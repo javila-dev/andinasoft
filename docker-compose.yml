@@ -8,28 +8,36 @@ services:
       - .:/code
     ports:
       - "8000:8000"
-    depends_on:
-      - db
+    env_file:
+      - .env
     environment:
-      # Le decimos a Django que el host de la BD es el nombre del servicio
-      - DB_HOST=db 
+      - DB_HOST=db  # Sobreescribe el del .env para apuntar al contenedor
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
     image: mysql:8.0
     container_name: mysql_multi_db
-    # Este comando es importante para compatibilidad con versiones antiguas de drivers de cliente
     command: --default-authentication-plugin=mysql_native_password
     restart: always
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword  # Contraseña para el usuario root (cámbiala si quieres)
-      MYSQL_DATABASE: developer_web      # Esta es la DB 'default'
-      MYSQL_USER: developer_admin        # Tu usuario del settings
-      MYSQL_PASSWORD: uGuQIm8jGHlOYqtI   # Tu contraseña del settings
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
-      - db_data:/var/lib/mysql           # Para que los datos persistan
-      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql # Carga el script de las otras DBs
+      - db_data:/var/lib/mysql
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db_data:

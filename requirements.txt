@@ -22,6 +22,4 @@ pytesseract
 pdf2image
 python-docx
 python-dotenv
-twilio
-openai
 httpx
