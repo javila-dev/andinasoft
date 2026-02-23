@@ -1,0 +1,58 @@
+<!doctype html>
+{%load static%}
+<html lang="es">
+    <head>
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
+        <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    </head>
+    <body>
+        <aside class="mdc-drawer mdc-drawer--dismissible">
+          <div class="mdc-drawer__content">
+            <div class="mdc-list">
+              <a class="mdc-list-item mdc-list-item--activated" href="#" aria-current="page">
+                <span class="mdc-list-item__ripple"></span>
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">inbox</i>
+                <span class="mdc-list-item__text">Inbox</span>
+              </a>
+              <a class="mdc-list-item" href="#">
+                <span class="mdc-list-item__ripple"></span>
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">send</i>
+                <span class="mdc-list-item__text">Outgoing</span>
+              </a>
+              <a class="mdc-list-item" href="#">
+                <span class="mdc-list-item__ripple"></span>
+                <i class="material-icons mdc-list-item__graphic" aria-hidden="true">drafts</i>
+                <span class="mdc-list-item__text">Drafts</span>
+              </a>
+            </div>
+          </div>
+        </aside>
+      
+        <div class="mdc-drawer-app-content">
+          <header class="mdc-top-app-bar app-bar" id="app-bar">
+            <div class="mdc-top-app-bar__row">
+              <section class="mdc-top-app-bar__section mdc-top-app-bar__section--align-start">
+                <button class="material-icons mdc-top-app-bar__navigation-icon mdc-icon-button">menu</button>
+                <span class="mdc-top-app-bar__title">Dismissible Drawer</span>
+              </section>
+            </div>
+          </header>
+      
+          <main class="main-content" id="main-content">
+            <div class="mdc-top-app-bar--fixed-adjust">
+              App Content
+            </div>
+          </main>
+        </div>
+      </body>
+      <script>
+          import {MDCTopAppBar} from "@material/top-app-bar";
+            const topAppBar = MDCTopAppBar.attachTo(document.getElementById('app-bar'));
+            topAppBar.setScrollTarget(document.getElementById('main-content'));
+            topAppBar.listen('MDCTopAppBar:nav', () => {
+            drawer.open = !drawer.open;
+            });
+      </script>
+</html>

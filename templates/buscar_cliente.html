@@ -1,0 +1,147 @@
+{%extends 'base.html'%}
+{%load static%}
+{%block title%}Buscar Cliente{%endblock%}
+{%block content%}
+<div class='container' style="padding:1rem">
+    <div class="row justify-content-md-center">
+        <div class="col-md-6 container-md rounded bg-white shadow" style="padding:1rem">
+            <h5><i class="fas fa-users"></i> Buscar Cliente</h5>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm" id="tableclients"
+                    style="font-size: small;width: 100%;cursor:pointer">
+                    <thead style="width: 100%;">
+                        <tr>
+                            <th style="width: 30%;">Cedula</th>
+                            <th scope="col">Nombre</th>
+                        </tr>
+                    </thead>
+                </table>
+              </div>
+        </div>
+        <div class="col-md-5 container-md" style="padding:1rem">
+            <div class="row">
+                <div class="col-12 container-md rounded bg-white shadow">
+                    <h5 id="detallecliente"><i class="fas fa-users"></i> Contratos asociados</h5>
+                    <div id='inicio' style="margin-left:0rem;"></div>
+                </div>
+                <div class="col-12 container-md rounded bg-white shadow mt-3">
+                    <div class="table-responsive">
+                        <table id="tablaInterfaz" class="table table-striped table-hover table-sm"
+                            style="cursor:pointer;width:100%;font-size:small">
+                            <thead>
+                                <tr>
+                                    <th style="width:30%">Nit</th>
+                                    <th>Nombre</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            </tbody>
+                        </table>
+                    </div>
+                    <button type="button" id="btnExport" class="btn btn-primary mt-3 mb-2 float-right">Exportar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script>
+    var tableclients = $('#tableclients').DataTable({
+            processing:true,
+            serverSide: true,
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/operaciones/buscar_cliente?todo=search&q=-1',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'idTercero'},
+                {'data':'nombrecompleto'},
+            ],
+            order: [[ 1, "asc" ]],
+        })
+
+    $('#modalsearchclient').on('shown.bs.modal', function(){
+        let value = $('#cedulaCliente').val()
+        let url = `/operaciones/buscar_cliente?todo=search&q=${value}`
+        tableclients.ajax.url(url).load()
+    })
+    $('#tablaInterfaz tbody').on('click','tr',function(){
+        $(this).remove()
+    })
+    $('#tableclients tbody').on('click','tr',function(){
+
+        tableclients.$('tr.selected').removeClass('selected');
+        $(this).addClass('selected')
+        let line = tableclients.row(this).data()
+        $('#tableclients').css('cursor','wait')
+        $.ajax({
+            type: 'GET',
+            url:'/operaciones/buscar_cliente',
+            data:{'pk':line.idTercero,'todo':'clientdata'},
+            success: function(response){
+                data_response=JSON.parse(response['contratos'])
+                cliente=response['cliente']
+                $('#detallecliente').html(
+                    '<i class="fas fa-users"></i> Contratos asociados <small>'+line.nombrecompleto+'</small>'
+                )
+                $('.detalle').remove()
+                for(i=0;i<data_response['cantidad'];i++){
+                    AgregarData(data_response[i]['proyecto'],data_response[i]['adj'],data_response[i]['inmueble'],data_response[i]['nrotitular'],data_response[i]['cartera'],data_response[i]['estado'])
+                }
+                $('#tableclients').css('cursor','pointer')
+                $('#tablaInterfaz tbody').append(`
+                    <tr>
+                        <td>${line.idTercero}</td>
+                        <td>${line.nombrecompleto}</td>
+                    </tr>
+                `)
+            }
+        })
+    })
+
+    $('#btnExport').click(function(){
+        var clientes = []
+        $('#tablaInterfaz tbody tr').each(function(index,element){
+            clientes.push($(element)[0].cells[0].outerText)
+        })
+        $(this).addClass('disabled').text('Exportando...')
+        $.ajax({
+            url:'/operaciones/buscar_cliente',
+            type:'POST',
+            data:{
+                'csrfmiddlewaretoken':getCookie('csrftoken'),
+                'clientes':clientes,
+                'todo':'interfaz'
+            },
+            success: function(xhr){
+                $('#alert-data').text('')
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').html('Puedes descargar el archivo <a href="'+xhr.ruta+'""><strong>Aquí</strong></a>')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                $('#btnExport').removeClass('disabled').text('Exportar')
+            }
+        })
+ 
+    })
+    
+
+    function BuscarCliente(){
+        var cedula = $('#cedulaCliente').val()
+        
+    }
+    function AgregarData(proyecto,adj,inmueble,titular,cartera,estado){
+        var nuevoDiv = "<div class='detalle bg-light shadow rounded'style='padding:0.5rem;margin-bottom:1rem;font-size:small'>"+
+                "<p style='margin:0.1px'><strong>Proyecto: </strong>"+proyecto+"   <strong>    Adj: </strong> <a href='/adjudicaciones/"+proyecto+"/"+adj+"'>"+adj+"</a></p>"+
+                "<p style='margin:0.1px'><strong>Cartera: </strong>"+cartera+"    <strong>    Estado: </strong>"+estado+"</p>"+
+                "<p style='margin:0.1px'><strong>Inmueble: </strong>"+inmueble+"      <strong>    Nro Titular: </strong>"+titular+"</p>"
+                "</div></div>"
+        $('#inicio').after(nuevoDiv)
+    }
+</script>
+
+
+
+{%endblock%}

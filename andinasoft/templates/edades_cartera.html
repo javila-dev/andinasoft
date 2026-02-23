@@ -1,0 +1,102 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load extras%}
+{%load l10n%}
+{%load static%}
+
+{%block title%}Edades {{proyecto}}{%endblock%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+<!-- <style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        text-align: center;
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+    .dtsb-searchBuilder{
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+</style> -->
+{%endblock%}
+{%block content%}
+<div class="principal-container bg-white rounded shadow-lg" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h3 class='section-title text-center text-white'>Edades de cartera {{proyecto}} <br><small>{{periodo}}</small></h3>
+
+    <div class="table-responsive">
+        <table id="tableedades" class="table table-sm" style="font-size: x-small;">
+            <thead>
+                <tr class="text-center">
+                    <th rowspan="2">ADJ</th>
+                    <th rowspan="2">Cliente</th>
+                    <th rowspan="2">Cartera</th>
+                    <th rowspan="2">Gestor</th>
+                    <th rowspan="2">Dias mora</th>
+                    <th rowspan="2">Ultimo pago</th>
+                    <th colspan="6">Edades</th>
+                </tr>
+                <tr class="text-center">
+                    <th>Por vencer</th>
+                    <th>0 a 30</th>
+                    <th>30 a 60</th>
+                    <th>60 a 90</th>
+                    <th>> 90</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for adj in adjudicaciones%}{%if adj.presupuesto.total_pendiente >= 0%}<tr>
+                    <td>{{adj.info.pk}}</td>
+                    <td>{{adj.info.extra_info.Nombre.upper}}</td>
+                    <td>{{adj.info.extra_info.tipo_cartera}}</td>
+                    <td>{{adj.info.gestor_cartera}}</td>
+                    <td class="text-center">{{adj.presupuesto.dias_mora}}</td>
+                    <td class="text-center">{{adj.presupuesto.ultimo_pago|date:"d/m/Y"}}</td>
+                    <td class="text-right">{{adj.presupuesto.por_vencer}}</td>
+                    <td class="text-right">{{adj.presupuesto.lt30}}</td>
+                    <td class="text-right">{{adj.presupuesto.lt60}}</td>
+                    <td class="text-right">{{adj.presupuesto.lt90}}</td>
+                    <td class="text-right">{{adj.presupuesto.lt120}}</td>
+                    <td class="text-right">{{adj.presupuesto.gt120}}</td>
+                    <td class="text-right">{{adj.presupuesto.total_pendiente}}</td>
+                </tr>{%endif%}{%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+<script src = '{%static "js/searchBuilder_Spanish.js"%}'></script>
+<script>
+    $(document).ready(function() {
+    var tableedades=$('#tableedades').DataTable({
+        paging:     false,
+        'scrollX':        true,
+        'scrollY':        '70vh',
+        'scrollCollapse': true,
+        "order": [[ 1, "desc" ]],
+        language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+        dom: 'Qlfrtip',
+        searchBuilder:{
+                conditions:searchBuilderspanish()
+            },
+        columnDefs: [
+            { type: 'date-uk', targets: 5 },
+        ],
+        });
+    })
+</script>
+{%endblock%}

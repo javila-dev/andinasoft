@@ -1,0 +1,91 @@
+<br/>
+{% if tiene_recaudos_pendientes %}
+<div class="col-xs-12 col-md-10 offset-1">
+    <div class="alert alert-warning d-flex align-items-center" role="alert">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        <div>
+            Existen recaudos pendientes por aplicar. No podrás elaborar nuevos recibos hasta que se validen los existentes.
+        </div>
+    </div>
+</div>
+{% endif %}
+<div class='col-xs-12 col-md-10 offset-1'>
+    <div class="table-responsive" style="max-height:450px; overflow-y:auto;">
+        <table id="tabla_recaudos_detallados" class='table table-sm table-striped table-bordered'>
+            <thead class="thead thead-light">
+                <tr>
+                    <th class="text-align-center">Estado</th>
+                    <th class="text-align-center">Num Recibo</th>
+                    <th class="text-align-center">Fecha</th>
+                    <th class="text-align-center">Operacion</th>
+                    <th class="text-align-center">Forma de Pago</th>
+                    <th class="text-align-center">Valor</th>
+                    <th class="text-align-center">Soporte</th>
+                    
+                </tr>
+            </thead>
+            <tbody>
+                {%for recaudo in recaudos%}
+                <tr class="text-align-center">
+                    <td class="text-align-center" width="10%">
+                        {%if recaudo.aplicado%}
+                        <span class="badge badge-success">Aplicado</span>
+                        {%else%}
+                        <span class="badge badge-warning text-dark">Pendiente</span>
+                        {%endif%}
+                    </td>
+                    <td class="text-align-center" width="15%">{{recaudo.numrecibo}}</td>
+                    <td class="text-align-center" width="20%">{{recaudo.fecha|date:'d/m/Y'}}</td>
+                    <td class="text-align-center" width="15%">{{recaudo.operacion}}</td>
+                    <td class="text-align-center" width="20%">{{recaudo.formapago}}</td>
+                    <td class="text-align-center" width="15%">{{recaudo.valor}}</td>
+                    <td class="text-align-center" width="15%">
+                        {% if recaudo.soporte_url %}
+                        <a href="/media/{{recaudo.soporte_url}}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="far fa-file-pdf"></i> Ver
+                        </a>
+                        {% else %}
+                        <span class="badge badge-light text-muted">Sin soporte</span>
+                        {% endif %}
+                    </td>
+                    
+                </tr>
+                {%endfor%}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th class="text-right" colspan=6>Total</th>
+                    <th class="text-align-center">{{total_recaudo.valor__sum}}</th>
+                    <th></th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+<script>
+    $(document).ready(function() {
+    var tabla_rec_det = $('#tabla_recaudos_detallados').DataTable({
+        "order": [[ 2, "desc" ]],
+        "language": {
+            "url": "/ajax_request/datatable_spanish"
+        },
+        dom: 'Bfrtip',
+        lengthMenu:[
+            [10,25,50,-1],
+            ['Ver 10','Ver 25','Ver 50','Ver todos']
+        ],
+        buttons: ['pageLength','copy', 'excel', 
+            {
+                extend: 'pdfHtml5',
+                mesageTop: 'Resumen de recibos'
+            }    
+            ],
+        columnDefs: [
+       { type: 'date-uk', targets: 2 },
+       { orderable: false, targets: 6 }
+     ]
+  });
+  tabla_rec_det.buttons().container()
+  .appendTo( '#tabla_recaudos_detallados_wrapper .col-md-6:eq(0)' );
+} );
+</script>

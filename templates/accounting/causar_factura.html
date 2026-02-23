@@ -1,0 +1,487 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Accounting | Causar facturas{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small  ;
+        text-align: center;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Causar facturas
+        </h3>
+        
+    <div class='d-inline-flex my-2'>
+        <div class='input-group ml-3'>
+            <div class='input-group-prepend'>
+                <span class='input-group-text'>Oficina</span>
+            </div>
+            <select id='oficina' class='custom-select'>
+                <option value=''>Seleccionar...</option>
+                <option value='MEDELLIN'>MEDELLIN</option>
+                <option value='MONTERIA'>MONTERIA</option>
+            </select>
+        </div>
+    </div>
+    <div class='row justify-content-around mx-0 pt-3 pb-4'>
+        <div class='col-md-12 bg-white shadow rounded py-3'>
+            <p class='lead text-center border-bottom border-gray'>Recibidos</p>
+            <div class='table-responsive'>
+                <table id='tablaRecibidos' class='display' style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Tercero</th>
+                            <th>Fecha Fact</th>
+                            <th>Descripcion</th>
+                            <th>Valor</th>
+                            <th>Empresa</th>
+                            <th>Causacion</th>
+                            <th>Pago Neto</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div class='row position-absolute position-fixed' style='bottom:15px;right:15px'>
+    <button disabled class='btn btn-xl btn-circle btn-primary' id='btnModalSinRecibir'
+            data-toggle="modal" data-target='#modalSinRecibir'><i class="fas fa-paper-plane"></i></button>
+    <button disabled class='btn btn-xl btn-circle btn-success shadow mx-3' id='btnmdlRadInt'
+            data-toggle="modal" data-target='#modalRadInterno'><i class="fas fa-plus"></i></button>
+
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuRecibir' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;z-index:1060">
+    <a class="dropdown-item" id='recibir' href="#">Recibir</a>
+    <a class="dropdown-item" id='ver' href="#">Ver Soporte</a>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuRecibidos' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;z-index:1060">
+    <a class="dropdown-item" id='history' href="#">History</a>
+    <a class="dropdown-item" id='ver' href="#">Ver Soporte</a>
+</div>    
+<!-- Modal -->
+<div class="modal fade" id="modalCausar" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalCausartitle"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            {%crispy form_causar%}
+        </div>
+      </div>
+    </div>
+  </div>
+<div class="modal fade" id="modalHistory" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+<div class="modal-dialog">
+    <div class="modal-content">
+    <div class="modal-header">
+        <h5 class="modal-title" id="modalHistorytitle"></h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    <div class="modal-body">
+        <div id='historyDiv'></div>
+    </div>
+    </div>
+</div>
+  </div>
+<div class="modal fade" id="modalSinRecibir" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Radicados por recibir</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class='table-responsive'>
+                <table id='tablaSinRecibir' class='display'>
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Id</th>
+                            <th rowspan="2">Tercero</th>
+                            <th colspan="2">Fechas</th>
+                            <th rowspan="2">Valor</th>
+                        </tr>
+                        <tr>
+                            <th>Radica</th>
+                            <th>Factura</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{%include 'accounting/radicados_internos.html'%}
+<script>
+    $(document).ready(function(){
+        var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+        var tablaSinRecibir = $('#tablaSinRecibir').DataTable({
+            processing:true,
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/infofacturas',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'tercero'},
+                {'data':'fecha_rad'},
+                {'data':'fecha_fact'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]]
+        })
+        var tablaRecibidos = $('#tablaRecibidos').DataTable({
+            processing:true,
+            language:{
+                url:'/ajax_request/datatable_spanish',
+            },
+            ajax:{
+                url:'/accounting/ajax/infofacturas',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'tercero'},
+                {'data':'fecha_fact'},
+                {'data':'descripcion'},
+                {'data':'valor'},
+                {'data':'empresa'},
+                {'data':'causacion'},
+                {'data':'pagoneto'},
+            ],
+            columnDefs: [
+            {targets: [4,7],type: 'num-fmt'},
+            {targets:[1,3,5],"className":"dt-body-left"},
+            {targets:[7],"className":"dt-body-right"}, 
+            ],
+            order: [[ 0, "desc" ]]
+        })
+        $('#tablaSinRecibir').on('click','tr',function(e){
+            tablaSinRecibir.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaSinRecibir').on('contextmenu','tr',function(e){
+            tablaSinRecibir.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuRecibir').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $('#tablaRecibidos').on('click','tr',function(e){
+            tablaRecibidos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var line = tablaRecibidos.row(this).data()
+            $('#id_fecha').val(null)
+            $('#id_nro_causacion').val(null)
+            $('#id_cuenta_por_pagar').val("")
+            $('#id_secuencia_cxp').val(null)
+            $('#id_pagoneto').val(null)
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/getinfointerfaz',
+                data:{
+                    'tipo':'CXP',
+                    'empresa':line.empresa
+                },
+                success:function(response){
+                    let data = JSON.parse(response['data'])
+                    $('#id_cuenta_por_pagar').empty()
+                    $('#id_cuenta_por_pagar').append(
+                        '<option value="">Selecciona...</option>'
+                    )
+                    for (let i in data){
+                        descrip = data[i]['fields']['descripcion']
+                        cuenta = data[i]['fields']['cuenta_credito_1']
+                        pk = data[i]['pk']
+                        $('#id_cuenta_por_pagar').append(
+                            '<option value='+pk+'>'+descrip+' | '+cuenta+'</option>'
+                        )
+                    }
+                }
+            })
+            $('#modalCausar').find('.modal-title').text('Registrar causacion Radicado #'+line.pk)
+            $('#modalCausar').modal('show')
+        })
+        $('#tablaRecibidos').on('contextmenu','tr',function(e){
+            tablaRecibidos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuRecibidos').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $('#oficina').on('change',function(){
+            var oficina = $(this).val()
+            var url = '/accounting/ajax/infofacturas?oficina='+oficina+'&ubicacion=Recepcion'
+            tablaSinRecibir.ajax.url(url).load()
+            var url = '/accounting/ajax/infofacturas?oficina='+oficina+'&ubicacion=Contabilidad'
+            tablaRecibidos.ajax.url(url).load()
+            if (oficina==null){
+                $('#btnModalSinRecibir').prop('disabled',true)
+                $('#btnmdlRadInt').prop('disabled',true)
+            }
+            else{
+                $('#btnModalSinRecibir').prop('disabled',false)
+                $('#btnmdlRadInt').prop('disabled',false)
+            }
+        })
+        $("#contextMenuRecibir").click(function(e){
+            var line = tablaSinRecibir.row('.selected').data()
+            switch(e.target.id){
+                case "recibir":
+                    $.ajax({
+                        type:'POST',
+                        url:'/accounting/ajax/recibir',
+                        data:{
+                            'radicado':line.pk,
+                            'recibe':'Contabilidad',
+                            'csrfmiddlewaretoken':csrf_token,
+                        },
+                        success:function(response){
+                            $('#alert-title').text(response.title)
+                            $('#alert-data').text(response.msj)
+                            $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                            tablaSinRecibir.ajax.reload()
+                            tablaRecibidos.ajax.reload()
+                        }
+                    })
+                    break;    
+                case "ver":
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/datafactura',
+                        data:{
+                            'pk':line.pk,
+                        },
+                        success:function(response){
+                            var data = JSON.parse(response['data'])[0]['fields']
+                            var ruta = '/media/'+data['soporte_radicado']
+                            let params = `status=no,location=no,toolbar=no,menubar=no,
+                            width=650,height=450,left=100,top=100`;
+                            window.open(ruta,'Soporte radicado '+ruta.pk,params)
+                            tablaSinRecibir.$('tr.selected').removeClass('selected');
+                        }
+                    })
+                    break;    
+                    
+            }
+        });
+        $("#contextMenuRecibidos").click(function(e){
+            var line = tablaRecibidos.row('.selected').data()
+            switch(e.target.id){
+                case "history":
+                $('#modalHistory').find('.modal-title').text('Acciones radicado '+line.pk)
+                $.ajax({
+                    type:'GET',
+                    url:'/accounting/ajax/gethistory',
+                    data:{
+                        'pk':line.pk
+                    },
+                    success:function(response){
+                        $('#historyDiv').empty()
+                        let data = response['data']
+                        for (let i in data){
+                            let fecha = new Date(data[i]['fecha'])
+                            fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                            let action = `<div class="media border-bottom border-gray pt-2">
+                                <img src="/media/`+data[i]['imagen']+`" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                                <div class="media-body">
+                                <h6 class="mt-0">`+data[i]['usuario']+' el '+fecha+`</h6>
+                                <p>`+data[i]['accion']+`</p>
+                                </div>
+                            </div>`
+                            $('#historyDiv').append(action)
+                        }
+                    }
+                })
+            $('#modalHistory').modal('show')
+                    break;    
+                case "ver":
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/datafactura',
+                        data:{
+                            'pk':line.pk,
+                        },
+                        success:function(response){
+                            var data = JSON.parse(response['data'])[0]['fields']
+                            var ruta = '/media/'+data['soporte_radicado']
+                            let params = `status=no,location=no,toolbar=no,menubar=no,
+                            width=650,height=450,left=100,top=100`;
+                            window.open(ruta,'Soporte radicado '+ruta.pk,params)
+                            tablaRecibidos.$('tr.selected').removeClass('selected');
+                        }
+                    })
+                    break;    
+                    
+            }
+        });
+        $('#formCausar').on('submit',function(e){
+            e.preventDefault();
+            form_data = new FormData(this)
+            let radic = tablaRecibidos.row('.selected').data().pk
+            form_data.append('radicado',radic)
+            let empresa
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/causarfactura',
+                data:form_data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    tablaSinRecibir.ajax.reload()
+                    tablaRecibidos.ajax.reload()
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').text(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    $('#modalCausar').modal('hide')
+                }
+            })
+        })
+        $(this).click(function(e){
+            if(e.button == 0){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        //RADICADOS INTERNOS
+        $('#id_empresa_rad_int').on('change',function(){
+            let empresa = $(this).val()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/getinfointerfaz',
+                data:{
+                    'tipo':'CXP',
+                    'empresa':empresa
+                },
+                success:function(response){
+                    let data = JSON.parse(response['data'])
+                    $('#id_tipo_cxp').empty()
+                    $('#id_tipo_cxp').append(
+                        '<option value="">Selecciona...</option>'
+                    )
+                    for (let i in data){
+                        descrip = data[i]['fields']['descripcion']
+                        cuenta = data[i]['fields']['cuenta_credito_1']
+                        pk = data[i]['pk']
+                        $('#id_tipo_cxp').append(
+                            '<option value='+pk+'>'+descrip+' | '+cuenta+'</option>'
+                        )
+                    }
+                }
+            })
+            
+        })
+        $('#id_empresa_pago_rad').on('change',function(){
+            let empresa = $(this).val()
+            $('#id_cuenta_pago_rad').empty()
+            $('#id_cuenta_pago_rad').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_pago_rad').append(option)
+                    }
+                }
+            })
+        })
+        $('#btnmdlRadInt').click(function(){
+            let oficina = $('#oficina').val()
+            $('#id_oficina_rad_int').val(oficina)
+        })
+        $('#id_id_tercero_rad_int').on('change',function(){
+            var tercero = $(this).val()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/matchsupplier',
+                data:{
+                    'tercero':tercero
+                },
+                success:function(response){
+                    var name = response['nombre']
+                    $('#id_nombre_tercero_rad_int').val(name)
+                }
+            })
+        })
+        $('#id_check_pagado').click(function(){
+            if ($(this).is(':checked')) {
+                $('.rowpagos').css('display','flex')
+                $('#id_cuenta_pago_rad').prop('required',true)
+                $('#id_fecha_pago_rad').prop('required',true)
+                $('#id_soporte_pago_rad').prop('required',true)
+            }
+            else {
+                $('.rowpagos').css('display','none')
+                $('#id_cuenta_pago_rad').prop('required',false)
+                $('#id_fecha_pago_rad').prop('required',false)
+                $('#id_soporte_pago_rad').prop('required',false)
+            }
+
+        });
+        $('.rowpagos').css('display','none')
+        //MASKS
+        $('#id_nro_causacion').mask('S-000-#')
+        $('#id_pagoneto').mask("#.##0", {reverse: true});
+        $('#id_valor_neto_rad_int').mask("#,##0", {reverse: true});
+        $('#id_documento_causacion').mask('S-000-#')
+
+        bsCustomFileInput.init();
+    })
+</script>
+{%endblock%}

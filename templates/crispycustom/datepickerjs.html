@@ -1,0 +1,5 @@
+{% load crispy_forms_field %}
+<div class="form-floating mb-3">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {% crispy_field field 'class' 'form-control'%}
+</div>

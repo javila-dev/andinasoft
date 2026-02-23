@@ -1,0 +1,142 @@
+{%load extras%}
+<!-- Modal -->
+{%block js%}
+{%endblock%}
+<form method='POST' enctype="multipart/form-data" id='formPQRS'>{%csrf_token%}
+    <div class="modal fade" id="modalRadicarPQRS" tabindex="-1" aria-labelledby="modalRadicarPQRS" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalRadicarPQRSlabel">Radicar nueva PQRS</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class='container'>
+                        <div class="form-group row">
+                            <label for='tipoPQRS' class='col-sm-3 col-form-label'>Tipo PQRS</label>
+                            <div class='col-sm-9'>
+                                <select class="custom-select my-1 mr-sm-2" id="tipoPQRS" name='tipoPQRS' required>
+                                    <option value="Peticion">Peticion</option>
+                                    <option value="Queja">Queja</option>
+                                    <option value="Reclamo">Reclamo</option>
+                                    <option value="Solicitud">Solicitud</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for='reqRespuesta' class='col-sm-3 col-form-label'>Requiere Respuesta</label>
+                            <div class='col-sm-9'>
+                                <select class="custom-select my-1 mr-sm-2" id="reqRespuesta" name='reqRespuesta'
+                                    required>
+                                    <option value="Si">Si</option>
+                                    <option value="No">No</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="peticion">Seleccionar Archivo</label>
+                            <input type="file" class="form-control-file" id="peticion" name='peticion'
+                                accept="application/pdf" required>
+                        </div>
+                        <div class='row'>
+                            <div class='col-md-6 mx-auto mt-sm-3'>
+                                <div class="input-group" id="div_fecha_recibido" data-target-input="nearest">
+                                    <input type="text" placeholder='Fecha Recibido' required name="fecha_recibido" id="fecha_recibido" class="datepicker form-control datetimepicker-input" data-toggle="datetimepicker" data-target="#fecha_recibido">
+                                        <div class="input-group-append" data-target="#fecha_recibido" data-toggle="datetimepicker">
+                                            <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i></div>
+                                        </div>
+                                </div>
+                                <script type="text/javascript">
+                                    function deferDateTimePicker_fecha_recibido() {
+                                        if (window.jQuery && $.fn.datetimepicker) {
+                                            $('#fecha_recibido').datetimepicker({"format": "YYYY-MM-DD", "icons": {"time": "fa fa-clock-o"}, "useCurrent": true, "collapse": false, "locale": "es-co" });
+                                        } else {
+                                            setTimeout(function() { deferDateTimePicker_fecha_recibido() }, 50);
+                                        }
+                                    }
+                                    deferDateTimePicker_fecha_recibido();
+                                </script>
+                            </div>
+                            <div class='col-md-6 mx-auto mt-sm-3'>
+                                <div class="input-group" id="div_fecha_vencimiento" data-target-input="nearest">
+                                    <input type="text" placeholder='Fecha Vencimiento' required name="fecha_vencimiento" id="fecha_vencimiento" class="datepicker form-control datetimepicker-input" data-toggle="datetimepicker" data-target="#fecha_vencimiento">
+                                        <div class="input-group-append" data-target="#fecha_vencimiento" data-toggle="datetimepicker">
+                                            <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i></div>
+                                        </div>
+                                </div>
+                                <script type="text/javascript">
+                                    function deferDateTimePicker_fecha_vencimiento() {
+                                        if (window.jQuery && $.fn.datetimepicker) {
+                                            $('#fecha_vencimiento').datetimepicker({"format": "YYYY-MM-DD", "icons": {"time": "fa fa-clock-o"}, "useCurrent": true, "collapse": false, "locale": "es-co" });
+                                        } else {
+                                            setTimeout(function() { deferDateTimePicker_fecha_vencimiento() }, 50);
+                                        }
+                                    }
+                                    deferDateTimePicker_fecha_vencimiento();
+                                </script>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <input type="submit" name='btnRadicarPQRS' class="btn btn-primary" value="Radicar">
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+<div class="modal fade" id="modalListaPQRS" tabindex="-1" aria-labelledby="modalRadicarPQRS" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalListaPQRSlabel">Lista PQRS {{adj}}</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class='table-responsive'>
+                    <table id='tablaPQRS' class='compact hover'>
+                        <thead>
+                            <tr>
+                                <th class='text-center'>Id</th>
+                                <th class='text-center'>Tipo</th>
+                                <th class='text-center'>Fecha radicado</th>
+                                <th class='text-center'>Usuario radica</th>
+                                <th class='text-center'>Estado</th>
+                                <th class='text-center'>Fecha cierre</th>
+                                <th class='text-center'>Usuario cierre</th>
+                            </tr>
+                        </thead>
+                        <tbody>{%for pq in pqrs%}
+                            <tr>
+                                <td class='text-center'>
+                                    <a href='/docs_andinasoft/doc_contratos/{{proyecto}}/{{adj}}/{{pq.doc_peticion}}' target="_blank">{{pq.pk}}</td>
+                                <td class='text-center'>{{pq.tipo}}</td>
+                                <td class='text-center'>{{pq.fecha_radicado}}</td>
+                                <td class='text-center'>{{pq.usuario_radica}}</td>
+                                <td class='text-center'>{{pq.estado}}</td>
+                                <td class='text-center'>{{pq.fecha_respuesta|replace_null:"-"}}</td>
+                                <td class='text-center'>{{pq.usuario_cierra|replace_null:"-"}}</td>
+                            </tr>{%endfor%}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <input type="submit" name='btnRadicarPQRS' class="btn btn-primary" value="Radicar">
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $('#tablaPQRS').DataTable();
+    $('#formPQRS').on('submit',function(){
+        $('#modalRadicarPQRS').modal('hide')
+        $('#modal-cargando').modal('show')
+    })
+</script>

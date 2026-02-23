@@ -1,0 +1,180 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+
+{%block title%}Radicar Facturas{%endblock%}
+{%block style%}
+<style>
+    td{
+        font-size: small;
+    }
+    th{
+        font-size: small;
+    }
+</style>
+{%endblock%}
+{%block content%}
+
+<div class="principal-container bg-white rounded shadow">
+    <h3 class='section-title text-white text-center'>Facturas Radicadas</h3>
+    <div class='table-responsive'>
+        <table id='tabla-facturas' class='display compact' style='width: 100%;'>
+            <thead>
+                <tr>
+                    <th class='text-center'>Rad</th>
+                    <th class='text-center'>Tercero</th>
+                    <th class='text-center'>Factura</th>
+                    <th class='text-center'>Fecha Radicado</th>
+                    <th class='text-center'>Empresa</th>
+                    <th class='text-center'>Valor</th>
+                    <th class='text-center'>Fecha Vencimiento</th>
+                    <th class='text-center'>Causacion</th>
+                    <th class='text-center'>Fecha Causacion</th>
+                    <th class='text-center'>Pago Neto</th>
+                    <th class='text-center'>Ubicacion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for radicado in radicados%}
+                <tr>
+                    <td class='text-center'><a href='#' data-toggle="modal" data-target="#modalRecibir" 
+                        data-radicado='{{radicado.nroradicado|unlocalize}}' data-factura='{{radicado.nrofactura}}'>
+                        {{radicado.nroradicado|unlocalize}}</a></td>
+                    <td>{{radicado.nombretercero.upper|truncatechars:30}}</td>
+                    <td class='text-center'>{{radicado.nrofactura}}</td>
+                    <td class='text-center'>{{radicado.fecharadicado|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{radicado.empresa}}</td>
+                    <td class='text-center'>${{radicado.valor}}</td>
+                    <td class='text-center'>{{radicado.fechavenc|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{radicado.nrocausa|default:"Sin causar"}}</td>
+                    <td class='text-center'>{{radicado.fechacausa|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{radicado.pago_neto|default:"Sin causar"}}</td>
+                    <td class='text-center'>{{radicado.estado}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+{%include 'alert.html'%} 
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalRecibir" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">¿Que deseas hacer?</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class='modal-body' id='modal-body'>
+            <div class="my-3 p-3 bg-white rounded shadow">
+                <h6 class="border-bottom border-gray pb-2 mb-0 lead">Timeline</h6>
+                <div id='container-timeline'>
+                </div>
+              </div>
+        </div>
+        <div class="modal-footer">
+          <div class='btn-group'>
+              
+            <form method='post' action=''>{%csrf_token%}
+            <input type="text" id="numero-radicado" name='numero-radicado' hidden>
+            <input type="text" id="numero-factura" name='numero-factura' hidden>
+            <a id ='link-ver' href="#" class="btn btn-primary" role="button">Ver</a>
+            <input type="submit" class="btn btn-primary" name='btnRecibir' value='Recibir'>
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+    $(document).ready(function() {
+    var tablafacturas=$('#tabla-facturas').DataTable({
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 25,
+        "order": [[ 0, "desc" ]],
+        'scrollX': true,
+        'scrollCollapse': true,
+        });
+        $('#tabla-facturas tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablafacturas.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+    });
+    $('#modalRecibir').on('show.bs.modal', function (event) {
+    var button = $(event.relatedTarget) // Button that triggered the modal
+    var radicado = button.data('radicado') // Extract info from data-* attributes
+    var factura = button.data('factura')
+    // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+    // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
+    var modal = $(this)
+    modal.find('.modal-title').text('¿Que deseas hacer con el radicado ' + radicado+'?')
+    document.getElementById('link-ver').setAttribute('href','/docs_andinasoft/docs_radicados/Facturas/Radicado_'+radicado+'_Factura_'+factura+'.pdf')
+    $('#numero-radicado').val(radicado)
+    $('#numero-factura').val(factura)
+    $.ajax({
+        type:'GET',
+        url:'/correspondencia/facturas/todas',
+        data:{'radicado':radicado},
+        success: function(response){
+            var instance = JSON.parse(response['instance'])
+            var div = document.getElementById('container-timeline')
+            while (div.hasChildNodes()){
+                div.removeChild(div.lastChild);
+            }
+            for (i=0; i<instance.length; i++){
+                var line = instance[i]['fields']
+                //crear el Div
+                var newDiv = $('<div>')
+                newDiv.addClass('media text-muted pt-3')
+                var Svg = $('<svg>')
+                Svg.addClass("bd-placeholder-img mr-2 rounded")
+                Svg.attr("width",32)
+                Svg.attr("height",32)
+                Svg.attr("preserveAspectRatio","xMidYMid slice")
+                Svg.attr("focusable","false")
+                Svg.attr("role","img")
+                Svg.attr("aria-label","Placeholder: 32x32")
+                var title = $('<title>')
+                title.text('Placeholder')
+                Svg.append(title)
+                var Rect = $('<rect/>')
+                Rect.attr("width","100%")
+                Rect.attr("height","100%")
+                Svg.append(Rect)
+                newDiv.append(Svg)
+                var newP = $('<p>')
+                newP.addClass("media-body pb-3 mb-0 small lh-125 border-bottom border-gray")
+                newP.text(line['usuario']+' el '+line['fecha'])
+                newP.append($('<br/>'))
+                newP.append(line['accion'])
+                newDiv.append(newP)
+               $('#container-timeline').append(newDiv)
+            }
+        }
+
+    })
+    })
+    });
+</script>
+<script>
+    function get_random_color() {
+    var letters = '0123456789ABCDEF'.split('');
+    var color = '#';
+    for (var i = 0; i < 6; i++ ) {
+        color += letters[Math.round(Math.random() * 15)];
+    }
+    return color;
+}
+$(".bd-placeholder-img").each(function() {
+    $(this).css("fill", get_random_color());
+});
+  </script>
+{%endblock%}

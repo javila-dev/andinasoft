@@ -1,0 +1,103 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+
+{%block title%}Causar Facturas{%endblock%}
+
+{%block content%}
+<style>
+    td{
+        font-size: small;
+    }
+</style>
+<div class="bg-white rounded shadow principal-container">
+    <h4 class='border-bottom border-gray section-title text-white text-center' >Causar Factura</h4>
+    <div class='table-responsive'>
+        <table id='tabla-facturas' class='display' style="width:100%">
+            <thead>
+                <tr>
+                    <th class='text-center'>Radicado</th>
+                    <th class='text-center'>Fecha Radicado</th>
+                    <th class='text-center'>Factura</th>
+                    <th class='text-center'>Tercero</th>
+                    <th class='text-center'>Empresa</th>
+                    <th class='text-center'>Valor</th>
+                    <th class='text-center'>Causacion</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for radicado in radicados%}
+                <tr>
+                    <td class='text-center'><a href='#' data-toggle="modal" data-target="#modalRecibir" data-radicado='{{radicado.nroradicado|unlocalize}}' data-factura='{{radicado.nrofactura}}'>{{radicado.nroradicado}}</a></th>
+                    <td class='text-center'>{{radicado.fecharadicado|date:"d/m/y"}}</th>
+                    <td class='text-center'>{{radicado.nrofactura}}</th>
+                    <td>{{radicado.nombretercero.upper|truncatechars:30}}</th>
+                    <td class='text-center'>{{radicado.empresa}}</th>
+                    <td class='text-center'>${{radicado.valor}}</th>
+                    <td class='text-center'>{{radicado.nrocausa}}</th>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalRecibir" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form method='post' action=''>{%csrf_token%}
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Causar Factura</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <input type='text' id='numeroRadicado' name='numeroRadicado' hidden>
+            {{form|crispy}}
+        </div>
+        <div class="modal-footer">
+            <div class='btn-group'>
+                <input type='submit' action='' value='Registrar' class='btn btn-primary'>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{%include 'alert.html'%}
+{{form.media}}
+<script>
+    $(document).ready(function() {
+    var tablafacturas=$('#tabla-facturas').DataTable({
+                    'scrollX':        true,
+                    'scrollCollapse': true,
+                    "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+                    "order": [[ 1, "desc" ]],
+            columnDefs: [
+                { type: 'date-uk', targets: 1 },
+            ],
+        });
+        $('#tabla-facturas tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablafacturas.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        $('#modalRecibir').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget) // Button that triggered the modal
+        var radicado = button.data('radicado') // Extract info from data-* attributes
+        var factura = button.data('factura')
+        // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+        // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
+        var modal = $(this)
+        modal.find('.modal-title').text('Registrar causacion radicado ' + radicado)
+        $('#numeroRadicado').val(radicado)
+        })
+        
+    });
+    });
+</script>
+{%endblock%}

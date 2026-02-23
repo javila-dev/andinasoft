@@ -1,0 +1,32 @@
+{%extends 'base.html'%}
+{%load static%}
+{%load crispy_forms_tags%}
+{%block title%}Contratos{%endblock%}
+{%block style%}
+<style>
+    .row{
+        margin-left: 0px;
+        margin-right: 0px;
+    }
+    div.detailrow input{
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+</style>
+{%endblock%}
+{%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
+{%block content%}
+<div class='principal-container bg-white rounded shadow-lg'>
+    <h3 class='text-white text-center section-title'>Acta recibido {{nro_acta}}
+        <p class='mb-0'><small>Contrato {{contrato.pk}} - {{contrato.proveedor.nombre}}</small></p>
+    </h3>
+    <div class='mt-2'>
+        {%crispy form%}
+    </div>
+</div>
+{%include 'building/modal_items_recibir.html'%}
+{%include 'new_alert.html'%}
+<script src="{%static 'js/building/newprogress.js'%}"></script>
+{%endblock%}

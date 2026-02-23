@@ -1,0 +1,308 @@
+import math
+import os
+import numpy_financial as npf
+import pytesseract
+from django.template.loader import get_template
+from django.conf import settings
+from django.http import HttpResponse
+from xhtml2pdf import pisa
+from dateutil.relativedelta import relativedelta
+from datetime import datetime
+from decimal import Decimal
+from PIL import Image
+from pdf2image import convert_from_path
+from django.db.models.fields.related import ForeignKey, ManyToManyField
+from django.db.models.fields.files import FileField, ImageField
+
+
+
+
+def link_callback(uri, rel):
+    path=''
+    if uri.startswith('/static'):   
+        path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
+    elif uri.startswith('/media'):   
+        path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ""))
+    return path
+
+def pdf_gen(template_path,context,filename,):
+    # Create a Django response object, and specify content_type as pdf
+    #response = HttpResponse(content_type='application/pdf')
+    #response['Content-Disposition'] = 'attachment; filename="report.pdf"'
+    # find the template and render it.
+    template = get_template(template_path)
+    html = template.render(context)
+    file_dir = settings.MEDIA_ROOT + f'/tmp/{filename}'
+    try:
+        output_file = open(file_dir,"w+b")
+    except FileNotFoundError:
+        os.makedirs(settings.MEDIA_ROOT + '/tmp')
+        output_file = open(file_dir,"w+b")
+    # create a pdf
+    pisa_status = pisa.CreatePDF(
+       html, dest=output_file, link_callback=link_callback)
+    # if error then show some funy view
+    if pisa_status.err:
+       return HttpResponse('We had some errors <pre>' + html + '</pre>')
+    
+    output_url = settings.MEDIA_ROOT + f'/tmp/{filename}'
+   
+    output = {
+        'url':settings.MEDIA_URL + f'tmp/{filename}',
+        'root':settings.MEDIA_ROOT + f'/tmp/{filename}'
+    }
+   
+    return output
+
+def get_text_from_file(file_path):
+    
+    pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
+
+    image_name = file_path.split('.')[0]
+
+    text = ''
+    
+    if file_path.endswith('.pdf'):
+        pages = convert_from_path(file_path, 500)
+        i = 1
+        for page in pages:
+            image_path = f'{settings.MEDIA_ROOT}/tmp/image_for_ocr_{i}.png'
+            page.save(image_path, 'PNG')
+            
+            
+            text += pytesseract.image_to_string(Image.open(image_path), lang="spa") + f'\n------Fin pagina {i}-----'
+            
+            i+=1
+            
+            os.remove(image_path)
+            
+    else:
+        text = pytesseract.image_to_string(Image.open(file_path), lang="spa")
+
+    return text
+
+class JsonRender():
+    
+    def __init__(self,queryset,reverse=False,query_functions=[]):
+        self.queryset = queryset
+        self.reverse = reverse
+        self.query_functions = query_functions
+    
+    def render(self):
+        object_dict = list()
+        if self.queryset.count() > 0:
+            fields = [f for f in self.queryset[0]._meta._get_fields(reverse=self.reverse)]
+        else: 
+            fields = []
+        for obj in self.queryset:
+            item = {}
+            for field in fields:
+                field_value = eval("obj."+field.name)     
+                if type(field) == ForeignKey:
+                    field_value = self.ForeingKeyRender(field,field_value)
+                elif type(field) == ManyToManyField:
+                    field_value = 'ManytoManyField'
+                elif type(field) == FileField:
+                    field_value = str(field_value)
+                item[field.name] = field_value
+            for func in self.query_functions:
+                item[func] = eval('obj.'+func+'()')
+            object_dict.append(item)
+        return object_dict
+
+    def ForeingKeyRender(self,fk,queryset_item):
+        query_dict = {}
+        field_list = fk.related_model._meta._get_fields(reverse = self.reverse)
+        for field in field_list:
+            if queryset_item == None:
+                field_value = None
+            else:
+                field_value = eval(f'queryset_item.{field.name}')
+                if type(field) == ForeignKey:
+                    field_value = self.ForeingKeyRender(field,field_value)
+                elif type(field) == ManyToManyField:
+                    field_value = 'ManytoManyField'
+                elif type(field) == FileField or ImageField:
+                    field_value = str(field_value)
+            query_dict[field.name] = field_value
+        return query_dict
+
+
+class Utilidades():
+
+    def cambiar_moneda_entero(self,valor):
+        if valor==None or valor=='':
+            return 0
+        else:
+            entero=''
+            for caracter in valor:
+                if caracter=="$" or caracter=="," or caracter==".":
+                    pass
+                else:
+                    entero+=caracter
+            return int(entero)
+    
+    def redondear_numero(self,numero,multiplo=1,redondeo='>'):
+        residuo=int(numero)%multiplo
+        if redondeo=='>':
+            numero_redondeado=int(numero)-residuo+multiplo
+        elif redondeo=='<':
+            numero_redondeado=int(numero)-residuo
+        return numero_redondeado
+    
+    def numeros_letras(self,numero,formato='Moneda'):
+        unidades={0:'',
+                  1:'UN',
+                  2:'DOS',
+                  3:'TRES',
+                  4:'CUATRO',
+                  5:'CINCO',
+                  6:'SEIS',
+                  7:'SIETE',
+                  8:'OCHO',
+                  9:'NUEVE',
+                 10:'DIEZ',
+                 11:'ONCE',
+                 12:'DOCE',
+                 13:'TRECE',
+                 14:'CATORCE',
+                 15:'QUINCE',
+                 16:'DIECISEIS',
+                 17:'DIECISIETE',
+                 18:'DIECIOCHO',
+                 19:'DIECINUEVE'}
+        decenas={20:('VEINTE','VEINTI'),
+                 30:('TREINTA','TREINTA Y'),
+                 40:('CUARENTA','CUARENTA Y'),
+                 50:('CINCUENTA','CINCUENTA Y'),
+                 60:('SESENTA','SESENTA Y'),
+                 70:('SETENTA','SETENTA Y'),
+                 80:('OCHENTA','OCHENTA Y'),
+                 90:('NOVENTA','NOVENTA Y')}
+        centenas={100:('CIEN','CIENTO'),
+                 200:'DOSCIENTOS',
+                 300:'TRESCIENTOS',
+                 400:'CUATROCIENTOS',
+                 500:'QUINIENTOS',
+                 600:'SEISCIENTOS',
+                 700:'SETECIENTOS',
+                 800:'OCHOCIENTOS',
+                 900:'NOVECIENTOS'}
+        
+        valor_letras=""
+        millones=int(numero/1000000)
+        numero-=(millones*1000000)
+        miles=int(numero/1000)
+        numero-=miles*1000
+        cientos=int(numero)
+        cifra=(millones,miles,cientos)
+        
+        index=1
+        for valor in cifra:
+            Cientos_valor=valor-valor%100
+            Decenas_valor=valor%100
+            if valor>0:
+                #centenas
+                if valor>=100:
+                    if valor==100:
+                        valor_letras+=centenas[Cientos_valor][0]
+                    elif valor<200:
+                        valor_letras+=centenas[Cientos_valor][1]
+                    elif valor<1000:
+                        valor_letras+=centenas[Cientos_valor]
+                    if Decenas_valor>=20:
+                        if Decenas_valor%10==0:
+                            valor_letras+=' '+decenas[Decenas_valor][0]
+                        else:
+                            valor_letras+=' '+decenas[Decenas_valor-Decenas_valor%10][1]
+                            valor_letras+=' '+unidades[Decenas_valor%10]
+                    elif Decenas_valor<20 and Decenas_valor>0:
+                        valor_letras+=' '+unidades[Decenas_valor]
+                elif valor>=20:
+                    if Decenas_valor>=20:
+                        if Decenas_valor%10==0:
+                            valor_letras+=' '+decenas[Decenas_valor][0]
+                        else:
+                            valor_letras+=' '+decenas[Decenas_valor-Decenas_valor%10][1]
+                            valor_letras+=' '+unidades[Decenas_valor%10]
+                    elif Decenas_valor<20:
+                        valor_letras+=' '+unidades[Decenas_valor]
+                elif valor>0:
+                    valor_letras+=unidades[Decenas_valor]
+                if index==1:
+                    valor_letras+=' MILLONES '
+                if index==2:
+                    valor_letras+=' MIL '
+                if index==3:
+                    if valor==1:
+                        valor_letras+=' PESO '
+                    else:
+                        valor_letras+=' PESOS '
+            index+=1
+            
+        if miles==0 and cientos==0:
+            valor_letras+='DE PESOS '
+        elif miles!=0 and cientos==0:
+            valor_letras+='PESOS '
+        valor_letras+='M/CTE'    
+        valor_letras.replace('VEINTI ','VEINTI')
+        valor_letras.replace('  ',' ')
+        
+        if formato=='Numero':
+            valor_letras = valor_letras.replace(' DE ',''
+                ).replace('PESOS M/CTE',''
+                ).replace('PESO M/CTE',''
+                ).replace('  ',' ')
+        
+        if 'UN' in valor_letras and len(valor_letras)<5: valor_letras = 'UNO'
+        
+        return valor_letras
+    
+    def CalcularAnualidades(self,capital,tasa,nCuotas):
+        if tasa==0:
+            return math.ceil(capital/nCuotas)
+        else:
+            up=capital*tasa
+            down=1-(1+tasa)**(-1*nCuotas)
+            cuota=up/down
+            return math.ceil(cuota)
+    
+    def calcularPeriodos(self,cuota,tasa,capital):
+        """
+        Calcula el numero de periodos en funcion del capital pendiente y el valor de las cuotas
+        Los tres parametros deben ser del mismo tipo de datos.
+        """
+        #up=-1*math.log(1-(capital*tasa/cuota))
+        #down=math.log(1+tasa)
+        #value=up/down
+        
+        value = npf.nper(int(tasa),int(cuota),int(capital))
+        
+        return math.ceil(value)
+    
+    def CalcularVP(self,cuota,tasa,nCuotas):
+        
+        if tasa==0:
+            return math.ceil(cuota*nCuotas)
+        up=(1-(1+tasa)**(-1*nCuotas))*cuota
+        down=tasa
+        try:
+            capital=up/down
+        except ZeroDivisionError:
+            capital=cuota*nCuotas
+        return math.ceil(capital)        
+
+    def NombreMes(self,nroMes):
+        dctMeses={1:'Enero',
+                  2:'Febrero',
+                  3:'Marzo',
+                  4:'Abril',
+                  5:'Mayo',
+                  6:'Junio',
+                  7:'Julio',
+                  8:'Agosto',
+                  9:'Septiembre',
+                  10:'Octubre',
+                  11:'Noviembre',
+                  12:'Diciembre'}
+        return dctMeses[nroMes]

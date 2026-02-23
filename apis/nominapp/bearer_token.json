@@ -1,0 +1,31 @@
+{
+    "data": {
+        "user": {
+            "active": null,
+            "area": "administrative",
+            "company_access": null,
+            "company_created_at": "0",
+            "company_id": null,
+            "company_name": null,
+            "email": "jorgeavila@somosandina.co",
+            "id": "f164abe1-7e55-4494-a2fa-c506beb44323",
+            "is_new_invited_admin_user": false,
+            "multicompany": true,
+            "name": "Jorge",
+            "picture": null,
+            "phone": "3505810975",
+            "premium": null,
+            "role": null,
+            "worker_id": null,
+            "worker_with_benefits": null,
+            "workers_handle_novelties": null,
+            "workers_income_certificate_access": null,
+            "workers_labor_certificate_access": null,
+            "workers_payslips_access": null
+        },
+        "created_at": 1765380534997,
+        "is_new_user": false
+    },
+    "token": "eyJfcmFpbHMiOnsibWVzc2FnZSI6IkltVjVTbVpqYlVad1lraE5hVTl1YzJsYVIwWXdXVk5KTmxkNVNtMU5WRmt3V1ZkS2JFMVRNRE5hVkZVeFRGUlJNRTlVVVhSWlZFcHRXVk14YWs1VVFUSlpiVlpwVGtSUmVrMXFUV2xNUTBvMVRWZFdSMVV6Y0dsWlZsa3lZakowWVZORmR6RldTRnBWVkZOS1pFeERTbXhsU0VGcFQybEplVTFFU1RGTVZFVjVURlJGZDFaRVJUVlBha2swVDJwVk1FeHFhelZPYkc5cFRFTktkMlJZU1dsUGFVcFdZekpXZVZoSE5XaGtXRkp2V2xjMU1HRlhUbWhrUjJ4MlltdzVNR0l5ZEd4aWJIaDFUVlJSTUUxRVFXbG1XREE5TFMxa1ptUXlaVGd5WXpReE9UWTNNVE5pWlRKbFpXUTFObUV6TVRVd05EWXhaVGs0WlRJd01qWTFJZz09IiwiZXhwIjoiMjAyNS0xMi0xMFQxOToyODo1NC4wMDBaIiwicHVyIjoiY29va2llLnRva2VuIn19--91876e6991ff5d41737d1379e70b5b0a85ed57d0",
+    "expires": 1765394934
+}

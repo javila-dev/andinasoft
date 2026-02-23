@@ -1,0 +1,287 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%block title%}CRM | Manage leads{%endblock%}
+{%block style%}
+<style>
+    th {
+        text-align: center;
+        font-size: small;
+    }
+
+    td {
+        font-size: x-small;
+        text-align: center;
+    }
+
+    .dataTables_length {
+        padding-left: 8px;
+    }
+
+    .dataTables_filter {
+        padding-right: 8px;
+    }
+
+    .dataTables_info {
+        padding-left: 8px;
+    }
+    .dt-buttons{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+{%include 'datatable_buttons.html'%}
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Administrar Leads</h3>
+    <div class='table-responsive'>
+        <table id='tablaAdminLeads' class='display' style='width:100%'>
+            <thead>
+                <th>Id</th>
+                <th>Nombre</th>
+                <th>Ciudad</th>
+                <th>Direccion</th>
+                <th>Telefono</th>
+                <th>Email</th>
+                <th>Gestor</th>
+                <th>Fecha capta</th>
+                <th>Operador</th>
+                <th>Estado</th>
+                <th>Tipo</th>
+            </thead>
+        </table>
+    </div>
+    <div class="modal fade" id="modalLead" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLabel"></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-pills justify-content-center">
+                        <li class="nav-item">
+                            <a class="nav-link active" id='pill-info' href="#info" data-toggle="tab">Info</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id='pill-tl' href="#timeline" data-toggle="tab">Timeline</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id='pill-tl' href="#asignarOP" data-toggle="tab">Asignar Operador</a>
+                        </li>
+                    </ul>
+                    <div class="tab-content card-body">
+                        <div id="info" class="tab-pane active">
+                            {%crispy form%}
+                        </div>
+                        <div id="timeline" class="tab-pane"> 
+                            <div id="div-history" class="overflow-auto" style='max-height:400px'></div>
+                        </div>
+                        <div id="asignarOP" class="tab-pane">
+                            <select class='custom-select' id='operadores' name='operadores' required>
+                                <option value='' selected>Seleccionar...</option>
+                                {%for op in operadores%}
+                                <option value='{{op.pk}}'>{{op.first_name}} {{op.last_name}}</option>
+                                {%endfor%}
+                            </select>
+                            <button class="btn btn-success shadow btn-circle float-right mt-2" id="btnAsignarOP"
+                                type="button">
+                                <i class="fas fa-check"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <button type='button' class='btn btn-primary btn-circle btn-xl'
+        id='btnTrasladar'></button>
+    <script>
+        $(document).ready(function () {
+            $('#btnConfArchivo').hide()
+            var tablaAdminLeads = $('#tablaAdminLeads').DataTable({
+                "language": {
+                    "url": "/ajax_request/datatable_spanish"
+                },
+                'order':[0,'desc'],
+                lengthChange: false,
+                dom: 'Bfrtip',
+                buttons: [ 'pageLength','copy', 'excel', 
+                    {
+                        extend: 'pdfHtml5',
+                        orientation: 'landscape',
+                        pageSize: 'LEGAL',
+                        mesageTop: 'Administrar Leads'
+                    }    
+                ],
+                'ajax': {
+                    'url': '/crm/ajax/leads?estado=TODOS',
+                    "dataSrc": "data"
+                },
+                "columns": [{
+                        "data": "pk"
+                    },
+                    {
+                        "data": "nombre"
+                    },
+                    {
+                        "data": "ciudad"
+                    },
+                    {
+                        "data": "direccion"
+                    },
+                    {
+                        "data": "celular"
+                    },
+                    {
+                        "data": "email"
+                    },
+                    {
+                        "data": "gestor_asignado"
+                    },
+                    {
+                        "data": "fecha_reg"
+                    },
+                    {
+                        "data": "operador"
+                    },
+                    {
+                        "data": "estado"
+                    },
+                    {
+                        "data": "tipo"
+                    },
+                ],
+                "columnDefs": [{
+                    "targets": [1, 6],
+                    "className": "dt-body-left"
+                }, ],
+                "displayLength": 25,
+            });
+            tablaAdminLeads.buttons().container()
+            .appendTo( '#tablaAdminLeads_wrapper .col-md-6:eq(0)' );
+            $('#tablaAdminLeads tbody').on('click', 'tr', function () {
+                var row = tablaAdminLeads.row(this).data()
+                var lead_id = row.pk
+                var lead_name = row.nombre
+                $('#modalLead').find('.modal-title').text('Lead: ' + lead_name)
+                $('#id_lead').val(lead_id)
+                $('#id_nombre').val(row.nombre)
+                $('#id_celular').val(row.celular)
+                $('#id_telefono').val(row.telefono)
+                $('#id_email').val(row.email)
+                $('#id_direccion').val(row.direccion)
+                $('#id_ciudad').val(row.ciudad)
+                $('#id_estado_civil').val(row.estado_civil)
+                $('#id_fecha_nacimiento').val(row.fecha_nacimiento)
+                $('#id_gestor_capta').val(row.id_gestor)
+                $('#id_fecha_capta').val(row.fecha_reg)
+                $('#id_identificacion').val(row.cedula)
+                $('#pill-info').click()
+                $('#submit-id-btngrabar').prop('disabled',false)
+                $('#modalLead').modal('show')
+                $.ajax({
+                    type:'GET',
+                    url:'/crm/ajax/get_comments',
+                    data: {
+                        'lead':lead_id
+                    },
+                    success: function(response){
+                        var data = response['data']
+                        $('#div-history').empty()
+                        var ul = $('<ul>').addClass('list-unstyled')
+                        for (i=0;i<data.length;i++){
+                            item = data[i]
+                            let fecha = new Date(item.fecha)
+                            fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                            var li = '<li class="media border-bottom border-gray pt-2">'+
+                                '<img src="'+item.avatar+'" width="45" height="45" class="mr-3 rounded-circle" alt="...">'+
+                                '<div class="media-body">'+
+                                  '<h6 class="mt-0 mb-1">'+item.usuario+'<small> el '+fecha+'</small></h6>'+
+                                  '<p>'+item.observacion+'</p>'+
+                                '</div>'+
+                              '</li>'
+                            ul.append(li)
+                        }
+                        $('#div-history').append(ul)
+        
+                    }
+                })
+            })
+            $('#btnAsignarOP').click(function(){
+                var newOP = $('#operadores').val()
+                var id_lead = $('#id_lead').val()
+                var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+                $.ajax({
+                    type:'POST',
+                    url:'/crm/ajax/changeOP',
+                    data:{
+                        'csrfmiddlewaretoken':csrf_token,
+                        'id_lead':id_lead,
+                        'newop':newOP
+                    },
+                    success: function(response){
+                        tablaAdminLeads.ajax.reload()
+                        $('#operadores').val('')
+                        $('#form-lead').trigger('reset')
+                        $('#modalLead').modal('hide')
+                        $('#pill-info').click()
+                    }
+                })
+            })
+            $('#id_gestor_capta').replaceWith(
+                '<select class="custom-select" id="id_gestor_capta" name="gestor_capta">'
+            )
+            $.ajax({
+                type:'GET',
+                url:'/crm/ajax/getasesores',
+                success:function(response){
+                    var data = Array(response)[0]['asesores']
+                    for(let asesor in data){
+                        let id = data[asesor][0]
+                        let nombre = data[asesor][1]
+                        let option ='<option value="'+id+'">'+nombre+'</option>'
+                        $('#id_gestor_capta').append(option)
+                    }
+                }
+            })
+            $('#form-lead').on('submit',function(e){
+                e.preventDefault();
+                var formData = new FormData(this)
+                $.ajax({
+                    type:'POST',
+                    url:'/crm/ajax/updateLead',
+                    data:formData,
+                    processData:false,
+                    contentType:false,
+                    success:function(response){
+                        var pass = response['success']
+                        if (pass){
+                            tablaAdminLeads.ajax.reload()
+                            $('#submit-id-btngrabar').prop('disabled',true)
+                            $('#modalLead').modal('hide')
+                            $('#alert-title').text('Realizado')
+                            $('#alert-data').text('Se actualizó el lead con exito')
+                            $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                        }
+                        else{
+                            var errors = response['errors']
+                            $('#alert-title').text('Error')
+                            $('#alert-data').text(errors)
+                            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                        
+                            
+                        }
+                    }
+                })
+            })
+            $('#btn-download').click(function(){
+
+            })
+        });
+    </script>
+    {%endblock%}

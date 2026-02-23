@@ -1,0 +1,27 @@
+{%load crispy_forms_tags%}
+<!-- Modal -->
+<div class="modal fade" id="modal-seguimientos" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+    <form method="post" action=''>{%csrf_token%}
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id='titulo-alerta' class="modal-title text-center" id="staticBackdropLabel">Nuevo Seguimiento</h4>
+            </div>
+            <div class="modal-body">
+                {{form_seguimiento.tipo_seguimiento|as_crispy_field}}
+                {{form_seguimiento.forma_contacto|as_crispy_field}}
+                {{form_seguimiento.comentarios|as_crispy_field}}
+                {{form_seguimiento.tiene_compromiso|as_crispy_field}}
+                {{form_seguimiento.fecha_compromiso|as_crispy_field}}
+                {{form_seguimiento.valor_compromiso|as_crispy_field}}
+            </div>
+            <div class="modal-footer">
+                <div class='button-group'>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                    <input type='submit' class='btn btn-primary' name='agregarSeguimiento' value='Agregar'>
+                </div>
+            </div>
+        </div>
+    </form>
+    </div>
+  </div>

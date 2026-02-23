@@ -1,0 +1,258 @@
+{%load static%}
+<div id="header_content">
+    <table>
+        <tr>
+            <th style="align:left">
+                <img src="{%static 'img/fractal450x.png'%}" width="200">
+            </th>
+            <th></th>
+            <th style="align:right">
+                <img src="{%static 'img/casas-de-verano450x.png'%}" width="180">
+            </th>
+        </tr>
+    </table>
+</div>
+<div id="footer_content" >
+    <p style="margin-bottom: -10px;margin-right: 5rem;text-align: right;">
+        Reporte generado por <b>{{user.username}}</b><small class='text-muted'>
+            el {{now}}
+        </small></p>
+    <img style="margin-top: 0px" src="{%static 'img/pie-de-pagina-fractal.png'%}" width="820">
+</div>
+<div>
+    <table>
+        <tr>
+            <td style="width: 60%">
+                <h2>Titular</h2>
+                {%if adj.titulares.titular_1.pk != "" %}<b>1.</b> {{adj.titulares.titular_1.nombrecompleto}}<br>{%endif%}
+                <h2>Datos de contacto</h2>
+                Residencia: {{adj.titulares.titular_1.domicilio}}<br>
+                Ciudad: {{adj.titulares.titular_1.ciudad}}<br>
+                Telefono(s): {{adj.titulares.titular_1.celular1}} {{adj.titulares.titular_1.telefono1}}<br>
+                Email: {{adj.titulares.titular_1.email}}<br>
+            </td>
+            <td>
+                <h2>Informacion del contrato</h2>
+                <strong>Identificador:</strong> {{adj.pk}}<br>
+                <strong>Fecha de contrato:</strong> {{adj.fechacontrato}}<br>
+                <strong>Inmueble:</strong> {{adj.idinmueble}}<br>
+                <strong>Fracciones:</strong> {{adj.detalle_fraccciones.nro_fracciones}}<br>
+                <strong>Valor:</strong> ${{adj.valor}}<br>         
+                
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table style="border: solid 0.5px;border-color: gray;padding-top: 3px;" id="table-credit-detail">
+        <thead>
+            <tr>
+                <th colspan="6" style="background-color: #7B50FF;"><h2 style="color: white">Detalle saldos capital</h2></th>
+            </tr>
+            <tr style="text-align: center;vertical-align: middle;">
+                <th>Tipo</th>
+                <th>Nº Cuotas</th>
+                <th>Plazo (meses)</th>
+                <th>Valor</th>
+                <th>Abonado</th>
+                <th>Saldo</th>
+            </tr>
+        </thead>
+        <tbody>
+                <tr style="text-align: center;">
+                    <td>Cuota Incial</td>
+                    <td>{{adj.tiempos_pagos.numero_ctas_ci}}</td>
+                    <td>{{adj.tiempos_pagos.months_to_pay_ci}}</td>
+                    <td>${{adj.extra_info.cta_inicial}}</td>
+                    <td>{{adj.saldos_por_cartera.abonado_ci}}</td>
+                    <td>{{adj.saldos_por_cartera.saldo_ci}}</td>
+                </tr>
+                <tr style="text-align: center;">
+                    <td>Saldo</td>
+                    <td>{{adj.tiempos_pagos.numero_ctas_fn}}</td>
+                    <td>{{adj.tiempos_pagos.months_to_pay_fn}}</td>
+                    <td>${{adj.extra_info.saldo}}</td>
+                    <td>{{adj.saldos_por_cartera.abonado_fn}}</td>
+                    <td>{{adj.saldos_por_cartera.saldo_fn}}</td>
+                </tr>
+        </tbody>
+        <tfoot>
+            <tr>
+                <th style="text-align: right;padding-right: 2px;">TOTAL</th>
+                <th>{{adj.tiempos_pagos.numero_ctas_ci|add:adj.tiempos_pagos.numero_ctas_fn}}</th>
+                <th>{{adj.tiempos_pagos.months_to_pay_ci|add:adj.tiempos_pagos.months_to_pay_fn}}</th>
+                <th>${{adj.extra_info.cta_inicial|add:adj.extra_info.saldo}}</th>
+                <th>${{adj.saldos_por_cartera.abonado_ci|add:adj.saldos_por_cartera.abonado_fn}}</th>
+                <th>${{adj.saldos_por_cartera.saldo_ci|add:adj.saldos_por_cartera.saldo_fn}}</th>
+            </tr>
+        </tfoot>
+    </table>
+    <br>
+    <table style="border: solid 0.5px;border-color: gray;padding-top: 3px;" id="table-detail">
+        <thead>
+            <tr>
+                <th colspan="6" style="background-color: #7B50FF"><h2 style="color: white">Cuotas pendientes a la fecha</h2></th>
+            </tr>
+            <tr style="text-align: center;vertical-align: middle;">
+                <th>Fecha</th>
+                <th>Cuota</th>
+                <th>Valor</th>
+                <th>Dias de mora</th>
+                <th>Intereses de mora</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {%for quota in cuotas_a_la_fecha%}
+                <tr style="text-align: center;">
+                    <td>{{quota.fecha|date:"d/m/Y"}}</td>
+                    <td>{{quota.idcta}}</td>
+                    <td>${{quota.pendiente.total}}</td>
+                    <td>{{quota.mora.dias_reales}}</td>
+                    <td>${{quota.mora.valor}}</td>
+                    <td>${{quota.pendiente.total|add:quota.mora.valor}}</td>
+                </tr>
+            {%endfor%}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="2" style="text-align: right;padding-right: 2px;">TOTAL</th>
+                <th>${{totals.valor}}</th>
+                <th></th>
+                <th>${{totals.intereses_mora}}</th>
+                <th>${{totals.total}}</th>
+            </tr>
+        </tfoot>
+    </table>
+    <br>
+    <table style="border: solid 0.5px;border-color: gray;padding-top: 3px;" id="table-detail">
+        <thead>
+            <tr>
+                <th colspan="3" style="background-color: #7B50FF;"><h2 style="color: white">Proxima(s) cuota(s)</h2></th>
+            </tr>
+            <tr style="text-align: center;vertical-align: middle;">
+                <th>Fecha</th>
+                <th>Cuota</th>
+                <th>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            {%for quota in cuotas_futuras%}{%if quota.is_pending%}
+            <tr style="text-align: center;">
+                <td>{{quota.fecha|date:"d/m/Y"}}</td>
+                <td>{{quota.pk}}</td>
+                <td>${{quota.pendiente.total}}</td>
+            </tr>{%endif%}{%endfor%}
+        </tbody>
+    </table>
+    <br>
+    <table style="border: solid 0.5px;border-color: gray;padding-top: 3px;" id="table-detail">
+        <thead>
+            <tr>
+                <th colspan="5" style="background-color: #7B50FF;"><h2 style="color: white">Detalle para pago total</h2></th>
+            </tr>
+            <tr style="text-align: center;vertical-align: middle;">
+                <th colspan="3" style="width:50%">Vencido</th>
+                <th rowspan="2" >Futuro</th>
+                <th rowspan="2" >Total</th>
+            </tr>
+            <tr style="text-align: center;vertical-align: middle;">
+                <th>Capital</th>
+                <th>Intereses</th>
+                <th>Mora</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="text-align: center;">
+                <td>{{adj.saldos_por_cartera.pago_hoy.cap_vencido}}</td>
+                <td>{{adj.saldos_por_cartera.pago_hoy.int_vencido}}</td>
+                <td>{{totals.intereses_mora}}</td>
+                <td>{{adj.saldos_por_cartera.pago_hoy.cap_futuro}}</td>
+                <td>{{adj.saldos_por_cartera.pago_hoy.total_pago_hoy|add:totals.intereses_mora}}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+<style>
+    @page {
+        size: letter;
+        /* background-image: url("/static/img/bg-andina-a4.jpg");
+        background-repeat: repeat; */
+        @frame header_frame {           /* Static Frame */
+            -pdf-frame-content: header_content;
+            left: 40pt; 
+            width: 530pt; 
+            top: 20px; 
+            height: 150px;
+        }
+        @frame footer_frame {           /* Another static Frame */
+            -pdf-frame-content: footer_content;
+            left: 0pt; width: 630pt; top: 700pt; height: 105pt;
+        }
+        @frame content_frame {          /* Content Frame */
+            left: 50pt; 
+            width: 530pt; 
+            top: 150px; 
+            height: 560pt;
+        }
+
+    }
+
+    @font-face {
+            font-family: Outfit;
+            src: url("{%static 'fonts/Outfit/Outfit-Light.ttf'%}");
+        }
+            
+    /* Bold */
+    @font-face {
+        font-family: Outfit;
+        src: url("{%static 'fonts/Outfit/Outfit-Bold.ttf'%}");
+        font-weight: bold;
+    }
+
+    body {
+        font-family: Outfit;
+    }
+    
+    table {
+        font-size: 9.5pt;
+        border-collapse:separate;
+        border-spacing: 10;
+        border-radius:10px;
+        -moz-border-radius:10px;
+        -webkit-border-radius: 5px;  
+    }
+    td{
+        vertical-align: top!important;
+    }
+    
+    .text-muted{
+        color: gray;
+        
+    }
+
+    #encabezados-logos p {
+        padding: 0px;
+        margin: 0px;
+        font-size: large;
+        color: lightslategray;
+    }
+
+    #detail-table th,
+    #detail-table td {
+        padding: 2px;
+        width: 50%;
+        height: 50%;
+    }
+
+    .underline {
+        border-bottom: 0.5px solid gray;
+    }
+
+    .text-center {
+        text-align: center;
+    }
+
+    .title {
+        font-weight: bold;
+    }
+</style>

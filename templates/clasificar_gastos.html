@@ -1,0 +1,402 @@
+{%extends 'base.html'%}
+{%load l10n%}
+{%load static%}
+{%block title%}Detalle gastos cargados{%endblock%}
+
+{%block content%}
+<style>
+    tfoot input {
+        width: 100%;
+        padding: 3px;
+        box-sizing: border-box;
+    }
+    .toast{
+        z-index: -1;
+    }
+    .toast.fade.show{
+        z-index: auto;
+    }
+</style>
+<div id='father' class="bg-white rounded shadow principal-container" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <div class='row'>
+        <div class='col-sm-5'>
+            <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Detalle gastos cargados</strong></h4>
+        </div>
+        <div class='flex-column ml-auto'>
+            <button type="button" class='btn btn-outline-danger' data-toggle="modal" data-target="#modalConfirmarEliminar">
+                <i class="fas fa-trash-alt"></i>&nbsp;Eliminar
+            </button>
+        </div>
+    </div>
+    <br>
+    <div class='table-responsive'>
+        <table id='tablaGastos' class="stripe row-border compact" style="width:100%">
+            <thead>
+                <tr>
+                    <th class='text-center' style="width:10%">Comprobante</th>
+                    <th class='text-center' style="width:20%">Tercero</th>
+                    <th class='text-center' style="width:10%">Fecha</th>
+                    <th class='text-center' style="width:10%">Cuenta</th>
+                    <th class='text-center' style="width:25%">Gasto</th>
+                    <th class='text-center' style="width:15%">Valor</th>
+                    <th class='text-center' style="width:15%">Proyecto</th>
+                    <th class='text-center' style="width:15%">Item</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for gasto in gastos%}
+                <tr>
+                    <td><a href="#" data-toggle="modal" data-target="#modalDetalleGasto"
+                            data-comprobante="{{gasto.comprobante}}" data-proyecto="{{gasto.proyecto}}"
+                            data-empresa="{{gasto.empresa}}" data-item="{{gasto.item_asociado}}"><small
+                                style="font-size: x-small;">{{gasto.comprobante}}</small></a></td>
+                    <td><small style="font-size: x-small;">{{gasto.tercero}}<small></td>
+                    <td class="text-center"><small style="font-size: x-small;">{{gasto.fecha|date:"d/m/Y"}}</small></td>
+                    <td class="text-center">
+                        <smal style="font-size: x-small;">{{gasto.cuenta}}</small>
+                    </td>
+                    <td><small style="font-size: x-small;">{{gasto.descrip_gasto}}</small></td>
+                    <td class="text-center"><small style="font-size: x-small;">{{gasto.valor}}</small></td>
+                    <td class="text-center"><small style="font-size: x-small;">{{gasto.proyecto}}</small></td>
+                    <td class="text-center"><small style="font-size: x-small;">{{gasto.item_asociado}}</small></td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalDetalleGasto" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="modalDetalleGasto" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Detalle de gasto</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type='text' id='filatabla' hidden>
+                <input type="text" id="comprobante" hidden>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="Proyecto" style="padding-right: 40px;">Proyecto</label>
+                    </div>
+                    <select class="custom-select" id="Proyecto" name='Proyecto'>
+                        {%for proyecto in proyectos%}
+                        <option value="{{proyecto.pk}}">{{proyecto.pk}}</option>
+                        {%endfor%}
+                    </select>
+                </div>
+                <br>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="Grupo">Grupo Gasto</label>
+                    </div>
+                    <select class="custom-select" id="Grupo" name='Grupo'>
+                        <option selected>...</option>
+                        <option value="GASTO COMERCIAL">Gasto Comercial</option>
+                        <option value="GASTO ADMINISTRATIVO">Gasto Administrativo</option>
+                        <option value="GASTO ALTTUM">Gasto Alttum</option>
+                        <option value="GASTO PROYECTOS">Gasto Proyectos</option>
+                        <option value="GASTO TIERRAS">Gasto Tierras</option>
+                    </select>
+                </div>
+                <br>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="Item" style="padding-right: 70px;">Item</label>
+                    </div>
+                    <select class="custom-select" id="Item" name='Item'>
+                    </select>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-danger" onclick="eliminarLinea()">Eliminar linea</button>
+                <button type="button" class="btn btn-primary" onclick="CambioClasificacion()">Cambiar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalConfirmarEliminar" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="modalConfirmarEliminar" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Confirmar</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estas seguro que deseas borrar los datos del periodo <strong>{{año}}-{{mes}}</strong>
+                     de la empresa <strong>{{empresa}}</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+                <form method='POST'>{%csrf_token%}
+                    <input type="submit" name='btnEliminarPeriodo' class="btn btn-primary" value='Si'>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Alerts -->
+<div style="position: absolute; top: 0;right: 0">
+    <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" id='toastProyecto'>
+        <div class="toast-header alert-danger">
+          <strong class="mr-auto">Oh Oh <i class="far fa-dizzy"></i></strong>
+          <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="toast-body alert-danger">
+            Hay <strong>{{obj_sinproyecto|unlocalize}}</strong> lineas de gasto <strong>sin PROYECTO</strong> asignado.
+        </div>
+    </div>
+    <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" id='toastItem'>
+        <div class="toast-header alert-danger">
+          <strong class="mr-auto">Oh Oh <i class="far fa-dizzy"></i></strong>
+          <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="toast-body alert-danger">
+            Hay <strong>{{obj_sinitem|unlocalize}}</strong> lineas de gasto <strong>sin ITEM</strong> asignado.
+        </div>
+    </div>
+</div>
+{%include 'alert.html'%}
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+<script>
+    revisionAlertas();
+    var tableGastos = $('#tablaGastos').DataTable({
+        'scrollY': "600px",
+        'scrollX': true,
+        'scrollCollapse': true,
+        'paging': false,
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/German.json"
+        },
+        searchBuilder:{
+            conditions: {
+                    num: {
+                        '=': {
+                            conditionName: 'Igual a'
+                        },
+                        '!=': {
+                            conditionName: 'Diferente de'
+                        },
+                        '!null': {
+                            conditionName: 'No esta vacio'
+                        },
+                        '<': {
+                            conditionName: 'Menor que'
+                        },
+                        '<=': {
+                            conditionName: 'Menor o igual que'
+                        },
+                        '>': {
+                            conditionName: 'Mayor que'
+                        },
+                        '>=': {
+                            conditionName: 'Mayor o igual que'
+                        },
+                        'null': {
+                            conditionName: 'Vacio'
+                        },
+                        'between': {
+                            conditionName: 'Entre'
+                        },
+                        '!between': {
+                            conditionName: 'No esta entre'
+                        }
+                    },
+                    string: {
+                        '=': {
+                            conditionName: 'Igual a'
+                        },
+                        '!=': {
+                            conditionName: 'Diferente de'
+                        },
+                        '!null': {
+                            conditionName: 'No esta vacio'
+                        },
+                        'null': {
+                            conditionName: 'Vacio'
+                        },
+                        'starts': {
+                            conditionName: 'Empieza con'
+                        },
+                        'ends': {
+                            conditionName: 'Termina en'
+                        },
+                        'contains': {
+                            conditionName: 'Contiene'
+                        },
+                    }
+                },
+        },
+        language:{
+            searchBuilder: {
+                add:'Nuevo filtro',
+                clearAll:'Borrar filtro',
+                deleteTitle:'Borrar',
+                data:'Columna',
+                logicAnd:'Y',
+                logicOr:'O',
+                condition: 'Condición',
+                value: 'Valor',
+                title: 'Filtro Avanzado',
+            }
+        },
+        dom: 'Qlfrtip',
+    });
+    $('#tablaGastos tbody').on('click', 'tr', function () {
+        if ($(this).hasClass('selected')) {
+            $(this).removeClass('selected');
+        } else {
+            tableGastos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        var pos = tableGastos.row(this).index();
+        $('#filatabla').val(tableGastos.row(pos)[0])
+    });
+    $('#modalDetalleGasto').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget) // Button that triggered the modal
+        $('#Grupo').val(null)
+        $('#Item').empty()
+        var comprobante = button.data('comprobante')
+        var proyecto = button.data('proyecto')
+        var item = button.data('item')
+        $('#comprobante').val(comprobante)
+        $('#Proyecto').val(proyecto)
+        $.ajax({
+            url: "/contabilidad/gastos/detalle/{{empresa}}/{{año}}/{{mes}}",
+            type: "GET",
+            data: {
+                'typecall': 'searchItem',
+                'item':item
+            },
+            success: function(response){
+                var passedData = response['passed']
+                var descripcion_item = response['descrip_item']
+                var grupo = response['grupo_item']
+                if(passedData){
+                    $('#Grupo').val(grupo)
+                    CargarOpciones(grupo,item)
+                }
+            }
+        });
+    });
+    $('#Grupo').on('change', function () {
+        var grupo = $('#Grupo').val()
+        CargarOpciones(grupo)
+    });
+    function CargarOpciones(grupo_gasto,option_selected=0) {
+        $.ajax({
+            url: "/contabilidad/gastos/detalle/{{empresa}}/{{año}}/{{mes}}",
+            type: "GET",
+            data: {
+                'typecall': 'selectOptions',
+                'grupo': grupo_gasto
+            },
+            success: function (response) {
+                var items = JSON.parse(response['items'])
+                var selectItem = $('#Item')
+                selectItem.empty()
+                for (i = 0; i < items.length; i++) {
+                    var item = items[i]['fields']
+                    var option = $('<option>')
+                    option.attr('value', items[i]['pk'])
+                    option.text(items[i]['pk'] + ". " + item['temas'])
+                    if (option_selected!=0){
+                        var value = items[i]['pk']
+                        if(value==option_selected){
+                            option.attr('selected',true)
+                        }
+                    }
+                    selectItem.append(option)
+                }
+            }
+        });
+    };
+    function CambioClasificacion(){
+        var row = $('#filatabla').val()
+        var comprobante = $('#comprobante').val()
+        var proyecto = $('#Proyecto').val()
+        var item = $('#Item').val()
+        $.ajax({
+            url: "/contabilidad/gastos/detalle/{{empresa}}/{{año}}/{{mes}}",
+            type: "GET",
+            data: {
+                'typecall': 'UpdateData',
+                'proyecto': proyecto,
+                'comprobante': comprobante,
+                'item': item,
+            },
+            success:function(response){
+                var changes_passed = response['passed']
+                if (changes_passed){
+                    var nuevo_proyecto = '<small style="font-size: x-small;">'+proyecto+'</small>'
+                    var nuevo_item = '<small style="font-size: x-small;">'+item+'</small>'
+                    tableGastos.cell(row,6).data(nuevo_proyecto).draw()
+                    tableGastos.cell(row,7).data(nuevo_item).draw()
+                    $('#modalDetalleGasto').modal('hide')
+                }
+                else{
+                    $('#modalDetalleGasto').modal('hide')
+                    $('#alerta-general').modal('show')
+                    document.getElementById('mensaje-alerta').innerHTML='Ocurrio un error al intentar cambiar la clasificacion de este gasto';
+                    document.getElementById('titulo-alerta').innerHTML='Error';
+                }
+            }
+        });
+    }
+    function revisionAlertas(){
+        var sinProyecto = parseInt('{{obj_sinproyecto|unlocalize}}')
+        var sinItem = parseInt('{{obj_sinitem|unlocalize}}')
+        $('.toast').toast({'autohide':false})
+        if (sinProyecto>0){
+            $('#toastProyecto').toast('show')
+        }
+        if (sinItem>0){
+            $('#toastItem').toast('show')
+        }
+        
+    }
+    function eliminarLinea(){
+        var row = $('#filatabla').val()
+        var comprobante = $('#comprobante').val()
+        var proyecto = $('#Proyecto').val()
+        var item = $('#Item').val()
+        $.ajax({
+            url: "/contabilidad/gastos/detalle/{{empresa}}/{{año}}/{{mes}}",
+            type: "GET",
+            data: {
+                'typecall': 'DeleteData',
+                'proyecto': proyecto,
+                'comprobante': comprobante,
+                'item': item,
+            },
+            success:function(response){
+                var changes_passed = response['passed']
+                if (changes_passed){
+                    tableGastos.row('.selected').remove().draw( false );
+                }
+                else{
+                    $('#modalDetalleGasto').modal('hide')
+                    $('#alerta-general').modal('show')
+                    document.getElementById('mensaje-alerta').innerHTML=response['message'];
+                    document.getElementById('titulo-alerta').innerHTML='Error';
+                }
+                $('#modalDetalleGasto').modal('hide')
+            }
+        })
+    }
+</script>
+{%endblock%}

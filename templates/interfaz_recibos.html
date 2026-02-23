@@ -1,0 +1,122 @@
+<form class='form-inline' method='post' action=''>{%csrf_token%}
+<div class="modal fade" id="modalIntRecibos" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Interfaz Recibos de Caja</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group" id="div_desde" data-target-input="nearest">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Fecha Desde</span>
+                </div>
+                <input type="text" name="Fecha_Desde" id="desde" class="datepicker form-control datetimepicker-input" required="True" data-toggle="datetimepicker" data-target="#desde">
+                <div class="input-group-append" data-target="#desde" data-toggle="datetimepicker">
+                    <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i></div>
+                </div>
+            </div>
+            <br>
+            <div class="input-group" id="div_desde" data-target-input="nearest">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Fecha Hasta</span>
+                </div>
+                <input type="text" name="Fecha_Hasta" id="hasta" class="datepicker form-control datetimepicker-input" required="True" data-toggle="datetimepicker" data-target="#hasta">
+                <div class="input-group-append" data-target="#desde" data-toggle="datetimepicker">
+                    <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" name='btnIntRecibos' class="btn btn-primary" value='Buscar'>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+<form class='form-inline' method='post' action=''>{%csrf_token%}
+    <div class="modal fade" id="modalIntComisiones" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="staticBackdropLabel">Interfaz Comisiones</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group" id="div_desde" data-target-input="nearest">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text" id="basic-addon2">Fecha Desde</span>
+                    </div>
+                    <input type="text" name="Fecha_Desde" id="desde_comis" class="datepicker form-control datetimepicker-input" required="True" data-toggle="datetimepicker" data-target="#desde_comis">
+                    <div class="input-group-append" data-target="#desde_comis" data-toggle="datetimepicker">
+                        <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i></div>
+                    </div>
+                </div>
+                <br>
+                <div class="input-group" id="div_desde" data-target-input="nearest">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text" id="basic-addon2">Fecha Hasta</span>
+                    </div>
+                    <input type="text" name="Fecha_Hasta" id="hasta_comis" class="datepicker form-control datetimepicker-input" required="True" data-toggle="datetimepicker" data-target="#hasta_comis">
+                    <div class="input-group-append" data-target="#hasta_comis" data-toggle="datetimepicker">
+                        <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i></div>
+                    </div>
+                </div>
+                <br>
+                <div class="input-group" id="div_desde" data-target-input="nearest">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text" id="basic-addon2">Consecutivo</span>
+                    </div>
+                    <input type="number" min="1" name="consecutivo" id="consecutivo" class="form-control" required="True">
+                </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+              <input type="submit" name='btnIntComisiones' class="btn btn-primary" value='Buscar'>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+<link href="//cdnjs.cloudflare.com/ajax/libs/tempusdominus-bootstrap-4/5.1.2/css/tempusdominus-bootstrap-4.min.css" type="text/css" media="all" rel="stylesheet">
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment-with-locales.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/tempusdominus-bootstrap-4/5.1.2/js/tempusdominus-bootstrap-4.min.js"></script>
+<script type="text/javascript">
+    function deferDateTimePicker_desde() {
+        if (window.jQuery && $.fn.datetimepicker) {
+            $('#desde').datetimepicker({"format": "YYYY-MM-DD", "icons": {"time": "fa fa-clock-o"}, "useCurrent": true, "collapse": false, "locale": "es-co"});
+        } else {
+            setTimeout(function() { deferDateTimePicker_desde() }, 50);
+        }
+    }
+    deferDateTimePicker_desde();
+    function deferDateTimePicker_hasta() {
+        if (window.jQuery && $.fn.datetimepicker) {
+            $('#hasta').datetimepicker({"format": "YYYY-MM-DD", "icons": {"time": "fa fa-clock-o"}, "useCurrent": true, "collapse": false, "locale": "es-co"});
+        } else {
+            setTimeout(function() { deferDateTimePicker_desde() }, 50);
+        }
+    }
+    deferDateTimePicker_hasta();
+    function deferDateTimePicker_hasta_comis() {
+        if (window.jQuery && $.fn.datetimepicker) {
+            $('#hasta_comis').datetimepicker({"format": "YYYY-MM-DD", "icons": {"time": "fa fa-clock-o"}, "useCurrent": true, "collapse": false, "locale": "es-co"});
+        } else {
+            setTimeout(function() { deferDateTimePicker_hasta_comis() }, 50);
+        }
+    }
+    deferDateTimePicker_hasta_comis();
+    function deferDateTimePicker_desde_comis() {
+        if (window.jQuery && $.fn.datetimepicker) {
+            $('#desde_comis').datetimepicker({"format": "YYYY-MM-DD", "icons": {"time": "fa fa-clock-o"}, "useCurrent": true, "collapse": false, "locale": "es-co"});
+        } else {
+            setTimeout(function() { deferDateTimePicker_desde_comis() }, 50);
+        }
+    }
+    deferDateTimePicker_desde_comis();
+</script>

@@ -1,0 +1,138 @@
+{%extends 'base.html'%}
+{%load static%}
+{%block title%}GTT {{proyecto}}{%endblock%}
+{%block style%}
+<style>
+    th {
+        text-align: center;
+    }
+
+    td {
+        text-align: center;
+    }
+    td.text-left{
+        text-align: left;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='container-lg rounded shadow bg-white px-0'>
+    <h3 class='text-white text-center section-title'>GTT {{proyecto}}</h3>
+    <div class='d-flex flex-row mx-0'>
+        <div class='px-2 ml-sm-auto'>
+            <a href='/comercial/gtt/nuevo/{{proyecto}}' class='btn btn-primary'>Agregar</a>
+        </div>
+    </div>
+    <div class='py-3 px-3'>
+        <div class='table-responsive'>
+            <table id='tablaGtt' class='display' style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Gtt</th>
+                        <th>Desde</th>
+                        <th>Hasta</th>
+                        <th>Valor</th>
+                        <th>Estado</th>
+                        <th>Usuario</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%for gtt in gtts%}
+                    <tr>
+                        <td class=' details-control'><i class="far fa-plus-square"></i></td>
+                        <td>{{gtt.pk}}</td>
+                        <td>{{gtt.fecha_desde|date:"d/m/Y"}}</td>
+                        <td>{{gtt.fecha_hasta|date:"d/m/Y"}}</td>
+                        <td>{{gtt.valor}}</td>
+                        <td>
+                            {%if gtt.estado == "Pendiente"%}
+                            <a href='#' data-toggle='modal' data-target='#modalGtt'
+                                data-gtt='{{gtt.pk}}'>{{gtt.estado}}</a>
+                            {%else%}
+                            <a href='/downloads/gtt/{{proyecto}}/{{gtt.pk}}' target="_blank">{{gtt.estado}}</a>
+                            {%endif%}
+                        </td>
+                        <td>{{gtt.usuario_crea}}</td>
+                    </tr>
+                    {%endfor%}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalGtt" tabindex="-1" aria-labelledby="modalGtt" aria-hidden="true">
+    <form method="POST">{%csrf_token%}
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalGttLabel">Gtt</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input type='text' name='gtt_aprobar' id='gtt_aprobar' hidden>
+                    ¿Estas seguro que deseas aprobar este GTT?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+                    <input type="submit" class="btn btn-primary" name='btnAprobar' value='Si'>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<script>
+    function format(d) {
+        // `d` is the original data object for the row
+        var table = '<table cellpadding="5" cellspacing="0" border="0" style="padding-left:50px;">'
+        for (i = 0; i < d.length; i++) {
+            table += '<tr>' +
+                '<td>' + (i + 1) + '</td>' +
+                '<td class="text-left">' + d[i].asesor + '</td>' +
+                '<td> $' + new Intl.NumberFormat().format(d[i].valor) + '</td>' +
+                '</tr>'
+        }
+        table += '</table>';
+        return table
+    }
+    $(document).ready(function () {
+        var tabla = $('#tablaGtt').DataTable({
+            'order': [
+                [1, 'desc']
+            ]
+        })
+        $('#tablaGtt tbody').on('click', 'td.details-control', function () {
+            var tr = $(this).closest('tr');
+            var row = tabla.row(tr);
+            if (row.child.isShown()) {
+                row.child.hide();
+                tr.find('i').removeClass('fa-minus-square');
+                tr.find('i').addClass('fa-plus-square');
+            } else {
+                // Open this row
+                var item_gtt = row.data()[1]
+                $.ajax({
+                    type: 'GET',
+                    url: '/comercial/gtt/{{proyecto}}',
+                    data: {
+                        'id_gtt': item_gtt
+                    },
+                    success: function (response) {
+                        var data = Array(response['data'])[0]
+                        row.child(format(data)).show();
+                    }
+                })
+                tr.find('i').removeClass('fa-plus-square')
+                tr.find('i').addClass('fa-minus-square')
+            }
+        });
+        $('#modalGtt').on('show.bs.modal', function (event) {
+            var trigger = $(event.relatedTarget)
+            var id_gtt = trigger.data('gtt')
+            $('#gtt_aprobar').val(id_gtt)
+        })
+    })
+</script>
+{%endblock%}

@@ -1,0 +1,181 @@
+{%load static%}{%load extras%}
+<html>
+    <body>
+        <div id="footer_content">
+            <p style="margin-bottom: 0px;margin-right: 10rem;text-align: right;">
+                Página <pdf:pagenumber> de <pdf:pagecount></p>
+            <img style="margin-top: 0px" src="{%static 'img/pie-de-pagina-fractal.png'%}" width="820">
+        </div>
+        <div id="header_content">
+            <table>
+                <tr>
+                    <th style="align:left">
+                        <img src="{%static 'img/fractal450x.png'%}" width="200">
+                    </th>
+                    <th></th>
+                    <th style="align:right">
+                        <img src="{%static 'img/casas-de-verano450x.png'%}" width="180">
+                    </th>
+                </tr>
+            </table>
+        </div>
+
+        <div>
+            <h1>
+                <b>FORMATO DE VERIFICACIÓN<br>ACUERDO PRIVADO DE INVERSIÓN “FRACTAL CASAS DE VERANO” 
+                    <span style="color:#7B50FF;font-size:15px;"> No.&nbsp;{{ctr.pk}}</span></b>
+            </h1>
+            <p>
+                Por medio del presente formato de verificación, la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S, con NIT 900.993.044-9, deja constancia
+                que, EL INVERSIONISTA:<br />
+            </p>
+            <p>
+                <b>Nombre/Razón social:</b> <u>{{ctr.titulares.0.nombrecompleto}}</u>&nbsp;&nbsp;
+                <b>Identificación/NIT:</b> <u>{{ctr.titulares.0.pk}}</u>&nbsp;&nbsp;
+            </p>
+            <p>
+                Conoce y está conforme con el contenido, términos y condiciones del acuerdo suscrito con EL PROMOTOR, 
+                y que, el formato de verificación hace parte integral del acuerdo. A lo cual se indica que: <br />
+            </p>
+            <ol>
+                <li>El proyecto adquirido se va a realizar a través de una sociedad por acciones simplificadas (S.A.S), 
+                    como vehículo jurídico para agrupar a los interesados inversionistas y a EL INVERSIONISTA.
+                </li>
+                <li>Que EL INVERSIONISTA, adquirió el <b>{{ctr.fractal.porcentaje_propiedad|nombre_numero}} POR CIENTO 
+                    ( {{ctr.fractal.porcentaje_propiedad}} %)</b>  del capital social (porcentaje mínimo).
+                </li>
+                <li>EL INVERSIONISTA, tendrá asignado en proporción al porcentaje adquirido, mediante este acuerdo, 
+                    la <b>CASA DE VERANO N&#176;
+                    </b>&nbsp;<u><b>{{ctr.general_info.inmueble.numero_casa}}</b>&nbsp;</u>,
+                    conjunto residencial <b>FRACTAL CASAS DE VERANO</b>, N&#176; de
+                    fracciones <u>&nbsp;<b>{{ctr.fractal.cantidad}}</b>&nbsp;</u>; 
+                    Porcentaje de propiedad <u>&nbsp;<b>{{ctr.fractal.porcentaje_propiedad}}</b>&nbsp;</u> por
+                    ciento; La cual se encuentra dentro del 
+                    Lote N&#176;: <u>&nbsp;<b>{{ctr.general_info.inmueble.lotenumero}}</b>&nbsp;</u>;
+                    Manzana N&#186;: <u>&nbsp;<b>{{ctr.general_info.inmueble.manzananumero}}</b>&nbsp;</u>
+                    . de la cual tendr&#225; el uso y disfrute seg&#250;n el n&#250;mero de semanas y el Manual 
+                    <b>FRACTAL CASAS DE VERANO</b>.
+                </li>
+                <li>El valor del porcentaje de derecho de propiedad y futuro aporte de capital, objeto de este acuerdo, 
+                    es por la suma de <b><u>&nbsp;{{ctr.general_info.valor_en_letras}}&nbsp;</u> 
+                    (<u>&nbsp;$ {{ctr.general_info.valor|floatformat:"-3g"}}&nbsp;</u>)</b>
+                </li>
+                <li>
+                    Que su forma de pago es:
+                </li>
+                    <table class='detalles' style="margin-top: 0.5rem;">
+                        <tr>
+                            <td style="width:2%"></td>
+                            <td style="text-align:justify;vertical-align: top;">
+                                <b>1. CUOTA INICIAL:</b> la suma de {{ctr.general_info.ci|nombre_numero}}
+                                 ($ <u><b>{{ctr.general_info.ci|floatformat:"-3g"}})</b>&nbsp;</u> pesos, 
+                                 que serán pagados de la siguiente manera: 
+                                <u>{{ctr.general_info.fp_ci}}&nbsp;</u>.<br>
+                            </td>
+                            <td style="width:5%"></td>
+                            <td style="text-align:justify;vertical-align: top;">
+                                <b>2. SALDO A PAGAR:</b>{%if ctr.general_info.saldo == 0 %} <u>$ 0</u> {%else%} 
+                                la suma de {{ctr.general_info.saldo|nombre_numero}}
+                                 ($ <u><b>{{ctr.general_info.saldo|floatformat:"-3g"}})&nbsp;</b></u> pesos, 
+                                 que serán pagados de la siguiente manera: 
+                                <u>{{ctr.general_info.fp_saldo}}&nbsp;</u>.{%endif%}<br>
+                            </td>
+                            <td style="width:2%"></td>
+                        </tr>
+                    </table><br>                
+                <li>El Proyecto se centra en el disfrute compartido de una casa de verano. Las proyecciones de rentabilidad y estimaciones de retorno de inversión
+                dependen netamente de la OPERACIÓN y pueden variar acorde a los resultados de la misma.</li>
+                <li>El inicio del proyecto está supeditado a las condiciones de inicio que usted declara conocer.</li>
+                <li>La sociedad será constituida por los inversionistas, una vez, se cumplan las condiciones estipuladas en la cláusula DÉCIMA PRIMERA del
+                acuerdo.</li>
+                <li>Todos los aportes realizados por EL INVERSIONISTA para el desarrollo del proyecto, serán realizados directamente a las cuentas bancarias de
+                EL PROMOTOR.</li>
+                <li>EL PROMOTOR otorgará una membresía de regalo para el disfrute del club ALTTUM CARIBE, la cual, será global por cada casa de verano. La
+                membresía estará sujeta a términos y condiciones de uso, a partir de su activación. Esta membresía no incluye pagos por concepto de
+                administración de uso club. Estos deberán ser cancelados por los inversionistas que integren la casa de verano.</li>
+                <li>Que, EL PROMOTOR no reconoce validez a las estipulaciones verbales que pudieron hacerse con anterioridad a la suscripción del acuerdo
+                privado entre las partes. Ya que, el acuerdo privado, constituye el acuerdo completo y total entre las partes.</li>
+                <li>Declaro que, el contenido de este documento es de mi conocimiento y que fue debidamente informado por EL PROMOTOR, en su obligación al
+                deber de la información que le asiste, frente a la relación contractual suscrita a través del ACUERDO PRIVADO DE INVERSIÓN “FRACTAL
+                CASAS DE VERANO”.</li>
+                <li>Declaro conocer que, EL PROMOTOR, le asiste el deber legal de dar cumplimiento a lo preceptuado en la Circular Externa 100-000016 de
+                diciembre 24 de 2020, que modificó el Cap. X circular básica Jurídica (Circular Externa N° 100-000005 del 22 de noviembre de 2017, de la
+                Superintendencia de Sociedades, para la cooperación en la prevención de delitos de lavado de activos, la financiación del terrorismo y
+                cualquier otro delito conexo; por lo cual, ha implementado el Sistema de Autocontrol y Gestión del Riesgo Integral de Lavado de Activos,
+                Financiación del Terrorismo y Financiamiento de la Proliferación de Armas de Destrucción Masiva “SAGRILAFT”. Razón por la cual, en mi
+                calidad de inversionista, me OBLIGO a dar cumplimiento de este sistema, y aportar toda la información y documentación que EL PROMOTOR
+                requiera, para su cumplimiento.</li>
+                <li>Declaro que, para efectos de la protección de los datos personales y su tratamiento de acuerdo a lo establecido en la Ley 1581 de 2012, y su
+                decreto reglamentario 1377 de 2013, EL PROMOTOR, hará el tratamiento de mis datos personales, conforme a su política de tratamientos de
+                datos personales y de seguridad de la información. En consecuencia, autorizo de manera libre, expresa, voluntaria a EL PROMOTOR, para que
+                realice el tratamiento de mis datos personales, incluyendo compilar, almacenar, consultar, usar, compartir, intercambiar, transmitir, transferir,
+                circular, divulgar mis datos personales durante y con posterioridad a la relación contractual que tengo con EL PROMOTOR.</li>
+                
+            </ol>
+           
+            <p>
+                En constancia, de aceptación y conocimiento de lo aquí establecido, es firmado el presente formato de verificación por EL INVERSIONISTA, 
+                el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+            </p><br>
+            <br><br>   
+            <p style="font-size:12px">
+                <b>EL INVERSIONISTA</b><br><br><br><br><br><br>
+                ____________________________________________<br>
+                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                <b>CC: </b>{{ctr.titulares.0.pk}}
+            </p>
+</div>
+
+        <head>
+            <style>
+                @page {
+                    size: legal;
+                    @frame content_frame {
+                        /* Content Frame */
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 3.4cm;
+                        height: 28.7cm;
+                    }
+                    @frame footer_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: footer_content;
+                        left: 0cm;
+                        width: 24cm;
+                        top: 32.6cm;
+                        height: 3.6cm;
+                    }
+                    @frame header_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: header_content;
+                        left: 0.5cm;
+                        width: 20cm;
+                        top: 0.5cm;
+                        height: 3cm;
+                    }
+                }
+            
+                @font-face {
+                    font-family: Outfit;
+                    src: url("{%static 'fonts/Outfit/Outfit-Light.ttf'%}");
+                }
+            
+                /* Bold */
+                @font-face {
+                    font-family: Outfit;
+                    src: url("{%static 'fonts/Outfit/Outfit-Bold.ttf'%}");
+                    font-weight: bold;
+                }
+            
+                body {
+                    font-family: Outfit;
+                }
+                p,li {
+                    font-size: 11px;
+                    line-height: normal;
+                    text-align: justify;
+                }
+            </style>
+        </head>
+    </body>
+</html>

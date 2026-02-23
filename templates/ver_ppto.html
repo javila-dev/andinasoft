@@ -1,0 +1,310 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load extras%}
+{%load l10n%}
+
+{%block title%}Presupuesto {{proyecto}}{%endblock%}
+
+{%block style%}
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+
+<style>
+    .form-group{
+        padding-right:1rem;
+    }
+    .form-control{
+        margin-left:0.5rem;
+    }
+    th, td {
+        white-space: nowrap;
+    }
+    td{
+        font-size:small;
+    }
+</style>
+{%endblock%}
+{%block content%}
+
+<div class="principal-container bg-white rounded shadow-lg" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <form name='opcionesPpto' id='opcionesPpto' method='POST'>{%csrf_token%}
+    <h3 class='section-title text-center text-white'>Presupuesto de Cobro {{proyecto}} <br><small>{{periodo}}</small>
+    <input class='btn btn-primary float-right mr-3' type='submit' name='btnExportar' value='Exportar'>
+    </h4>
+    </form>
+    <br/>
+    <div class='table-responsive'>
+        <table class="stripe row-border compact nowrap" style="width:100%" id='tabla-presupuesto'>
+            <thead>
+                <tr>
+                    <th class="text-center">Adjudicacion</th>
+                    <th class="text-center">Cliente</th>
+                    <th class="text-center">Estado</th>
+                    <th class="text-center">Gestor</th>
+                    <th class="text-center">Origen</th>
+                    <th class="text-center">Venta del Mes</th>
+                    <th class="text-center">Tipo Cartera</th>
+                    <th class="text-center">Edad</th>
+                    <th class="text-center">Cuota del Mes</th>
+                    <th class="text-center">Recaudo Mes</th>
+                    <th class="text-center">Cuotas Vencidas</th>
+                    <th class="text-center">Recaudo Vencido</th>
+                    <th class="text-center">Presupuesto Total</th>
+                    <th class="text-center">Recaudo Pptado</th>
+                    <th class="text-center">No Presupuestado</th>
+                    <th class="text-center">Recaudo Total</th>
+                    <th class="text-center">Cumplimiento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for adj in informe%}
+                    <tr>
+                        <td class="text-center"><a href='#' data-toggle="modal" data-target="#modalOpcionesAdj" data-adj="{{adj.pk}}">{{adj.pk}}</a></td>
+                        <td >{{adj.cliente.upper}}</td>
+                        <td class="text-center">{{adj.estado}}</td>
+                        <td class="text-center">{{adj.asesor}}</td>
+                        <td class="text-center">{{adj.origen}}</td>
+                        <td class="text-center">{{adj.venta_mes}}</td>
+                        <td class="text-center">{{adj.tipocartera}}</td>
+                        <td class="text-center">{{adj.edad}}</td>
+                        <td class="text-center">{{adj.ppto_mes|unlocalize}}</td>
+                        <td class="text-center">{{adj.recaudo_mes|unlocalize}}</td>
+                        <td class="text-center">{{adj.ppto_vencido|unlocalize}}</td>
+                        <td class="text-center">{{adj.recaudo_vencido|unlocalize}}</td>
+                        <td class="text-center">{{adj.presupuesto|unlocalize}}</td>
+                        <td class="text-center">{{adj.recaudo_pptado|unlocalize}}</td>
+                        <td class="text-center">{{adj.recaudo_nopptado|unlocalize}}</td>
+                        <td class="text-center">{{adj.recaudo_total|unlocalize}}</td>
+                        <td class="text-center">{{adj.recaudo_pptado|porcentaje:adj.presupuesto|unlocalize }}</td>
+                    </tr>
+                {%endfor%}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th class="text-center">Cuota del Mes</th>
+                    <th class="text-center">Recaudo Mes</th>
+                    <th class="text-center">Cuotas Vencidas</th>
+                    <th class="text-center">Recaudo Vencido</th>
+                    <th class="text-center">Presupuesto Total</th>
+                    <th class="text-center">Recaudo Pptado</th>
+                    <th class="text-center">No Presupuestado</th>
+                    <th class="text-center">Recaudo Total</th>
+                    <th class="text-center">Cumplimiento</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+{%include 'alert.html'%}
+<!-- Modal -->
+<form name='opcionesPpto' id='opcionesPpto' method='POST'>{%csrf_token%}
+    <div class="modal fade" id="modalOpcionesAdj" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modallabel">Opciones</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            </div>
+            <div class="modal-body">
+                <input type="text" name='adj' id='adj' hidden>
+                <div class="card">
+                <h5 class="card-header">Cambiar Gestor</h5>
+                <div class="card-body">
+                    <div class='input-group'>
+                        <div class='input-group-prepend'>
+                            <label class="input-group-text" for="nuevoGestor">Gestor</label>
+                        </div>
+                        <select class="custom-select" id="nuevoGestor" name='nuevoGestor'>
+                            <option selected>Choose...</option>
+                            <option value="DARCY JULIO">DARCY JULIO</option>
+                            <option value="DINA ORTEGA">DINA ORTEGA</option>
+                            <option value="HAROLD TANGARIFE">HAROLD TANGARIFE</option>
+                            <option value="NELSON SUAREZ">NELSON SUAREZ</option>
+                            <option value="JURIDICO">JURIDICO</option>
+                            <option value="ESPECIAL">ESPECIAL</option>
+                        </select>
+                        <div class='input-group-append'>
+                            <input class='btn btn-primary' type="submit" name='btnGestor' value="Cambiar">
+                        </div>
+                    </div>
+                </div>
+                </div>
+                <br>
+                <div class="card">
+                    <h5 class="card-header">Acciones</h5>
+                    <div class="card-body">
+                        <div class='input-group'>
+                            <div class='input-group-prepend'>
+                                <label class="input-group-text" for="nuevoGestor">Accion</label>
+                            </div>
+                            <select class="custom-select" id="acciones" name='acciones'>
+                                <option selected>Choose...</option>
+                                <option value="eliminar">Eliminar Ppto Mes</option>
+                                <option value="recalcular">Recalcular Ppto</option>
+                            </select>
+                            <div class='input-group-append'>
+                                <input class='btn btn-primary' type="submit" name='btnAccion' value="Aplicar">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            <a href="#" id='verAdj' class="btn btn-primary">Ver ADJ</a>
+            </div>
+        </div>
+        </div>
+    </div>
+</form>
+{%block js%}
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+
+<script>
+  var tablappto=$('#tabla-presupuesto').DataTable({
+                    'scrollY':        "600px",
+                    'scrollX':        true,
+                    'scrollCollapse': true,
+                    'paging':         false,
+                    'fixedColumns':   {
+                        'leftColumns': 2
+                    },
+                    searchBuilder:{
+                        conditions: {
+                                num: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    '<': {
+                                        conditionName: 'Menor que'
+                                    },
+                                    '<=': {
+                                        conditionName: 'Menor o igual que'
+                                    },
+                                    '>': {
+                                        conditionName: 'Mayor que'
+                                    },
+                                    '>=': {
+                                        conditionName: 'Mayor o igual que'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'between': {
+                                        conditionName: 'Entre'
+                                    },
+                                    '!between': {
+                                        conditionName: 'No esta entre'
+                                    }
+                                },
+                                string: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'starts': {
+                                        conditionName: 'Empieza con'
+                                    },
+                                    'ends': {
+                                        conditionName: 'Termina en'
+                                    },
+                                    'contains': {
+                                        conditionName: 'Contiene'
+                                    },
+                                }
+                            },
+                    },
+                    language:{
+                        searchBuilder: {
+                            add:'Nuevo filtro',
+                            clearAll:'Borrar filtro',
+                            deleteTitle:'Borrar',
+                            data:'Columna',
+                            logicAnd:'Y',
+                            logicOr:'O',
+                            condition: 'Condición',
+                            value: 'Valor',
+                            title: 'Filtro Avanzado',
+                        }
+                    },
+                    dom: 'Qlfrtip',
+        "footerCallback": function ( row, data, start, end, display ) {
+            var api = this.api(), data;
+ 
+            // Remove the formatting to get integer data for summation
+            var intVal = function ( i ) {
+                var valores=i.toString().replace('.',',')
+                return parseFloat(valores)
+                    
+            };
+            for (i=8;i<16;i++){
+            // Total over this page
+            pageTotal = api
+                .column( i, { page: 'current'} )
+                .data()
+                .reduce( function (a, b) {
+                    return intVal(a) + intVal(b);
+                }, 0 );
+ 
+            // Update footer
+            $( api.column( i ).footer() ).html(
+                '$'+ new Intl.NumberFormat().format(pageTotal)
+            );
+
+        }
+        var recaudo = parseFloat($( api.column( 13 ).footer() ).html().replace('$',''))
+        var total = parseFloat($( api.column( 12 ).footer() ).html().replace('$',''))
+        var cumplimiento = function(){ 
+            if (total>0){
+                value=recaudo/total
+                value=parseFloat(value*100).toFixed(2)
+                return value+"%"
+            }
+            else{
+                return '0%'
+            }
+        }
+        $( api.column( 16 ).footer() ).html(cumplimiento)
+        }
+    });
+    
+
+$('#modalOpcionesAdj').on('show.bs.modal', function (event) {
+  var button = $(event.relatedTarget) // Button that triggered the modal
+  var recipient = button.data('adj') // Extract info from data-* attributes
+  // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+  // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
+  var modal = $(this)
+  modal.find('.modal-title').text('Opciones ' + recipient)
+  $('#adj').val(recipient)
+  $('#verAdj').attr('href','/adjudicaciones/{{proyecto}}/'+recipient)
+})
+
+</script>
+{%endblock%}
+
+{%endblock%}

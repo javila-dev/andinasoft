@@ -1,0 +1,38 @@
+{%load crispy_forms_tags%}
+{%load l10n%}
+<!-- Modal -->
+<div class="modal fade" id="modal-procesabilidad" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form method="post" action=''>{%csrf_token%}
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Procesabilidad</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {{form_procesabilidad|crispy}}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <input class='btn btn-primary' type='submit' name='btnProcesabilidad' value='Modificar'>
+        </div>
+      </div>
+    </div>
+    </form>
+  </div>
+  <script>
+    if (parseInt('{{datos_adj.p_enmendadura}}')==1){
+      $('#proc_enmendaduras').prop('checked',true)
+    }
+    if (parseInt('{{datos_adj.p_doccompleta}}')==1){
+      $('#proc_documentacion').prop('checked',true)
+    }
+    if (parseInt('{{datos_adj.p_valincorrectos}}')==1){
+      $('#proc_valores').prop('checked',true)
+    }
+    
+    $('#proc_observaciones').val('{{datos_adj.p_obs}}')
+
+  </script>

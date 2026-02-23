@@ -1,0 +1,108 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Recaudos no radicados{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow-sm" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h4 class='text-center border-bottom border-gray' style='padding-bottom:1rem;'><strong>Recaudos no Radicados</strong>
+    <button type='button' class='btn btn-outline-primary float-right' data-toggle="modal" data-target='#modalRecaudoNR'>Recaudo Novacion</button>
+        
+    </h4>
+    <br/>
+    <div class='table-responsive'>
+        <table id='tabla-recaudosnr' class='table table-sm table-striped'>
+            <thead class='thead thead-light'>
+                <tr>
+                    <th class='text-center'>Recibo</th>
+                    <th class='text-center'>Fecha</th>
+                    <th class='text-center'>Adj/Contrato</th>
+                    <th class='text-center'>Cliente</th>
+                    <th class='text-center'>Concepto</th>
+                    <th class='text-center'>Forma de Pago</th>
+                    <th class='text-center'>Valor</th>
+                    <th class='text-center'>Soporte</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for recaudo in recaudos%}
+                <tr>
+                    <td class='text-center'><a href='#' data-toggle="modal" data-target="#asignar-recaudo" data-whatever='{{recaudo.recibo}}'>{{recaudo.recibo}}</a></td>
+                    <td class='text-center'>{{recaudo.fecha}}</td>
+                    <td class='text-center'>{{recaudo.contrato}}</td>
+                    <td>{{recaudo.cliente}}</td>
+                    <td class='text-center'>{{recaudo.concepto}}</td>
+                    <td class='text-center'>{{recaudo.formapago}}</td>
+                    <td class='text-center'>$ {{recaudo.valor}}</td>
+                    <td class='text-center'>
+                        {%if recaudo.soportepago%}
+                            <a href='{{recaudo.soportepago}}' target='_blank' class='btn btn-sm btn-outline-primary'>
+                                Ver soporte
+                            </a>
+                        {%else%}
+                            <span class="text-muted">N/A</span>
+                        {%endif%}
+                    </td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="asignar-recaudo" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form method="post" action=''>{%csrf_token%}
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Radicar un Recaudo</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            </div>
+            <div class="modal-body">
+                <input type='text' id='nro-recibo' name='nro-recibo' hidden>
+                {{form|crispy}}
+            </div>
+            <div class="modal-footer">
+                <div class="btn-group">
+                    <input type='submit' class="btn btn-danger" value='Anular' name='AnularRecibo'>
+                    <input type='submit' class="btn btn-primary" value='Guardar' name='radicarRecibo'>
+                </div>
+            </div>
+        </div>
+    </div>
+    </form>
+</div>
+<div class="modal fade" id="modalRecaudoNR" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form method="post" action=''>{%csrf_token%}
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Nuevo recaudo no Radicado</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            </div>
+            <div class="modal-body">
+                {{form_nuevoRnr|crispy}}
+            </div>
+            <div class="modal-footer">
+                <div class="btn-group">
+                    <input type='submit' class="btn btn-primary" value='Crear' name='crearRecibo'>
+                </div>
+            </div>
+        </div>
+    </div>
+    </form>
+</div>
+{{form_nuevoRnr.media}}
+<script>
+    var oTable = $('#tabla-recaudosnr').DataTable();
+        $('#asignar-recaudo').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var recipient = button.data('whatever')
+            var modal = $(this)
+            $('#nro-recibo').val(recipient)
+        });
+</script>
+{%endblock%}

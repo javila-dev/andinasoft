@@ -1,0 +1,90 @@
+{%extends 'base.html'%}
+{%load static%}
+{%load crispy_forms_tags%}
+{%block title%}Proyectos | Acta {{acta.num_acta}} contrato {{acta.contrato.pk}}{%endblock%}
+{%block style%}
+<style>
+    .row{
+        margin-left: 0px;
+        margin-right: 0px;
+    }
+    div.detailrow input{
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+</style>
+{%endblock%}
+{%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
+{%block content%}
+<div class='principal-container bg-white rounded shadow-lg'>
+    <h3 class='text-white text-center section-title'>Acta {{acta.num_acta}}
+        <br><small>Contrato {{acta.contrato.pk}} - {{acta.contrato.proveedor.nombre}}</small>
+        <button type='button' id='exportarActa' class='btn btn-primary btn-xl btn-circle float-right mr-3'
+            onclick="exportarPdf()">
+        <i class="fas fa-file-pdf"></i></button>
+    </h3>
+    <div class='mt-2'>
+        {%crispy form%}
+    </div>
+</div>
+{%include 'building/modal_items_recibir.html'%}
+<script>
+    $(document).ready(function(){
+        var row = $('#detaildiv')
+        var detalle = JSON.parse('{{items_acta|escapejs}}')
+        var aprobado = ""
+        var disabled = ""
+        if ('{{acta.estado}}'=='Aprobado'){
+            aprobado = "readonly"
+            disabled = 'disabled'
+            $('#id_canje').prop('readonly',true)
+            $('#id_anticipo').prop('readonly',true)
+        }
+        else{
+            $('#exportarActa').prop('disabled',true)
+        }
+        for (i=0;i<detalle.length;i++){
+            var idproducto = detalle[i]['item']
+            var nombreproducto = detalle[i]['nombre']
+            var unid = detalle[i]['unidad']
+            var cantidad = detalle[i]['cantidad']
+            var vr_unit = detalle[i]['vr_unit']
+            var vr_total = detalle[i]['vr_total']
+            var valor_max = detalle[i]['pendiente']
+            var newRow = '<div class="row py-2 detailrow"> <div class="col-1 pr-0"> <div class="row"> <div class="col-2 pl-0 pr-1 my-auto"> <button class="btn btn btn-danger btn-sm btn-circle btnremoveline" type="button" '+disabled+'><i class="fas fa-minus" aria-hidden="true"></i></button></div>'+
+            '<div class="col-10 pr-0"> <input type="text" name="item_obra" class="textinput text-center textInput form-control form-control" required="" id="id_item_obra" value="'+idproducto+'" readonly></div></div></div>'+
+            '<div class="col-5"> <input type="text" name="descripcion_item" class="textinput textInput form-control form-control" required="" id="id_descripcion_item" value="'+nombreproducto+'" readonly></div>'+
+            '<div class="col-1"> <input type="text" name="unidad_item" value="'+unid+'" class="text-center textinput textInput form-control form-control" readonly="True" required="" id="id_unidad_item"></div>'+
+            '<div class="col-1 px-1"> <input type="number" step="0.01" value="'+cantidad+'" '+aprobado+' name="cantidad_item" data-toggle="tooltip" data-placement="top" title="El valor maximo a recibir es '+valor_max+'" max="'+valor_max+'" class="text-center numberinput form-control form-control" required="" id="id_cantidad_item"></div>'+
+            '<div class="col-2"> <input type="number" readonly value="'+vr_unit+'" name="valor_item" value="0" step="0.01" class="text-center numberinput form-control form-control" required="" id="id_valor_item"></div>'+
+            '<div class="col-2"> <input type="text" value="'+vr_total+'" name="total_item" value="0" step="0.01" class="text-center numberinput form-control form-control" readonly="True" required="" id="id_total_item"></div></div>'
+            row.append(newRow)
+        }
+    })
+    function exportarPdf(){
+        $.ajax({
+            type:'GET',
+            url:'/reports/progressdoc',
+            data:{
+                'acta':"{{acta.pk}}"
+            },
+            success:function(response){
+                if (response['valid']){
+                    $('#alert-title').text('!Hecho!')
+                    $('#alert-data').text('')
+                    $('#alert-data').append('Puedes descargar tu archivo haciendo click <a href="'+response['href']+'" target="_blank"><strong>aqui</strong></a>')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                }
+                else{
+                    $('#alert-title').text('!Error!')
+                    $('#alert-data').text(response['error'])
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                }
+            }
+        })
+    }
+</script>
+<script src="{%static 'js/building/newprogress.js'%}"></script>
+{%endblock%}

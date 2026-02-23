@@ -1,0 +1,575 @@
+{%extends 'base.html'%}{%load crispy_forms_tags%}{%load l10n%}{%load static%}
+{%block title%}Reestructuraciones{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Reestructuraciones
+    </h3>
+    <div class='my-2'>
+        {%crispy formbuscar%}
+    </div>
+    <div class="table-responsive">
+        <table id='tablaReestructuraciones' class='table table-striped table-sm table-bordered'>
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Fecha</th>
+                    <th>Adj</th>
+                    <th>Cliente</th>
+                    <th>Valor</th>
+                    <th>Usuario</th>
+                    <th>Estado</th>
+                    <th>Oficina</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalNewReestructuracion" style="z-index:1070" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content position-relative pb-3">
+            <div id="spinner" class="overlay-form" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="sr-only">Cargando...</span>
+                </div>
+              </div>
+        <div class="modal-header">
+            <h5 class="modal-title" id="modalAnticip">Solicitar reestructuracion</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body ">
+          {%crispy form_reg_legaliz%}
+        </div>
+        </div>
+    </div>
+  </div>
+{%include 'alert.html'%}
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+{%include 'datepicker_gigjo.html'%}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src="{%static 'js/fstdropdown.js'%}"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+<script>
+    
+    let counter = 1;
+    // Función para agregar una nueva línea
+    function add_ci() {
+        // Clona el bloque original
+        let newBlock = $('#block-ci').clone();
+        // Genera un nuevo ID único para el bloque clonado
+        newBlock.attr('id', 'block-ci-' + counter);
+        newBlock.find('label').each(function() {
+            $(this).remove();
+        })
+        // Actualiza los IDs de los campos dentro del bloque clonado
+        newBlock.find('input, select').each(function() {
+            let originalId = $(this).attr('id');
+            $(this).attr('id', originalId+'_'+counter);
+            $(this).val('');
+        });
+        
+
+        if ($('#id_fecha_ci_'+counter-1).length < 1){
+            let last_ci  = $('#id_fecha_ci').val()
+        }
+        else {
+            let last_ci  = $('#id_fecha_ci_'+counter-1).val()
+        }
+
+        
+
+
+        // Inserta el nuevo bloque después del último bloque existente
+        $('#div-ci').append(newBlock);
+        $('.money').mask("#,##0", {reverse: true});
+        flatpickr('#id_fecha_ci_'+counter,{
+            dateFormat: 'Y-m-d',
+            locale: "es",
+        });
+        // Incrementa el contador para el próximo bloque
+        counter++;
+    };
+    // Función para eliminar la última línea
+    function remove_ci() {
+        // Verifica que haya más de un bloque antes de eliminar
+        if ($('[id^="block-ci"]').length > 1) {
+            $('#block-ci-'+ counter).remove();
+            counter--;
+        } else {
+            alert("No se puede eliminar el último bloque.");
+        }
+    };
+    // Función que realiza la operación solicitada
+    function updateDiffCi() {
+            let total = 0;
+            
+            // Iterar sobre cada campo con name "valor_ci"
+            $("input[name='valor_ci']").each(function() {
+                // Convertir el valor a número
+                const valor = parseNumber($(this).val());
+                // Buscar el campo "cant_ci" más cercano dentro de la misma sección contenedora
+                const cant = parseNumber($(this).closest('.d-flex').find("input[name='cant_ci']").val());
+                // Acumular el producto
+                total += valor * cant;
+            });
+            
+            // Obtener el valor de ci_reestructurar y restarle el total acumulado
+            const ciReestructurar = parseNumber($("#id_ci_reestructurar").val());
+            const diff = ciReestructurar - total;
+            
+            // Actualizar el campo diff_ci con el resultado formateado
+            $("#id_diff_ci").val(formatNumber(diff));
+        }
+    // Función para convertir un string con comas en un número
+    function parseNumber(str) {
+        // Remover todas las comas y convertir a número flotante
+        return parseFloat(str.replace(/,/g, '')) || 0;
+    }
+    function formatNumber(num) {
+        // Usamos toLocaleString para formatear el número
+        fmt = new Intl.NumberFormat('en-EN')
+
+        return fmt.format(num);
+    }
+
+    $(document).ready(function(){
+        $('.money').mask("#,##0", {reverse: true});  
+        let spinner = $('#spinner');
+        var formater = new Intl.NumberFormat('en-EN')
+        var tablaReestructuraciones = $('#tablaReestructuraciones').DataTable({
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:window.location.href+'?todo=datatable',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'id'},
+                {'data':'fecha'},
+                {'data':'adj.idadjudicacion'},
+                {'data':'extra_info.Nombre'},
+                {'data':'capital_pendiente',render: $.fn.dataTable.render.number( ',', '.', 0)},
+                {'data':'usuario_solicita.username'},
+                {'data':'estado'},
+                {'data':'extra_info.oficina'},
+            ],
+            order:[[0,'desc']]
+        })
+        $('#btnbuscarmvtos').click(function () {
+            let proyecto = $('#id_proyecto').val()
+            let fecha_desde = $('#id_fecha_desde').val()
+            let fecha_hasta = $('#id_fecha_hasta').val()
+
+            let url = window.location.href+'?todo=datatable&proyecto='+proyecto
+            tablaReestructuraciones.ajax.url(tablaReestructuraciones).load()
+            .then()
+        })
+        /* Buttons */
+        $('#btnnuevareestr').click(function(){
+            let proyecto = $('#id_proyecto').val()
+            if (proyecto == ''){
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text('Debes seleccionar un proyecto primero')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+            $.ajax({
+                type:'GET',
+                url:'/ajax_request/activeclients',
+                data:{
+                    'proyecto':proyecto
+                },
+                success: (xhr) => {
+                    let clients = xhr.data
+                    $('#id_adj').empty()
+                    $('#id_adj').append('<option value="">Selecciona...</option>')
+                    for (let i in clients){
+                        let option = `
+                            <option value="${clients[i].IdAdjudicacion}">${clients[i].IdAdjudicacion} - ${clients[i].Nombre}</option>
+                        `
+                        $('#id_adj').append(option)
+                        document.querySelector("#id_adj").fstdropdown.rebind()
+                    }
+                }
+            })
+            $('#modalNewReestructuracion').modal('show')
+        })
+        // Escuchar cambios en el campo Adj (Adjudicacion)
+        $('#id_adj').change(handleAdj);
+        // Escuchar cambios en el campo tipo_reestructuracion
+        $('#id_tipo_reestructuracion').change(handleTipoReestructuracionChange);
+        // Escucha cambios en el campo forma_pago
+        $('#id_forma_pago').change(handleFormaPagoChange);
+        // Ejecutar la función al cargar la página para manejar el estado inicial
+        handleTipoReestructuracionChange();
+        // Ejecutar la función al cargar la página para manejar el estado inicial
+        handleFormaPagoChange();
+        // Asignar el evento keyup y change a los campos involucrados para actualizar el cálculo
+        $("input[name='valor_ci'], input[name='cant_ci'], #id_ci_reestructurar").on("keyup change", updateDiffCi);
+        $('#id_cantidad_fn').on('keyup change', calcularCuotaMensual);
+        $('#id_valor_reg, #id_cantidad_extra, #id_periodo_extra').on('keyup change', calcularCuotaMensual);
+        $('#id_nro_ctas_dividir, #id_int_a_cobrar').on('keyup change', handleAddIntereses);
+        $('#id_ci_reestructurar').on('keyup change', handleCiValue);
+        $('#id_descuento').on('keyup change', handleDcto);
+        $('#form-reestructuracion').on('submit', function(event){
+            event.preventDefault();
+            if (!validarReestructuracion()) {
+                return false
+            }
+            spinner.show();
+            let form =  new FormData(this)
+            form.append('todo','add-reestructuration')
+            $.ajax({
+                type: 'POST',
+                url: window.location.href,
+                data: form,
+                contentType: false,
+                processData: false,
+                success: function(xhr) {
+                    $('#modalNewReestructuracion').modal('hide')
+                    Swal.fire({
+                        title: "Listo!",
+                        text: "Se agregó la reestructuracion para su aprobación",
+                        icon: "success"
+                    });
+                },
+                complete: function(xhr) {
+                    spinner.hide();
+                }
+            })
+            return true;
+        });
+        function calcularCuotaMensual() {
+            console.log('Calculando cuota mensual...');
+
+            let formaPago = $('#id_forma_pago').val();
+            let cantidad_fn = parseNumber($('#id_cantidad_fn').val());  // Número de cuotas regulares
+            let tasa = parseNumber($('#id_tasa').val()) / 100;          // Convertir a decimal
+            let fn_reestructurar = parseNumber($('#id_fn_reestructurar').val()); // Valor presente
+
+            let cuotaRegular = parseNumber($('#id_valor_reg').val()); // Cuota regular ingresada por el usuario
+            let cuotaExtraordinaria = 0;
+
+            if (formaPago === "Extraordinario") {
+                let cantidad_extra = parseNumber($('#id_cantidad_extra').val()); // Número de cuotas extraordinarias
+                let periodo_extra = parseNumber($('#id_periodo_extra').val());   // Cada cuántos períodos se paga
+
+                
+
+                // Cálculo del valor presente de las cuotas regulares
+                let vpCuotasRegulares = cuotaRegular * (1 - Math.pow(1 + tasa, -cantidad_fn)) / tasa;
+
+                // Calcular el valor presente de las cuotas extraordinarias
+                let vpCuotasExtraordinarias = fn_reestructurar - vpCuotasRegulares;
+                let tasaExtraordinaria = Math.pow(1 + tasa, periodo_extra) - 1;
+
+                // Cálculo de la cuota extraordinaria
+                cuotaExtraordinaria = (vpCuotasExtraordinarias * tasaExtraordinaria) / (1 - Math.pow(1 + tasaExtraordinaria, -cantidad_extra));
+
+                $('#id_valor_extra').val(formatNumber(Math.ceil(cuotaExtraordinaria)));
+
+            } else if (formaPago === "Regular") {
+                if (cantidad_fn <= 0 & tasa < 0 & fn_reestructurar <= 0) {
+                    alert("Los valores ingresados deben ser mayores a 0.");
+                    return 0;
+                }
+
+                // Cálculo de cuota regular sin extraordinarias
+                cuotaRegular = (tasa === 0) 
+                    ? fn_reestructurar / cantidad_fn 
+                    : (fn_reestructurar * tasa) / (1 - Math.pow(1 + tasa, -cantidad_fn));
+
+                $('#id_valor_reg').val(formatNumber(Math.ceil(cuotaRegular)));
+                $('#id_valor_reg').prop('readonly', true);
+            }            
+
+            return cuotaRegular;
+        }
+        function validarReestructuracion() {
+            let tipo_reestructuracion = $('#id_tipo_reestructuracion').val();
+            let fecha_cta_reg = $('#id_fecha_fn').val()
+
+            if (fecha_cta_reg == ''){
+                alert("Debes ingresar la fecha de la primera cuota regular.");
+                return false; // Indica que la validación falló
+            }
+            
+            //Valida que se esta reestructurando el capital vigente
+            let ciReestructurar = parseNumber($('#id_ci_reestructurar').val());
+            let fnReestructurar = parseNumber($('#id_fn_reestructurar').val());
+            let capitalVigente = parseNumber($('#id_capital_vigente').val());
+
+            let sumaReestructuracion = ciReestructurar + fnReestructurar;
+            
+            if (tipo_reestructuracion == 'Descuento'){
+                capitalVigente = parseNumber($('#id_nuevo_saldo').val());
+            }
+
+            if (sumaReestructuracion !== capitalVigente) {
+                alert(`La suma de CI a reestructurar y FN a reestructurar (${formatNumber(sumaReestructuracion)}) debe ser igual al capital vigente (${formatNumber(capitalVigente)}).`);
+                return false; // Indica que la validación falló
+            }
+
+            //Valida que las cuotas de la CI sumen el valor de la CI a reestructurar
+            let diff_ci = parseNumber($('#id_diff_ci').val())
+
+            if (diff_ci != 0){
+                alert("Las cuotas de la CI no suman el valor de la CI a reestructurar.");
+                return 0;
+            }
+
+            //Valida que los intereses causados a cobrar no sean mayores a los adeudados
+            let int_a_cobrar = parseNumber($('#id_int_a_cobrar').val())
+            let int_pdte = parseNumber($('#id_total_int_pdte').val())
+            let ctas_div = parseNumber($('#id_nro_ctas_dividir').val())
+            if (int_pdte < int_a_cobrar) {
+                alert("Los intereses pendientes no pueden ser inferiores a los intereses a cobrar.");
+                return 0;
+            }
+
+            if (int_a_cobrar > 0 && ctas_div <= 0){
+                alert('El numero de cuotas a dividir el interes pendiente debe ser minimo 1')
+                return 0;
+            }
+
+            
+            //Valida el plazo y monto en la forma de pago extraordinario
+            let fp = $('#id_forma_pago').val()
+
+            if (fp == 'Extraordinario') {
+                let cantidad_extra = parseNumber($('#id_cantidad_extra').val()); // Número de cuotas extraordinarias
+                let periodo_extra = parseNumber($('#id_periodo_extra').val());   // Cada cuántos períodos se paga
+                let cantidad_fn = parseNumber($('#id_cantidad_fn').val());  // Número de cuotas regulares
+                let tasa = parseNumber($('#id_tasa').val()) / 100;          // Convertir a decimal
+                let fn_reestructurar = parseNumber($('#id_fn_reestructurar').val()); // Valor presente
+                let cuotaRegular = parseNumber($('#id_valor_reg').val()); // Cuota regular ingresada por el usuario
+                let fecha_extra = $('#id_fecha_extra').val()
+
+                if (cantidad_extra*periodo_extra > cantidad_fn) {
+                    alert("El plazo de pago de cuotas extraordinarias no puede superar el de las cuotas regulares.");
+                    return 0;
+                }
+
+                if (fn_reestructurar*tasa >= cuotaRegular) {
+                    alert("El valor de la cuota regular es inferior o igual a los intereses corrientes en el primer periodo.");
+                    return 0;
+                }
+
+                if (fecha_extra == ''){
+                    alert("Debes ingresar la fecha de la primera cuota extra.");
+                    return false; // Indica que la validación falló
+                }
+            }
+
+            return true; // Indica que la validación pasó
+        }
+        function handleTipoReestructuracionChange() {
+            var tipoReestructuracion = $('#id_tipo_reestructuracion').val();
+
+            // Ocultar todos los campos primero
+            $('.reestructuracion-normal, .reestructuracion-descuento, .reestructuracion-especial').closest('.form-group, .form-floating, button').hide();
+            $('.reestructuracion-normal, .reestructuracion-descuento, .reestructuracion-especial').prop('required', false);
+            $('.reestructuracion-normal, .reestructuracion-descuento, .reestructuracion-especial').prop('readonly', true);
+
+            if (tipoReestructuracion === 'Normal') {
+                // Mostrar y habilitar campos para "Normal"
+                $('.reestructuracion-normal').closest('.form-group, .form-floating, button').show();
+                $('.reestructuracion-normal').prop('required', true);
+                $('.reestructuracion-normal').prop('readonly', false);
+            } else if (tipoReestructuracion === 'Descuento') {
+                // Mostrar y habilitar campos para "Descuento"
+                $('.reestructuracion-descuento').closest('.form-group, .form-floating, button').show();
+                $('.reestructuracion-descuento').prop('required', true);
+                $('.reestructuracion-descuento').prop('readonly', false);
+            } else if (tipoReestructuracion === 'Especial') {
+                // Mostrar solo ciertos campos para "Especial"
+                $('.reestructuracion-especial').closest('.form-group, .form-floating, button').show();
+                $('.reestructuracion-especial').prop('required', true);
+                $('#id_archivo_solicitud').prop('readonly', false); // No hacer readonly
+            }
+            // Campos que no deben cambiar sus propiedades segun la clase
+            $('#id_diff_ci').prop('readonly', true); 
+            $('#id_fecha_ci').prop('readonly', true); 
+            $('#id_valor_reg').prop('readonly', true);
+            $('#id_valor_extra').prop('readonly', true);
+            $('#id_vr_final_ctas_reg').prop('readonly', true);
+            $('#id_fecha_fn').prop('readonly', true);
+            $('#id_nuevo_valor').prop('readonly', true);
+            $('#id_nuevo_saldo').prop('readonly', true);
+        }
+        function handleFormaPagoChange() {
+            var formaPago = $('#id_forma_pago').val();
+
+            // Oculta todos los campos relacionados con "Extraordinario" por defecto
+            $('.extra-fields').closest('.form-group, .form-floating').hide();
+            $('.extra-fields').prop('required', false);
+            $('#id_valor_reg').prop('readonly', true);
+            
+            if (formaPago === 'Extraordinario') {
+                // Muestra los campos y los hace obligatorios cuando se selecciona "Extraordinario"
+                $('#id_valor_reg').prop('readonly', false);
+                $('.extra-fields').closest('.form-group, .form-floating').show();
+                $('.extra-fields').prop('required', true);
+            }
+            
+        }
+        function handleAdj(){
+            let adj = $('#id_adj').val()
+            let proyecto = $('#id_proyecto').val()
+            $('#spinner').show();
+            $.ajax({
+                type:'GET',
+                url:'/ajax_request/dataotrosi',
+                data:{
+                    'adj':adj,
+                    'project':proyecto,
+                },
+                success: (xhr) => {
+                    console.log(xhr)
+                    $('#id_nro_reestructuraciones').val(xhr.cantidad_otrosi)
+                    $('#id_ultima_reestructuracion').val(xhr.ultimo_otrosi)
+                    $('#id_valor_contrato').val(
+                        formater.format(xhr.vr_contrato)
+                    )
+                    $('#id_capital_pagado').val(
+                        formater.format(xhr.capital_pagado)
+                    )
+                    $('#id_capital_vigente').val(
+                        formater.format(xhr.capital_pendiente)
+                    )
+                    $('#id_int_cte_causado').val(
+                        formater.format(xhr.interes_cte_pendiente)
+                    )
+                    $('#id_int_mora_causado').val(
+                        formater.format(xhr.interes_mora_pendiente)
+                    )
+                    $('#id_total_int_pdte').val(
+                        formater.format(xhr.total_int_pdte)
+                    )
+                    $('#id_ci_pendiente').val(
+                        formater.format(xhr.ci_pdte)
+                    )
+                    $('#id_saldo_pendiente').val(
+                        formater.format(xhr.fn_pdte)
+                    )
+
+                    // Lógica para ocultar o mostrar los campos con clase "cuota_inicial"
+                    if (xhr.ci_pdte *1 == 0) {
+                        console.log('entra')
+                        // Se ponen en blanco y se ocultan
+                        $('.cuota_inicial input').val('')
+                        .prop('required',false);
+                        $('.cuota_inicial').hide();
+                        // Además, eliminar los elementos cuyos id contengan "block-ci-"
+                        $('[id*="block-ci-"]').remove();
+                    } else {
+                        // Si ci_pdte es diferente de 0, se muestran los campos
+                        $('.cuota_inicial').show()
+                        .prop('required',true);
+                    }
+                },
+                complete: function(){
+                    $('#spinner').hide();
+                }
+            })
+        }
+        function handleAddIntereses(){
+            let monto = parseNumber($('#id_int_a_cobrar').val())
+            if (monto == 0){
+                $('#id_nro_ctas_dividir').val(0)
+                $('#id_vr_final_ctas_reg').val(0)
+            } 
+            else {
+                let cuotas = parseNumber($('#id_nro_ctas_dividir').val())
+                let cuota_reg = parseNumber($('#id_valor_reg').val())
+                let cta_final = cuotas == 0 ? cuota_reg : Math.ceil(monto/cuotas) + cuota_reg
+                $('#id_vr_final_ctas_reg').val(formatNumber(cta_final))
+            }
+        }
+        function handleCiValue(){
+            let ciReestructurar = parseNumber($('#id_ci_reestructurar').val())
+            //Valida que si la CI es 0, los campos de las cuotas no sean required
+            if (ciReestructurar == 0 ){
+                console.log('entra')
+                $('div[id*="block-ci"] .form-group,div[id*="block-ci"] .form-floating').hide();
+                $('div[id*="block-ci-"]').remove()
+                $('#btn-add-ci, #btn-remove-ci').hide();
+                $('#block-ci input').each(function(){
+                    $(this).prop('required', false);
+                })
+            }
+            else{
+                $('div[id*="block-ci"] .form-group,div[id*="block-ci"] .form-floating').show();
+                $('#btn-add-ci, #btn-remove-ci').show();
+                $('#block-ci input').each(function(){
+                    $(this).prop('required', true);
+                })
+            }
+
+        }
+        function handleDcto(){
+            let dcto = parseNumber($('#id_descuento').val())
+            let vr_ctro = parseNumber($('#id_valor_contrato').val())
+            let monto_pdte = parseNumber($('#id_capital_vigente').val())
+            let vr_final = vr_ctro - dcto
+            let vr_pdte = monto_pdte - dcto
+            $('#id_nuevo_valor').val(formatNumber(vr_final))
+            $('#id_nuevo_saldo').val(formatNumber(vr_pdte))
+        }
+        function updateMinDate() {
+                let startDateValue = $("#startDate").val();
+                let months = parseInt($("#monthsInput").val(), 10) || 0;
+
+                if (startDateValue) {
+                    let startDate = new Date(startDateValue);
+                    startDate.setMonth(startDate.getMonth() + months);
+
+                    // Formatear fecha a YYYY-MM-DD
+                    let formattedDate = startDate.toISOString().split("T")[0];
+
+                    // Actualizar la fecha mínima en el segundo calendario
+                    endPicker.set("minDate", formattedDate);
+                }
+            }
+    })
+    
+</script>
+{%endblock%}
+{%block style%}
+<link rel="stylesheet" href="{%static 'css/fstdropdown.css'%}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+  th, td{
+      text-align: center;
+      font-size: smaller;
+  }
+  tbody {
+      cursor: pointer;
+  }
+  td {
+    font-size: x-small;
+  }
+  .overlay-form {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8); /* Fondo semitransparente */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000; /* Asegura que esté por encima del formulario */
+    }
+</style>
+{%endblock%}

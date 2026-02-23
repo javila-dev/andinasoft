@@ -1,0 +1,237 @@
+{%extends 'base.html'%}
+{%load l10n%}
+{%block title%}Graficos | Recaudos{%endblock%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchpanes/1.2.0/css/searchPanes.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+{%endblock %}
+{%block js%}
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchpanes/1.2.0/js/dataTables.searchPanes.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://code.highcharts.com/highcharts.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js"></script>
+{%endblock%}
+{%block content%}
+<style>
+    td{
+        font-size: smaller;
+    }
+    tfoot{
+        font-size: smaller;
+    }
+</style>
+<div class='container-xl bg-light rounded shadow'>
+    <div class='row' id='grafico'></div>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <p class='lead text-center border-bottom border-gray'>Recaudos Cartera</p>
+            <div class='table-responsive'>
+                <table id='tablaRecaudos' class='display compact' style='width: 100%;'>
+                    <thead>
+                        <tr>
+                            <th>Dia</th>
+                            <th>Adj</th>
+                            <th>Recibo</th>
+                            <th>Operacion</th>
+                            <th>Valor</th>
+                            
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%for recaudo in recaudos%}
+                        <tr>
+                            <td class='text-center'>{{recaudo.fecha.day}}</td>
+                            <td class='text-center'>{{recaudo.idadjudicacion}}</td>
+                            <td class='text-center'>{{recaudo.numrecibo}}</td>
+                            <td class='text-center'>{{recaudo.operacion}}</td>
+                            <td class='text-center'>{{recaudo.valor|unlocalize}}</td>
+                        </tr>
+                        {%endfor%}
+                    </tbody>
+                    <tfoot>
+                        <th colspan="4" style="text-align:right">Total:</th>
+                        <th></th>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <p class='lead text-center border-bottom border-gray'>Recaudos ventas mes</p>
+            <div class='table-responsive'>
+                <table id='tablaRecaudosVentasMes' class='display compact' style='width: 100%;'>
+                    <thead>
+                        <tr>
+                            <th>Dia</th>
+                            <th>Adj</th>
+                            <th>Recibo</th>
+                            <th>Operacion</th>
+                            <th>Valor</th>
+                            
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%for recaudo in rec_ventasmes%}
+                        <tr>
+                            <td class='text-center'>{{recaudo.fecha.day}}</td>
+                            <td class='text-center'>{{recaudo.idadjudicacion}}</td>
+                            <td class='text-center'>{{recaudo.numrecibo}}</td>
+                            <td class='text-center'>{{recaudo.operacion}}</td>
+                            <td class='text-center'>{{recaudo.valor|unlocalize}}</td>
+                        </tr>
+                        {%endfor%}
+                    </tbody>
+                    <tfoot>
+                        <th colspan="4" style="text-align:right">Total:</th>
+                        <th></th>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{%include 'periodo_graphs.html'%}
+<script>
+    $(document).ready(function(){
+        var tabla = $('#tablaRecaudos').DataTable({
+            dom: 'Qlfrtip',
+            "footerCallback": function ( row, data, start, end, display ) {
+                    var api = this.api(), data;
+        
+                    // Remove the formatting to get integer data for summation
+                    var intVal = function ( i ) {
+                        return typeof i === 'string' ?
+                            i.replace(/[\$,]/g, '')*1 :
+                            typeof i === 'number' ?
+                                i : 0;
+                    };
+                    // Total over all pages
+                    total = api
+                        .column( 4 )
+                        .data()
+                        .reduce( function (a, b) {
+                            return intVal(a) + intVal(b);
+                        }, 0 );
+        
+                    // Total over this page
+                    pageTotal = api
+                        .column( 4, { page: 'current'} )
+                        .data()
+                        .reduce( function (a, b) {
+                            return intVal(a) + intVal(b);
+                        }, 0 );
+        
+                    // Update footer
+                    $( api.column( 4 ).footer() ).html(
+                        '$'+new Intl.NumberFormat().format(pageTotal) +' ($'+ new Intl.NumberFormat().format(total) +')'
+                    );
+                }
+            })
+        var tablaRecVenMes = $('#tablaRecaudosVentasMes').DataTable({
+            dom: 'Qlfrtip',
+            "footerCallback": function ( row, data, start, end, display ) {
+                    var api = this.api(), data;
+        
+                    // Remove the formatting to get integer data for summation
+                    var intVal = function ( i ) {
+                        return typeof i === 'string' ?
+                            i.replace(/[\$,]/g, '')*1 :
+                            typeof i === 'number' ?
+                                i : 0;
+                    };
+                    // Total over all pages
+                    total = api
+                        .column( 4 )
+                        .data()
+                        .reduce( function (a, b) {
+                            return intVal(a) + intVal(b);
+                        }, 0 );
+        
+                    // Total over this page
+                    pageTotal = api
+                        .column( 4, { page: 'current'} )
+                        .data()
+                        .reduce( function (a, b) {
+                            return intVal(a) + intVal(b);
+                        }, 0 );
+        
+                    // Update footer
+                    $( api.column( 4 ).footer() ).html(
+                        '$'+new Intl.NumberFormat().format(pageTotal) +' ($'+ new Intl.NumberFormat().format(total) +')'
+                    );
+                }
+            })
+
+        var serie = seriesData(tabla)['sum']
+        var container = $('#grafico')
+
+        var chart = Highcharts.chart(container[0], {
+            chart: {
+                type: 'line',
+            },
+            title: {
+                text: 'Recaudos',
+            },
+            xAxis: {
+                title: 'Fecha'
+            },
+            yAxis:[{
+                title: {
+                    text: 'Recaudo'
+                }
+            }],
+            series: [
+                {
+                    name:'Cartera',
+                    data: chartData(tabla),
+                },
+                {
+                    name:'Ventas Mes',
+                    data: chartData(tablaRecVenMes)
+                }
+            ],
+        });
+        
+        tabla.on('draw', function () {
+            chart.series[0].setData(chartData(tabla));
+            chart.series[1].setData(chartData(tablaRecVenMes));
+        });
+        function chartData(table) {
+            var sums = seriesData(table)['sum']
+            // And map it to the format highcharts uses
+            /* return $.map(sums, function (val, key) {
+                return [parseInt(key),val];
+            }); */
+            data=[]
+            for (let key in sums){
+                data.push([parseInt(key),sums[key]])
+            }
+            return data
+        }
+        function seriesData(table){
+            var counts = {};
+            var sums = {};
+            var indexes = table.rows({search:'applied'}).indexes().toArray();
+            
+            for (var i=0; i<indexes.length; i++){
+                var key = table.cell(indexes[i],0).data()
+                var valor = parseFloat(table.cell(indexes[i],4).data())
+                if(key in counts){
+                    counts[key]+=1
+                    sums[key]+=valor
+                }
+                else{
+                    counts[key]=0
+                    sums[key]=valor
+                }
+            }
+            var data = {
+                'count':counts,
+                'sum':sums,
+            }
+            return data
+        }
+        
+    })
+</script>
+{%endblock%}

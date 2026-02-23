@@ -1,0 +1,77 @@
+<!doctype html>{%load static%}
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{%block title%}{%endblock%}</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.2/dist/semantic.min.css">
+    <link rel="icon" type="image/jpg" href="{%static 'img/ico.ico'%}"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pivottable/2.23.0/pivot.min.css" integrity="sha512-BDStKWno6Ga+5cOFT9BUnl9erQFzfj+Qmr5MDnuGqTQ/QYDO1LPdonnF6V6lBO6JI13wg29/XmPsufxmCJ8TvQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    {%block style%}{%endblock%}
+  </head>
+  <body>
+    <div class="ui bottom attached segment pushable" style="margin-bottom: 0px;border-top-width: 0px;border-bottom-width: 0px;">
+      <div class="ui left vertical voilet visible inverted sidebar violet thin labeled icon menu">
+        <div class="ui basic segment" style="margin-bottom: 0px;">
+          <a href="/fractal" class="ui centered circular mini image">
+
+            <img src="{%static 'img/IMG_1680.png'%}" style="margin-top: 2rem;margin-bottom: 1.5rem;">
+          </a>
+          
+        </div>
+        </h4>
+        <div class="ui horizontal list" style="margin-top: 0px;margin-bottom: 1rem;position: absolute;bottom: 1rem;left: 2rem;">
+          <div class="item">
+            <img class="ui mini circular image" src="/media/{{user.profiles.avatar.image}}">
+            <div class="content">
+              <div class="ui sub grey header" style="color:white">{{request.user.first_name.capitalize}}</div>
+            </div>
+          </div>
+        </div>
+        <a class="item" href="/venta/inventario/Fractal">
+          <i class="handshake icon"></i>
+          Nueva venta
+        </a>
+        <!-- <a class="item" href="/reports/landing">
+          <i class="chartline icon"></i>
+          Rolling
+        </a> -->
+        <a class="item" href="/comercial/ventas_sin_aprobar/Fractal">
+          <i class="hourglass half icon"></i>
+          Sin aprobar
+        </a>
+        <a class="item" href="/operaciones/por_adjudicar/Fractal">
+          <i class="route icon"></i>
+          Por adjudicar
+        </a>
+        <a class="item" href="/cartera/edades_cartera/Fractal">
+          <i class="briefcase icon"></i>
+          Adjudicados
+        </a>
+        <a class="item" href="/finance/requirereceiptsfractal">
+          <i class="hand holding usd icon"></i>
+          Solicitar recibos
+        </a>
+        <a class="item" href="/accounts/logout">
+          <i class="door open icon"></i>
+          Salir
+        </a>
+      </div>
+      <div class="pusher">  
+        <div class="ui basic segment" style="height:100vh!important;width:calc(100vw - 150px);margin-bottom:0px">
+          <div class="ui basic segment" style="height: 100%; overflow-y:auto">
+            {%block content%}{%endblock%}
+          </div>          
+        </div>  
+      </div>   
+    </div>
+    {%block contextmenu%}
+    {%endblock%}
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.3/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.2/dist/semantic.min.js"></script>
+    <script>
+      $('button').popup();
+    </script>
+    {%block script%}{%endblock%}
+  </body>
+</html>

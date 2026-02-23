@@ -1,0 +1,126 @@
+<style>
+    th{
+        font-size:small;
+    }
+    td{
+        font-size:small;
+    }
+</style>
+<br/>
+<div class="row">
+    
+    <div class='col-xs-12 col-md-6'>
+        <p class="lead text-center border-bottom border-gray">Cuotas Pactadas</p>
+        <div class="table-responsive">
+            <table id="tabla-plandepagos" class='table table-sm table-striped table-bordered'>
+                <thead class="thead thead-light">
+                    <tr>
+                        <th data-sort="%= my_date.strftime('%Y%m%d') %" class="text-align-center">Fecha</th>
+                        <th class="text-align-center">Nº Cta</th>
+                        <th class="text-align-center">Capital</th>
+                        <th class="text-align-center">Interes Cte</th>
+                        <th class="text-align-center">Cuota</th>
+                        <th class="text-align-center">Por Pagar</th>
+                        
+                    </tr>
+                </thead>
+                <tbody>
+                    {%for cuota in saldos_cuotas%}
+                    <tr class="text-align-center">
+                        <td class="text-align-center" >{{cuota.fecha|date:'d/m/Y'}}</th>
+                        <td class="text-align-center" >{{cuota.tipocta}}{{cuota.nrocta}}</th>
+                        <td class="text-align-center" >{{cuota.capital}}</th>
+                        <td class="text-align-center" >{{cuota.intcte}}</th>
+                        <td class="text-align-center" >{{cuota.cuota}}</th>
+                        <td class="text-align-center" >{{cuota.saldocuota}}</th>
+                        
+                    </tr>
+                    {%endfor%}
+                </tbody>
+<!--                 <tfoot>
+                    <tr>
+                        <th class="text-right" colspan=4>Total</th>
+                        <th class="text-align-center">{{total_recaudo.valor__sum}}</th>
+                    </tr>
+                </tfoot> -->
+            </table>
+        </div>
+    </div>
+    <div class='col-xs-12 col-md-6'>
+        <p class="lead text-center border-bottom border-gray">Pagos Efectuados</p>
+        <div class="table-responsive">
+            <table id="tabla-detallerecaudo" class='table table-sm table-striped table-bordered'>
+                <thead class="thead thead-light">
+                    <tr>
+                        <th class="text-align-center">Fecha</th>
+                        <th class="text-align-center">Recibo</th>
+                        <th class="text-align-center">Cta Pagada</th>
+                        <th class="text-align-center">Capital</th>
+                        <th class="text-align-center">Int Cte</th>
+                        <th class="text-align-center">Int Mora</th>
+                        
+                    </tr>
+                </thead>
+                <tbody>
+                    {%for linea in detalle_recaudos%}
+                    <tr class="text-align-center">
+                        <td class="text-align-center" >{{linea.fecha|date:'d/m/Y'}}</th>
+                        <td class="text-align-center" >{{linea.recibo}}</th>
+                        <td class="text-align-center" >{{linea.concepto}}{{linea.idcta}}</th>
+                        <td class="text-align-center" >{{linea.capital}}</th>
+                        <td class="text-align-center" >{{linea.interescte}}</th>
+                        <td class="text-align-center" >{{linea.interesmora}}</th>
+                    </tr>
+                    {%endfor%}
+                </tbody>
+<!--                 <tfoot>
+                    <tr>
+                        <th class="text-right" colspan=4>Total</th>
+                        <th class="text-align-center">{{total_recaudo.valor__sum}}</th>
+                    </tr>
+                </tfoot> -->
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function() {
+    var tablaplan = $('#tabla-plandepagos').DataTable({
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "language": {
+            "url": "/ajax_request/datatable_spanish"
+        },
+        dom: 'Bfrtip',
+        buttons: ['pageLength', 'copy', 'excel', 
+        {
+            extend: 'pdfHtml5',
+            mesageTop: 'Plan de pagos'
+        }    
+        ],
+        columnDefs: [
+        { type: 'date-uk', targets: 0 }
+        ]
+  });
+  var tablarec = $('#tabla-detallerecaudo').DataTable({
+    'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+    "language": {
+        "url": "/ajax_request/datatable_spanish"
+    },
+    dom: 'Bfrtip',
+    buttons: ['pageLength', 'copy', 'excel', 
+        {
+            extend: 'pdfHtml5',
+            mesageTop: 'Aplicacion de recaudos'
+        }    
+        ],
+    columnDefs: [
+   { type: 'date-uk', targets: 0 }
+    ]
+    });
+    tablaplan.buttons().container()
+            .appendTo( '#tabla-plandepagos_wrapper .col-md-6:eq(0)' );
+    tablarec.buttons().container()
+    .appendTo( '#tabla-detallerecaudo_wrapper .col-md-6:eq(0)' );
+} );
+</script>

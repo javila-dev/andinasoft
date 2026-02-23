@@ -1,0 +1,34 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%block title%}CRM | Principal{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'><i class="fas fa-headset"></i> &nbsp;CRM</h3>
+    <div class='container pb-3'>
+        <div class='row justify-content-around'>
+            <div class='col-4 mx-4 my-4 py-3 rounded-pill shadow bg-white text-center'>
+                <a href="/crm/leads">
+                    <img src="/media/icons/prospect.png" class="rounded mx-auto d-block mb-2" alt="..." width="80" height="80">
+                    <strong>Leads</strong></a>
+            </div>
+            <div class='col-4 my-4 py-3 rounded-pill shadow bg-white text-center'>
+                <a href="/crm/manage_leads">
+                    <img src="/media/icons/recruitment.png" class="rounded mx-auto d-block mb-2" alt="..." width="80" height="80">
+                    <strong>Administrar Leads</strong></a>
+            </div>
+            <div class='col-4 my-4 py-3 rounded-pill shadow bg-white text-center'>
+                <a href="/crm/events">
+                    <img src="/media/icons/interview.png" class="rounded mx-auto d-block mb-2" alt="..." width="80" height="80">
+                    <strong>Eventos</strong></a>
+            </div>
+            <div class='col-4 my-4 py-3 rounded-pill shadow bg-white text-center'>
+                <a href="/crm/adminevents">
+                    <img src="/media/icons/appointment.png" class="rounded mx-auto d-block mb-2" alt="..." width="80" height="80">
+                    <strong>Administrar eventos</strong></a>
+            </div>  
+        </div>
+        
+    </div>
+</div>
+{%endblock%}

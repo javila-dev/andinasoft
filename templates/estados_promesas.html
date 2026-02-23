@@ -1,0 +1,768 @@
+{%extends 'base.html'%}
+{%block title%}Estados Promesas {{proyecto}}{%endblock%}
+
+{%block content%}
+<style>
+    body {
+  position: relative;
+}
+td{
+    font-size: small;
+}
+a{
+    cursor: pointer;
+}
+</style>
+<div class="bg-white rounded shadow-lg">
+    <h3 class='section-title text-white text-center'>Estado contratos<br><small>{{proyecto}}</small></h3>
+    
+    <nav id="navbar-example2" class="navbar navbar-light bg-light">
+        <ul class="nav nav-pills">
+          <li class="nav-item">
+            <a class="nav-link" href="#opcionesvigentes">Opciones Vigentes</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#opcionesvencidas">Opciones por vencer/vencidas</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#promesassinaprobar">Promesas sin aprobar</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#promesasaprobadas">Promesas Aprobadas</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#promesasporvencer">Promesas por vencer</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#promesasvencidas">Promesas vencidas</a>
+          </li>
+        </ul>
+      </nav>
+    <br>
+    <div class='p-2'>
+        <div data-spy="scroll" data-target="#navbar-example2" data-offset="0">
+        <div class="row" id='opcionesvigentes'>
+            <div class='col-xs-12 col-lg-12'>
+                <div class="card" >
+                    <h5 class='text-info text-center card-header'>Opciones vigentes</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped opciones' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Inmueble</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Oficina</th>
+                                        <th class='text-center'>Cartera</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for opcion in opciones_vigentes%}
+                                    <tr>
+                                        <td class='text-center'><a data-toggle="modal" data-target="#modalOpciones" data-adj="{{opcion.pk}}">{{opcion.pk}}</a></td>
+                                        <td>{{opcion.titular.upper}}</td>
+                                        <td class='text-center'>{{opcion.inmueble}}</td>
+                                        <td class='text-center'>{{opcion.estado}}</td>
+                                        <td class='text-center'>{{opcion.oficina}}</td>
+                                        <td class='text-center'>{{opcion.cartera}}</td>
+                                        <td class='text-center'>{{opcion.vencimiento|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <br>
+        <div class='row' id='opcionesvencidas'>
+            <div class='col-xs-12 col-lg-6'>
+                <div class="card" >
+                    <h5 class='text-warning text-center card-header'>Opciones por vencer</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped opciones' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for opcion in opciones_porvencer%}
+                                    <tr>
+                                        <td class='text-center'><a data-toggle="modal" data-target="#modalOpciones" data-adj="{{opcion.pk}}">{{opcion.pk}}</a></td>
+                                        <td>{{opcion.titular.upper}}</td>
+                                        <td class='text-center'>{{opcion.estado}}</td>
+                                        <td class='text-center'>{{opcion.vencimiento|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class='col-xs-12 col-lg-6'>
+                <div class="card" >
+                    <h5 class='text-danger text-center card-header'>Opciones vencidas</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped opciones' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for opcion in opciones_vencidas%}
+                                    <tr>
+                                        <td class='text-center'><a data-toggle="modal" data-target="#modalOpciones" data-adj="{{opcion.pk}}">{{opcion.pk}}</a></td>
+                                        <td>{{opcion.titular.upper}}</td>
+                                        <td class='text-center'>{{opcion.estado}}</td>
+                                        <td class='text-center'>{{opcion.vencimiento|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <br>
+        <div class='row' id='promesassinaprobar'>
+            <div class='col-xs-12 col-lg-12'>
+                <div class="card" >
+                    <h5 class='text-info card-header text-center'>Promesas sin aprobar</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='row-border compact striped' id='tablasinAprobar' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Inmueble</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Oficina</th>
+                                        <th class='text-center'>Fecha Promesa</th>
+                                        <th class='text-center'>Fecha Entrega</th>
+                                        <th class='text-center'>Fecha Escritura</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for promesa in promesas_pendientes%}
+                                    <tr>
+                                        <td class='text-center'>{{promesa.pk}}</td>
+                                        <td>{{promesa.titular}}</td>
+                                        <td class='text-center'>{{promesa.inmueble}}</td>
+                                        <td class='text-center'>{{promesa.estado}}</td>
+                                        <td class='text-center'>{{promesa.oficina.capitalize}}</td>
+                                        <td class='text-center'>{{promesa.fechapromesa|date:'d/m/Y'}}</td>
+                                        <td class='text-center'>{{promesa.fechaentrega|date:'d/m/Y'}}</td>
+                                        <td class='text-center'>{{promesa.fechaescritura|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <br>
+        <div class='row' id='promesasaprobadas'>
+            <div class='col-xs-12 col-lg-12'>
+                <div class="card" >
+                    <h5 class='text-success card-header text-center'>Promesas vigentes</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped promesas' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Inmueble</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Oficina</th>
+                                        <th class='text-center'>Fecha Promesa</th>
+                                        <th class='text-center'>Fecha Entrega</th>
+                                        <th class='text-center'>Fecha Escritura</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for promesa in promesas_vigentes%}
+                                    <tr>
+                                        <td class='text-center'>{{promesa.pk}}</td>
+                                        <td>{{promesa.titular}}</td>
+                                        <td class='text-center'>{{promesa.inmueble}}</td>
+                                        <td class='text-center'>{{promesa.estado}}</td>
+                                        <td class='text-center'>{{promesa.oficina.capitalize}}</td>
+                                        <td class='text-center'>{{promesa.fechapromesa|date:'d/m/Y'}}</td>
+                                        <td class='text-center'>{{promesa.fechaentrega|date:'d/m/Y'}}</td>
+                                        <td class='text-center'>{{promesa.fechaescritura|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <br>
+        <div class='row' id='promesasporvencer'>
+            <div class='col-xs-12 col-lg-6'>
+                <div class="card" >
+                    <h5 class='text-warning text-center card-header'>Entregas por vencer</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped promesas' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for promesa in entregas_porvencer%}
+                                    <tr>
+                                        <td class='text-center'>{{promesa.pk}}</td>
+                                        <td>{{promesa.titular.upper}}</td>
+                                        <td class='text-center'>{{promesa.estado}}</td>
+                                        <td class='text-center'>{{promesa.fechaentrega|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class='col-xs-12 col-lg-6'>
+                <div class="card" >
+                    <h5 class='text-warning text-center card-header'>Escrituracion por vencer</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped promesas' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for promesa in escrituras_porvencer%}
+                                    <tr>
+                                        <td class='text-center'>{{promesa.pk}}</td>
+                                        <td>{{promesa.titular.upper}}</td>
+                                        <td class='text-center'>{{promesa.estado}}</td>
+                                        <td class='text-center'>{{promesa.fechaescritura|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <br>
+        <div class='row' id='promesasvencidas'>
+            <div class='col-xs-12 col-lg-6'>
+                <div class="card" >
+                    <h5 class='text-danger text-center card-header promesas'>Entregas vencidas</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped promesas' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for promesa in entregas_vencidas%}
+                                    <tr>
+                                        <td class='text-center'>{{promesa.pk}}</td>
+                                        <td>{{promesa.titular.upper}}</td>
+                                        <td class='text-center'>{{promesa.estado}}</td>
+                                        <td class='text-center'>{{promesa.fechaentrega|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class='col-xs-12 col-lg-6'>
+                <div class="card" >
+                    <h5 class='text-danger text-center card-header promesas'>Escrituracion vencidas</h5>
+                    <div class='card-body'>
+                        <div class='table-responsive'>
+                            <table class='display row-border compact striped promesas' style='width: 100%;'>
+                                <thead class='thead thead-light'>
+                                    <tr>
+                                        <th class='text-center'>Adj</th>
+                                        <th class='text-center'>Cliente</th>
+                                        <th class='text-center'>Estado</th>
+                                        <th class='text-center'>Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {%for promesa in escrituras_vencidas%}
+                                    <tr>
+                                        <td class='text-center'>{{promesa.pk}}</td>
+                                        <td>{{promesa.titular.upper}}</td>
+                                        <td class='text-center'>{{promesa.estado}}</td>
+                                        <td class='text-center'>{{promesa.fechaescritura|date:'d/m/Y'}}</td>
+                                    </tr>
+                                    {%endfor%}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    
+</div>
+<!-- ventanas modales -->
+<div class='modal fade' id='modalOpciones' tabindex="-1" data-backdrop="static" role="dialog" aria-hidden="true">
+    <form id='formOpcion' method='POST' action=''>{%csrf_token%}
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="titulopciones"></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input id='adjopcion' name='adjopcion' type="text" hidden>
+                    <div class="input-group">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text" style='padding-right: 5.7rem;'>Oficina</span>
+                        </div>
+                        <select class='custom-select' id='oficinaopcion' name='oficinaopcion'>
+                            <option selected>Selecciona...</option>
+                            <option value="Medellin">Medellin</option>
+                            <option value="Monteria">Monteria</option>
+                        </select>
+                    </div>
+                    <br>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="input-group mt-md-4 pt-md-2">
+                                <div class='input-group-prepend'>
+                                    <span class="input-group-text" style='padding-right: 2rem;'>Prorroga</span>
+                                </div>
+                                <select class='custom-select' id='prorroga' name='prorroga'>
+                                    <option selected>Selecciona...</option>
+                                    <option value="360">360</option>
+                                    <option value="180">180</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Fecha de promesa</label>
+                            <input type="text" name="fechapromesa" class="form-control text-center" id="id_fechapromesa">
+                        </div>
+                    </div>
+                    
+                    <br>
+                    <div class='input-group'>
+                        <div class='input-group-prepend'>   
+                            <span class="input-group-text" style='padding-right: 2.7rem;'>Cargar fechas</span>
+                        </div>
+                        <select class='custom-select' id='tipofechas' name='tipofechas'>
+                            <option selected value="Automatico">Automatico</option>
+                            <option value="Manual">Manual</option>
+                        </select>
+                    </div>
+                    <br>
+                    <div id='blockfechas' class="row gap-2 mb-3">
+                        <div class="col-md-6" id="div_id_fechaentrega">
+                            <label>Fecha de entrega</label>
+                            <input type="text" name="fechaentrega" class="form-control text-center" id="id_fechaentrega">
+                        </div>
+                        <br>
+                        <div class="col-md-6" id="div_id_fechaescritura">
+                            <label>Fecha de escritura</label>
+                            <input type="text" name="fechaescritura" class="form-control text-center" id="id_fechaescritura">
+                        </div>
+                        <br>
+                    </div>
+                    <div class="input-group">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text" style='padding-right: 2rem;'>Forma de Pago</span>
+                        </div>
+                        <select class='custom-select' id='formapago' name='formapago'>
+                            <option selected>Selecciona...</option>
+                            <option value="Contado">Contado</option>
+                            <option value="Credicontado">Credicontado</option>
+                            <option value="Amortizacion">Amortizacion</option>
+                        </select>
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text" style='padding-right: 3.2rem;'>Forma CI</span>
+                        </div>
+                        <textarea class="form-control" name="formaci" id='formaci'></textarea>
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text" style='padding-right: 1.7rem;'>Forma Saldo</span>
+                        </div>
+                        <textarea class="form-control" name="formasaldo" id='formasaldo' rows="3"></textarea>
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                          <span class="input-group-text">Observaciones</span>
+                        </div>
+                        <textarea class="form-control" name="observaciones" id='observaciones' rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                    <input class='btn btn-primary' type="submit" name="btnOpciones" value='Registrar'>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<div class='modal fade' id='modalOpcionesPromesas' tabindex="-1" data-backdrop="static" role="dialog" aria-hidden="true">
+    <form id='formOpcion' method='POST' action=''>{%csrf_token%}
+        <div class="modal-dialog modal-sm" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="tituloopcionesPromesa"></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <input id='adjOpcionPromesa' name='adjOpcionPromesa' type="text" hidden>
+                    <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="entregado" name="entregado">
+                        <label class="custom-control-label" for="entregado">Entregado</label>
+                      </div>
+                      <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="escriturado" name="escriturado">
+                        <label class="custom-control-label" for="escriturado">Escriturado</label>
+                      </div>
+                      <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="prorrogado" name="prorrogado">
+                        <label class="custom-control-label" for="prorrogado">Prorrogado</label>
+                      </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                    <input class='btn btn-primary' type="submit" name="EstadoPromesa" value='Actualizar'>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalcambiarfecha" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Cambiar Fechas</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <form method='POST' id='formCambiofecha'>{%csrf_token%}
+            <div class="modal-body">
+                <div class='mb-3'>
+                    <label for='fecha_promesa'>Fecha promesa</label>
+                    <input type='text' class='form-control' required
+                    name='fecha_promesa' id='id_fecha_promesa'>
+                </div>
+                <div class='mb-3'>
+                    <label for='fecha_entrega'>Fecha entrega</label>
+                    <input type='text' class='form-control' required
+                    name='fecha_entrega' id='id_fecha_entrega'>
+                </div>
+                <div>
+                    <label for='fecha_escritura'>Fecha escritura</label>
+                    <input type='text' class='form-control' required
+                    name='fecha_escritura' id='id_fecha_escritura'>
+                </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+              <button type="submit" class="btn btn-primary">Cambiar</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuPromesas' aria-labelledby="dropdownMenuLink"
+  style="max-width: 200px;z-index:1060">
+    <a class="dropdown-item" id='desaprobar'><i class="fas fa-undo-alt"></i> Desaprobar</a>
+    <a class="dropdown-item" id='cambiarfechas'><i class="fas fa-exchange-alt"></i> Cambiar fechas</a>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuPromesasSA' aria-labelledby="dropdownMenuLink"
+  style="max-width: 220px;z-index:1060">
+  <button class="dropdown-item" id='btnModifProm'>Modificar promesa</button>
+  <form id='formOpcion' method='POST' action=''>{%csrf_token%}
+    <input id='adjpromesa' name='adjpromesa' type="text" hidden>
+    <input class="dropdown-item" type='submit' name='btnReimpPromesa' value='Imprimir promesa'>
+    <input class="dropdown-item" type='submit' name='btnReimpPagare' value=" Imprimir pagare">
+    <input class='dropdown-item' type="submit" name="btnAprobar" value='Aprobar'>
+</form>
+</div>
+{%include 'alert.html'%}
+<script>
+    $(document).ready(function(){
+    var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+    $('table.opciones').DataTable({
+            'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+            "pageLength": 10,
+            "order": [[ 3, "asc" ]],
+            columnDefs: [
+            { type: 'date-uk', targets: 3 }]
+    });
+    var tablasPromesas = $('table.promesas').DataTable({
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 10,
+        "order": [[ 3, "asc" ]],
+        columnDefs: [
+        { type: 'date-uk', targets: 3 }]
+    });
+    var tablaPromSA = $('#tablasinAprobar').DataTable({
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 10,
+        "order": [[ 3, "asc" ]],
+        columnDefs: [
+        { type: 'date-uk', targets: 3 }]
+    });
+    $('table.promesas').on('contextmenu','tr',function(e){
+        tablasPromesas.$('tr.selected').removeClass('selected');
+        $(this).addClass('selected')
+        var width = $(document).width()
+        var position = e.pageX
+        if (position>=width*3/4){
+            position -= 200
+        }
+        $('#contextMenuPromesas').css({
+            'display':'block',
+            'left':position,
+            'top':e.pageY,
+        })
+        return false;
+    });
+    $('#id_fecha_entrega').datepicker({
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        uiLibrary: 'bootstrap4'
+    });
+    $('#id_fecha_escritura').datepicker({
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        uiLibrary: 'bootstrap4'
+    });
+    $('#id_fechaescritura').datepicker({
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        uiLibrary: 'bootstrap4'
+    });
+    $('#id_fechaentrega').datepicker({
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        uiLibrary: 'bootstrap4'
+    });
+    $('#id_fechapromesa').datepicker({
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        uiLibrary: 'bootstrap4'
+    });
+    $('#id_fecha_promesa').datepicker({
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        uiLibrary: 'bootstrap4'
+    });
+    $('#formCambiofecha').on('submit',function(e){
+        e.preventDefault();
+        var line = tablasPromesas.row('.selected').data()
+        let dataform = new FormData(this)
+        dataform.append('adj',line[0])
+        dataform.append('tipo','solofecha')
+        $.ajax({
+            type:'POST',
+            url:'/operaciones/promesas/{{proyecto}}',
+            data:dataform,
+            contentType:false,
+            processData:false,
+            success:function(response){
+                location.reload()
+            }
+        })
+
+    })
+    $('#tablasinAprobar tbody').on('contextmenu','tr',function(e){
+        tablaPromSA.$('tr.selected').removeClass('selected');
+        var line = tablaPromSA.row(this).data()
+        $('#adjpromesa').val(line[0])
+        $(this).addClass('selected')
+        var width = $(document).width()
+        var position = e.pageX
+        if (position>=width*3/4){
+            position -= 220
+        }
+        $('#contextMenuPromesasSA').css({
+            'display':'block',
+            'left':position,
+            'top':e.pageY,
+        })
+        return false;
+    });
+    $("#contextMenuPromesas").click(function(e){
+        var line = tablasPromesas.row('.selected').data()
+        switch(e.target.id){
+            case "desaprobar":
+                $.ajax({
+                    type:'POST',
+                    url:'/operaciones/promesas/{{proyecto}}',
+                    data:{
+                        'adj':line[0],
+                        'csrfmiddlewaretoken':csrf_token,
+                    },
+                    success:function(response){
+                        location.reload()
+                    }
+                })
+                break;    
+            case 'cambiarfechas':
+               $('#modalcambiarfecha').modal('show')
+        }
+    });
+    $('#blockfechas').css('display','none')
+    $('#modalOpciones').on('show.bs.modal',function(event){
+        var button = $(event.relatedTarget)
+        var recipient = button.data('adj')
+        if(recipient) {
+            $('#formOpcion').trigger('reset')
+            var modal = $(this)
+            modal.find('.modal-title').text('Opcion de promesa '+recipient)
+            $('#adjopcion').val(recipient)
+        }
+    })
+    $('#modalPromesas').on('show.bs.modal',function(event){
+        var button = $(event.relatedTarget)
+        var recipient = button.data('adj')
+        var modal = $(this)
+        modal.find('.modal-title').text('Promesa '+recipient)
+        $('#adjpromesa').val(recipient)
+    })
+    $('#modalOpcionesPromesas').on('show.bs.modal',function(event){
+        var button = $(event.relatedTarget)
+        var recipient = button.data('adj')
+        var modal = $(this)
+        modal.find('.modal-title').text('Opciones Promesa '+recipient)
+        $('#adjOpcionPromesa').val(recipient)
+        $.ajax({
+            type:'GET',
+            url:'/operaciones/promesas/{{proyecto}}',
+            data:{
+                'adj':recipient
+            },
+            success:function(response){
+                var escriturado = response['escriturado']
+                var entregado = response['entregado']
+                var prorrogado = response['prorrogado']
+                $('#escriturado').attr('checked',escriturado)
+                $('#entregado').attr('checked',entregado)
+                $('#prorrogado').attr('checked',prorrogado)
+            }
+        })
+    })
+    $('#tipofechas').on('change',function(){
+        var tipo = $(this).val()
+        if (tipo=='Manual'){
+            $('#blockfechas').css('display','flex')
+        }
+        else{
+            $('#blockfechas').css('display','none')
+        }
+    })
+    $(this).click(function(e){
+        if(e.button == 0){
+            $(".contextmenu").css("display", "none");
+        }
+    });
+    $(this).keydown(function(e){
+        if(e.keyCode == 27){
+            $(".contextmenu").css("display", "none");
+        }
+    });
+    $('#btnModifProm').click(function(){
+        let line = tablaPromSA.row('.selected').data()
+        let adj = line[0]
+        $.ajax({
+            type:'GET',
+            url:'/operaciones/promesas/{{proyecto}}',
+            data:{
+                'adj':adj
+            },
+            success:function(response){
+                
+                let datos_resp = JSON.parse(response['datos_promesa'])
+                let datos = datos_resp[0]['fields']
+                $('#modalOpciones').find('.modal-title').text('Opcion de promesa ' + adj)
+                $('#adjopcion').val(adj)
+                $('#oficinaopcion').val(datos.ciudad)
+                $('#prorroga').val(datos.dias_prorroga)
+                $('#tipofechas').val('Manual')
+                $('#id_fechapromesa').val(datos.fechapromesa)
+                $('#id_fechaentrega').val(datos.fechaentrega)
+                $('#id_fechaescritura').val(datos.fechaescritura)
+                $('#formapago').val(datos.formapago)
+                $('#formaci').val(datos.formaci)
+                $('#formasaldo').val(datos.formasaldo)
+                $('#observaciones').val(datos.observaciones)
+                $('#blockfechas').css('display','flex')
+                $('#modalOpciones').modal('show')
+            }
+        })
+    })
+});
+</script>
+<script>
+    $('body').scrollspy({ target: '#navbar-example2' })
+</script>
+{%include 'datepicker_gigjo.html'%}
+<link href="//cdnjs.cloudflare.com/ajax/libs/tempusdominus-bootstrap-4/5.1.2/css/tempusdominus-bootstrap-4.min.css" type="text/css" media="all" rel="stylesheet">
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment-with-locales.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/tempusdominus-bootstrap-4/5.1.2/js/tempusdominus-bootstrap-4.min.js"></script>
+{%endblock%}

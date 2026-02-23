@@ -1,0 +1,219 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+
+{%block title%}Detalle Comisiones {{proyecto}}{%endblock%}
+
+{%block style%}
+<style>
+    .form-group{
+        padding-right:1rem;
+    }
+    .form-control{
+        margin-left:0.5rem;
+    }
+</style>
+{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Detalle Comisiones {{proyecto}}</strong></h4>
+    <br/>
+    <form id="form-asesor" name="form-asesor" method="POST" action="">{%csrf_token%}
+        <div class='row'>
+        <div class='col-lg-2'>{{form.valor_buscado|as_crispy_field}}</div>    
+        <div class='col-lg-3'>{{form.fecha_desde|as_crispy_field}}</div>
+        <div class='col-lg-3'>{{form.fecha_hasta|as_crispy_field}}</div>
+        <div class='col-lg-4 pt-lg-4 mt-lg-2'>
+            <div class="btn-toolbar" role="toolbar" aria-label="Toolbar with button groups">
+                <div class="btn-group" role="group" aria-label="Basic example">
+                    <input name='buscar-porasesor' class='btn btn-primary' type='submit' value='Por Asesor'>
+                    <input name='buscar-poradj' class='btn btn-primary' type='submit' value='Por Adj'>
+                    <div class="btn-group" role="group">
+                        <button id="btnGroupDrop1" type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                          Por fecha
+                        </button>
+                        <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
+                            <input name='buscar-porfecha' class='dropdown-item' type='submit' value='Buscar'>
+                            <button class='dropdown-item' type='button' onclick="exportarDoc()">Exportar</button>
+                        </div>
+                      </div>
+                </div>
+            </div>
+        </div>
+        </div>        
+    </form>
+    <br/>
+    
+    {%if respuesta == 'asesor'%}
+    <p class='lead border-bottom border-gray'>Comisiones de <strong>{{asesor}}</strong> desde el <strong>{{fecha_desde}}</strong> hasta <strong>{{fecha_hasta}}</strong></p>
+    <div class='table-responsive'>
+        <table class='table table-sm display'>
+            <thead class='thead thead-light'>
+                <th class='text-center'>Fecha</th>
+                <th class='text-center'>Adj</th>
+                <th class='text-center'>Cargo</th>
+                <th class='text-center'>Cliente</th>
+                <th class='text-center'>%</th>
+                <th class='text-center'>Comision</th>
+                <th class='text-center'>Provision</th>
+                <th class='text-center'>Pago Neto</th>
+            </thead>
+            <tbody>
+                {%for comision in comisiones_asesor%}
+                <tr>
+                    <td class='text-center'>{{comision.fecha|date:"d-m-Y"}}</td>
+                    <td class='text-center'>{{comision.adj}}</td>
+                    <td>{{comision.idcargo}}</td>
+                    <td >{{comision.cliente.upper}}</td>
+                    <td class='text-center'>{{comision.tasacomision}}</td>
+                    <td class='text-center'>{{comision.comision}}</td>
+                    <td class='text-center'>{{comision.provision}}</td>
+                    <td class='text-center'>{{comision.pagoneto}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+            <tfoot>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th><strong>Total</strong></th>
+                <th class='text-center'>Comision</th>
+                <th class='text-center'>Provision</th>
+                <th class='text-center'>Pago Neto</th>
+            </tfoot>
+        </table>
+    </div>
+    {%endif%}
+    {%if respuesta == 'adj'%}
+    <p class='lead border-bottom border-gray'>Comisiones pagadas por <strong>{{cliente}}</strong> desde el <strong>{{fecha_desde}}</strong> hasta <strong>{{fecha_hasta}}</strong></p>
+    <div class='table-responsive'>
+        <table class='table table-sm display'>
+            <thead class='thead thead-light'>
+                <th class='text-center'>Fecha</th>
+                <th class='text-center'>Cedula</th>
+                <th class='text-center'>Gestor</th>
+                <th class='text-center'>Comision</th>
+                <th class='text-center'>Provision</th>
+                <th class='text-center'>Pago Neto</th>
+            </thead>
+            <tbody>
+                {%for comision in comisiones_adj%}
+                <tr>
+                    <td class='text-center'>{{comision.fecha}}</td>
+                    <td class='text-center'>{{comision.idgestor}}</td>
+                    <td >{{comision.nombre.upper}}</td>
+                    <td class='text-center'>{{comision.comision}}</td>
+                    <td class='text-center'>{{comision.provision}}</td>
+                    <td class='text-center'>{{comision.pagoneto}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+            <tfoot>
+                <th></th>
+                <th><strong>Total</strong></th>
+                <th class='text-center'>Comision</th>
+                <th class='text-center'>Provision</th>
+                <th class='text-center'>Pago Neto</th>
+            </tfoot>
+        </table>
+    </div>
+    {%endif%}
+    {%if respuesta == 'fecha'%}
+    <p class='lead border-bottom border-gray'>Comisiones pagadas desde el <strong>{{fecha_desde}}</strong> hasta <strong>{{fecha_hasta}}</strong></p>
+    <div class='table-responsive'>
+        <table class='table table-sm display'>
+            <thead class='thead thead-light'>
+                <th class='text-center'>Fecha</th>
+                <th class='text-center'>Cedula</th>
+                <th class='text-center'>Gestor</th>
+                <th class='text-center'>Comision</th>
+                <th class='text-center'>Provision</th>
+                <th class='text-center'>Pago Neto</th>
+            </thead>
+            <tbody>
+                {%for comision in comisiones_fecha%}
+                <tr>
+                    <td class='text-center'>{{comision.fecha|date:"d-m-Y"}}</td>
+                    <td class='text-center'>{{comision.idgestor}}</td>
+                    <td >{{comision.nombre.upper}}</td>
+                    <td class='text-center'>{{comision.comision}}</td>
+                    <td class='text-center'>{{comision.provision}}</td>
+                    <td class='text-center'>{{comision.pagoneto}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+            <tfoot>
+                <th></th>
+                <th></th>
+                <th class='text-right'><strong>Total</strong></th>
+                <th class='text-center'>Comision</th>
+                <th class='text-center'>Provision</th>
+                <th class='text-center'>Pago Neto</th>
+            </tfoot>
+        </table>
+    </div>
+    {%endif%}
+</div>
+{%include 'alert.html'%}
+{{form.media}}
+{%include 'datatable_buttons.html'%}
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+<script>
+        function exportarDoc(){
+            var desde = $('#fecha_desde_asesor').val()
+            var hasta = $('#fecha_hasta_asesor').val()
+            var url ='/downloads/gtt/{{proyecto}}/'+desde+'/'+hasta
+            window. open(url, "_blank");
+        }
+       $(document).ready(function() {
+        $('table.display').DataTable({
+        dom: 'Bfrtip',
+        buttons: ['copy', 'excel', 'pdf'],
+        language:{
+            url:'/ajax_request/datatable_spanish'
+        },
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 50,
+        "footerCallback": function ( row, data, start, end, display ) {
+            var api = this.api(), data;
+ 
+            // Remove the formatting to get integer data for summation
+            var intVal = function ( i ) {
+                var valores=i.toString().replace('.','')
+                valores=valores.replace('.','')
+                return parseFloat(valores)
+                    
+            };
+            if (('{{respuesta}}'=='asesor')){
+                var inicio=5
+            }
+            else if('{{respuesta}}'=='adj'){
+                var inicio=2
+            }
+            else if('{{respuesta}}'=='fecha'){
+                var inicio=3
+            }
+            for (i=inicio;i<9;i++){
+                // Total over this page
+                pageTotal = api
+                    .column( i, { page: 'current'} )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+    
+                // Update footer
+                $( api.column( i ).footer() ).html(
+                    new Intl.NumberFormat('co-CO',{style:'currency',currency:'COP'}).format(pageTotal)
+                );
+
+        }
+
+        }
+    
+    })
+})
+</script>
+
+{%endblock%}

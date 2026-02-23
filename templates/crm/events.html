@@ -1,0 +1,415 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}CRM | Eventos{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Eventos</h3>
+    <div class='row mx-0'>
+        <div class='col-md-3 overflow-auto mb-2' style='min-height:20vh;max-height: 85vh'>
+            <select id='operaciones' name='operaciones' class='custom-select mb-2'>
+                <option value='' selected>Seleccionar</option>
+                {%for op in operaciones%}
+                <option value='{{op.pk}}'>{{op}}</option>
+                {%endfor%}
+            </select>
+            <div id='listaEventos' class="list-group">
+            </div>
+            <button class='btn btn-primary btn-circle btn-lg float-right mt-2 shadow'
+                id='btnNuevoEvento'>
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+        <div class='col-md-9'>
+            <div class='table-responsive mt-3'>
+                <table id='tablaLeadsAsist' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Nombre</th>
+                            <th>Telefono(s)</th>
+                            <th>Estado civil</th>
+                            <th>Cupos</th>
+                            <th>Tipo</th>
+                            <th>Gestor</th>
+                            <th>Captado</th>
+                            <th>Cita</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalLead" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <ul class="nav nav-pills justify-content-center"> 
+                <li class="nav-item">
+                    <a class="nav-link active" id='pill-info' href="#info" data-toggle="tab">Info</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id='pill-tl' href="#timeline" data-toggle="tab">Timeline</a>
+                </li>
+            </ul>
+            <div class="tab-content card-body"> 
+                <div id="info" class="tab-pane active"> 
+                    {%crispy form%}
+                </div>
+                <div id="timeline" class="tab-pane"> 
+                    <div id="div-history" class="overflow-auto" style='max-height:400px'></div>
+                    <button class="btn btn-success shadow btn-circle float-right mt-2" id="btnHistory" type="button">
+                        <i class="fas fa-plus" aria-hidden="true"></i></button>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalFechaEvento" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Crear Evento</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            {%crispy form_evento%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalConfirCierre" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Cerrar Evento</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            ¿Estas seguro que deseas cerrar este evento?
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+            <button type="button" class="btn btn-primary" id='btnCerrarEvento' >Si</button>
+          </div>
+      </div>
+    </div>
+  </div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuEvent' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;">
+    <a class="dropdown-item" id='cerrarEvento' href="#">Cerrar</a>
+</div>   
+{%csrf_token%}
+<script>
+    $(document).ready(function(){
+        var groupColumn = 9
+        $('.buttonHolder').hide()
+        $('#btnHistory').hide()
+        var tablaLeadsAsist = $('#tablaLeadsAsist').DataTable({
+            "language": {
+                "url": "/ajax_request/datatable_spanish"
+            },
+            dom: 'Bfrtip',
+            buttons: [ 'pageLength','copy', 'excel', 
+                {
+                    extend: 'pdfHtml5',
+                    orientation: 'landscape',
+                    pageSize: 'LEGAL',
+                    mesageTop: 'Administrar Leads'
+                }    
+            ],
+            'ajax':{
+                'url':'/crm/ajax/eventleads?asesor=TODOS',
+                "dataSrc": "data"
+            },
+                "columns": [
+                { "data": "pk" },
+                { "data": "nombre" },
+                { "data": "celular" },
+                { "data": "estado_civil" },
+                { "data": "cupos" },
+                { "data": "tipo" },
+                {'data':'gestor_asignado'},
+                {'data':'fecha_reg'},
+                { "data" : "cita"},
+                {'data':'asistencia'},
+            ],
+            "columnDefs": [
+                { "visible": false, "targets": groupColumn },
+                { "targets":1,"className":"dt-body-left"}
+            ],
+            "order": [[ groupColumn, 'asc' ]],
+            "displayLength": 25,
+            "drawCallback": function ( settings ) {
+                var api = this.api();
+                var rows = api.rows( {page:'current'} ).nodes();
+                var last=null;
+                api.column(groupColumn, {page:'current'} ).data().each( function ( group, i ) {
+                    if ( last !== group ) {
+                        $(rows).eq( i ).before(
+                            '<tr class="group"><td colspan="8" class="text-left"><strong>Estado: </strong>'+group+'</td></tr>'
+                        );
+                        last = group;
+                    }
+                } );
+            }
+        } );
+        $('#tablaLeadsAsist tbody').on('click','tr',function(){
+            var row = tablaLeadsAsist.row(this).data()
+            var lead_id = row.pk
+            var lead_name = row.nombre
+            $('#estadoleadAct').val(row.estado)
+            $('#modalLead').modal('show',{type:'inshow'})
+            $('#modalLead').find('.modal-title').text('Lead: '+lead_name)
+            $('#id_lead').val(lead_id)
+            $('#id_nombre').val(row.nombre)
+            $('#id_celular').val(row.celular)
+            $('#id_telefono').val(row.telefono)
+            $('#id_email').val(row.email)
+            $('#id_direccion').val(row.direccion)
+            $('#id_estado_civil').val(row.estado_civil)
+            $('#id_fecha_nacimiento').val(row.fecha_nacimiento)
+            $('#id_gestor_capta').val(row.gestor_asignado)
+            $('#id_fecha_capta').val(row.fecha_reg)
+            $('#id_identificacion').val(row.cedula)
+            
+            $.ajax({
+                type:'GET',
+                url:'/crm/ajax/get_comments',
+                data: {
+                    'lead':lead_id
+                },
+                success: function(response){
+                    var data = response['data']
+                    $('#div-history').empty()
+                    var ul = $('<ul>').addClass('list-unstyled')
+                    for (i=0;i<data.length;i++){
+                        item = data[i]
+                        let fecha = new Date(item.fecha)
+                        fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                        var li = '<li class="media border-bottom border-gray pt-2">'+
+                            '<img src="'+item.avatar+'" width="45" height="45" class="mr-3 rounded-circle" alt="...">'+
+                            '<div class="media-body">'+
+                              '<h6 class="mt-0 mb-1">'+item.usuario+'<small> el '+fecha+'</small></h6>'+
+                              '<p>'+item.observacion+'</p>'+
+                            '</div>'+
+                          '</li>'
+                        ul.append(li)
+                    }
+                    $('#div-history').append(ul)
+                }
+            })
+        })        
+        $('#operaciones').on('change',function(){
+            var op_select = $(this).val()
+            $('#listaEventos').empty()
+            $.ajax({
+                type:'GET',
+                url:'/crm/ajax/events',
+                data:{
+                    'operacion':op_select
+                },
+                success:function(response){
+                    var data = JSON.parse(response['eventos'])
+                    let item_todos = '<a href="#" data-pk="TODOS" id="todosEvents" class="list-group-item list-group-item-action">'+
+                        'TODOS</a>'
+                    $('#listaEventos').append(item_todos)
+                    for (let event in data){
+                        let pk = data[event]['pk']
+                        let fecha = data[event]['fields']['fecha_evento']
+                        let hora = data[event]['fields']['hora_evento']
+                        let eventos_data = fecha + " - " + hora
+                        let item_list = '<a href="#" data-pk="'+pk+'" class="list-group-item list-group-item-action">'+
+                            eventos_data+'</a>'
+                        $('#listaEventos').append(item_list)
+                    }
+                }
+            });
+        });
+        $('#listaEventos').on('click','a',function(){
+            if ($(this).hasClass('active')){
+                
+            }
+            else{
+                $('#listaEventos a').removeClass('active')
+                $(this).addClass('active')
+            }
+            var evento = $(this).data('pk')
+            var op = $('#operaciones').val()
+            tablaLeadsAsist.ajax.url('/crm/ajax/eventleads?operacion='+op+'&asesor=TODOS&evento='+evento).load()
+        })
+        $('#listaEventos').on('contextmenu','a',function(e){
+            if ($(this).hasClass('active')){
+                
+            }
+            else{
+                $('#listaEventos a').removeClass('active')
+                $(this).addClass('active')
+            }
+            var evento = $(this).data('pk')
+            var op = $('#operaciones').val()
+            tablaLeadsAsist.ajax.url('/crm/ajax/eventleads?operacion='+op+'&asesor=TODOS&evento='+evento).load()
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuEvent').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $("#contextMenuEvent").click(function(e){
+            var evento = $('#listaEventos a.active').data('pk')
+            // El switch utiliza los IDs de los <li> del menú
+            switch(e.target.id){
+                case "cerrarEvento":
+                    $('#modalConfirCierre').modal('show')
+                    break;     
+            }
+        });
+        $(this).click(function(e){
+            if(e.button == 0){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                  $(".contextmenu").css("display", "none");
+            }
+            $('#listaEventos a').removeClass('active')
+        });
+        $('#btnNuevoEvento').click(function(e){
+            var op = $('#operaciones').val()
+            if (op==''){
+                $('#alert-title').text('Error')
+                $('#alert-data').text('Debes seleccionar una operacion primero')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                
+            }
+            else{
+                $('#modalFechaEvento').modal('show')
+            }
+        })
+        $('#form-newevent').on('submit',function(e){
+            e.preventDefault();
+            var op = $('#operaciones').val()
+            var fecha = $('#id_fecha_evento').val()
+            var hora = $('#id_hora_evento').val()
+            var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+            $.ajax({
+                type:'POST',
+                url:'/crm/ajax/new_event',
+                data:{
+                    'csrfmiddlewaretoken':csrf_token,
+                    'operacion':op,
+                    'fecha':fecha,
+                    'hora':hora,
+                },
+                success: function(response){
+                    $('#alert-title').text(response['title'])
+                    $('#alert-data').text(response['msj'])
+                    $('#general-right-alert').toggleClass('show').toggleClass(response['type'])
+                    if(!response['error']){
+                        getEventosAbiertos();
+                        $('#modalFechaEvento').modal('hide')
+                        $(this).trigger('reset')
+                    }
+                }
+            })
+        })
+        $('#btnCerrarEvento').on('click',function(){
+            cerrarEvento()
+            var op = $('#operaciones').val()
+            tablaLeadsAsist.ajax.url('/crm/ajax/eventleads?operacion='+op+'&asesor=TODOS&evento=TODOS').load()
+        })
+    });
+function cerrarEvento(){
+    var evento = $('#listaEventos a.active').data('pk')
+    var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+    $.ajax({
+        type:'POST',
+        url:'/crm/ajax/close_event',
+        data:{
+            'csrfmiddlewaretoken':csrf_token,
+            'evento':evento,
+        },
+        success:function(response){
+            var error = response['error']
+            if (error){
+                $('#alert-title').text('Error')
+                $('#alert-data').text(response['msj'])
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            }
+            else{
+                $('#alert-title').text('Listo')
+                $('#alert-data').text(response['msj'])
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                getEventosAbiertos()
+                $('#listaEventos a').removeClass('active')
+                $('#todosEvents').addClass('active')
+                $('#modalConfirCierre').modal('hide')
+            }
+
+        }
+    })
+
+}
+function getEventosAbiertos(){
+    var operacion = $('#operaciones').val()
+    $('#listaEventos').empty()
+    $.ajax({
+        type:'GET',
+        url:'/crm/ajax/events',
+        data:{
+            'operacion':operacion
+        },
+        success:function(response){
+            var data = JSON.parse(response['eventos'])
+            let item_todos = '<a href="#" data-pk="TODOS" id="todosEvents" class="list-group-item list-group-item-action">'+
+                'TODOS</a>'
+            $('#listaEventos').append(item_todos)
+            for (let event in data){
+                let pk = data[event]['pk']
+                let fecha = data[event]['fields']['fecha_evento']
+                let hora = data[event]['fields']['hora_evento']
+                let eventos_data = fecha + " - " + hora
+                let item_list = '<a href="#" data-pk="'+pk+'" class="list-group-item list-group-item-action">'+
+                    eventos_data+'</a>'
+                $('#listaEventos').append(item_list)
+            }
+        }
+    });
+}
+</script>
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+{%include 'datepicker_gigjo.html'%}
+{%endblock%}

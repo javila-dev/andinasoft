@@ -1,0 +1,294 @@
+{%extends 'base.html'%}
+{%load l10n%}
+{%load extras%}
+{%block title%}Graficos | Ventas por mes{%endblock%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchpanes/1.2.0/css/searchPanes.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+{%endblock %}
+{%block js%}
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchpanes/1.2.0/js/dataTables.searchPanes.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://code.highcharts.com/highcharts.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js"></script>
+{%endblock%}
+{%block content%}
+<style>
+    td{
+        font-size: smaller;
+    }
+    tfoot{
+        font-size: smaller;
+    }
+</style>
+<div class='container-xl bg-light rounded shadow' style="padding:1rem;">
+    <div class='row' id='grafico'></div>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-12'>
+            <div class='table-responsive'>
+                <table id='tablaVentas' class='display compact' style='width: 100%;'>
+                    <thead>
+                        <tr>
+                            <th class='text-center'>Adj</th>
+                            <th class='text-center'>Fecha</th>
+                            <th class='text-center'>Mes</th>
+                            <th class='text-center'>Operacion</th>
+                            <th class='text-center'>Valor</th>
+                            <th class='text-center'>Plata Mesa</th>
+                            <th class='text-center'>Plata Mes</th>
+                            <th class='text-center'>Reacudo Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%for venta in ventas%}
+                        <tr>
+                            <td class='text-center'>{{venta.pk}}</td>
+                            <td class='text-center'>{{venta.fecha|date:"d/m/Y"}}</td>
+                            <td class='text-center'>{{venta.fecha|date:"M"}}</td>
+                            <td>{{venta.titular}}</td>
+                            <td class='text-center'>{{venta.valor|unlocalize}}</td>
+                            <td class='text-center'>{{venta.platamesa|unlocalize}}</td>
+                            <td class='text-center'>{{venta.platames|unlocalize}}</td>
+                            <td class='text-center'>{{venta.platamesa|add:venta.platames|unlocalize}}</td>
+                        </tr>
+                        {%endfor%}
+                    </tbody>
+                    <tfoot>
+                        <th colspan="3" style="text-align:right">Total:</th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{%include 'periodo_graphs.html'%}
+<script>
+    $(document).ready(function(){
+        var tabla = $('#tablaVentas').DataTable({
+            'scrollY':        "600px",
+            'scrollX':        true,
+            'scrollCollapse': true,
+            'paging':         false,
+            "order": [[ 1, "asc" ]],
+            columnDefs: [{ type: 'date-uk', targets: 1 }],
+            searchBuilder:{
+                        conditions: {
+                                num: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    '<': {
+                                        conditionName: 'Menor que'
+                                    },
+                                    '<=': {
+                                        conditionName: 'Menor o igual que'
+                                    },
+                                    '>': {
+                                        conditionName: 'Mayor que'
+                                    },
+                                    '>=': {
+                                        conditionName: 'Mayor o igual que'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'between': {
+                                        conditionName: 'Entre'
+                                    },
+                                    '!between': {
+                                        conditionName: 'No esta entre'
+                                    }
+                                },
+                                string: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'starts': {
+                                        conditionName: 'Empieza con'
+                                    },
+                                    'ends': {
+                                        conditionName: 'Termina en'
+                                    },
+                                    'contains': {
+                                        conditionName: 'Contiene'
+                                    },
+                                }
+                            },
+                    },
+            language:{
+                        searchBuilder: {
+                            add:'Nuevo filtro',
+                            clearAll:'Borrar filtro',
+                            deleteTitle:'Borrar',
+                            data:'Columna',
+                            logicAnd:'Y',
+                            logicOr:'O',
+                            condition: 'Condición',
+                            value: 'Valor',
+                            title: 'Filtro Avanzado',
+                        }
+                    },
+            dom: 'Qlfrtip',
+            "footerCallback": function ( row, data, start, end, display ) {
+                    var api = this.api(), data;
+        
+                    // Remove the formatting to get integer data for summation
+                    var intVal = function ( i ) {
+                        return typeof i === 'string' ?
+                            i.replace(/[\$,]/g, '')*1 :
+                            typeof i === 'number' ?
+                                i : 0;
+                    };
+                    // Total over all pages
+                    for (i=4;i<8;i++){
+                        total = api
+                        .column( i ,{ page: 'current'})
+                        .data()
+                        .reduce( function (a, b) {
+                            return intVal(a) + intVal(b);
+                        }, 0 );
+                        
+                    // Update footer
+                    $( api.column( i ).footer() ).html(
+                        '$'+new Intl.NumberFormat().format(total)
+                    );
+                    }
+                    count = api
+                        .column( 3 ,{ page: 'current'})
+                        .data()
+                        .count()
+                    $( api.column( 3 ).footer() ).html(
+                        count + ' Clientes'
+                    );
+                    
+                   
+                }
+            })
+        $('#periodomes').prop('disabled',true)
+        var serie = seriesData(tabla,2,4)['sum']
+        var container = $('#grafico')
+        var chart = Highcharts.chart(container[0], {
+            title: {
+                text: 'Ventas {{proyecto}} {{año|unlocalize}}',
+            },
+            xAxis: {
+                title: 'Fecha',
+                categories: Object.keys(serie)
+            },
+            yAxis:[{
+                title: {
+                    text: 'Cantidad'
+                }                
+            },
+            { //--- Secondary yAxis
+                title: {
+                    text: 'Valor'
+                },
+                opposite: true
+            }
+            ],
+            series: [
+                {
+                    name:'Cantidad',
+                    yAxis:0,
+                    type:'line',
+                    color: '#F68D8D',
+                    data: chartDataCount(tabla),
+                },
+                {
+                    name:'Volumen',
+                    yAxis:1,
+                    type:'column',
+                    data: chartData(tabla,2,4),
+                },
+                {
+                    name:'Recaudo Ventas',
+                    yAxis:1,
+                    type:'column',
+                    color:'#8AD27A',
+                    data: chartData(tabla,2,7),
+                }
+            ],
+        });
+        
+        tabla.on('draw', function () {
+            chart.series[0].setData(chartData(tabla,2,4));
+            chart.series[1].setData(chartData(tabla,2,7));
+            chart.series[2].setData(chartDataCount(tabla));
+        });
+        function chartData(table,index,value) {
+            var sums = seriesData(table,index,value)['sum']
+            // And map it to the format highcharts uses
+            return $.map(sums, function (val, key) {
+                return {
+                    name:key,
+                    y:val}
+            });
+            /* data=[]
+            for (let key in sums){
+                data.push([parseInt(key),sums[key]])
+            }
+            return data */
+        }
+        function chartDataCount(table) {
+            var sums = seriesData(table,2,4)['count']
+            // And map it to the format highcharts uses
+            return $.map(sums, function (val, key) {
+                return {
+                    name:key,
+                    y:val}
+            });
+            /* data=[]
+            for (let key in sums){
+                data.push([parseInt(key),sums[key]])
+            }
+            return data */
+        }
+        function seriesData(table,index,value){
+            var counts = {};
+            var sums = {};
+            var indexes = table.rows({search:'applied'}).indexes().toArray();
+            
+            for (var i=0; i<indexes.length; i++){
+                var key = table.cell(indexes[i],index).data()
+                var valor = parseFloat(table.cell(indexes[i],value).data())
+                if(key in counts){
+                    counts[key]+=1
+                    sums[key]+=valor
+                }
+                else{
+                    counts[key]=1
+                    sums[key]=valor
+                }
+            }
+            var data = {
+                'count':counts,
+                'sum':sums,
+            }
+            return data
+        }
+        
+    })
+</script>
+{%endblock%}

@@ -1,0 +1,22 @@
+<div class='container-fluid bg-white rounded shadow p-3'>
+    <h5 class='text-center'>
+        <img src='/media/icons/recordatorio.png' class='mr-2' width='30' height='30'>Recordatorios</h5>
+        <br>
+{%for grupo in grupos%}
+    <table>
+        <tbody>
+            {%for reminder in reminders%}
+            <tr>
+                <td>
+                    <strong>{{reminder.title}}</strong>
+                </td>
+                <td style="text-align: right;">
+                    <small>{{reminder.value}}</small>
+                </td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+{%endfor%}
+
+</div>

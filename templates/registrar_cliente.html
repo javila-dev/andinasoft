@@ -1,0 +1,548 @@
+{% extends 'simple_base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Registrar Cliente{%endblock%}
+{%block style%}
+<link rel="stylesheet" href="{%static 'css/fstdropdown.css'%}">
+<style>
+    .form-signin {
+        background: rgb(31, 52, 46);
+        background: linear-gradient(0deg, rgba(31, 52, 46, 1) 0%, rgba(51, 84, 75, 1) 88%);
+    }
+
+    .bg-levelcurves {
+        background-image: url("{%static 'img/bg-andina.jpg'%}");
+        font-family: 'Ubuntu', sans-serif;
+        ;
+    }
+
+    .btn-andina {
+        background-color: #33544b;
+        border-color: #33544b;
+    }
+
+    .btn-andina:hover {
+        background-color: #2c3f3a;
+        border-color: #2c3f3a;
+    }
+    .dateinput {
+        cursor: pointer;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='row vh-100 mx-0' style="max-height: 100vh!important;">
+    {%include 'manage/form_errors.html'%}
+    <div class='col-lg-4 col-xl-5 px-0 d-none d-sm-block d-sm-none d-md-block form-signin' style="height: 100vh;max-height: 100vh;">
+        <table style="height: 100%;width: 100%;">
+            <tbody>
+                <td class='align-middle'>
+                    <img src="https://somosandina.co/wp-content/uploads/2021/02/footer-logo.png"
+                        class='img-fluid pb-1 mx-auto d-block' width="230" height="170"><br><br><br><br>
+                    <h1 class='display-4 text-center text-white'>!Bienvenido a <br>nuestra familia!</h1>
+                </td>
+            </tbody>
+        </table>
+    </div>
+    <div class='col-lg-8 col-xl-7 px-0 bg-levelcurves' style="height: 100vh;overflow-y: auto;">
+        <div class='row mx-0 justify-content-center align-items-center h-100'>
+            <div class='col px-4'>
+
+                <div class='mx-auto my-3 shadow rounded-3 row align-items-center' id='formTipoP' style='height: 40vh;width: 300px; background-color: #33544b;'>
+                    <div class='px-4 py-3 col mx-auto align-center'>
+                        <p class='text-center text-white'><strong>Eres:</strong></p>
+                        <div class='d-grid gap-2 d-md-flex justify-content-center' >
+                            <button id='personaNatural' class='btn btn-outline-light rounded-0'>Persona Natural</button>
+                            <button id='personaJuridica' class='btn btn-outline-light rounded-0'>Persona Juridica</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class='mx-auto my-3 bg-white shadow rounded-3' id='formPN' style='display: none'>
+                    <h3 class='text-center text-white py-2' style='background: rgba(51,84,75,1);'>Registrar Propietario<br><small>Persona Natural</small></h3>
+                    <div class='px-4 pb-3 mx-auto'>
+                        {%crispy form%}
+                    </div>
+                </div>
+
+                <div class='mx-auto my-3 bg-white shadow rounded-3' id='formPJ' style='display: none'>
+                    <h3 class='text-center text-white py-2' style='background: rgba(51,84,75,1);'>Registrar Propietario<br><small>Persona Juridica</small></h3>
+                    <div class='px-4 pb-3 mx-auto'>
+                        {%crispy form_pj%}
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+    </div>
+</div>
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 11">
+    <div id="alertToast" class="toast bg-danger hide" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header">
+        <img src="..." class="rounded me-2" alt="...">
+        <strong class="me-auto">Andinasoft:</strong>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body text-white">
+        
+      </div>
+    </div>
+  </div>
+  <!-- Modal -->
+  <div class="modal fade" id="modal_tratamiento_de_datos" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Politicas de tratamiento de datos</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="text-align:justify;">
+            <ul>
+                <li><a href="{%static 'pdf/15-08-2023 POL DE TRATAMIENTO DE DATOS PERSONALES ANDINA.V3.pdf'%}"
+                    target="_blank">ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</a>  </li>
+                    <li><a href="{%static 'pdf/15-08-2023 POLÍTICA DE TRAT DATOS PERSONALES TERRANOVA DESARROLLADORA TURÍSTICA.V2.pdf'%}"
+                        target="_blank">TERRANOVA DESARROLLADORA TURISTICA S.A.S.</a>  </li>
+                    <li><a href="{%static 'pdf/15-08-2023 POLÍTICA DE TRAT DATOS PERSONALES STATUS COMERCIALIZADORA.V2.pdf'%}"
+                        target="_blank">STATUS COMERCIALIZADORA S.A.S.</a>  </li>
+                    <li><a href="{%static 'pdf/15-08-2023 POLÍTICA DE TRAT DATOS PERSONALES QUADRATA CONSTRUCTORES.V2.pdf'%}"
+                        target="_blank">QUADRATA CONSTRUCTORES S.A.S.</a>      </li>
+            </ul>
+            
+            
+                   
+              
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Entendido</button>
+        </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modal_wti" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Sistema de autocontrol, prevención y gestión de riesgo integral contra el lavado de activos, 
+                financiación del terrorismo, y financiamiento de la proliferación de armas de destrucción masiva -SAGRILAFT-</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="text-align:justify;">
+            Teniendo en cuenta que la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S, (antes PROMOTORA SANDVILLE S.A.S),  identificada con NIT 900993044-9, 
+            así como sus filiales, sucursales o subordinados, debe reportar sus operaciones comerciales a la Superintendencia de Sociedades, le son aplicables las 
+            reglamentaciones de la Circular Externa 100-00016 del 24 de Diciembre de 2020 y Circular Externa 100-0004 de 9 abril 2021 que, modificaron la Circular 
+            Básica Juridica de la misma Entidad en su Capitulo X.  Razón por la cual, le asiste el deber legal de dar a plicación al Sistema de autocontrol, prevención y 
+            gestión de riesgo integral contra el lavado de activos, financiación del terrorismo, y financiamiento de la proliferación de armas de destrucción masiva -SAGRILAFT-. 
+            En razón a ello, realizará  a cada una de las contrapartes con la que vaya a tener vinculación contractual, un estudio de seguridad, para la prevención del lavado de activos, 
+            la financiación del terrorismo y cualquier otro delito conexo contemplado en en el codigo (Ley 599 de 2000 o cualquier norma que lo adicione, complemente o modifique),  
+            con el propósito de que se pueda dar cumplimiento a lo señalado en la Circular Externa 100-000016 de diciembre 24 de 2020, que modificó  el Cap. X circular básica Jurídica 
+            (Circular Externa N° 100-000005 del 22 de noviembre de 2017, de la Superintendencia de Sociedades).         
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Entendido</button>
+        </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modal_peps" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Persona Expuesta Politicamente (PEPS)</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="text-align: justify;">
+            Las personas políticamente expuestas son aquellas personas nacionales o extranjeras que cumplen funciones públicas 
+            destacadas de alto nivel o con mando y jurisdicción en un Estado, como jefes de Estado o de un gobierno, políticos 
+            de alta jerarquía, funcionarios gubernamentales, judiciales o militares de alta jerarquía, altos ejecutivos de empresas estatales, 
+            funcionarios importantes de partidos políticos o familiar cercano o estrecho colaborador de cualquier categoría de persona expuesta 
+            políticamente (extranjero, nacionales o de organismo internacional). Ver cargos relacionados en el Art. 2.1.4.2.3. del Decreto 1674 de 2016. 
+            Se considerará persona políticamente expuesta desde el momento de su nombramiento hasta su separación del cargo y por un periodo posterior 
+            no mayor de dos (2) años desde el momento que cesa de ejercer funciones u obligaciones.  Los PEP (Personas Expuestas Políticamente) y sus 
+            relacionados están obligados a identificarse según Artículo 2.1.4.2.4. del Decreto 1674 de 2016. Adicionalemente son considerados PEPS: 
+            los Familiares por vínculo sangüíneo, de afinidad o civil; como padres, hijos, abuelos, nietos, hermanos, sobrinos, tíos, cónyuge o pareja, suegros, yernos o nueras. <br>
+            <b>* En caso de requerir registrar más PEP, entregar una relación física.</b> 
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Entendido</button>
+        </div>
+        </div>
+    </div>
+</div>
+<script src="{%static 'js/fstdropdown.js'%}"></script>
+<script>
+    $(document).ready(function () {
+        if('{{PNnovalid}}'){
+            $('#formTipoP').css('display','None')
+            $('#formPN').css('display','block')
+        }
+        $('#personaNatural').click(function(){
+            $('#formTipoP').fadeOut(300)
+            $('#formPN').delay(300).fadeIn(400)
+        })
+        $('#personaJuridica').click(function(){
+            $('#formTipoP').fadeOut(300)
+            $('#formPJ').delay(300).fadeIn(400)
+        })
+        $(function () {
+            $('#id_num_cta').keypress(function (e) {
+                    if (isNaN(this.value + String.fromCharCode(e.charCode)))
+                        return false;
+                })
+                .on("cut copy paste", function (e) {
+                    e.preventDefault();
+                });
+
+        });
+    })
+</script>
+<script>
+    function captura(){
+        $('#modal_tratamiento_de_datos').modal('show')
+    }
+    $(document).ready(function () {
+        var toast = document.getElementById('alertToast')
+        var bs_toast = bootstrap.Toast.getOrCreateInstance(toast)
+        
+        let otro_ocup_col = $('#id_otro_ocupacion').parent('div').parent('div')
+        otro_ocup_col.hide()
+        let id_ciuu = $('#id_ciuu').parent('div').parent('div')
+        id_ciuu.hide()
+        $('.compl_p_compl').parent('div').parent('div').hide()
+        $('.initial-hide').parent('div').parent('div').hide()
+        $('#label_id_tratamiento_datos').html(
+            `Confirmo que he leido y aceptado la <a href="#" onclick="captura()" >politica de tratamiento de datos personales</a>`
+        )
+        var modal_wti = new bootstrap.Modal(document.getElementById('modal_wti'))
+        $('#id_btn_wti').click(function(){
+            modal_wti.show()
+        })
+        var modal_peps = new bootstrap.Modal(document.getElementById('modal_peps'))
+        $('#id_btn_peps').click(function(){
+            modal_peps.show()
+        })
+        $('#id_tipo_ocupacion').on('change', function () {
+            let val = $('#id_tipo_ocupacion').val()
+            if ( val == 'I' || val == 'P' ) {
+                    $('#ocupacion_titular').val('').prop('readonly',true)
+                    .prop('required',false)
+                    $('#id_cargo_ocupacion').val('').prop('readonly',true)
+                    .prop('required',false)
+                    $('#ocupacion_titular').parent('div').parent('div').show()
+                    $('#id_cargo_ocupacion').parent('div').parent('div').show()
+                    $('#id_otro_ocupacion').val('')
+                    .prop('required',false)
+                    otro_ocup_col.hide()
+                    $('#id_otro_ocupacion').val('')
+            }
+            else if (val == 'O'){
+                    $('#ocupacion_titular').val('')
+                    .prop('required',false)
+                    $('#ocupacion_titular').parent('div').parent('div').hide()
+                    $('#id_cargo_ocupacion').val('')
+                    .prop('required',false)
+                    $('#id_cargo_ocupacion').parent('div').parent('div').hide()
+                    $('#id_otro_ocupacion').val('')
+                    .prop('required',true)
+                    otro_ocup_col.show()
+            }
+            else {
+                $('#ocupacion_titular').val('').prop('readonly',false)
+                .prop('required',true)
+                $('#id_cargo_ocupacion').val('').prop('readonly',false)
+                .prop('required',true)
+                $('#ocupacion_titular').parent('div').parent('div').show()
+                $('#id_cargo_ocupacion').parent('div').parent('div').show()
+                $('#id_otro_ocupacion').val('')
+                .prop('required',false)
+                otro_ocup_col.hide()
+            }
+        })
+        
+        $('#id_tiene_rut').on('change', function() {
+            let val = $(this).val()
+            if (val == 'True') {
+                $('#id_tiene_rut').parent('div').parent('div').removeClass('col-md-6')
+                .addClass('col-md-4')
+                $('#id_declara_renta').parent('div').parent('div').removeClass('col-md-6')
+                .addClass('col-md-4')
+                id_ciuu.show()
+            }
+            else {
+                $('#id_tiene_rut').parent('div').parent('div').removeClass('col-md-4')
+                .addClass('col-md-6')
+                $('#id_declara_renta').parent('div').parent('div').removeClass('col-md-4')
+                .addClass('col-md-6')
+                id_ciuu.hide()
+            }
+
+        })
+        $('input[type="radio"]').parent('div').addClass('form-check form-check-inline')
+        
+        $('input[type="radio"]').on('click', function(){
+            let val = $(this).val()
+            let compl_p_compl = $(this).parents('.row').first().find('.compl_p_compl')
+            let near_compl  =  $(this)
+            if (val == 'True') {
+                compl_p_compl.val('')
+                .prop('required',true)
+                compl_p_compl.parent('div').parent('div')
+                .show()
+            }
+            else {
+                compl_p_compl.val('')
+                .prop('required',false)
+                compl_p_compl.parent('div').parent('div')
+                .hide()
+            }
+        })
+
+        $('#id_es_peps').on('change', function() {
+            let val = $(this).val()
+            if (val == 'True') {
+                $('.peps-col').show()
+                $('.peps-col').find('input').prop('required',true)
+            }
+            else {
+                $('.peps-col').hide()
+                $('.peps-col').find('input').val(null)
+                .prop('required',false)
+            }
+            $('#id_peps_hasta').prop('required',false)
+        })
+
+        $('#id_es_familiar_peps').on('change', function() {
+            let val = $(this).val()
+            if (val == 'True') {
+                $('.familiar-peps-col').find('input').prop('required',true)
+                $('.familiar-peps-col').show()
+            }
+            else {
+                $('.familiar-peps-col').hide()
+                $('.familiar-peps-col').find('input').val(null)
+                .prop('required',false)
+            }
+        })
+        
+        $('#id_pais').on('change',function(){
+            let pais = $(this).val()
+            $('#id_estado').empty()
+            .append(`<option value="">Selecciona...</option>`)
+            $('#id_ciudad').empty()
+                .append(`<option value="">Selecciona...</option>`)
+            $.ajax({
+            type:'get',
+                url:'/ajax_request/datacountries',
+                data:{
+                    'tipo':'estados',
+                    'pais':pais
+                },
+                success: function (response) {
+                    var estados = JSON.parse(response['estados'])
+                    for (estado in estados){
+                    let fields = estados[estado].fields
+                    let pk = estados[estado].pk
+                    $('#id_estado').append(
+                        `<option value="${pk}">${fields.state_name}</option>`
+                    )
+                    }
+                }
+            })
+        })
+        $('#id_estado').on('change',function(){
+            let estado = $(this).val()
+            $('#id_ciudad').empty()
+            .append(`<option value="">Selecciona...</option>`)
+            $.ajax({
+                type:'get',
+                url:'/ajax_request/datacountries',
+                data:{
+                'tipo':'ciudades',
+                'estado':estado
+                },
+                success: function (response) {
+                    var ciudades = JSON.parse(response['ciudades'])
+                    for (ciudad in ciudades){
+                        let fields = ciudades[ciudad].fields
+                        let pk = ciudades[ciudad].pk
+                        $('#id_ciudad').append(
+                        `<option value="${pk}">${fields.city_name}</option>`
+                        )
+                    }
+                }
+            })
+        })
+
+        $('#id_es_peps').click(function(){
+           
+        })
+
+
+        $('#form-cliente').submit(function(e){
+            let rut = $('#id_tiene_rut').val()
+            let tipo = $('#id_tipo_ocupacion').val()
+            let ciuu = $('#id_ciuu').val()
+
+            if (rut == 'True' && $('#id_ciuu').val() == '') {
+                e.preventDefault();
+                $('.toast').find('.toast-body').text('Como nos indicaste que tienes RUT, por favor diligencia el campo de codigo CIUU')
+                bs_toast.show()
+                return false;
+            }
+
+            
+            if (tipo == 'I' && (ciuu == "0010" || ciuu == "0020")){
+                e.preventDefault();
+                let texto = $(elem).data('text')
+                $('.toast').find('.toast-body').html('Si tu ocupación es independiente, no puedes escoger este codigo CIUU')
+                bs_toast.show()
+                return false;
+            }
+
+            if (tipo == 'I' && rut == "False"){
+                e.preventDefault();
+                let texto = $(elem).data('text')
+                $('.toast').find('.toast-body').html('Si tu ocupación es independiente, debes tener RUT.')
+                bs_toast.show()
+                return false;
+            }
+            
+            $(this).find('.dateinput').each(function(index,elem){
+                if ($(elem).attr('required') && $(elem).val()=='') {
+                    e.preventDefault();
+                    let texto = $(elem).data('text')
+                    $('.toast').find('.toast-body').html('Por favor diligencia el siguiente campo: <b>'+texto+'</b>')
+                    bs_toast.show()
+                    return false;
+                }
+            })
+
+            $('input[type="radio"]').each(function(index,elem){
+                if ($(elem).val()=='') {
+                    e.preventDefault();
+                    let texto = $(elem).data('text')
+                    $('.toast').find('.toast-body').html('Por favor diligencia el siguiente campo: <b>'+texto+'</b>')
+                    bs_toast.show()
+                    return false;
+                }
+            })
+
+            var i=0
+            checks_verify = 0
+            $('input[type="radio"]').each(function(index,elem){
+                if (i > 3) {
+                    i = 0 
+                    checks_verify = 0
+                }
+                if ($(elem).is(':checked')){
+                    cheked = 1
+                }
+                else {
+                    cheked = 0
+                }
+
+                i += 1
+                checks_verify += cheked
+
+                if (i > 3 && checks_verify < 2 ) {
+                    e.preventDefault();
+                    $('.toast').find('.toast-body').html('Por favor selecciona si o no en todas las preguntas')
+                    bs_toast.show()
+                    $(elem).focus()
+                    return false;
+                }
+            })
+        })
+        /* ---------------------------------- */
+
+        $('#rowDomicilioPJ').append(
+            "<div class='col-sm-12 col-md-6 col-lg-3 pt-2'>"+
+                "<div class='form-floating'>"+
+                    "<select name='dep_resid' id='id_dep_resid_pj' class='select form-control form-select' placeholder='Departamento'></select>"+
+                    '<label for="id_dep_resid">Departamento</label>'+
+                "</div"+
+            "</ div>"
+        )
+        .append(
+            "<div class='col-sm-12 col-md-6 col-lg-3 pt-2'>"+
+                "<div class='form-floating'>"+
+                    "<select name='ciudad' id='ciudad_titular_pj' class='select form-control form-select' placeholder='Ciudad'></select>"+
+                    '<label for="ciudad_titular">Ciudad</label>'+
+                "</div"+
+            "</ div>"
+        )
+
+        data_dptos('id_dep_resid')
+        data_dptos('id_dep_ofic')
+        data_dptos('id_dep_resid_pj')
+        $('#id_dep_resid').on('change', function () {
+            var dpto = $(this).val()
+            data_dptos_mpios(dpto, 'ciudad_titular')
+        })
+        $('#id_dep_ofic').on('change', function () {
+            var dpto = $(this).val()
+            data_dptos_mpios(dpto, 'id_ciudad_ofic')
+        })
+        $('#id_dep_resid_pj').on('change', function () {
+            var dpto = $(this).val()
+            data_dptos_mpios(dpto, 'ciudad_titular_pj')
+        })
+
+        var data = JSON.parse('{{data_municipios|escapejs}}')
+
+        function data_dptos(element) {
+            var data = JSON.parse('{{data_municipios|escapejs}}')
+            $('#' + element).children().remove()
+            $('#' + element).append(
+                $('<option>').prop('value', '').text('Escoger')
+            );
+            var departamentos = {}
+            var last_dpto = ''
+            for (var line of data) {
+                if (!(line['departamento'] in departamentos)) {
+                    $('#' + element).append(
+                        $('<option>').attr('value', line['departamento']).text(line['departamento'])
+                    )
+                    departamentos[line['departamento']] = 'Incluido'
+                }
+            }
+            sortDropDownListByText(element)
+
+        };
+
+        function data_dptos_mpios(dpto, element) {
+            $('#' + element).children().remove()
+            var data = JSON.parse('{{data_municipios|escapejs}}')
+            for (var line of data) {
+                if (dpto == line['departamento']) {
+                    for (i = 0; i < line['ciudades'].length; i++) {
+                        $('#' + element).append(
+                            $('<option>').attr('value', line['ciudades'][i]).text(line['ciudades'][i])
+                        );
+                    }
+
+                };
+                sortDropDownListByText(element)
+            };
+
+        }
+
+        function sortDropDownListByText(selectId) {
+            //Separo la primera opción del select (vacío) porque no quiero ordenarla
+            var foption = $('#' + selectId + ' option:first');
+            //Ordeno todas menos la primera (Si el texto de a y el de b son iguales no se hace nada, si el de a es menor que el de b es porque tiene que ir en un índice anterior (en la documentación indicada se explican todos los casos posibles de la compareFunction())
+            var soptions = $('#' + selectId + ' option:not(:first)').sort(function (a, b) {
+                return a.text == b.text ? 0 : a.text < b.text ? -1 : 1
+            });
+            //Reasigno al select los valores ordenados y le añado antes la primera opción
+            $('#' + selectId).html(soptions).prepend(foption);
+
+        };
+
+
+    })
+</script>
+</div>
+</div>
+
+{%endblock%}

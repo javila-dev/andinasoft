@@ -1,0 +1,43 @@
+<style>
+  #tablaReq td{
+    font-size: small;
+  }
+</style>
+<div class="modal fade" id="modalRequisiciones" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel"><i class="fas fa-mouse-pointer"></i>&nbsp;Selecciona la requisicion</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class='table-responsive'>
+              <table id='tablaReq' class='display' style='width: 100%;'>
+                <thead>
+                    <tr>
+                        <th class='text-center'>Id</th>
+                        <th class='text-center'>Fecha</th>
+                        <th class='text-center'>Proyecto</th>
+                        <th class='text-center'>Usuario</th>
+                        <th class='text-center'>Descripcion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%for req in requisiciones%}
+                    <tr>
+                    <td class='text-center'>{{req.pk}}</td>
+                    <td class='text-center'>{{req.fecha|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{req.proyecto.proyecto}}</td>
+                    <td class='text-center'>{{req.usuario_crea.username}}</td>
+                    <td>{{req.descripcion.upper|truncatechars:20}}</td>
+                    </tr>
+                    {%endfor%}
+                </tbody>
+              </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

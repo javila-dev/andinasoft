@@ -1,0 +1,159 @@
+{%extends 'base.html'%}
+{%load extras%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+{%endblock%}
+{%block title%}PQRS {{proyecto}}{%endblock%}
+{%block content%}
+<style>
+    th{
+        text-align: center;
+    }
+    td{
+        text-align: center;
+        font-size: small;
+    }
+</style>
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>PQRS {{proyecto}}</strong></h4>
+    <br>
+    <div class='table-responsive'>
+        <table id='tablaPQRS' class='compact hover' style='width: 100%;'>
+            <thead class='bg-light'>
+                <tr>
+                    <th>Radicado</th>
+                    <th>Adj</th>
+                    <th>Cliente</th>
+                    <th>Tipo</th>                    
+                    <th>Estado</th>
+                    <th>Fecha Radicado</th>
+                    <th>Fecha Vencimiento</th>
+                    <th>Fecha Cierre</th>
+                    <th>Usuario Radica</th>
+                    <th>Usuario Cierre</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for rad in pqrs%}
+                {%if rad.estado == 'Cerrado'%}
+                <tr class='bg-info'>
+                {%else%}
+                {%if rad.fecha_vencimiento > today%}
+                <tr class='bg-success'>
+                {%endif%}
+                {%if rad.fecha_vencimiento == today%}
+                <tr class='bg-warning'>
+                {%endif%}
+                {%if rad.fecha_vencimiento < today%}
+                <tr class='bg-danger'>
+                {%endif%}
+                {%endif%}
+                    <td>
+                        <div class="dropright">
+                            <a class="text-dark dropright dropdown-toggle" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" href='#'>
+                                {{rad.pk}}
+                            </a>
+                            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                              <a class="dropdown-item" href="/media/docs_andinasoft/doc_contratos/{{proyecto}}/{{rad.idadjudicacion}}/{{rad.doc_peticion}}">Ver PQRS</a>
+                              {%if rad.estado == "Cerrado"%}
+                              <a class="dropdown-item" href="/media/docs_andinasoft/doc_contratos/{{proyecto}}/{{rad.idadjudicacion}}/{{rad.doc_respuesta}}">Ver Respuesta PQRS</a>
+                              {%else%}
+                              <a class="dropdown-item" href='#' data-toggle="modal" data-target='#modalCierrePQRS'
+                              data-adj='{{rad.idadjudicacion}}' data-radicado='{{rad.pk}}'>Cerrar PQRS</a>
+                              {%endif%}
+                          </div>
+                    <td>{{rad.idadjudicacion}}</td>
+                    <td style="text-align: start;">{{rad.idadjudicacion|titular_adj:proyecto}}</td>
+                    <td>{{rad.tipo}}</td>
+                    <td>{{rad.estado}}</td>
+                    <td>{{rad.fecha_radicado|date:"d/m/Y"}}</td>
+                    <td>{{rad.fecha_vencimiento|date:"d/m/Y"}}</td>
+                    <td>{{rad.fecha_respuesta|date:"d/m/Y"}}</td>
+                    <td>{{rad.usuario_radica|replace_null:""}}</td>
+                    <td>{{rad.usuario_cierra|replace_null:""}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- Modals -->
+<form method='POST' enctype="multipart/form-data" id='formPQRS'>{%csrf_token%}
+    <div class="modal fade" id="modalCierrePQRS" tabindex="-1" aria-labelledby="modalCierrePQRS" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalCierrePQRSlabel">Cerrar PQRS</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class='container'>
+                        <div class='row mb-3 justify-content-between'>
+                            <div class='col-md-4'>
+                                <input type='text' id='idPQRS' name='idPQRS' class='form-control' readonly style='text-align: center;'>
+                            </div>
+                            <div class='col-md-4'>
+                                <input type='text' id='adjPQRS' name='adjPQRS' class='form-control text-center' readonly>
+                            </div>
+                        </div>
+                        <div class='form-group row'>
+                            <label for='fecha_respuesta' class='col-sm-3 col-form-label'>Fecha Respuesta</label>
+                            <div class='col-sm-9'>
+                                <input type='text' id='fecha_respuesta' name='fecha_respuesta' required>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label for='tipoPQRS' class='col-sm-3 col-form-label'>Medio Respuesta</label>
+                            <div class='col-sm-9'>
+                                <select class="custom-select my-1 mr-sm-2" id="forma_respuesta" name='forma_respuesta' required>
+                                    <option value="Email">Email</option>
+                                    <option value="Correo Certificado">Correo Certificado</option>
+                                    <option value="Presencial">Presencial</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="respuesta">Soporte Respuesta</label>
+                            <input type="file" class="form-control-file" id="respuesta" name='respuesta'
+                                accept="application/pdf" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="envio">Soporte Envío</label>
+                            <input type="file" class="form-control-file" id="envio" name='envio'
+                                accept="application/pdf" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <input type="submit" name='btnCerrarPQRS' class="btn btn-primary" value="Cerrar PQRS">
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+<script>
+    $(document).ready(function(){
+        $('#tablaPQRS').DataTable({
+            "order":[[0,'desc']],
+            "language": {
+            "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+        }
+        });
+        $('#fecha_respuesta').datepicker({
+            uiLibrary: 'bootstrap4',
+            locale: 'es-es',
+            format: 'yyyy-mm-dd'
+        });
+        $('#modalCierrePQRS').on('show.bs.modal',function(event){
+            var button = $(event.relatedTarget)
+            var adj = button.data('adj')
+            var id_rad = button.data('radicado')
+            $('#idPQRS').val(id_rad)
+            $('#adjPQRS').val(adj)
+        })
+    });
+</script>
+{%endblock%}

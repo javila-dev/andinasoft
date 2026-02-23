@@ -1,0 +1,293 @@
+{%extends 'base.html'%}
+{%block title%}Liquidar Comisiones{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h4 class='border-bottom border-gray text-center' style='padding-bottom:1rem;'><strong>Liquidar Comisiones</strong></h4>
+    <br/>
+    <form method='post' action='' name='form-negocios' id='form-negocios'>{%csrf_token%}
+        <input id='adj-escala' name='adj-escala' type='text' hidden>
+    <div class='table-responsive'>
+        <table id='tabla-comisiones' class='table table-striped table-sm' style="font-size: small;">
+            <thead class='thead thead-light'>
+                <tr>
+                    <th class='text-center'>Adjudicacion</th>
+                    <th class='text-center'>Cliente</th>
+                    <th class='text-center'>Valor</th>
+                    <th class='text-center'>Base Comision</th>
+                    <th class='text-center'>Recaudo</th>
+                    <th class='text-center'>Generado</th>
+                    <th class='text-center'>Procesable</th>
+                    <th class='text-center'>Mora</th>
+                    <th class='text-center'>Por Liquidar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for adj in adjudicaciones%}
+                <tr style="{%if adj.dias_de_mora >= 30%}background-color:#cd6d6d {%elif adj.procesabilidad > 0%}background-color:#cd6d6d{%endif%}">
+                    <td class='text-center'>
+                        <div class="dropright">
+                            <a class="text-dark dropright dropdown-toggle" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" href='#'>
+                                <strong>{{adj.idadjudicacion}}</strong>
+                            </a>
+                            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                                <a class="dropdown-item" href='#' data-toggle='modal' data-target='#modal-cargoscomis' data-adj='{{adj.idadjudicacion}}'>Liquidar comision tradicional</a>
+                                <a class="dropdown-item" href='#' data-toggle='modal' data-target='#modal-comisionrm' data-adj='{{adj.idadjudicacion}}'>Liquidar comision RM</a>
+                                <a class="dropdown-item" href='#' data-toggle='modal' data-target='#modal-asignacioncomisiones' data-adj='{{adj.idadjudicacion}}'>Escala Comision</a>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{adj.nombrecliente}}</td>
+                    <td class='text-center'>{{adj.valorcontrato}}</td>
+                    <td class='text-center'>{{adj.basecomision}}</td>
+                    <td class='text-center'>{{adj.recaudo}}</td>
+                    <td class='text-center'>{{adj.porcentaje_generado}}%</td>
+                    <td class='text-center'>{% if adj.procesabilidad == 0%}Sí{%else%}No{%endif%}</td>
+                    <td class='text-center'>{{adj.dias_de_mora}}</td>
+                    {%if adj.por_pagar > 100%}
+                    <td class='text-center'>Si+</td>
+                    {%elif adj.por_pagar < -100%}
+                    <td class='text-center'>Si-</td>
+                    {%else%}
+                    <td class='text-center'>No</td>
+                    {%endif%}
+                    
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div> 
+    </form> 
+</div>
+  <!-- Modal -->
+  <div class="modal fade" id="modal-cargoscomis" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+    <form method='post' action='' name='form-liquidar' id='form-liquidar'>{%csrf_token%}
+        <input id='adj-liquidacion' name='adj-liquidacion' type='text' hidden>
+        <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel" id='titulo'>Liquidacion de Comisiones {{adj}}</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class='table-responsive'>
+                <table id='tabla-escalacomisiones' class='table table-striped table-sm'>
+                    <thead class='thead thead-light'>
+                        <tr>
+                            <th class='text-center'>Cargo</th>
+                            <th class='text-center'>Gestor</th>
+                            <th class='text-center'>%</th>
+                            <th class='text-center'>Comision</th>
+                            <th class='text-center'>Provision</th>
+                            <th class='text-center'>Neto Pagar</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>  
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" class="btn btn-primary" name='btn-Liquidar' value='Liquidar'>
+        </div>
+      </div>
+      </form>   
+    </div>
+  </div>
+  <div class="modal fade" id="modal-comisionrm" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+    <form method='post' action='' name='form-liquidarrm' id='form-liquidarcomisrm'>{%csrf_token%}
+        <input id='adj-liquidacionrm' name='adj-liquidacionrm' type='text' hidden>
+        <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel" id='titulo'>Liquidacion de Comisiones RM {{adj}}</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class='table-responsive'>
+                <table id='tabla-comisionrm' class='table table-striped table-sm'>
+                    <thead class='thead thead-light'>
+                        <tr>
+                            <th class='text-center'>Cargo</th>
+                            <th class='text-center'>Gestor</th>
+                            <th class='text-center'>%</th>
+                            <th class='text-center'>Comision</th>
+                            <th class='text-center'>Provision</th>
+                            <th class='text-center'>Neto Pagar</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>  
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" class="btn btn-primary" name='btn-Liquidar-rm' value='Liquidar'>
+        </div>
+      </div>
+      </form>   
+    </div>
+  </div>
+  <div class="modal fade" id="modal-asignacioncomisiones" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+    <form method='post' action='' name='form-asignacion' id='form-escala'>{%csrf_token%}
+        <input id='adj-asignacion' name='adj-asignacion' type='text' hidden>
+        <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel" id='titulo'>Escala de Comisiones</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class='table-responsive'>
+                <table id='tabla-asignacioncomisiones' class='table table-striped table-sm'>
+                    <thead class='thead thead-light'>
+                        <tr>
+                            <th class='text-center' style='width: 20%;'>Id Cargo</th>
+                            <th class='text-center' style='width: 20%;'>Id Gestor</th>
+                            <th class='text-center' style='width: 35%;'>Gestor</th>
+                            <th class='text-center' style='width: 10%;'>Comision</th>
+                            <th class='text-center' style='width: 15%;'>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>  
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" class="btn btn-primary" name='btn-asignarescala' value='Guardar'>
+        </div>
+      </div>
+      </form>   
+    </div>
+  </div>
+  <div class="modal fade" id="modal-cargando" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-body">
+          <h1 class='text-center'>Cargando <i class="fas fa-cog fa-spin"></i></h1>
+        </div>
+    </div>
+  </div>
+<script>
+    $(document).ready(function() {
+        var oTable = $('#tabla-comisiones').DataTable({
+           "pageLength": 25,
+           'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+           "autoWidth": false,
+           'order':[[8,"desc"],[1,"asc"]]
+           });
+        $('#modal-cargoscomis').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var adj = button.data('adj')
+            $('#adj-liquidacion').val(adj)
+            var modal = $(this)
+            modal.find('.modal-title').text('Liquidar comision '+adj)
+            $.ajax({
+                type:'GET',
+                url:'/operaciones/comisiones/{{proyecto}}',
+                data:{'adj_buscar':adj,'form':'form-liquidar'},
+                success: function(response){
+                    var instance = response['instance']
+                    $('#tabla-escalacomisiones tbody tr').remove();
+                    for (i=0;i<instance.length;i++){
+                        var line = instance[i]
+                        var tr = '<tr>'+
+                        '<td class="text-center">'+line['idcargo']+'</td>'+
+                        '<td>'+line['gestor']+'</td>'+
+                        '<td class="text-center">'+line['porc_comis']+'%</td>'+
+                        '<td class="text-center">$'+new Intl.NumberFormat().format(line['por_pagar'])+'</td>'+
+                        '<td class="text-center">$'+new Intl.NumberFormat().format(line['provision'])+'</td>'+
+                        '<td class="text-center">$'+new Intl.NumberFormat().format(line['neto'])+'</td>'+
+                        '</tr>'
+                        $('#tabla-escalacomisiones tbody').append(tr);
+                    }
+
+                } 
+            })
+        } );
+         $('#modal-comisionrm').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var adj = button.data('adj')
+            $('#adj-liquidacionrm').val(adj)
+            var modal = $(this)
+            modal.find('.modal-title').text('Liquidar comision '+adj)
+            $.ajax({
+                type:'GET',
+                url:'/operaciones/comisiones/{{proyecto}}',
+                data:{'adj_buscar':adj,'form':'form-liquidarrm'},
+                success: function(response){
+                    var instance = response['instance']
+                    $('#tabla-comisionrm tbody tr').remove();
+                    for (i=0;i<instance.length;i++){
+                        var line = instance[i]
+                        var tr = '<tr>'+
+                        '<td class="text-center">'+line['idcargo']+'</td>'+
+                        '<td>'+line['gestor']+'</td>'+
+                        '<td class="text-center">'+line['porc_comis']+'%</td>'+
+                        '<td class="text-center">$'+new Intl.NumberFormat().format(line['por_pagar'])+'</td>'+
+                        '<td class="text-center">$'+new Intl.NumberFormat().format(line['provision'])+'</td>'+
+                        '<td class="text-center">$'+new Intl.NumberFormat().format(line['neto'])+'</td>'+
+                        '</tr>'
+                        $('#tabla-comisionrm tbody').append(tr);
+                    }
+
+                } 
+            })
+        } );
+        $('#modal-asignacioncomisiones').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var adj = button.data('adj')
+            $('#adj-asignacion').val(adj)
+            var modal = $(this)
+            modal.find('.modal-title').text('Escala comision '+adj)
+            $.ajax({
+                type:'GET',
+                url:'/operaciones/comisiones/{{proyecto}}',
+                data:{'adj_buscar':adj,'form':'form-asignacion'},
+                success: function(response){
+                    var instance =Array(response['data'])[0]
+                    $('#tabla-asignacioncomisiones tbody tr').remove();
+                    for (i=0;i<instance.length;i++){
+                        var line = instance[i]
+                        var tr = '<tr>'+
+                        '<td class="text-center"><input type="text" class="form-control text-center" name="idcargo" value="'+line['idcargo']+'"readonly></td>'+
+                        '<td class="text-center"><input type="text" class="form-control" name="idgestor" value="'+line['idgestor']+'"></td>'+
+                        '<td class="text-center"><input type="text" class="form-control" name="gestor" value="'+line['gestor']+'"readonly></td>'+
+                        '<td class="text-center"><input type="number" max="100" min="0" step="0.01" class="form-control text-center" name="comision" value="'+ parseFloat(line['comision'])+'"></td>'+
+                        '<td class="text-center"><select class="custom-select" name="estado">'
+                        if(line['estado']=='Activo'){
+                            tr+='<option value="Activo" selected>Activo</option><option value="Retirado">Retirado</option><option value="Retenido">Retenido</option></select></td></tr>'
+                        }
+                        else if (line['estado']=='Retirado'){
+                            tr+='<option value="Activo">Activo</option><option value="Retirado" selected>Retirado</option><option value="Retenido">Retenido</option></select></td></tr>'
+                        }
+                        else if (line['estado']=='Retenido'){
+                            tr+='<option value="Activo">Activo</option><option value="Retirado">Retirado</option><option value="Retenido" selected>Retenido</option></select></td></tr>'
+                        }
+                        else {
+                            tr+='<option selected></option><option value="Activo">Activo</option><option value="Retirado">Retirado</option><option value="Retenido">Retenido</option></select></td></tr>'
+                        }
+                        $('#tabla-asignacioncomisiones tbody').append(tr);
+                    }
+
+                } 
+            })
+        } );
+        
+    });
+</script>
+{%if openmodal%}
+<script>
+    $('#modal-cargoscomis').modal('show')
+</script>
+{%endif%}
+{%endblock%}
+
+{%block js%}
+
+{%endblock%}

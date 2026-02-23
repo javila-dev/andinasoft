@@ -1,0 +1,125 @@
+{%load extras%}
+<form class='form-inline' method='post' action=''>{%csrf_token%}
+  <div class="modal fade" id="modalParamRecibos" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Parametrizar Cuentas</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Numero de Comprobante</span>
+                </div>
+                <input type="text" name="nrocomprobante" id="nrocomprobante" class="form-control" required="True">
+            </div>
+            <br>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Cuenta Capital</span>
+                </div>
+                <input type="text" name="ctacapital" id="ctacapital" class="form-control" required="True">
+            </div>
+            <br>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Cuenta Interes Cte</span>
+                </div>
+                <input type="text" name="ctaintcte" id="ctaintcte" class="form-control" required="True">
+            </div>
+            <br>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Cuenta Interes Mora</span>
+                </div>
+                <input type="text" name="ctaintmora" id="ctaintmora" class="form-control" required="True">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" name='btnParamRecibos' class="btn btn-primary" value='Registrar'>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+<form class='form-inline' method='post' action=''>{%csrf_token%}
+  <div class="modal fade" id="modalParamComis" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Parametrizar Cuentas Comisiones</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Numero de Comprobante</span>
+                </div>
+                <input type="text" name="nrocomprobante" id="nrocomprobante_comis" class="form-control" required="True">
+            </div>
+            <br>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Cuenta Gasto</span>
+                </div>
+                <input type="text" name="ctagasto" id="ctagasto" class="form-control" required="True">
+            </div>
+            <br>
+            <div class="input-group">
+              <div class="input-group-prepend">
+                  <span class="input-group-text" id="basic-addon2">Cuenta Anticipo</span>
+              </div>
+              <input type="text" name="cta_anticipo" id="ctaanticip" class="form-control" required="True">
+          </div>
+          <br>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Cuenta Provision</span>
+                </div>
+                <input type="text" name="ctaprovision" id="ctaprovision" class="form-control" required="True">
+            </div>
+            <br>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-addon2">Cuenta por pagar</span>
+                </div>
+                <input type="text" name="ctaporpagar" id="ctaporpagar" class="form-control" required="True">
+            </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" name='btnParamComis' class="btn btn-primary" value='Registrar'>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+<script>
+  $('#nrocomprobante').val('{{cuentas.comprobante_contable}}')
+  $('#ctacapital').val('{{cuentas.cuenta_capital}}')
+  $('#ctaintcte').val('{{cuentas.cuenta_intcte}}')
+  $('#ctaintmora').val('{{cuentas.cuenta_inmora}}')
+  $('#nrocomprobante_comis').val('{{cuentas_comis.comprobante_contable}}')
+  $('#ctagasto').val('{{cuentas_comis.cuenta_capital|replace_null:""}}')
+  $('#ctaprovision').val('{{cuentas_comis.cuenta_intcte|replace_null:""}}')
+  $('#ctaporpagar').val('{{cuentas_comis.cuenta_inmora|replace_null:""}}')
+  $('#ctaanticip').val('{{cuentas_comis.cuenta_aux1|replace_null:""}}')
+  if('{{cuentas.comprobante_contable}}'=='None'){
+    $('#nrocomprobante').val('')
+  }
+  if('{{cuentas.cuenta_capital}}'=='None'){
+    $('#ctacapital').val('')
+  }
+  if('{{cuentas.cuenta_intcte}}'=='None'){
+    $('#ctaintcte').val('')
+  }
+  if('{{cuentas.cuenta_inmora}}'=='None'){
+    $('#ctaintmora').val('')
+  }
+</script>

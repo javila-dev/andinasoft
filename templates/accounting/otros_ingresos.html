@@ -1,0 +1,219 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Accounting | Otros Ingresos{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+    }
+    .dt-buttons{
+        padding-left: 8px;
+    }
+    #tablaPagos_filter{
+        padding-right: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+{%include 'datatable_buttons.html'%}
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Otros Ingresos
+        </h3>
+    <div class='pt-3 pb-4'>
+        <div class='table-responsive'>
+            <table id='tablaIngresos' class='display' style='width:100%'>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Tercero</th>
+                        <th>Concepto</th>
+                        <th>Empresa</th>
+                        <th>Cuenta</th>                       
+                        <th>Usuario</th>
+                        <th>Oficina</th>
+                        <th>Valor</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+<div class='row position-absolute' style='bottom:15px;right:15px'>
+    <button class='btn btn-xl btn-circle btn-success shadow mx-3' id='btnmodalIng'
+            data-toggle="modal" data-target='#modalNuevoIng'><i class="fas fa-plus"></i></button>
+
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenu' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;">
+    <a class="dropdown-item" id='imprimir' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Imprimir</a>
+</div>  
+<div class="modal fade" id="modalNuevoIng" data-backdrop="static" data-keyboard="false" 
+    tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Nuevo Ingreso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form%}
+        </div>
+      </div>
+    </div>
+  </div> 
+  <script>
+      $(document).ready(function(){
+        $('#id_cuenta').empty()
+        var tablaIngresos = $('#tablaIngresos').DataTable({
+            scrollY : "70vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,  
+            language:{
+                url:'/ajax_request/datatable_spanish',
+            },
+            ajax:{
+                url:'/accounting/ajax/listanotherincomes',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'tercero'},
+                {'data':'concepto'},
+                {'data':'empresa'},
+                {'data':'cuenta'},
+                {'data':'usuario'},
+                {'data':'oficina'},
+                {'data':'valor'},
+            ],
+            columnDefs: [
+            {targets: [7],type: 'num-fmt'},
+            {targets: [0], type: 'date-uk'},
+            {targets:[1,2,3],"className":"dt-body-left"},
+            {targets:[7],"className":"dt-body-right"}, 
+            ],
+            order: [[ 0, "desc" ]],
+            dom: 'Bfrtip',
+            buttons: ['copy', 'excel', 'pdf'],
+            deferRender: true,
+        });
+        $('#tablaIngresos tbody').on('contextmenu','tr',function(e){
+            tablaIngresos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenu').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $("#contextMenu").click(function(e){
+            var line = tablaIngresos.row('.selected').data()
+            switch(e.target.id){
+                case "imprimir":
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/printotherincomes',
+                        data:{
+                            'pk':line.pk,
+                        },
+                        success:function(response){
+                            $(".contextmenu").css("display", "none");
+                            var ruta = response['ruta']
+                            let params = `status=no,location=no,toolbar=no,menubar=no,
+                            width=650,height=450,left=100,top=100`;
+                            window.open(ruta,'Recibo de ingreso',params)
+                            tablaIngresos.$('tr.selected').removeClass('selected');
+                        }
+                    })
+                    break;    
+            }
+        });
+        $('#id_empresa').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta').empty()
+            $('#id_cuenta').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta').append(option)
+                    }
+                }
+            })
+        });
+        $('#formNuevoIngreso').on('submit',function(e){
+            e.preventDefault();
+            form_data = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/otherincomes',
+                data:form_data,
+                processData:false,
+                contentType:false,
+                success:function(response){
+                    let texto = response['mensaje']['message']
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').text('')
+                    $('#alert-data').append(texto)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    $('#formNuevoIngreso').trigger('reset')
+                    $('#modalNuevoIng').modal('hide')
+                }
+            })
+        })
+        $('#id_valor').mask("#,##0", {reverse: true});
+        $('#id_id_tercero').on('change',function(){
+            var tercero = $(this).val()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/matchsupplier',
+                data:{
+                    'tercero':tercero
+                },
+                success:function(response){
+                    var name = response['nombre']
+                    $('#id_nombre_tercero').val(name)
+                }
+            })
+        })
+        $(this).click(function(e){
+            if(e.button == 0){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+      });
+  </script>
+  {%endblock%}

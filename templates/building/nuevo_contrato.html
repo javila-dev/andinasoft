@@ -1,0 +1,57 @@
+{%extends 'base.html'%}
+{%load static%}
+{%load crispy_forms_tags%}
+{%block title%}Proyectos | Nuevo contratos{%endblock%}
+{%block style%}
+<style>
+    .row{
+        margin-left: 0px;
+        margin-right: 0px;
+    }
+    .detailrow input{
+        font-size: small;
+    }
+</style>
+{%endblock%}
+{%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
+{%block content%}
+<div class='principal-container bg-white rounded shadow-lg'>
+    <h3 class='text-white text-center section-title'>Crear nueva orden
+    <button type='button' id='cruzarReq' class='btn btn-primary btn-xl btn-circle float-right mr-3 shadow-lg'
+            data-toggle="modal" data-target="#modalRequisiciones" data-new="1" data-toggle="tooltip" data-placement="top" title="Buscar una requisicion">
+        <i class="fas fa-clipboard-list"></i></button>
+    </h3>
+    <div class='mt-2'>
+        {%crispy form%}
+    </div>
+</div>
+<div class="modal fade" id="modalTipoObra" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Tipo de Obra</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <select class="custom-select" id='tipoobramenu'>
+                <option selected>Seleccionar</option>
+                {%for tipo_obra in tipos_obra%}
+                <option value="{{tipo_obra.pk}}">{{tipo_obra.nombre_tipo}}</option>
+                {%endfor%}
+              </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="button" id='selectTipoObra' class="btn btn-primary">Seleccionar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+<input type='text' id='controlTipoObra' hidden>
+{%include 'building/modal_requisiciones.html'%}
+{%include 'building/modal_productos.html'%}
+{%include 'building/modal_proveedores.html'%}
+<script src="{%static 'js/building/contractform.js'%}"></script>
+{%endblock%}

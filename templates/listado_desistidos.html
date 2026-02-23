@@ -1,0 +1,51 @@
+{%extends 'base.html'%}
+{%block title%}Listado Adjudicaciones{%endblock%}
+{%load crispy_forms_tags%}
+{%block content%}
+<div class="bg-white rounded shadow-sm" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+<h3 class="text-align-center">Desistidos</h3>
+<div class="table-responsive">
+<table id='adjudicaciones' class='table table-striped'>
+    <thead class="thead thead-light">
+        <tr>
+            <th class='text-center'>Adjudicacion</th>
+            <th class='text-center'>Fecha</th>
+            <th class='text-center'>Titular 1</th>
+            <th class='text-center'>Inmueble</th>
+            <th class='text-center'>Valor</th>  
+            <th class='text-center'>Fecha Desistimiento</th>
+        </tr>
+    </thead>
+    <tbody>
+    {%for adjudicacion in adjudicaciones%}
+        <tr>
+            <td class='text-center'><a href='/adjudicaciones/{{proyecto}}/{{adjudicacion.idadj}}'>{{adjudicacion.idadj}}</a></td>
+            <td class='text-center'>{{adjudicacion.fecha|date:'d/m/Y'}}</td>
+            <td>{{adjudicacion.Nombre}}</td>
+            <td class='text-center'>{{adjudicacion.inmueble}}</td>
+            <td class='text-center'>${{adjudicacion.valor}}</td>
+            <td class='text-center'>{{adjudicacion.fechadesist}}</td>
+        </tr>
+    {%endfor%}
+    </tbody>
+</table>
+</div>
+</div>
+
+<script>
+    $(document).ready(function() {
+    $('#adjudicaciones').DataTable({
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 25,
+        "order": [[ 1, "asc" ]],
+        columnDefs: [
+       { type: 'date-uk', targets: 1 }
+     ]
+  });
+});
+
+
+</script>
+
+
+{%endblock%}

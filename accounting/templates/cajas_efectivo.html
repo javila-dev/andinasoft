@@ -1,0 +1,1903 @@
+{%extends 'base.html'%}{%load static%}{%load crispy_forms_tags%}
+{%block title%}Tesoreria | Caja efectivo{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded pb-2'>
+    <div class="mx-auto" style="width: 160px;">
+        <lord-icon
+            src="https://cdn.lordicon.com/wyqtxzeh.json"
+            trigger="loop"
+            delay="2000"
+            style="width:100px;height:100px">
+        </lord-icon>
+      </div>
+      <h3 class="text-center">Libro de caja</h3>
+      <div class="container mt-3 text-center">
+        {%crispy formCaja%}
+      </div>
+
+      <ul class="nav nav-tabs" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="mvtos-tab" data-toggle="tab" data-target="#tab_mvtos" 
+            type="button" role="tab" aria-controls="tab_mvtos" aria-selected="true">Movimientos</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="reembolsos-tab" data-toggle="tab" data-target="#tab_reembolsos" 
+            type="button" role="tab" aria-controls="tab_reembolsos" aria-selected="false">Reembolsos</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="arqueos-tab" data-toggle="tab" data-target="#tab_arqueos" 
+            type="button" role="tab" aria-controls="tab_arqueos" aria-selected="false">Arqueos</button>
+        </li>
+      </ul>
+      <div class="tab-content" id="myTabContent">
+        <div class="tab-pane fade show active" id="tab_mvtos" role="tabpanel" aria-labelledby="tab_mvtos">
+          <div class="row">
+            <div class="col-md-2">
+              <button type="button" class="btn btn-info ml-3 mt-3 actions disabled"
+                disabled data-toggle="modal" data-target="#modalNuevaLegalizacion">Registrar gasto</button>
+            </div>
+            <div class="'col-md-2">
+              <div class="custom-control custom-switch mt-3 pt-2 actions">
+                <input type="checkbox" class="custom-control-input" id="sw_gastos">
+                <label class="custom-control-label" for="sw_gastos">Solo gastos</label>
+              </div>
+            </div>
+            <div class="'col-md-2 ml-3">
+              <div class="custom-control custom-switch mt-3 pt-2 actions">
+                <input type="checkbox" class="custom-control-input" id="sw_solo_pendientes">
+                <label class="custom-control-label" for="sw_solo_pendientes">Solo gastos pendientes</label>
+              </div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table id="tabla_movimientos" style="width: 100%;" class="table table-sm table-hover">
+                <thead>
+                    <tr>
+                        <th style="width:10%">Fecha</th>
+                        <th style="width:23%">Tercero</th>
+                        <th style="width:28%">Descripcion</th>
+                        <th>Concepto</th>
+                        <th style="text-align: right;">Subtotal</th>
+                        <th style="text-align: right;">IVA</th>
+                        <th style="text-align: right;">Rte</th>
+                        <th style="text-align: right;">Total</th>
+                        <th style="width:10%">Estado</th>
+                    </tr>
+                </thead>
+                <tfoot>
+                  <tr>
+                      <th colspan="7" style="text-align: right;">Saldo final</th>
+                      <th style="text-align: right;"></th>
+                      <th></th>
+                  </tr>
+              </tfoot>
+            </table>
+          </div>  
+        </div>
+        <div class="tab-pane fade" id="tab_reembolsos" role="tabpanel" aria-labelledby="tab_reembolsos">
+          <button type="button" id="btn-nuevo-reembolso" class="btn btn-info ml-3 mt-3 actions disabled"
+                disabled>Solicitar reembolso</button>
+          <div class="table-responsive mt-3">
+            <table id="tabla_reembolsos" style="width: 100%;" class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Solicitado por</th>
+                  <th>Valor Legalizacion</th>
+                  <th>Aprobado por</th>
+                  <th>Legalizacion</th>
+                  <th>Valor a reembolsar</th>
+                  <th>Fecha reembolso</th>
+                </tr>
+              </thead>
+            </table>
+          </div>
+        </div>
+        <div class="tab-pane fade" id="tab_arqueos" role="tabpanel" aria-labelledby="tab_arqueos">
+          <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+              <a class="nav-link active" id="home-tab" data-toggle="tab" 
+                href="#home" role="tab" aria-controls="home" aria-selected="true">Registrar</a>
+            </li>
+            <li class="nav-item" role="presentation">
+              <a class="nav-link" id="profile-tab" data-toggle="tab" 
+                href="#profile" role="tab" aria-controls="profile" aria-selected="false">Historico</a>
+            </li>
+          </ul>
+          <div class="tab-content" id="myTabContent">
+            <div class="tab-pane fade show active" id="home" role="tabpanel">
+              
+                <form class='form mt-3 mb-2 mx-auto' id='formSaldoIni' method='post' style="width:60%">{%csrf_token%}
+                  <div class='col-md-3'>
+                    <div class="mb-3">
+                      <label for="id_fecha_arqueo">Fecha arqueo</label>
+                      <input type="text" name="fecha" class="text-center dateinput form-control flatpickr-input" 
+                        required="" id="id_fecha_arqueo" readonly="readonly">
+                    </div>  
+                    <script>
+                      flatpickr('#id_fecha_arqueo',{
+                          dateFormat: 'Y-m-d',
+                          locale: "es",
+                      });
+                  </script>
+                </div>
+                  <div class='row'>
+                        <div class='col-md-6'>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>50</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='50' id='mnd50' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>100</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='100' id='mnd100' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>200</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='200' id='mnd200' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>500</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='500' id='mnd500' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>1000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='1.000' id='mnd1000' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                        </div>
+                        <div class='col-md-6'>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>1.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='1000' id='bll1k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>2.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='2000' id='bll2k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>5.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='5000' id='bll5k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>10.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='10000' id='bll10k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>20.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='20000' id='bll20k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>50.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='50000' id='bll50k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                            <div class='row'>
+                                <div class='col-6'>
+                                    <p>100.000</p>
+                                </div>
+                                <div class='col-6'>
+                                    <input type='number' data-denom='100000' id='bll100k' class='arqueofisico form-control text-center'>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class='row  mt-3'>
+                        <div class='col-md-6'>  
+                            <input name="saldoinicial" class='form-control text-center mr-3' 
+                            id='saldoinicial' placeholder="Valor" required>
+                        </div>
+                        <div class='col-md-6 d-flex'>
+                        <button type="submit" class="btn btn-primary ml-auto">Registrar</button>
+                        </div>
+                    </div>
+                  </form>
+            </div>
+            <div class="tab-pane fade" id="profile" role="tabpanel">
+                <div class='table-responsive mt-3'>
+                    <table class='display' id='tablaHistSaldos' style='width: 100%;'>
+                        <thead>
+                          <tr>
+                            <th rowspan="2">Fecha</th>
+                            <th rowspan="2">Usuario</th>
+                            <th rowspan="2">Saldo real</th>
+                            <th colspan="2">Guardado</th>
+                            <th colspan="2">Hoy</th>
+                          </tr>
+                            <tr>
+                                <th>Valor</th>
+                                <th>Diferencia</th>
+                                <th>Valor</th>
+                                <th>Diferencia</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+          </div>
+        </div>
+      </div>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuLegal' 
+  style="max-width: 220px;">
+  <a class="dropdown-item" id='ver_soporte' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte</a>
+  <a class="dropdown-item" id='ver_soporte_prov' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Ver id Proveedor</a>
+  <a class="dropdown-item" id='eliminar_leg' href="#"><i class="fas fa-trash"></i>&nbsp;Eliminar</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" id='change_support' href="#"><i class="fa fa-exchange"></i>&nbsp;Cambiar soporte</a>
+  <a class="dropdown-item" id='change_concept' href="#"><i class="fas fa-thumbtack"></i>&nbsp;Cambiar concepto</a>
+  <a class="dropdown-item" id='include_taxes' href="#"><i class="fas fa-percent"></i>&nbsp;IVA y Rte</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" id='approve_gasto' href="#"><i class="fas fa-check"></i>&nbsp;Aprobar</a>
+</div> 
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenureemb' 
+  style="max-width: 220px;">
+  <a class="dropdown-item" id='ver_soporte_r' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte</a>
+  <a class="dropdown-item" id='devolver_r' href="#"><i class="fas fa-rotate-left"></i>&nbsp;Devolver</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" id='change_concept_r' href="#"><i class="fas fa-thumbtack"></i>&nbsp;Cambiar concepto</a>
+  <a class="dropdown-item" id='include_taxes_r' href="#"><i class="fas fa-percent"></i>&nbsp;IVA y Rte</a>
+</div> 
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuLeg' 
+  style="max-width: 220px;">
+  <a class="dropdown-item" id='print_reemb' href="#"><i class="fas fa-print"></i>&nbsp;Imprimir</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item disabled" id='reg_legal' href="#"><i class="fas fa-link"></i>&nbsp;Legalización</a>
+  <a class="dropdown-item disabled" id='soporte_reemb' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte legalización</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item disabled" id='pagar_reemb' href="#"><i class="fas fa-money-bill-wave"></i>&nbsp;Pagar</a>
+  <a class="dropdown-item disabled" id='soporte_transf' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Transferencia</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" id='interf_reemb' href="#"><i class="fas fa-file-arrow-down"></i>&nbsp;Interfaz</a>
+</div> 
+<div class="modal fade" id="modalNuevaLegalizacion" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Registrar gasto</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+          {%crispy form_leg_anticipo%}
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalcreatepartner" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Crear tercero</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        {%crispy form_partners%}
+      </div>
+      <!-- <div class="modal-footer">
+        <button id="btn-create-partner" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div> -->
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalPagarReemb" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Transferencia entre cuentas</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+          <div class="row">
+              <div class="col-md-6">
+                  <div class='table-responsive'>
+                      <table id='tablaCONBanco_tr' class='display' style='width:100%'>
+                          <thead>
+                              <tr>
+                                  <th>Fecha</th>
+                                  <th>Descripcion</th>
+                                  <th>Referencia</th>
+                                  <th>Valor</th>
+                              </tr>
+                          </thead>
+                      </table>
+                  </div>
+                  <div class="input-group mt-3">
+                      <div class="input-group-prepend">
+                          <span class="input-group-text">Total</span>
+                      </div>
+                      <input type="text" readonly class="form-control text-center" id='total-tr-banco'>
+                  </div>
+              </div>
+              <div class="col-md-6">
+                  {%crispy form_transf%}
+              </div>
+          </div>
+      </div>
+      </div>
+  </div>
+</div>  
+<div class="modal fade" id="modalchangesupport" style="z-index:1070" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Cambiar soporte</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        <form method="POST" enctype="multipart/form-data" id="form_change_support">{%csrf_token%}
+          <div class="custom-file">
+            <input type="file" name="nuevo_soporte" class="clearablefileinput custom-file-input" required="" id="id_nuevo_soporte">
+            <label class="custom-file-label" for="nuevo_soporte" data-browse="Buscar">Nuevo soporte</label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-change-support" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalchangeconcept" data-backdrop="static"
+  style="z-index:1070" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Cambiar concepto</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+      </div>
+      <div class="modal-footer">
+        <button id="btn-change-concept" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modaltaxes" style="z-index:1070" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">IVA y Retenciones</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        {%crispy form_taxes%}
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalRegLegal" style="z-index:1070" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Registrar Legalización</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        {%crispy form_reg_legaliz%}
+      </div>
+      <div class="modal-footer">
+        <button id="btn-leg-reemb" class="btn btn-primary">Registrar</button>
+      </div>
+      </div>
+  </div>
+</div>
+<div class="modal fade" id="modalSolicitarReembolso" data-backdrop="static" data-keyboard="false"  aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Solicitar reembolso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+          <div class="table-responsive">
+            <table id="tabla_movimientos_reembolso" style="width: 100%;" class="table table-sm table-hover">
+                <thead>
+                    <tr>
+                        <th style="width:10%">Fecha</th>
+                        <th style="width:25%">Tercero</th>
+                        <th style="width:35%">Descripcion</th>
+                        <th style="text-align: right;">Subtotal</th>
+                        <th style="text-align: right;">IVA</th>
+                        <th style="text-align: right;">Rte</th>
+                        <th style="text-align: right;">Valor</th>
+                        <th style="width:10%">Aprobado por</th>
+                    </tr>
+                </thead>
+                <tfoot>
+                  <tr>
+                      <th colspan="6" style="text-align: right;">Total</th>
+                      <th style="text-align: right;"></th>
+                      <th></th>
+                  </tr>
+              </tfoot>
+            </table>
+          </div> 
+      </div>
+      <div class="modal-footer">
+        <button id="btn-aprobar-reemb" class="btn btn-success">
+          Aprobar
+        </button>
+        <button id="btn-solicitar-reemb" class="btn btn-primary">
+          Solicitar
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+{%include 'datepicker_gigjo.html'%}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src="{%static 'js/fstdropdown.js'%}"></script>
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+<script>
+  $(document).ready(function(){
+    const params = `status=no,location=no,toolbar=no,menubar=no,
+                width=650,height=450,left=100,top=100`
+    const abrir_mes = '{{abrir_mes_anterior.activo}}' == 'True' ? true:false 
+    const mes_abrir = parseInt('{{abrir_mes_anterior.valor}}')
+
+    bsCustomFileInput.init();
+    $('.rowpagos').hide()
+    $('#id_check_pagado').parent('.form-check').hide()
+
+    // Initialize datepicker for datefield elements with date restrictions
+    let today = new Date()
+    let initmonth;
+
+    if (today.getDate() <= 5){
+      // Go back to day 16 of previous month (Date constructor handles year boundary automatically)
+      initmonth = new Date(today.getFullYear(), today.getMonth() - 1, 16)
+    }
+    else {
+      // First day of current month
+      initmonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    }
+
+    if (abrir_mes){
+      // Override with specific month from parameter
+      // If mes_abrir is greater than current month, it's from the previous year
+      let yearForAbrirMes = today.getFullYear();
+      if (mes_abrir > today.getMonth() + 1) {
+        yearForAbrirMes = today.getFullYear() - 1;
+      }
+      initmonth = new Date(yearForAbrirMes, mes_abrir - 1, 1)
+    }
+
+    let endMonth = new Date()
+
+    // Initialize flatpickr for datefield inputs
+    $(".datefield").each(function() {
+      flatpickr(this, {
+        dateFormat: 'Y-m-d',
+        locale: "es",
+        minDate: initmonth,
+        maxDate: endMonth,
+      });
+    });
+
+    $('#modalchangeconcept').find('.modal-body').append(
+          $('#id_concepto').parent('div').clone()
+        )
+    $('#id_caja').change(function(){
+      if ($(this).val() != ""){
+        $('.actions').removeClass('disabled').prop('disabled', false);
+      }
+      else {
+        $('.actions').addClass('disabled').prop('disabled', true);
+      }
+    })
+    $('.money').mask("#,##0", {reverse: true});  
+    var tabla_movimientos = $("#tabla_movimientos").DataTable({
+          paging:false,
+          processing:true,
+          scrollCollapse: true,
+          scrollY: '370px',
+          dom: 'Bfrtip',
+          buttons: ['copy', 'excel'],
+          language:{
+              url:'/ajax_request/datatable_spanish'
+          },
+          ajax:{
+              url:'/accounting/cajasefectivo?todo=datatable',
+              dataSrc:"data",
+              error: function(xhr, error, code) {
+                console.log('Error loading tabla_movimientos:', error);
+              }
+          },
+          columns:[
+              {'data':'fecha'},
+              {'data':'tercero'},
+              {'data':'descripcion'},
+              {'data':'concepto'},
+              {'data':'subtotal',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'iva',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'rte',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'valor',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'estado'},
+          ],
+          columnDefs: [
+              {targets: [4,5,6,7],type: 'num-fmt'},
+              {targets:[1,2],"className":"dt-body-left"}, 
+              {targets:[4,5,6,7],"className":"dt-body-right"}, 
+              { type: 'date-uk', targets: 0 },
+          ],
+          order: [[ 0, "asc" ]],
+          footerCallback: function (row, data, start, end, display) {
+            var api = this.api();
+
+            // Remove the formatting to get integer data for summation
+            var intVal = function (i) {
+                return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
+            };
+
+            // Total over all pages
+            var columnData = api.column(7).data();
+            total = columnData.length > 0 ? columnData.reduce(function (a, b) {
+                return intVal(a) + intVal(b);
+            }, 0) : 0;
+
+            fmt_total = new Intl.NumberFormat('en-EN').format(total)
+            // Update footer
+            $(api.column(7).footer()).html('$' + fmt_total );
+        }
+      })
+    var tabla_movimientos_reemb = $("#tabla_movimientos_reembolso").DataTable({
+          paging:false,
+          processing:true,
+          scrollCollapse: true,
+          scrollY: '370px',
+          language:{
+              url:'/ajax_request/datatable_spanish'
+          },
+          ajax:{
+              url:'/accounting/cajasefectivo?todo=datatable&legalizar=true',
+              dataSrc:"data",
+              error: function(xhr, error, code) {
+                console.log('Error loading tabla_movimientos_reembolso:', error);
+              }
+          },
+          columns:[
+              {'data':'fecha'},
+              {'data':'tercero'},
+              {'data':'descripcion'},
+              {'data':'subtotal',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'iva',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'rte',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'valor',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'usuario_aprueba'},
+          ],
+          columnDefs: [
+              {targets: [3,4,5,6],type: 'num-fmt'},
+              {targets:[1,2],"className":"dt-body-left"}, 
+              {targets:[3,4,5,6],"className":"dt-body-right"}, 
+              { type: 'date-uk', targets: 0 },
+          ],
+          order: [[ 0, "asc" ]],
+          footerCallback: function (row, data, start, end, display) {
+            var api = this.api();
+
+            // Remove the formatting to get integer data for summation
+            var intVal = function (i) {
+                return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
+            };
+
+            // Total over all pages
+            var columnData = api.column(6).data();
+            total = columnData.length > 0 ? columnData.reduce(function (a, b) {
+                return intVal(a) + intVal(b);
+            }, 0) : 0;
+
+            fmt_total = new Intl.NumberFormat('en-EN').format(total)
+            // Update footer
+            $(api.column(6).footer()).html('$' + fmt_total );
+        }
+      })
+    var tabla_reembolsos = $("#tabla_reembolsos").DataTable({
+          paging:false,
+          processing:true,
+          scrollCollapse: true,
+          scrollY: '370px',
+          language:{
+              url:'/ajax_request/datatable_spanish'
+          },
+          ajax:{
+              url:'/accounting/cajasefectivo?todo=datatable_reembolsos',
+              dataSrc:"data",
+              error: function(xhr, error, code) {
+                console.log('Error loading tabla_reembolsos:', error);
+              }
+          },
+          columns:[
+              {'data':'fecha_solicita'},
+              {'data':'usuario_solicita.username'},
+              {'data':'valor',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'usuario_aprueba.username'},
+              {'data':'doc_legalizacion'},
+              {'data':'valor_a_reembolsar',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'transferencia_asociada.fecha'},
+          ],
+          columnDefs: [
+              {targets: [2],type: 'num-fmt'},
+              {targets:[2],"className":"dt-body-right"}, 
+              { type: 'date-uk', targets: [0,4] },
+          ],
+          order: [[ 0, "asc" ]]
+      })
+    var tablaCONBanco_tr = $('#tablaCONBanco_tr').DataTable({
+          scrollY : "30vh",
+          scrollX : true,
+          scrollCollapse : true,
+          paging : false,
+          info:false,
+          processing: true,
+          language: {
+              'url':'/ajax_request/datatable_spanish'
+          },
+          ajax:{
+              url:'/accounting/ajax/bancarymovements',
+              dataSrc:"data"
+          },
+          columns:[
+              {'data':'fecha'},
+              {'data':'descripcion'},
+              {'data':'referencia'},
+              {'data':'valor'},
+          ],
+          order: [[ 0, "desc" ]],
+          columnDefs: [
+              { "targets":[1],"className":"dt-body-left"},
+              { "targets":[3],"className":"dt-body-right"},
+              { type: 'date-uk', targets: 0 }
+          ],
+      })
+    var tablaSaldos = $('#tablaHistSaldos').DataTable({
+          scrollY: "30vh",
+          scrollX: true,
+          scrollCollapse: true,
+          paging: false,
+          info: false,
+          language: {
+              url: '/ajax_request/datatable_spanish'
+          },
+          ajax: {
+              url: '/accounting/ajax/saldosiniciales',
+              dataSrc: 'data'
+          },
+          columns: [{
+                  'data': 'fecha'
+              },
+              {
+                  'data': 'usuario'
+              },
+              {
+                  'data': 'saldo'
+              },
+              {
+                  'data': 'saldoteorico',
+                  render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {
+                  'data': 'diferencia_guardad',
+                  render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {
+                  'data': 'saldoteorhoy',
+                  render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {
+                  'data': 'diferencia_hoy',
+                  render: $.fn.dataTable.render.number( ',', '.', 0)},
+          ],
+          order: [
+              [0,'desc']
+          ],
+          columnDefs: [
+              {
+              "targets": [2],
+              "className": "dt-body-right"
+              },
+              { type: 'date-uk', targets: 0 }
+          ],
+      })
+        
+    $("#tabla_reembolsos tbody").on('click','tr', function(){
+        
+        let line = tabla_reembolsos.row(this).data()
+        console.log(line)
+        $("#tabla_reembolsos tr").removeClass('selected')
+        $(this).addClass('selected');
+        let caja = $('#id_caja').val()
+        let url = `/accounting/cajasefectivo?todo=datatable&caja=${caja}&id_reemb=${line.id}`
+        tabla_movimientos_reemb.ajax.url(url).load()
+        if (line.fecha_aprueba != null) $('#btn-aprobar-reemb').hide()
+        else $('#btn-aprobar-reemb').show()
+        $('#btn-solicitar-reemb').hide()
+        
+        $('#modalSolicitarReembolso').modal('show')
+      })
+    $('#tablaCONBanco_tr tbody').on('click','tr',function(){
+          $(this).toggleClass('selected')
+          bsCustomFileInput.init()
+          totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
+      })
+    $('#tabla_movimientos tbody').on('contextmenu','tr',function(e){
+      
+      let line = tabla_movimientos.row(this).data()
+      if (line.tipo != 'gasto') return;
+
+      if (line.estado == 'Pendiente') {
+        $('#approve_gasto').removeClass('disabled');
+        $('#eliminar_leg').removeClass('disabled');
+        $('#change_support').removeClass('disabled');
+        $('#change_concept').removeClass('disabled');
+        $('#include_taxes').removeClass('disabled');
+      }
+      else if (line.estado == 'Aprobado'){
+        $('#approve_gasto').addClass('disabled');
+        $('#eliminar_leg').addClass('disabled');
+        $('#change_support').addClass('disabled');
+        $('#change_concept').addClass('disabled');
+        $('#include_taxes').addClass('disabled');
+      }
+      else if (line.estado == 'Devuelto') {
+        $('#approve_gasto').addClass('disabled');
+        $('#eliminar_leg').addClass('disabled');
+        $('#change_support').removeClass('disabled');
+        $('#change_concept').removeClass('disabled');
+        $('#include_taxes').removeClass('disabled');
+      }
+      else {
+        $('#approve_gasto').addClass('disabled');
+        $('#eliminar_leg').addClass('disabled');
+        $('#change_support').addClass('disabled');
+        $('#change_concept').addClass('disabled');
+        $('#include_taxes').addClass('disabled');
+      }
+      
+      
+      tabla_movimientos.$('tr.selected').removeClass('selected');
+      $(this).addClass('selected')
+      var width = $(document).width()
+      var position = e.pageX
+      if (position>=width*3/4){
+          position -= 220
+      }
+      positionY = e.pageY
+      if (e.pageY/$(document).height()>=0.7){
+          positionY -= 240
+      }
+      $('#contextMenuLegal').css({
+          'display':'block',
+          'left':position,
+          'top':positionY,
+          'z-index':1060
+      })
+      return false;
+    })
+    $('#tabla_movimientos_reembolso tbody').on('contextmenu','tr',function(e){
+      
+      let line = tabla_movimientos_reemb.row(this).data()
+      if (line.tipo != 'gasto') return false;
+      console.log(line.estado)
+      if (line.estado == 'Legalizado'){
+        $('#change_concept_r').addClass('disabled');
+        $('#include_taxes_r').addClass('disabled');
+      }
+      else {
+        $('#change_concept_r').removeClass('disabled');
+        $('#include_taxes_r').removeClass('disabled');
+      }
+      tabla_movimientos_reemb.$('tr.selected').removeClass('selected');
+      $(this).addClass('selected')
+      var width = $(document).width()
+      var position = e.pageX
+      if (position>=width*3/4){
+          position -= 220
+      }
+      positionY = e.pageY
+      if (e.pageY/$(document).height()>=0.7){
+          positionY -= 240
+      }
+      $('#contextMenureemb').css({
+          'display':'block',
+          'left':position,
+          'top':positionY,
+          'z-index':1060
+      })
+      return false;
+    })
+    $('#tabla_reembolsos tbody').on('contextmenu','tr',function(e){
+      
+      let line = tabla_reembolsos.row(this).data()
+      if (line.usuario_aprueba.id == null) return;
+
+      if (line.doc_legalizacion == null){
+        $('#reg_legal').removeClass('disabled')
+        $('#soporte_reemb').addClass('disabled')
+        $('#pagar_reemb').addClass('disabled')
+        $('#soporte_transf').addClass('disabled')
+      }
+      else if (line.transferencia_asociada.valor == null){
+        $('#reg_legal').addClass('disabled')
+        $('#soporte_reemb').removeClass('disabled')
+        $('#pagar_reemb').removeClass('disabled')
+        $('#soporte_transf').addClass('disabled')
+      }
+      else{
+        $('#reg_legal').addClass('disabled')
+        $('#soporte_reemb').removeClass('disabled')
+        $('#pagar_reemb').addClass('disabled')
+        $('#soporte_transf').removeClass('disabled')
+      }
+
+      tabla_reembolsos.$('tr.selected').removeClass('selected');
+      $(this).addClass('selected')
+      var width = $(document).width()
+      var position = e.pageX
+      if (position>=width*3/4){
+          position -= 210
+      }
+      positionY = e.pageY
+      if (e.pageY/$(document).height()>=0.7){
+          positionY -= 260
+      }
+      $('#contextMenuLeg').css({
+          'display':'block',
+          'left':position,
+          'top':positionY,
+          'z-index':1060
+      })
+      return false;
+    })
+    
+    $("#contextMenuLegal").click(function(e){  
+      var line = tabla_movimientos.row('.selected').data()
+      switch(e.target.id){
+          case "ver_soporte":
+            var ruta = '/media/'+line.soporte
+            window.open(ruta,'Soporte legalizacion anticipo',params)
+            break;     
+          
+            case "ver_soporte_prov":
+            var ruta = '/media/'+line.soporte_doc_prov
+            window.open(ruta,'Soporte idenficacion proveedor',params)
+            break;    
+
+          case "change_concept":
+            $('#modalchangeconcept').modal('show')
+            break;
+            
+          case "include_taxes":
+            if(line.cuenta_iva.id == null)  $('#id_tipo_iva').val("")
+            else  $('#id_tipo_iva').val(line.cuenta_iva.id)
+
+            if(line.cuenta_rte.id == null)  $('#id_tipo_rte').val("")
+            else  $('#id_tipo_rte').val(line.cuenta_rte.id)
+            
+            $('#id_valor_iva').val(new Intl.NumberFormat('en-EN').format(line.valor_iva))
+
+            $('#id_valor_rte').val(new Intl.NumberFormat('en-EN').format(line.valor_rte))
+
+            if(line.rte_asumida){
+              $('#id_rte_asumida').prop('checked',true)
+              rte_asumida = 0
+            }
+            else{
+              $('#id_rte_asumida').prop('checked',false)
+              rte_asumida = 1
+            }
+
+            subtotal = (line.valor*-1) - line.valor_iva + (line.valor_rte * rte_asumida)
+            $('#id_subtotal').val(new Intl.NumberFormat('en-EN').format(subtotal))
+            totalizar_taxes();
+            
+            $('#modaltaxes').modal('show')
+            break;
+
+          case 'eliminar_leg':
+          if (line.estado!='Pendiente'){
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('No puedes eliminar un registro que está verificado o legalizado.')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+          }
+          let option = confirm('Estas segur@ de eliminar este gasto? Si lo eliminas no se podrá recuperar.')
+          if (option == true){
+            $('#tabla_movimientos tbody').css(
+              'cursor','wait'
+            )
+            $.ajax({
+                type:'POST',
+                url:'/accounting/cajasefectivo',
+                data:{
+                  'csrfmiddlewaretoken':getCookie('csrftoken'),
+                  'history':true,
+                  'gasto':line.pk,
+                  'to_do':'delete'
+                },
+                success: (xhr) => {
+                  tabla_movimientos.ajax.reload(function(json){
+                  })
+                  $('#alert-data').text('')
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').text(xhr.msj)
+                  $('#general-right-alert').toggleClass('show').toggleClass(xhr.bg)
+                  
+                },
+                error: (xhr) => {
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').text('Ocurrió un error')
+                  $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                },
+                complete: (xhr) => {
+                  $('#tabla_movimientos tbody').css(
+                    'cursor','pointer'
+                  )
+                }
+              })
+          }
+          
+            
+              break;
+          
+          case "change_support":
+            $('#modalchangesupport').modal('show')
+            break;
+          
+          case "approve_gasto":
+            if (line.estado!='Pendiente'){
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').text('No puedes aprobar un registro que está verificado.')
+              $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              return;
+            }
+            let conf = confirm('Estas segur@ de aprobar este gasto? Si lo apruebas, no podrás revertirlo.')
+            if (conf == true){
+              $('#tabla_movimientos tbody').css(
+                'cursor','wait'
+              )
+              $.ajax({
+                  type:'POST',
+                  url:'/accounting/cajasefectivo',
+                  data:{
+                    'csrfmiddlewaretoken':getCookie('csrftoken'),
+                    'gasto':line.pk,
+                    'to_do':'approve'
+                  },
+                  success: (xhr) => {
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text(xhr.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                    tabla_movimientos.ajax.reload()
+                    
+                  },
+                  error: (xhr) => {
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text('Ocurrio un error, contacta  al administrador')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                  },
+                  complete: function(xhr){
+                    $('#tabla_movimientos tbody').css(
+                      'cursor','pointer'
+                    )
+                  }
+                })
+              }
+              break;
+      }
+    })
+    $("#contextMenureemb").click(function(e){  
+      var line = tabla_movimientos_reemb.row('.selected').data()
+      switch(e.target.id){
+          case "ver_soporte_r":
+            var ruta = '/media/'+line.soporte
+            window.open(ruta,'Soporte legalizacion anticipo',params)
+            break;     
+          case "devolver_r":
+            $('#tabla_movimientos_reembolso tbody').css(
+                'cursor','wait'
+              )
+              $.ajax({
+                  type:'POST',
+                  url:'/accounting/cajasefectivo',
+                  data:{
+                    'csrfmiddlewaretoken':getCookie('csrftoken'),
+                    'gasto':line.pk,
+                    'to_do':'return_to_user'
+                  },
+                  success: (xhr) => {
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text(xhr.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                    tabla_movimientos_reemb.ajax.reload()
+                    
+                  },
+                  error: (xhr) => {
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text('Ocurrio un error, contacta  al administrador')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                  },
+                  complete: function(xhr){
+                    $('#tabla_movimientos_reembolso tbody').css(
+                      'cursor','pointer'
+                    )
+                  }
+                })
+            break;
+          case "change_concept_r":
+            $('#modalchangeconcept').modal('show')
+            break;
+            
+          case "include_taxes_r":
+            if(line.cuenta_iva.id == null)  $('#id_tipo_iva').val("")
+            else  $('#id_tipo_iva').val(line.cuenta_iva.id)
+
+            if(line.cuenta_rte.id == null)  $('#id_tipo_rte').val("")
+            else  $('#id_tipo_rte').val(line.cuenta_rte.id)
+            
+            $('#id_valor_iva').val(new Intl.NumberFormat('en-EN').format(line.valor_iva))
+
+            $('#id_valor_rte').val(new Intl.NumberFormat('en-EN').format(line.valor_rte))
+
+            if(line.rte_asumida){
+              $('#id_rte_asumida').prop('checked',true)
+              rte_asumida = 0
+            }
+            else{
+              $('#id_rte_asumida').prop('checked',false)
+              rte_asumida = 1
+            }
+
+            subtotal = (line.valor*-1) - line.valor_iva + (line.valor_rte * rte_asumida)
+            $('#id_subtotal').val(new Intl.NumberFormat('en-EN').format(subtotal))
+            totalizar_taxes();
+            
+            $('#modaltaxes').modal('show')
+            break;
+          
+      }
+    })
+    $("#contextMenuLeg").click(function(e){  
+      var line = tabla_reembolsos.row('.selected').data()
+      switch(e.target.id){
+          case "soporte_reemb":
+            var ruta = '/media/'+line.soporte_legalizacion
+            window.open(ruta,'Soporte legalizacion reembolso',params)
+            break;     
+          case "pagar_reemb":
+            $('#id_valor_transf')
+            .prop('readonly',true)
+            .val(new Intl.NumberFormat('en-EN').format(line.valor_a_reembolsar))
+            
+            $('#id_empresa_entra')
+            .prop('readonly',true)
+            .val(line.caja.nit_empresa.Nit)
+
+            $('#id_cuenta_entra').empty()
+            .prop('readonly',true)
+            option = '<option value='+line.caja.idcuenta+'>'+
+                                    line.caja.cuentabanco+'</option>'
+            $('#id_cuenta_entra').append(option)
+
+
+            $('#modalPagarReemb').modal('show')
+            break;
+          case "reg_legal":
+            $('#modalRegLegal').modal('show')
+            break;
+
+          case "soporte_transf":
+            ruta = '/media/'+line.transferencia_asociada.soporte_pago
+            window.open(ruta,'Soporte pago reembolso',params)
+            break;
+          case "print_reemb":
+            $.ajax({
+                type:'GET',
+                url: window.location.href,
+                data:{
+                  'todo': 'print_reemb',
+                  'id_reemb': line.id
+                },
+                success: (xhr) => {
+                  $('#alert-data').text('')
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').html(xhr.msj)
+                  $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                },
+                error: (xhr) => {
+                  $('#alert-data').text('')
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').html('Ocurrió un error')
+                  $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                }
+              })
+          
+          break;
+          case "interf_reemb":
+            $.ajax({
+              type:'GET',
+              url: window.location.href,
+              data:{
+                'todo': 'interf_reemb',
+                'id_reemb': line.id
+              },
+              success: (xhr) => {
+                $('#alert-data').text('')
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').html(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+              },
+              error: (xhr) => {
+                $('#alert-data').text('')
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').html('Ocurrió un error')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              }
+            })
+            break;
+      }
+    })
+    
+    $('#btn-aprobar-reemb').click(function(){
+      btn = $(this)
+      btn.addClass('disabled').html('<i class="fas fa-spinner fa-pulse">')
+      line = tabla_reembolsos.row('tr.selected').data()
+      $.ajax({
+        type:'POST',
+        url:'/accounting/cajasefectivo',
+        data:{
+          'csrfmiddlewaretoken':getCookie('csrftoken'),
+          'id_reemb':line.id,
+          'to_do':'approve_leg'
+        },
+        success: (xhr) => {
+          $("#modalSolicitarReembolso").modal('hide')
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text(xhr.msj)
+          $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+          tabla_reembolsos.ajax.reload()
+        },
+        complete: (xhr) => {
+          btn.removeClass('disabled')
+          .html('Aprobar')
+        }
+      })
+
+    })
+    $('#btnbuscarmvtos').click(function(){
+      $(this).addClass('disabled')
+      .html('<i class="fas fa-spinner fa-pulse">')
+      let caja = $('#id_caja').val()
+      let fecha_desde = $('#id_fecha_desde').val()
+      let fecha_hasta = $('#id_fecha_hasta').val()
+      let solo_pdtes = $('#sw_solo_pendientes').prop('checked')
+      let solo_gastos = $('#sw_gastos').prop('checked')
+      show_incomes = true
+      if (solo_pdtes == true || solo_gastos == true){
+        show_incomes = false
+      }
+      let url = `/accounting/cajasefectivo?todo=datatable&caja=${caja}&fecha_desde=${fecha_desde}&fecha_hasta=${fecha_hasta}&sp=${solo_pdtes}&swinc=${show_incomes}`
+      tabla_movimientos.ajax.url(url).load(function(){
+        $('#btnbuscarmvtos').removeClass('disabled')
+      .html('<i class="fas fa-search"></i>')
+      })
+
+      let url_reemb = `/accounting/cajasefectivo?todo=datatable_reembolsos&caja=${caja}&fecha_desde=${fecha_desde}&fecha_hasta=${fecha_hasta}`
+      tabla_reembolsos.ajax.url(url_reemb).load()
+
+      let url_saldos = `/accounting/ajax/saldosiniciales?cuenta=${caja}`
+      tablaSaldos.ajax.url(url_saldos).load()
+
+    })
+    $('#sw_solo_pendientes').change(function(){
+      let caja = $('#id_caja').val()
+      let fecha_desde = $('#id_fecha_desde').val()
+      let fecha_hasta = $('#id_fecha_hasta').val()
+      let solo_pdtes = $('#sw_solo_pendientes').prop('checked')
+      let url = `/accounting/cajasefectivo?todo=datatable&caja=${caja}&fecha_desde=${fecha_desde}&fecha_hasta=${fecha_hasta}&sp=${solo_pdtes}`
+      tabla_movimientos.ajax.url(url).load()
+    })
+    $('#sw_gastos').change(function(){
+      let caja = $('#id_caja').val()
+      let fecha_desde = $('#id_fecha_desde').val()
+      let fecha_hasta = $('#id_fecha_hasta').val()
+      let solo_pdtes = $('#sw_solo_pendientes').prop('checked')
+      let solo_gastos = $('#sw_gastos').prop('checked')
+      show_incomes = true
+      if (solo_pdtes == true || solo_gastos == true){
+        show_incomes = false
+      }
+      let url = `/accounting/cajasefectivo?todo=datatable&caja=${caja}&fecha_desde=${fecha_desde}&fecha_hasta=${fecha_hasta}&sp=${solo_pdtes}&swinc=${show_incomes}`
+      tabla_movimientos.ajax.url(url).load(function(){
+        $('#btnbuscarmvtos').removeClass('disabled')
+      .html('<i class="fas fa-search"></i>')
+      })
+    })
+    $('#form-legalizar-anticipo').submit(function(e){
+      e.preventDefault();
+      let data = new FormData(this);
+      let caja = $('#id_caja').val()
+      if (caja==""){
+        $('#alert-title').text('Andinasoft dice:')
+        $('#alert-data').text('Debes escoger una caja para registrar el gasto')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
+      $('#submit-id-registrar-leg').addClass('disabled').val('Cargando...')
+      data.append('to_do','nuevogasto')
+      data.append('id_caja',caja)
+      $.ajax({
+        type:'POST',
+        url:'/accounting/cajasefectivo',
+        data:data,
+        contentType: false,
+        processData: false,
+        success: (xhr) => {
+          tabla_movimientos.ajax.reload()
+          $('#form-legalizar-anticipo').trigger('reset')
+          bsCustomFileInput.init()
+          $("#modalNuevaLegalizacion").modal('hide')
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text(xhr.msj)
+          $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+          
+        },
+        error: (xhr) => {
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('Ocurrió un error')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        },
+        complete: (xhr) => {
+          $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+        }
+      })
+    })
+    $('#form-partners').submit(function(e){
+      e.preventDefault();
+      $('#btn-create-partner').addClass('disabled')
+      .html('<i class="fas fa-spinner fa-pulse">')
+      let data = new FormData(this)
+      data.append('todo','create')
+      $.ajax({
+        type:'POST',
+        url:'/accounting/partners',
+        data:data,
+        contentType: false,
+        processData: false,
+        success: (xhr) => {
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text(xhr.msj)
+          $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+          if (xhr.status_response == 'success') {
+            $("#modalcreatepartner").modal('hide')
+            $("#id_nit_tercero").append(`<option value="${xhr.partner.idTercero}">${xhr.partner.full_name}</option>`)
+            document.querySelector("#id_nit_tercero").fstdropdown.rebind()
+          }            
+        },
+        error: (xhr) => {
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('Ocurrió un error')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        },
+        complete: (xhr) => {
+          $('#btn-create-partner').removeClass('disabled')
+          .html('<i class="fas fa-check">')
+        }
+      });
+    })
+    $('#modalSolicitarReembolso').on('hidden.bs.modal', function(){
+      tabla_movimientos_reemb.$('tr.selected').removeClass('selected');
+    })
+    $('#form-taxes').submit(function(e){
+        e.preventDefault();
+        let row = tabla_movimientos.row('.selected').data();
+        let row_leg  = tabla_movimientos_reemb.row('.selected').data()
+
+        if (row == undefined){
+          row = row_leg
+        }
+
+        let valor_calculado = $('#id_total_calculado').val().replace(/[$,]/g,'') * 1
+        if (valor_calculado != row.valor * -1){
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('El total calculado es diferente al valor realmente pagado.')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+          return false;
+        }
+        
+        let data = new FormData(this)
+        
+        $('#submit-id-btn-registar-taxes').prop('disabled',true)
+
+        data.append('id_gasto',row.pk)
+        data.append('to_do','add_taxes')
+        $.ajax({
+          type:'POST',
+          url:'/accounting/cajasefectivo',
+          data:data,
+          contentType:false,
+          processData:false,
+          success:function(data){
+            tabla_movimientos.ajax.reload()
+            tabla_movimientos_reemb.ajax.reload()
+            $('#modaltaxes').modal('hide')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Impuestos agregados al detalle del gasto')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+          },
+          complete:function(data){
+            $('#submit-id-btn-registar-taxes').prop('disabled',false)
+          }
+
+        })
+      })
+    $('#formTransfers').on('submit',function(e){
+        e.preventDefault();
+        data = new FormData(this)
+        let oficina = "MEDELLIN"
+        data.append(
+            'oficina',oficina
+        )
+        let cuenta_sale = $('#id_cuenta_sale').val()
+        let cuenta_entra = $('#id_cuenta_entra').val()
+        if(cuenta_sale == cuenta_entra){
+            $('#alert-title').text('Oh Oh!')
+            $('#alert-data').text('La cuentra de ingreso no puede ser igual a la de salida')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+
+        let valor = $('#id_valor_transf').val()
+        valor = valor.replace(/[\$,]/g, '')*1
+        valor_conciliado = totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
+        let cuenta = $('#id_cuenta_ant').text()
+
+        if (cuenta_sale != "9" && cuenta_sale != "16" && cuenta_sale != "25"){
+            if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+        }
+
+        var lineas_banco = []
+        var selected_rows = tablaCONBanco_tr.rows('.selected').data()
+        for (i = 0; i < selected_rows.length; i++){
+            lineas_banco.push(selected_rows[i].pk)
+        }
+        data.append('lineas_banco', lineas_banco)
+        let row = tabla_reembolsos.row('.selected').data();
+        data.append('reembolso', row.id)
+
+        $.ajax({
+            type:'POST',
+            url:'/accounting/ajax/newtransfer',
+            data:data,
+            processData:false,
+            contentType:false,
+            success:function(xhr){
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                $('#modalPagarReemb').modal('hide')
+                $('#formTransfers').trigger('reset')
+            }
+        })
+    });
+    $('#formSaldoIni').on('submit',function(e){
+            e.preventDefault();
+            data = new FormData(this)
+            let cuenta = $('#id_caja').val()
+            if (cuenta == ''){
+              $('#alert-title').text('Oh Oh!')
+              $('#alert-data').text('Debes seleccionar una cuenta')
+              $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              return;
+            }
+            data.append('cuenta',cuenta)
+            data.append('tipo','cajamenor')
+            let arqueo = []
+            $('.arqueofisico').each(function(index,elem){
+                let cantidad = $(elem).val()
+                let denom = $(elem).data('denom')
+                if (cantidad>0) arqueo.push(`"${denom}":${cantidad}`)
+            })
+            data.append('forma',`{${arqueo}}`)
+            btn = $(this).find('button')
+            btn.addClass('disabled')
+            .html('<i class="fas fa-spinner fa-pulse">')
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/saldosiniciales',
+                data:data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').text(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    tablaSaldos.ajax.reload()
+                    $('#formSaldoIni').trigger('reset')
+                },
+                error: function(xhr,status, error){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('Ocurrió un error al procesar el saldo inicial')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                },
+                complete: function(){
+                    btn.removeClass('disabled')
+                    .html('Registrar')
+                }
+            })
+        })
+    $("#btn-open-add-partner").click(function(e){
+      /* $("#modalNuevaLegalizacion").modal('hide') */
+      $("#modalcreatepartner").modal('show')
+    })
+    $('#btn-change-concept').click(function(e){
+        let row = tabla_movimientos.row('.selected').data()
+        let new_concept = $('#modalchangeconcept').find('select').val()
+        if (new_concept == ""){
+          $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Debes seleccionar un concepto')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+        $(this).addClass('disabled')
+            .html('<i class="fas fa-spinner fa-pulse">')
+
+        $.ajax({
+            type:'POST',
+            url:'/accounting/cajasefectivo',
+            data:{
+              'to_do':'change_concept',
+              'id_gasto': row.pk,
+              'new_concept': new_concept,
+              'csrfmiddlewaretoken':getCookie('csrftoken')
+            },
+            success: (xhr) => {
+                $('#alert-data').text('')
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').html(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                tabla_movimientos.ajax.reload()
+                $('#modalchangeconcept').modal('hide')
+            },
+            complete: (xhr) => {
+                $('#btn-change-concept').html('<i class="fas fa-check"></i>')
+                .removeClass('disabled')
+            },
+        })
+      })
+    $('#btn-change-support').click(function(e){
+      let row = tabla_movimientos.row('.selected').data()
+      let new_support = $('#id_nuevo_soporte').val()
+      if (new_support == ""){
+      $('#alert-title').text('Andinasoft dice:')
+        $('#alert-data').text('Debes cargar un archivo PDF.')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
+      $(this).addClass('disabled')
+          .html('<i class="fas fa-spinner fa-pulse">')
+      
+      let data = new FormData($('#form_change_support')[0])
+      data.append('to_do','change_support_gasto')
+      data.append('gasto',row.pk)
+
+
+      $.ajax({
+          type:'POST',
+          url:'/accounting/cajasefectivo',
+          data:data,
+          contentType: false,
+          processData: false,
+          success: (xhr) => {
+              $('#alert-data').text('')
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').html(xhr.msj)
+              $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+              tabla_movimientos.ajax.reload()
+              $('#modalchangesupport').modal('hide')
+          },
+          complete: (xhr) => {
+              $('#btn-change-support').html('<i class="fas fa-check"></i>')
+              .removeClass('disabled')
+          },
+      })
+    })
+    $('#btn-solicitar-reemb').click(function(){
+      $(this).addClass('disabled').html('<i class="fas fa-spinner fa-pulse">')
+      let data = {
+        'to_do':'solicitar_reembolso',
+        'caja':$('#id_caja').val(),
+        'csrfmiddlewaretoken':getCookie('csrftoken')
+      }
+      $.ajax({
+        type:'POST',
+        url:'/accounting/cajasefectivo',
+        data:data,
+        success: (xhr) => {
+          $('#alert-data').text('')
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').html(xhr.msj)
+          $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+          tabla_reembolsos.ajax.reload()
+          $('#modalSolicitarReembolso').modal('hide')
+        },
+        complete: (xhr) =>{
+          $('#btn-solicitar-reemb').removeClass('disabled').html('Solicitar')
+        }
+      })
+    })
+    $('#btn-nuevo-reembolso').click(function(){
+      let caja = $('#id_caja').val()
+      let url = `/accounting/cajasefectivo?todo=datatable&caja=${caja}&legalizar=true`
+      tabla_movimientos_reemb.ajax.url(url).load()
+      $('#btn-solicitar-reemb').show()
+      $('#btn-aprobar-reemb').hide()
+      $('#modalSolicitarReembolso').modal('show')
+    })
+    
+      
+    $('#formLegalizarReemb').submit(function(e){
+      e.preventDefault()
+      let row = tabla_reembolsos.row('.selected').data();
+      let vr_reemb = $('#id_valor_reemb').val().replace(/[$,]/g,'') * 1
+      if (row.valor > vr_reemb){
+        $('#alert-title').text('Oh Oh!')
+        $('#alert-data').text('El valor del reembolso no puede ser menor al valor solicitado.')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
+      if (vr_reemb % 10000 != 0) {
+        $('#alert-title').text('Oh Oh!')
+        $('#alert-data').text('El valor del reembolso debe ser múltiplo de 10,000.')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
+      if (vr_reemb - row.valor> 9999) {
+        $('#alert-title').text('Oh Oh!')
+        $('#alert-data').text('La aproximación del pago no debe superar los $10.000')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
+      let data = new FormData(this)
+      data.append('to_do','leg_reemb')
+      data.append('id_leg',row.id)
+      $('#btn-leg-reemb').addClass('disabled')
+      .html('<i class="fas fa-spinner fa-pulse">')
+      $.ajax({
+        type:'POST',
+        url:'/accounting/cajasefectivo',
+        data:data,
+        contentType: false,
+        processData: false,
+        success: (xhr) => {
+            $('#alert-data').text('')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').html(xhr.msj)
+            $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+            $('#modalRegLegal').modal('hide')
+            $('#formLegalizarReemb').trigger('reset')
+            bsCustomFileInput.init()
+            tabla_reembolsos.ajax.reload()
+        },
+        error: (xhr) => {
+          $('#alert-data').text('')
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').html('Ocurrió un error')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        },
+        complete: (xhr) =>{
+          $('#btn-leg-reemb').removeClass('disabled').html('Registrar')
+        }
+      })
+    })
+    $('#btn-leg-reemb').click(function(){
+      $('#formLegalizarReemb').submit()
+    })
+    $('#form-taxes .calculate').on('change keyup', function(){
+        
+        totalizar_taxes('subtotal')
+
+        
+      })
+    $('#id_pais').on('change',function(){
+      let pais = $(this).val()
+      $('#id_estado').empty()
+      .append(`<option value="">Selecciona...</option>`)
+      $('#id_ciudad').empty()
+        .append(`<option value="">Selecciona...</option>`)
+      $.ajax({
+      type:'get',
+      url:'/ajax_request/datacountries',
+      data:{
+        'tipo':'estados',
+        'pais':pais
+      },
+      success: function (response) {
+        var estados = JSON.parse(response['estados'])
+        for (estado in estados){
+          let fields = estados[estado].fields
+          let pk = estados[estado].pk
+          $('#id_estado').append(
+            `<option value="${pk}">${fields.state_name}</option>`
+          )
+        }
+      }
+    })
+  })
+    $('#id_estado').on('change',function(){
+      let estado = $(this).val()
+      $('#id_ciudad').empty()
+      .append(`<option value="">Selecciona...</option>`)
+      $.ajax({
+      type:'get',
+      url:'/ajax_request/datacountries',
+      data:{
+        'tipo':'ciudades',
+        'estado':estado
+      },
+      success: function (response) {
+        var ciudades = JSON.parse(response['ciudades'])
+        for (ciudad in ciudades){
+          let fields = ciudades[ciudad].fields
+          let pk = ciudades[ciudad].pk
+          $('#id_ciudad').append(
+            `<option value="${pk}">${fields.city_name}</option>`
+          )
+        }
+      }
+    })
+  })
+    $('#id_empresa_rad_int').on('change',function(){
+              let empresa = $(this).val()
+              $.ajax({
+                  type:'GET',
+                  url:'/accounting/ajax/getinfointerfaz',
+                  data:{
+                      'tipo':'CXP',
+                      'empresa':empresa
+                  },
+                  success:function(response){
+                      let data = JSON.parse(response['data'])
+                      $('#id_tipo_cxp').empty()
+                      $('#id_tipo_cxp').append(
+                          '<option value="">Selecciona...</option>'
+                      )
+                      for (let i in data){
+                          descrip = data[i]['fields']['descripcion']
+                          cuenta = data[i]['fields']['cuenta_credito_1']
+                          pk = data[i]['pk']
+                          $('#id_tipo_cxp').append(
+                              '<option value='+pk+'>'+descrip+' | '+cuenta+'</option>'
+                          )
+                      }
+                  }
+              })
+              
+          })  
+    $('#id_soporte_rad_int').parent('.custom-file').remove()
+    $('#id_fecha_transf').change(function(){
+        let fecha = $(this).val()
+        let cuenta = $('#id_cuenta_sale').val()
+        if (fecha != "" && cuenta != ""){
+            var url_bco = '/accounting/ajax/bancarymovements?tipo=general&cuenta='+cuenta+'&fecha='+fecha
+            tablaCONBanco_tr.ajax.url(url_bco).load()
+        }
+    })
+    $('#id_cuenta_sale').change(function(){
+        let fecha = $('#id_fecha_transf').val()
+        let cuenta = $(this).val()
+        if (fecha != "" && cuenta != ""){
+            var url_bco = '/accounting/ajax/bancarymovements?tipo=general&cuenta='+cuenta+'&fecha='+fecha
+            tablaCONBanco_tr.ajax.url(url_bco).load()
+        }
+    })
+    $('#id_empresa_sale').on('change',function(){
+        var empresa = $(this).val()
+        $('#id_cuenta_sale').empty()
+        $('#id_cuenta_sale').append('<option value="">Selecciona...</option>')
+        $.ajax({
+            type:'GET',
+            url:'/accounting/ajax/companies_accounts',
+            data:{
+                'empresa':empresa
+            },
+            success:function(response){
+                var data = JSON.parse(response['cuentas'])
+                for (let i in data){
+                    var pk_cuenta = data[i]['pk']
+                    var cuenta = data[i]['fields']['cuentabanco']
+                    var option = '<option value='+pk_cuenta+'>'+
+                                cuenta+'</option>'
+                    $('#id_cuenta_sale').append(option)
+                }
+            }
+        })
+    })
+    $('#id_empresa_entra').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_entra').empty()
+            $('#id_cuenta_entra').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa,
+                    'group':'onlycash',
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_entra').append(option)
+                    }
+                }
+            })
+        })
+    $('.arqueofisico').on('change',function(e){
+        let valor = 0
+        $('.arqueofisico').each(function(index,elem){
+            let cantidad = $(elem).val()
+            let denom = $(elem).data('denom')*1
+            if (denom == 1) denom = 1000
+            valor += cantidad*denom
+        })
+        valor = new Intl.NumberFormat('en-EN').format(valor)
+        $('#saldoinicial').val(valor)
+    })
+    //MASKS
+    $('#id_causacion_leg_reemb').mask('S-000-#')
+    $('#id_pagoneto').mask("#.##0", {reverse: true});
+    $('#id_valor_neto_rad_int').mask("#,##0", {reverse: true});
+    $('#id_valor_reemb').mask("#,##0", {reverse: true});
+    $('#id_documento_causacion').mask('S-000-#')
+    $(this).click(function(e){
+      if(e.button == 0){
+          $(".contextmenu").css("display", "none");
+      }
+    });
+    $(this).keydown(function(e){
+        if(e.keyCode == 27){
+            $(".contextmenu").css("display", "none");
+        }
+    });
+    function totalizar_taxes(to_change) {
+          subtotal = $('#id_subtotal').val().replace(/[$,]/g,'') * 1
+          iva = $('#id_valor_iva').val().replace(/[$,]/g,'') * 1
+          if (iva!=0){
+            $('#id_tipo_iva').prop('required',true)
+          }
+          else{
+            $('#id_tipo_iva').prop('required',false)
+          }
+          rte = $('#id_valor_rte').val().replace(/[$,]/g,'') * 1
+          if (rte!=0){
+            $('#id_tipo_rte').prop('required',true)
+          }
+          else{
+            $('#id_tipo_rte').prop('required',false)
+          }
+          rte_asumida = $('#id_rte_asumida').prop('checked')
+          if (rte_asumida == true){
+            rte = 0
+          }
+
+          total = new Intl.NumberFormat('en-EN').format(subtotal + iva - rte)
+
+          $('#id_total_calculado').val(total)
+      }
+    function totalizarMovimiento(tabla="#tablaCONBanco tr.selected",total_input="#total-pago-banco"){
+        let total = 0
+        $(tabla).each(function(index, element){
+            let valor = $(element).find('.dt-body-right').text()
+            valor = valor.replace(/[\$,]/g,'') * 1
+            total += valor
+        })
+        fmt_total = new Intl.NumberFormat('en-EN').format(total)
+        $(total_input).val(fmt_total)
+
+        return total
+    }
+})
+</script>
+{%endblock%}
+{%block style%}
+<link rel="stylesheet" href="{%static 'css/fstdropdown.css'%}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+  th, td{
+      text-align: center;
+      font-size: smaller;
+  }
+  tbody {
+      cursor: pointer;
+  }
+  td {
+    font-size: x-small;
+  }
+</style>
+{%endblock%}

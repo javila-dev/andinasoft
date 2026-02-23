@@ -1,0 +1,513 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Accounting | Conciliaciones{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+    }
+    .dataTables_length {
+        padding-left: 8px;
+    }
+
+    .dataTables_filter {
+        padding-right: 8px;
+    }
+
+    .dataTables_info {
+        padding-left: 8px;
+    }
+    .dt-buttons{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Conciliaciones
+        </h3>
+    <div class='container-fluid'>
+        <div class='row mb-3 d-flex'>
+            <div class='p-2'>
+                <label for='empresa_cont'>
+                    <small>Empresa*</small></label>
+                <select id='empresa_cont' class='custom-select' required style='font-size:small'>
+                    <option value='' selected>Selecciona...</option>
+                    {%for empresa in empresas%}
+                    <option value="{{empresa.pk}}">{{empresa.nombre.upper}}</option>
+                    {%endfor%}
+                </select>
+            </div>
+            <div class='p-2'>
+                <label for='cuenta_cont'>
+                    <small>Cuenta*</small></label>
+                <select id='cuenta_cont' class='custom-select' required style='font-size:small'>
+                    <option value='' selected>Selecciona...</option>
+                </select>
+            </div>
+            <div class='p-2 ml-auto'>
+                <p class='text-center'><small>Saldos</small></p>
+                <div class='input-group pb-3'>
+                    <div class='input-group-prepend'>
+                        <span class='input-group-text' style='font-size:small'>Libros</span>
+                    </div>
+                    <input type='number' class='form-control text-center' step="0.01" id='saldoLibros' style='font-size:small;max-width:150px' readonly>
+                </div>
+                <div class='input-group pb-3'>
+                    <div class='input-group-prepend'>
+                        <span class='input-group-text' style='font-size:small'>Banco</span>
+                    </div>
+                    <input type='number' class='form-control text-center' step="0.01" id='saldoBancos' style='font-size:small;max-width:150px' readonly>
+                </div>
+            </div>
+            <div class='p-2'>
+                <p class='text-center'><small>Verificaciones</small></p>
+                <input type='number' class='form-control text-center mb-3' step="0.01" id='verificacionLibros' style='font-size:small' readonly>
+                <input type='number' class='form-control text-center' step="0.01" id='verificacionBancos' style='font-size:small' readonly>
+            </div>
+        </div>
+        <div class='row'>
+            <div class='col-md-6 table-responsive mb-3'>
+                <table id='tablaNCCont' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Comprobante</th>
+                            <th>Descripcion</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+            <div class='col-md-6 table-responsive mb-3'>
+                <table id='tablaNCBco' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Descripcion</th>
+                            <th>Referencia</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+        <div class='row'>
+            <div class='col-6'>
+                <div class='row justify-content-center'>
+                    <div class='col-4 text-center'>
+                        <button id='btnSubirLineaCont' class='btn btn-circle btn-primary shadow'>
+                            <i class="fas fa-angle-up"></i>
+                        </button>
+                    </div>
+                    <div class='col-4 text-center'>
+                        <button id='btnBajarLineaCont' class='btn btn-circle btn-primary shadow'>
+                            <i class="fas fa-angle-down"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class='col-6'>
+                <div class='row justify-content-center'>
+                    <div class='col-4 text-center'>
+                        <button id='btnSubirLineaBco' class='btn btn-circle btn-primary shadow'>
+                            <i class="fas fa-angle-up"></i>
+                        </button>
+                    </div>
+                    <div class='col-4 text-center'>
+                        <button id='btnBajarLineaBco' class='btn btn-circle btn-primary shadow'>
+                            <i class="fas fa-angle-down"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <form id='form-conciliados' method='POST'>{%csrf_token%}
+        <div class='row mt-4'>
+            <div class='col-md-6 table-responsive'>
+                <table id='tablaCONCont' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Fecha</th>
+                            <th>Comprobante</th>
+                            <th>Descripcion</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th class='text-right'>Total</th>
+                            <th>$0</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class='col-md-6 table-responsive'>
+                <table id='tablaCONBanco' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Fecha</th>
+                            <th>Descripcion</th>
+                            <th>Referencia</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr>
+                            <th></th>
+                            <th></th>
+                            <th></th>
+                            <th class='text-right'>Total</th>
+                            <th>$0</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class='row justify-content-center'>
+        <div class='d-inline-flex mt-3'>
+            <div class='input-group'>
+                <div class='input-group-prepend'>
+                    <span class='input-group-text'>Diferencia</span>
+                </div>
+                <input type='number' id='total-dif' name='total-dif' class='form-control text-center' value="0" readonly>
+            </div>    
+        </div>
+    </div>
+    <div class='row'>
+        <input type='submit' id='btnConciliar' class='btn btn-primary shadow ml-auto my-3 mx-4' value="Conciliar">
+    </div>
+    </form>
+</div>
+<script>
+    $(document).ready(function(){
+        var tablaNCCont = $('#tablaNCCont').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/accountsmovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'comprobante'},
+                {'data':'descripcion'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1,2],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        var tablaNCBco = $('#tablaNCBco').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        var tablaCONCont = $('#tablaCONCont').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            columnDefs: [{
+                orderable: false,
+                targets: [0]
+            }],
+            footerCallback:function ( row, data, start, end, display ) {
+                var api = this.api(), data;
+     
+                // Remove the formatting to get integer data for summation
+                var intVal = function ( i ) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '')*1 :
+                        typeof i === 'number' ?
+                            i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column( 4 )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+     
+                // Update footer
+                $( api.column( 4 ).footer() ).html(
+                    '$'+total.toFixed(2)
+                );
+            }
+        })
+        var tablaCONBanco = $('#tablaCONBanco').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            columnDefs: [{
+                orderable: false,
+                targets: [0]
+            }],
+            footerCallback:function ( row, data, start, end, display ) {
+                var api = this.api(), data;
+     
+                // Remove the formatting to get integer data for summation
+                var intVal = function ( i ) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '')*1 :
+                        typeof i === 'number' ?
+                            i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column( 4 )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+     
+                // Update footer
+                $( api.column( 4 ).footer() ).html(
+                    '$'+total.toFixed(2)
+                );
+            }
+        
+        })
+        $('#tablaNCCont tbody').on('click','tr',function(){
+            tablaNCCont.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaNCBco tbody').on('click','tr',function(){
+            tablaNCBco.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaCONCont tbody').on('click','tr',function(){
+            tablaCONCont.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaCONBanco tbody').on('click','tr',function(){
+            tablaCONBanco.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#empresa_cont').on('change',function(){
+            var empresa = $(this).val()
+            reiniciarVerif()
+            $('#cuenta_cont').empty()
+            $('#cuenta_cont').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#cuenta_cont').append(option)
+                    }
+                }
+            })
+        })
+        $('#cuenta_cont').on('change',function(){
+            var cuenta = $(this).val()
+            reiniciarVerif()
+            if (cuenta!=''){
+                var url_cont = '/accounting/ajax/accountsmovements?estado=SIN CONCILIAR&cuenta='+cuenta
+                tablaNCCont.ajax.url(url_cont).load()
+                var url_bco = '/accounting/ajax/bancarymovements?estado=SIN CONCILIAR&cuenta='+cuenta
+                tablaNCBco.ajax.url(url_bco).load()
+                verificarSaldos()
+            }
+        })
+        $('#btnBajarLineaCont').click(function(){
+            $('#btnAlertaRight').click()
+            var line = tablaNCCont.row('.selected').data()
+            var pk = '<input type="number" class="form-control-plaintext text-center" readonly name="conc-cont" value='+line.pk+' style="font-size:smaller;">'
+            tablaCONCont.row.add(
+                [pk,line.fecha,line.comprobante,line.descripcion,line.valor,line.pk]
+            ).draw()
+            tablaNCCont.row('.selected').remove().draw( false );
+            totalizarDif();
+        })
+        $('#btnSubirLineaCont').click(function(){
+            $('#btnAlertaRight').click()
+            var line = tablaCONCont.row('.selected').data()
+            var pk = '<input type="number" class="form-control-plaintext text-center" readonly name="conc-cont" value='+line.pk+' style="font-size:small;">'
+            tablaNCCont.row.add({
+                'fecha':line[1],
+                'comprobante':line[2],
+                'descripcion':line[3],
+                'valor':line[4],
+                'pk':line[5]
+            }).draw()
+            tablaCONCont.row('.selected').remove().draw( false );
+            totalizarDif();
+        })
+        $('#btnBajarLineaBco').click(function(){
+            $('#btnAlertaRight').click()
+            var line = tablaNCBco.row('.selected').data()
+            var pk = '<input type="number" class="form-control-plaintext text-center" readonly name="conc-bco" value='+line.pk+' style="font-size:smaller;">'
+            tablaCONBanco.row.add(
+                [pk,line.fecha,line.descripcion,line.referencia,line.valor,line.pk]
+            ).draw()
+            tablaNCBco.row('.selected').remove().draw( false );
+            totalizarDif();
+        })
+        $('#btnSubirLineaBco').click(function(){
+            $('#btnAlertaRight').click()
+            var line = tablaCONBanco.row('.selected').data()
+            tablaNCBco.row.add({
+                'fecha':line[1],
+                'descripcion':line[2],
+                'referencia':line[3],
+                'valor':line[4],
+                'pk':line[5]
+            }).draw()
+            tablaCONBanco.row('.selected').remove().draw( false );
+            totalizarDif();
+        })
+        $('#form-conciliados').on('submit',function(e){
+            e.preventDefault();
+            var verif_total = function(){
+                 var len_cont = tablaCONCont.rows().count()
+                 var len_bco = tablaCONBanco.rows().count()
+                 if (len_cont==0&&len_bco==0){
+                     return true
+                 }
+                 return false
+            }
+            if ($('#total-dif').val()!=0){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('No puedes conciliar un movimiento con diferencias')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            }
+            else if(verif_total()){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('No puedes crear una conciliacion sin movimientos')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            }
+            else{
+                var form_data = new FormData(this)
+                var empresa = $('#empresa_cont').val()
+                var cuenta = $('#cuenta_cont').val()
+                form_data.append('empresa',empresa)
+                form_data.append('cuenta',cuenta)
+                $.ajax({
+                    type:'POST',
+                    url:'/accounting/ajax/reconciliate',
+                    data:form_data,
+                    processData:false,
+                    contentType:false,
+                    success: function(response){
+                        tablaCONCont.rows().remove().draw(false)
+                        tablaCONBanco.rows().remove().draw(false)
+                        verificarSaldos()
+                        $('#alert-title').text('¡Listo!')
+                        $('#alert-data').text('El movimiento fue conciliado con exito')
+                        $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    }
+                })
+            }
+        })
+        function totalizarDif(){
+            var total_cont = $(tablaCONCont.column(4).footer()).text().
+                replace(/[\$,]/g, '')
+            var total_bco = $(tablaCONBanco.column(4).footer()).text().
+                replace(/[\$,]/g, '')
+            var diferencia = parseFloat(total_cont).toFixed(2) - parseFloat(total_bco).toFixed(2)
+            $('#total-dif').val(diferencia.toFixed(2))
+        }
+        function verificarSaldos(){
+            $('#verificacionLibros').removeClass('text-danger')
+            $('#verificacionBancos').removeClass('text-danger')
+            $('#verificacionLibros').removeClass('text-success')
+            $('#verificacionBancos').removeClass('text-success')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/accountingfinalbalance',
+                data:{
+                    'empresa':$('#empresa_cont').val(),
+                    'cuenta':$('#cuenta_cont').val()
+                },
+                success:function(response){
+                    var data = response
+                    $('#saldoLibros').val(response['saldo_libros'])
+                    $('#saldoBancos').val(response['saldo_banco'])
+                    $('#verificacionLibros').val(response['verif_libros'])
+                    $('#verificacionBancos').val(response['vefif_bancos'])
+                    if(response['verif_libros']==response['vefif_bancos']){
+                        $('#verificacionLibros').addClass('text-success')
+                        $('#verificacionBancos').addClass('text-success')
+                    }
+                    else{
+                        $('#verificacionLibros').addClass('text-danger')
+                        $('#verificacionBancos').addClass('text-danger')
+                    }
+                }
+            })
+        }
+        function reiniciarVerif(){
+            tablaNCCont.rows().remove().draw(false)
+            tablaNCBco.rows().remove().draw(false)
+            tablaCONCont.rows().remove().draw(false)
+            tablaCONBanco.rows().remove().draw(false)
+            $('#saldoLibros').val(null)
+            $('#saldoBancos').val(null)
+            $('#verificacionLibros').val(null)
+            $('#verificacionBancos').val(null)
+            totalizarDif()
+        }
+    });
+</script>
+{%endblock%}

@@ -1,0 +1,21 @@
+{% extends "signin.html" %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block content %}
+<div class="bg-light rounded shadow-lg" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px;margin:auto;">
+    <form class="form-signin" method="post" action=".">{% csrf_token %}
+        <img class="mb-4" src="{%static 'img/tierra.png'%}" alt="" width="72" height="72">
+        {{form|crispy}}
+        <button class="btn btn-lg btn-primary btn-block" type="submit">Ingresa</button>
+        <input type="hidden" name="next" value="{{ next }}" /><br>
+        <p>{% trans "Olvidaste tu Contraseña"%}? <a
+                href="{% url 'auth_password_reset' %}">{% trans "Haz click para recuperar" %}</a></p>
+        <p>{% trans "No tienes una cuenta aun" %}? <a
+                href="{% url 'registration_register' %}">{% trans "Registrate Aqui" %}</a>!</p>
+        <p class="mt-5 mb-3 text-muted">&copy; 2015</p>
+    </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,264 @@
+{%load static%}
+<html>
+
+    <body>
+        <div id="footer_content">
+            <table style="color:#34554c;font-size:9px">
+                <tr>
+                    <td style="text-align:center;border-right: darkslategrey solid 0.5px;padding-right: 5px;">
+                        <b>Medellín</b><br>
+                        Parque empresarial Calle 11 Of 508<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align:center">
+                        <b>Montería</b><br>
+                        Cra 8A # 63-09<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align: right;width:60%">
+                        VERSIÓN: 2<br>
+                        TODOS LOS CHEQUES, CONSIGNACIONES Y TRANSFERENCIAS DEBEN SER GIRADOS A NOMBRE DE<br>
+                        <strong>STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4</strong>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table>
+                <tr>
+                    <th>
+                    <th style="width:25%;text-align:left">
+                        <img src="{%static 'img/Andina-Conceptos.png'%}" width="140">
+                    </th>
+                    </th>
+                    <th style="width:50%;text-align:center">
+                        <img src="{%static 'img/conceptos_inmob_bugambilias.png'%}" width="180">
+                    </th>
+                    <th style="width:25%;text-align:right">
+                        <img src="{%static 'img/logo-Tesoro-Escondido.png'%}" width="170">
+                    </th>
+                </tr>
+            </table>
+            <h2 style="color:#345555; text-align:center">
+                <b>FORMATO DE VERIFICACIÓN AL CONTRATO DE PROMESA DE COMPRAVENTA DE BIEN FUTURO, PROYECTO DE 
+                    PARCELACIÓN DENOMINADO “EL TESORO ESCONDIDO”<br>
+                    Nº <u><span style="color:lightcoral">{{ctr.pk}}</span></u> DE FECHA
+                    <u><span style="color:lightcoral">{{ctr.fecha_contrato}}</span></u></b>
+            </h2>
+            <p class="detalles">
+                Por medio del presente formato de verificación, la sociedad <strong>TERRANOVA DESARROLLADORA
+                    TURÍSTICA S.A.S</strong>,
+                con <strong>NIT 900712229-1</strong>, deja constancia que, <strong>EL (LOS) PROMITENTE (S) COMPRADOR
+                    (ES)</strong>:<br>
+
+            </p>
+            <ol class="detalles">
+                {%for titular in ctr.titulares%}
+                <li style="text-align: justify;font-size:12px;margin-bottom:5px">
+                    <b>Nombre:</b> <u>{{titular.nombrecompleto}}</u>&nbsp;&nbsp;
+                    <b>CC:</b> <u>{{titular.pk}}</u>&nbsp;&nbsp;
+                </li>
+                {%endfor%}
+            </ol>
+            <p class="detalles">
+                Están de acuerdo con los términos y condiciones del contrato suscrito con la sociedad <b>TERRANOVA DESARROLLADORA TURÍSTICA S.A.S</b>, 
+                con <b>NIT 900712229-1</b>, para la compra del lote en el proyecto de parcelación<b>“EL TESORO ESCONDIDO”</b>, y que, 
+                el formato de verificación hace parte integral del contrato de promesa de bien futuro. A lo cual se indica:
+            </p>
+            <ol class="detalles">
+                <li>
+                    El inmueble adquirido es: Parcelacion Nº <u>1</u>
+                    denominada <u>BUGAMBILIAS TERRITORIO CAMPESTRE</u>
+                    <p>Parcela N° <u> {%if fraccion%}{{inmueble.lotenumero|slice:":-1"}}{%else%}{{inmueble.lotenumero}}{%endif%} </u> Manzana <u> {{inmueble.manzananumero}} </u>  
+                    (Área total parcela <u> {{inmueble.area_mz}} </u> metros cuadrados),{%if fraccion%} Fracción <u> {{inmueble.lotenumero|last}} </u> con un % sobre el total 
+                    del area de la parcela del <u>50%</u>, es decir <u>{{inmueble.areaprivada}}</u> metros cuadrados, fraccion{%endif%} que cuenta con las siguientes medidas y linderos:</p>
+                    
+                <li>
+                    El valor del lote adquirido es de <u>{{ctr.general_info.valor_en_letras}}</u>
+                    ($<u>{{ctr.valor_venta|floatformat:"-3g"}}</u>)
+                </li>
+                <li>
+                    La forma de pago del lote adquirido es:<br>
+                    a) <b>Cuota inicial:</b> $<u>{{ctr.cuota_inicial|floatformat:"-3g"}} </u>, que serán cancelados así:
+                    <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                    b) <b>Saldo a pagar</b> $<u>{{ctr.general_info.saldo|floatformat:"-3g"}}</u>{%if ctr.general_info.saldo > 0 %}, que serán cancelados
+                    así: <u>{{ctr.general_info.fp_saldo}}</u>{%endif%}.
+                </li>
+                <li>Que, el pago de la cuota inicial, en caso de pagarlo en mensualidades, estas se pagan sin intereses
+                    corrientes.</li>
+                <li>Que, el pago del saldo, si se paga mediante financiación directa con la sociedad vendedora, el pago
+                    es mediante amortización y las cuotas mensuales incluyen el valor de los intereses corrientes.</li>
+                <li>Que, en caso de mora en el pago de cualquiera de las cuotas correspondientes a la cuota inicial o a
+                    las cuotas
+                    mensuales de amortización para el pago del saldo del LOTE, pagará (n) a <b>LA PROMITENTE
+                        VENDEDORA</b>, intereses
+                    moratorios a la tasa máxima legal vigente mensual y/o fracción de mes vencido, establecida por la
+                    Superintendencia
+                    Financiera de Colombia.</li>
+                <li>Que, con la suscripción del contrato de promesa de compraventa para la compra del lote en el
+                    proyecto <b>“EL CARMELO RESERVADO TERRITORIO CAMPESTRE”</b>, le fue entregado como obsequio, una membresía de uso denominada
+                    <b>ALTTUM COLLECTION CLUB ALIANZA</b>, para el uso y usufructo de los diferentes clubes que hagan parte de
+                    la red <b>ALTTUM COLLECTION CLUB ALIANZA</b>, la cual está sujeta a términos y condiciones de uso, a partir de su
+                    activación. Esta membresía no incluye pagos por concepto de administración de uso club. Estos deberán ser cancelados por
+                    parte de <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.</li>
+                
+
+                <li><b>LA PROMITENTE VENDEDORA</b>, se reserva el derecho de hacer la entrega material del lote objeto
+                    de este contrato, a título de mera tenencia, antes del otorgamiento de la escritura pública de compraventa. Para lo
+                    cual, se estima una fecha aproximada de entrega del lote, de <u>{{meses_entrega}}</u> meses, contados a partir de la
+                    firma de este contrato. Para lo cual, se establecerá un acuerdo de tenencia con <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.
+                </li>
+                <li>El proyecto de parcelación utilizará energía solar en su totalidad. La red de alumbrado público
+                    de la Parcelación, estará a cargo de <b>LA PROMITENTE VENDEDORA</b>. Y la energía solar de
+                    cada inmueble estará a cargo en su totalidad de <b>EL(LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>.</li>
+                <li>El proyecto de parcelación contará con red de acueducto, proveniente del acueducto veredal
+                    de la zona, para el suministro de agua veredal a cada inmueble.</li>
+                <li>Se entregará por cada parcela, un pozo séptico recirculación, el cuál será para el uso de dos
+                    (2) fracciones de parcela. <b>LA PROMITENTE VENDEDORA</b> indicará el punto de conexión del
+                    pozo séptico para que <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>, realicen la conexión.</li>
+                <li>Las vías del proyecto de parcelación serán en afirmado.</li>
+
+                <li>Que autorizamos a la sociedad <b>TERRANOVA DESARROLLADORA TURÍSTICA S.A.S</b>, con <b>NIT
+                    900712229-1</b>, para consultar, actualizar y reportar nuestros datos personales o cualquier 
+                    otra información a las centrales de información de riesgos.
+                    La presente autorización faculta a <b>TERRANOVA DESARROLLADORA TURÍSTICA S.A.S</b>, para que pueda
+                    solicitar información a las centrales de riesgos sobre las relaciones comerciales que tenemos 
+                    con cualquier entidad financiera.
+                </li>
+                <li>
+                    Para efectos de protección de los datos personales y su tratamiento de acuerdo a lo
+                    establecido en la Ley 1581 de 2012, y su decreto reglamentario 1377 de 2013, <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b> autoriza (mos) de manera libre, expresa, voluntaria, a
+                    <b>LA PROMITENTE VENDEDORA</b>, la sociedad <b>TERRANOVA DESARROLLADORA
+                    TURÍSTICA S.A.S</b>, con NIT 900712229-1, para recolectar, manejar, almacenar, usar, circular,
+                    actualizar, cruzar información propia, con el fin de facilitar la venta de bienes y servicios de la
+                    empresa, adelantar acciones de cobro y de recuperación de cartera a través de la empresa o
+                    de terceros que este encargue, reportar a centrales de riesgo cuando corresponda, y demás
+                    fines que estipule la empresa en cumplimiento de la obligación contractual derivada de este
+                    contrato; y en general realizar toda acción tendiente al tratamiento de mis datos personales de
+                    acuerdo con la política establecida para tal fin por la empresa como responsable y encargada
+                    de la información. El alcance de la autorización comprende además, la facultad que tiene la
+                    empresa para que, a través de proveedor tecnológico, realice la toma de firma electrónica y
+                    validación de quien firma a través de fotografía digital, de todos los documentos necesarios
+                    para la vinculación contractual entre las partes, como los son: contratos, formularios, pagaré,
+                    autorización para diligenciar espacios en blanco, y demás documentos requeridos en razón a
+                    la vinculación contractual de las partes; para que, envíe mensajes de correo electrónico,
+                    mensajes de texto, mensajes de Whatsapp, correspondencia a mi dirección de residencia, o
+                    lugar de trabajo, de contenidos institucionales, notificaciones, información del estado de
+                    cuenta, saldos, recibos de pago, envió de cartas de cobro pre jurídico y jurídico, y demás fines
+                    que estipule la empresa en cumplimiento de la obligación contractual derivada de este
+                    contrato. En ese sentido, declaro conocer que los datos personales objeto del tratamiento,
+                    serán utilizados para las finalidades derivadas de la relación contractual suscrita entre las
+                    partes. Igualmente conozco el derecho de supresión de datos personales que me asiste, para
+                    lo cual, en caso de solicitarlo, LA PROMITENTE VENDEDORA, procederá conforme a las
+                    políticas de tratamiento de datos personales establecida por misma para tal fin.
+                </li>
+                <li>
+                    Declaramos que, el contenido de este documento es de mi (nuestro) conocimiento y corresponde a lo
+                    suscrito en
+                    el contrato de contrato de promesa de compraventa de bien futuro, proyecto de parcelación
+                    denominado <b>“EL TESORO ESCONDIDO”</b>.
+                </li>
+            </ol>
+            <p class="detalles">
+                En constancia, de aceptación y conocimiento de lo aquí establecido, es firmado el presente formato de
+                verificación
+                por <strong>EL (LOS) PROMITENTE (S) COMPRADOR (ES) </strong>, <u>{{ctr.fecha_contrato.day}} </u> de <u>
+                    {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u>
+                en la ciudad de <u>{{oficina}}</u>.
+            </p><br>
+            <p class="detalles" style="text-align:center;font-size:12px">
+                <b>EL (LOS) PROMITENTE (S) COMPRADOR (ES)</b><br><br><br>
+                <table>
+                    <tr>
+                        <td style="{%if ctr.titulares.1%}width:50%;{%endif%}text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.0.pk}}
+                        </td>
+                        {%if ctr.titulares.1%}
+                        <td style="width:50%;text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.1.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.1.pk}}
+                        </td>
+                        {%endif%}
+                    </tr>
+                    {%if ctr.titulares.2%}
+                    <tr style="padding-top:20px;">
+                        <td style="{%if ctr.titulares.3%}width:50%;{%endif%}text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.2.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.2.pk}}
+                        </td>
+                        {%if ctr.titulares.3%}
+                        <td style="width:50%;text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.3.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.3.pk}}
+                        </td>
+                        {%endif%}
+                    </tr>
+
+                    {%endif%}
+                </table>
+        </div>
+    </body>
+
+    <head>
+        <style>
+            @page {
+                size: letter;
+                background-image: url("/static/img/bg-andina-a4.jpg");
+                @frame content_frame {
+                    /* Content Frame */
+                    left: 1cm;
+                    width: 19.5cm;
+                    top: 1cm;
+                    height: 24.6cm;
+                }
+
+                @frame footer_frame {
+                    /* Static Frame */
+                    -pdf-frame-content: footer_content;
+                    left: 1cm;
+                    width: 19.5cm;
+                    top: 26.4cm;
+                    height: 1.5cm;
+                }
+            }
+
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+            }
+
+            /* Bold */
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                font-weight: bold;
+            }
+
+            body {
+                font-family: Ubuntu;
+            }
+
+            .cuerpo {
+                font-size: 12px;
+                color: rgb(81, 81, 81);
+                line-height: normal;
+                text-align: justify;
+            }
+
+            .detalles {
+                font-size: 12px;
+                color: rgb(81, 81, 81);
+
+                text-align: justify;
+            }
+        </style>
+    </head>
+
+</html>

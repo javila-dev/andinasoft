@@ -1,0 +1,176 @@
+{%extends 'base.html'%}
+{%load static%}
+{%load crispy_forms_tags%}
+{%block title%}Proyectos | Ver adicional{%endblock%}
+{%block style%}
+<style>
+    .row{
+        margin-left: 0px;
+        margin-right: 0px;
+    }
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+    .detailrow input{
+        font-size: small;
+    }
+</style>
+{%endblock%}
+{%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
+{%block content%}
+<div class='principal-container bg-white rounded shadow-lg'>
+    <h3 class='text-white text-center section-title'>Adicional # {{adicional.num_otrosi}}
+        <br><small>Orden # {{contrato.pk}} - {{contrato.proveedor.nombre}}</small>
+        <button type='button' id='exportarAdicional' class='btn btn-primary btn-xl btn-circle float-right mr-3'
+            onclick="exportarPdf()">
+        <i class="fas fa-file-pdf"></i></button>
+    </h3>
+    <div class='mt-2'>
+        {%crispy form%}
+    </div>
+</div>
+<div class="modal fade" id="modalTipoObra" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Tipo de Obra</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <select class="custom-select" id='tipoobramenu'>
+                <option selected>Seleccionar</option>
+                {%for tipo_obra in tipos_obra%}
+                <option value="{{tipo_obra.pk}}">{{tipo_obra.nombre_tipo}}</option>
+                {%endfor%}
+              </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="button" id='selectTipoObra' class="btn btn-primary">Seleccionar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+<input type='text' id='controlTipoObra' hidden>
+{%include 'building/modal_productos.html'%}
+{%include 'building/modal_proveedores.html'%}
+<script>
+    $(document).ready(function(){
+        calcularPagoEfectivo();
+        var row = $('#detaildiv')
+        var disabled = ''
+        var cols_name = '5'
+        var recibidos = ''
+        if ('{{adicional.estado}}'=='Aprobado'){
+            disabled = 'disabled'
+            cols_name = '4'
+            $('#btnsearchProv').prop('disabled',true)
+        } 
+        else{
+            $('#exportarAdicional').prop('disabled',true)
+        }
+        var detalle = JSON.parse('{{items_contrato|escapejs}}')
+        for (i=0;i<detalle.length;i++){
+            var idproducto = detalle[i]['item']
+            var nombreproducto = detalle[i]['nombre']
+            var unid = detalle[i]['unidad']
+            var cantidad = detalle[i]['cantidad']
+            var vr_unit = detalle[i]['vr_unit']
+            var vr_total = detalle[i]['vr_total']
+            var recibidos = detalle[i]['recibidos']
+            var tipoobra  = detalle[i]['obra']
+            var nombreobra = detalle[i]['nombre_obra']
+            if ('{{adicional.estado}}'=='Pendiente'){
+                recibidos = ""
+            }
+            if ('{{adicional.estado}}'=='Aprobado'){
+                recibidos ='<div class="col-1 px-1">'+
+                        '<input type="number" value="'+recibidos+'" name="recibido_item" class="numberinput text-center form-control form-control" required="" disabled id="id_recibido_item">'+
+                    '</div>'
+            } 
+            var actualObra = $('#obra'+tipoobra+'DetailRow')
+            var ObraExists = $(document).find(actualObra)
+            if (ObraExists.length==0){
+                var row = $(document).find('.detailrow')
+                var newP = "<div class='obraDetailRow border-bottom border-gray' id='obra"+tipoobra+"DetailRow'>"+
+                    '<button type="button" class="close" onclick="borrarObra($(this))">'+
+                        '<span aria-hidden="true">&times;</span>'+
+                    '</button>'+
+                    "<p class='pl-2 my-1'><strong>Obra: </strong>"+nombreobra+"</p>"+
+                    '<div id="rowObra'+tipoobra+'">'+
+                    '</div>'+
+                    '<button class="btn" type="button" data-toggle="modal" data-target="#modalProductos" data-obra="'+tipoobra+'">'+
+                        '<i class="fas fa-plus" aria-hidden="true"></i> Agregar item</button>'+
+                    "</div>"
+                if ('{{contrato.estado}}'=='Aprobado'){
+                    var newP = "<div class='obraDetailRow border-bottom border-gray' id='obra"+tipoobra+"DetailRow'>"+
+                    "<p class='pl-2 my-1'><strong>Obra: </strong>"+nombreobra+"</p>"+
+                    '<div id="rowObra'+tipoobra+'">'+
+                    '</div>'+
+                    "</div>"
+                }
+                $('#detaildiv').append(newP)
+            }
+            var row = $('#rowObra'+tipoobra)
+            var newRow = '<div class="row py-2 detailrow">'+
+                ' <div class="col-1 pr-0">'+
+                    '<div class="row">'+
+                        '<div class="col-2 pl-0 pr-1 my-auto">'+
+                            '<button class="btn btn btn-danger btn-sm btn-circle btnremoveline" type="button" '+disabled+'><i class="fas fa-minus" aria-hidden="true"></i></button>'+
+                        '</div>'+
+                        '<div class="col-10 pr-0">'+
+                            '<input type="text" name="item_obra" class="textinput text-center textInput form-control form-control" required="" id="id_item_obra" value="'+idproducto+'" readonly>'+
+                        '</div>'+
+                    '</div>'+
+                '</div>'+
+                '<div class="col-'+cols_name+'">'+
+                    '<input type="text" name="descripcion_item" class="textinput textInput form-control form-control" required="" id="id_descripcion_item" value="'+nombreproducto+'" readonly>'+
+                '</div>'+
+                '<div class="col-1">'+
+                    '<input type="text" name="unidad_item" value="'+unid+'" class="text-center textinput textInput form-control form-control" readonly="True" required="" id="id_unidad_item">'+
+                '</div>'+
+                '<div class="col-1 px-1">'+
+                    '<input type="number" value="'+cantidad+'" name="cantidad_item" class="numberinput text-center form-control form-control" required="" '+disabled+' id="id_cantidad_item">'+
+                '</div>'+recibidos+
+                '<div class="col-2">'+
+                    '<input type="number" value="'+vr_unit+'" name="valor_item" '+disabled+' value="0" step="0.01" class="text-center numberinput form-control form-control" required="" id="id_valor_item">'+
+                '</div>'+
+                '<div class="col-2">'+
+                    '<input type="text" value="'+vr_total+'" name="total_item" value="0" step="0.01" class="text-center numberinput form-control form-control" readonly="True" required="" id="id_total_item">'+
+                '</div>'+
+                '<input type="text" name="obraItem" value="'+tipoobra+'" hidden>'+
+                '</div>'
+            row.append(newRow)
+        }
+    })
+    function exportarPdf(){
+        $.ajax({
+            type:'GET',
+            url:'/reports/adicionales',
+            data:{
+                'adicional':"{{adicional.pk}}"
+            },
+            success:function(response){
+                if (response['valid']){
+                    $('#alert-title').text('!Hecho!')
+                    $('#alert-data').text('')
+                    $('#alert-data').append('Puedes descargar tu archivo haciendo click <a href="'+response['href']+'" target="_blank"><strong>aqui</strong></a>')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                }
+                else{
+                    $('#alert-title').text('!Error!')
+                    $('#alert-data').text(response['error'])
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                }
+            }
+        })
+    }
+</script>
+<script src="{%static 'js/building/contractform.js'%}"></script>
+{%endblock%}

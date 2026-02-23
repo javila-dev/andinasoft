@@ -1,0 +1,18 @@
+{% extends "signin.html" %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+{%load static%}
+
+{% block content %}
+<div class='col-sm-4 offset-4 col-xs-12'>
+  <h2 class='text-align-center'><strong>Registrate</h2>
+    <br/>
+ <img class="mb-4" src="{%static 'img/tierra.png'%}" alt="" width="72" height="72">
+<form method="post" action=".">
+  {% csrf_token %}
+  {{ form|crispy }}
+  <input class='btn btn-primary'type="submit" value="{% trans 'Submit' %}" />
+</form>
+</div>
+{% endblock %}
+

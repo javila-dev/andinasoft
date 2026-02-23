@@ -1,0 +1,500 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Accounting | Principal{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+{%include 'datepicker_gigjo.html'%}
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Movimiento diario</h3>
+    <div class='container pb-3'>
+        <p class='lead pt-2'>Proceso de facturas recibidas</p>
+        <div class='row my-4 px-0 justify-content-center'>
+            <div class='col-md-3 mb-4 py-3 rounded-pill bg-white shadow text-center'>
+                <a href="/accounting/radicarfactura">
+                    <img src="/media/icons/documentos-oficiales.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Radicar</strong></a>
+            </div>
+            <div class='col-md-1 mb-4 my-auto text-center'>
+                <i class="fas fa-2x fa-arrow-right"></i>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/causarfactura">
+                    <img src="/media/icons/inscripcion.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Causar</strong></a>
+            </div>
+            <div class='col-md-1 mb-4 my-auto text-center'>
+                <i class="fas fa-2x fa-arrow-right"></i>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/pagarfactura">
+                    <img src="/media/icons/metodo-de-pago.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Pagar</strong></a>
+            </div>
+        </div>
+        <p class='lead'>Listados</p>
+        <div class='row my-4 px-0 justify-content-around'>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/listafacturas">
+                    <img src="/media/icons/material-de-oficina.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Facturas radicadas</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 mx-2 py-3 rounded-pill bg-white shadow text-center'>
+                <a href="/accounting/listapagos">
+                    <img src="/media/icons/calendario-contable.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Pagos efectuados</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/correspondencia/facturas/pagos_efectuados">
+                    <img src="/media/icons/history.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Lista pagos modulo anterior</strong></a>
+            </div>
+        </div>
+        <p class='lead pt-2'>Movimiento Tesoreria</p>
+        <div class='row my-4 px-0 justify-content-around'>
+            
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/otherincomes">
+                    <img src="/media/icons/recibo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Otros ingresos</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/movement_sheet">
+                    <img src="/media/icons/calendario-lista.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Planilla diaria</strong></a>
+            </div>
+            <!-- <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/correspondencia/facturas/pagar">
+                    <img src="/media/icons/history.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Efectuar pagos modulo anterior</strong></a>
+            </div> -->
+            
+        </div>
+        <p class='lead'>Movimientos bancarios</p>
+        <div class='row my-4 px-0 justify-content-around'>
+            <div class='col-md-3 mb-4 py-3 rounded-pill bg-white shadow text-center'>
+                <a href="/accounting/movements">
+                    <img src="/media/icons/teneduria-de-libros.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Ver/Cargar movimientos</strong></a>
+            </div>
+            <div class='col-md-1 mb-4 my-auto text-center'>
+                <i class="fas fa-2x fa-arrow-right"></i>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/reconciliations">
+                    <img src="/media/icons/revisar.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Conciliaciones</strong></a>
+            </div>
+            <div class='col-md-1 mb-4 my-auto text-center'>
+                <i class="fas fa-2x fa-arrow-right"></i>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="/accounting/reconciliationslist">
+                    <img src="/media/icons/check-list.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Lista conciliaciones</strong></a>
+            </div>
+        </div>
+        <p class='lead'>Interfaces y utilidades</p>
+        <div class='row my-4 px-0 justify-content-around'>
+            
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="#" data-toggle="modal" data-target="#modalEgresos">
+                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Interfaz egresos</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="#" data-toggle="modal" data-target="#modalNotas">
+                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Interfaz notas</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="#" data-toggle="modal" data-target="#modalInterfacesNomina">
+                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Interfaces Nomina</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="#" data-toggle="modal" data-target="#modalInterfacesBanco">
+                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Interfaces Bancarias</strong></a>
+            </div>
+            <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
+                <a href="#" data-toggle="modal" data-target="#modalConciliacionDS">
+                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <strong>Conciliacion DS</strong></a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalConciliacionDS" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Conciliacion DS</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form-conciliacionDS" method="post" enctype="multipart/form-data"> {%csrf_token%}
+                <div class="modal-body">
+                    <div class="container">
+                        <div class="custom-file pb-3 mb-3">
+                            <input type="file" class="custom-file-input" id="id_file_siigo" name='file_siigo'>
+                            <label class="custom-file-label" for="id_file_siigo">SIIGO</label>
+                        </div>
+                        <div class="custom-file pb-3">
+                            <input type="file" class="custom-file-input" id="id_file_dian" name='file_dian'>
+                            <label class="custom-file-label" for="id_file_dian">DIAN</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary btn btn-primary" id="submit-id-comparar-ds">Conciliar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalEgresos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Interfaz Egreso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form-int-egr%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalNotas" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Interfaz notas contables</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form-int-notas%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalInterfacesBanco" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Interfaces bancarias</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form-interfazBanco" method="post"> {%csrf_token%}
+                <div class="modal-body">
+                    <div class="container">
+                        <div class="input-group pb-3">
+                            <div class="input-group-prepend"> 
+                                <label class="input-group-text" for="id_tipo_interf">Tipo</label> 
+                            </div> 
+                            <select name="tipo" class="select form-control custom-select" required id="id_tipo_interf">
+                                <option selected value="">Seleccionar...</option>
+                                <option value="comision">Comisiones</option>
+                                <option value="gtt">GTT</option>
+                            </select>
+                        </div>
+                        <div class="input-group pb-3">
+                                <div class="input-group-prepend"> 
+                                    <label class="input-group-text" for="id_empresa">Proyecto</label> 
+                                </div> 
+                                <select name="proyecto" class="select form-control custom-select" required id="id_proyecto">
+                                    <option selected value="">Seleccionar...</option>
+                                    {%for proyecto in proyectos%}
+                                    <option value="{{proyecto.proyecto}}">{{proyecto.proyecto}}</option>
+                                    {%endfor%}
+                                </select>
+                            </div>
+                        <div class="pb-3">
+                            <input type='text' id='fecha_desde' name='fecha_desde' placeholder="Fecha Desde">
+                        </div>
+                        <div class="pb-3">
+                            <input type='text' id='fecha_hasta' name='fecha_hasta' placeholder="Fecha Hasta">
+                        </div>
+                        <div class="pb-3">
+                            <div class="input-group">
+                                <div class="input-group-prepend"> 
+                                    <label class="input-group-text" for="id_empresa">Empresa</label> 
+                                </div> 
+                                <select name="empresa" class="select form-control custom-select" required id="id_empresa">
+                                    <option selected>Seleccionar</option>
+                                    <option value="Promotora Sandville">Promotora Sandville</option>
+                                    <option value="Status Comercializadora">Status Comercializadora</option>
+                                    <option value="Quadrata Constructores">Quadrata Constructores</option>
+                                    <option value="Promotora Westville">Promotora Westville</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="input-group">
+                                <div class="input-group-prepend"> 
+                                    <label class="input-group-text" for="id_cuenta">Cuenta</label> 
+                                </div> 
+                                <select name="cuenta" class="select form-control custom-select" required id="id_cuenta">
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary btn btn-primary" id="submit-id-generar">Generar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalInterfacesNomina" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Interfaces de nomina</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form-interfazNomina" method="post" enctype="multipart/form-data"> {%csrf_token%}
+                <div class="modal-body">
+                    <div class="container">
+                        <div class="input-group pb-3">
+                            <div class="input-group-prepend"> 
+                                <label class="input-group-text" for="id_tipo_interf">Tipo</label> 
+                            </div> 
+                            <select required name="tipo" class="select form-control custom-select" required id="id_tipo_interf">
+                                <option selected value="">Seleccionar...</option>
+                                <option value="reclasificacion_cc">Reclasificar CC</option>
+                            </select>
+                        </div>
+                        <div class="custom-file pb-3">
+                            <input type="file" class="custom-file-input" id="id_archivonomina" name='archivonomina'>
+                            <label class="custom-file-label" for="id_archivonomina">Nomina</label>
+                        </div>
+                        <div class="input-group pb-3 pt-3">
+                            <div class='input-group-prepend'>
+                                <span class='input-group-text'>Consecutivo</span>
+                            </div>
+                            <input type='number' min="6" name='consecutivo_nomina' id='id_consecutivo_nomina' class='form-control'>
+                        </div>
+                        <div class="input-group pb-3">
+                            <div class='input-group-prepend'>
+                                <span class='input-group-text'>Ultima fila</span>
+                            </div>
+                            <input type='number' min="6" name='ultimafila' id='id_ultimafila' class='form-control'>
+                        </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary btn btn-primary" id="submit-id-generar-nomina">Generar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+  <script>
+    
+    $(document).ready(function () {
+        bsCustomFileInput.init();
+        $('#id_cuentas_egr').prop('multiple',true)
+        $('#id_cuentas_notas').prop('multiple',true)
+        $('#fecha_desde').datepicker({
+            uiLibrary: 'bootstrap4',
+            locale: 'es-es',
+            format: 'yyyy-mm-dd'
+        });
+        $('#fecha_hasta').datepicker({
+            uiLibrary: 'bootstrap4',
+            locale: 'es-es',
+            format: 'yyyy-mm-dd'
+        });
+        $('#id_empresa_egr').on('change',function(){
+            let empresa = $(this).val()
+            $('#id_cuentas_egr').empty()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuentas_egr').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_notas').on('change',function(){
+            let empresa = $(this).val()
+            $('#id_cuentas_notas').empty()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuentas_notas').append(option)
+                    }
+                }
+            })
+        })
+        
+        $('#id_empresa').on('change', function () {
+            var empresa = $(this).val()
+            $.ajax({
+                type: 'GET',
+                url: '/tesoreria/interfaces_tesoreria',
+                data: {
+                    'data_request': 'cuentas_por_empresa',
+                    'empresa': empresa
+                },
+                success: function (response) {
+                    var cuentas = JSON.parse(response['data'])
+                    $('#id_cuenta').children().remove()
+                    $.each(cuentas, function (index, item) {
+                        cuenta = item['fields']['cuentabanco']
+                        var option = "<option value='" + cuenta + "'>" + cuenta +
+                            "</option>"
+                        $('#id_cuenta').append(option)
+                    })
+                }
+            })
+        })
+        $('#formInterfEgr').on('submit',function(e){
+            e.preventDefault();
+            data = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/interfazEgresos',
+                data:data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').html(response.texto)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                },
+            })
+        })
+        
+        $('#form-interfazBanco').on('submit',function(e){
+            e.preventDefault();
+            $('#submit-id-generar').html('Cargando <i class="fas fa-circle-notch fa-spin"></i>'
+            ).addClass('disabled')
+            let formdata = new FormData(this)
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/interfazbanco',
+                data:formdata,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').html('Puedes descargar el archivo <a target="_blank" href="'+response.ruta+'"><strong>Aquí</strong></a>')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                },
+                complete: function(response){
+                    $('#submit-id-generar').html('Generar'
+                    ).removeClass('disabled')
+                }
+            })
+        })
+
+        $('#formInterfNotas').on('submit',function(e){
+            e.preventDefault();
+            
+            data = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/interfacesnotas',
+                data:data,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').html(response.texto)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                }
+            })
+        })
+        $('#form-conciliacionDS').on('submit',function(e){
+            e.preventDefault();
+            siigo = $('#id_file_siigo').val()
+            dian = $('#id_file_dian').val()
+
+            if(!siigo.endsWith(".xlsx") || !dian.endsWith(".xlsx")){
+                $('#alert-title').text('Error!')
+                $('#alert-data').html('Los archivos deben ser Excel (.xlsx)')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return false;
+            }
+            $('#submit-id-comparar-ds').addClass('disabled').text('Cargando...')
+            data = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/ajax_request/revisionds',
+                data:data,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').html(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    $('#modalConciliacionDS').modal('hide')
+                    $('#form-conciliacionDS').trigger('reset')
+                },
+                complete: function(){
+                    $('#submit-id-comparar-ds').removeClass('disabled').text('Conciliar')
+                }
+            })
+        })
+        $('#form-interfazNomina').on('submit',function(e){
+            e.preventDefault();
+            $('#submit-id-generar-nomina').addClass('disabled').text('Cargando...')
+            let data = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/reclasificarnomina',
+                data:data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').html(response.texto)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                },
+                error: function(response){
+                  console.log(response.responseText)  
+                },
+                complete: function(){
+                    $('#submit-id-generar-nomina').removeClass('disabled').text('Generar')
+                }
+            })
+
+        })
+    })
+  </script>
+{%endblock%}

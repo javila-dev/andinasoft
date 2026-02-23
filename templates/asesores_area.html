@@ -1,0 +1,66 @@
+{%extends 'simple_base.html'%}
+{%load static%}
+{%block title%}Mi cuenta{%endblock%}
+{%block style%}
+<link href="{%static 'css/sidebar.css'%}" rel="stylesheet" type="text/css" />
+<link href="{%static 'css/custom_bs.css'%}" rel="stylesheet" type="text/css" />
+{%endblock%}
+{%block content%}
+<div class="wrapper">
+    <!-- Page Content  -->
+    <div id="content">
+        
+        <main>
+            <h2>Collapsible Sidebar Using Bootstrap 4</h2>
+            <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+            <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+            <div class="line"></div>
+
+            <h2>Lorem Ipsum Dolor</h2>
+            <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+            <div class="line"></div>
+
+            <h2>Lorem Ipsum Dolor</h2>
+            <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+            <div class="line"></div>
+
+            <h3>Lorem Ipsum Dolor</h3>
+            <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+        </main>
+        
+    </div>
+</div>  
+<script type="text/javascript">
+    $(document).ready(function () {
+        var mediaqueryList = window.matchMedia("(min-width: 768px)");
+        $('.collapsebutton').on('click', function () {
+            $('#sidebar').toggleClass('minimal');
+            $('#content').toggleClass('nosidebar');
+            if(mediaqueryList.matches) {
+                if ($('#sidebar').hasClass('minimal')){
+                $('#btnsidebar').removeClass('fa-arrow-left')
+                $('#btnsidebar').addClass('fa-arrow-right')
+                }
+                else{
+                    $('#btnsidebar').removeClass('fa-arrow-right')
+                    $('#btnsidebar').addClass('fa-arrow-left')
+                }
+            }
+            else{
+                if ($('#sidebar').hasClass('minimal')){
+                    $('#btnsidebar').removeClass('fa-arrow-right')
+                    $('#btnsidebar').addClass('fa-arrow-left')
+                }
+                else{
+                    $('#btnsidebar').removeClass('fa-arrow-left')
+                    $('#btnsidebar').addClass('fa-arrow-right')
+                }
+            }
+            
+        });
+    });
+</script>
+{%endblock%}

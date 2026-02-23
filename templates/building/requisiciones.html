@@ -1,0 +1,131 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Proyectos | Requisiciones{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+    div.detailrow input{
+        font-size: small;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Requisiciones
+        <button type='button' id='addRequisicion' class='btn btn-primary btn-xl btn-circle float-right mr-3'
+            data-toggle="modal" data-target="#modalRequisicion" data-new="1">
+        <i class="fas fa-plus"></i></button>
+    </h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaReq' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Id Req</th>
+                    <th>Fecha</th>
+                    <th>Usuario</th>
+                    <th>Proyecto</th>
+                    <th>Descripcion</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for req in requisiciones%}
+                <tr>
+                    <td class='text-center'>
+                        <a href="#" onclick="abrirDetalleReq({{req.pk}})"><strong>{{req.pk}}</strong></a></td>
+                    <td class='text-center'>{{req.fecha|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{req.usuario_crea.username}}</td>
+                    <td class='text-center'>{{req.proyecto.proyecto}}</td>
+                    <td>{{req.descripcion.upper|truncatechars:20}}</td>
+                    <td class='text-center'>{{req.estado}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalRequisicion" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalTipoObra" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Tipo de Obra</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <select class="custom-select" id='tipoobramenu'>
+                <option selected>Seleccionar</option>
+                {%for tipo_obra in tipos_obra%}
+                <option value="{{tipo_obra.pk}}">{{tipo_obra.nombre_tipo}}</option>
+                {%endfor%}
+              </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="button" id='selectTipoObra' class="btn btn-primary">Seleccionar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalProductos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel"><i class="fas fa-hand-pointer"></i>&nbsp;Selecciona el producto o servicio</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <input type='text' id='obraAsignar' hidden>
+          <div class='table-responsive'>
+              <table id='tablaProductos' class='display' style='width: 100%;'>
+                <thead>
+                    <tr>
+                        <th class='text-center'>Id</th>
+                        <th class='text-center'>Descripcion</th>
+                        <th class='text-center'>Unidad</th>
+                        <th class='text-center'>Tipo</th>
+                    </tr>
+                </thead>
+              </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<input type='text' id='controlTipoObra' hidden>
+<script src="{%static 'js/building/requeriments.js'%}"></script>
+{%endblock%}

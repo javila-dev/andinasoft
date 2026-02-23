@@ -1,0 +1,237 @@
+{%extends 'base.html'%}
+{%block title%}Asociar cuentas de gasto{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Cuentas de gasto {{empresa}}</strong>
+        <button class='btn btn-primary float-right' type='button' data-toggle='modal'
+            data-target='#modalNuevaCuenta'>Nueva Cuenta</button>
+    </h4>
+    <br>
+    <table id='tablaCuentas' class="hover stripe row-border compact" style="width:100%">
+        <thead>
+            <tr>
+                <th class='text-center'>Cuenta</th>
+                <th class='text-center'>Descripcion</th>
+                <th class='text-center'>Item Asociado</th>
+                <th class='text-center'>Grupo</th>
+                <th class='text-center'>Descripcion</th>
+            </tr>
+        </thead>
+        <tbody>
+            {%for cuenta in cuentas%}
+            <tr>
+                <td class="text-center"><a href="#" data-toggle="modal" data-target="#modalAsociarCuentas"
+                        data-cuenta='{{cuenta.cuenta}}' data-grupo='{{cuenta.grupo_item}}' data-item='{{cuenta.item}}'>
+                        <small>{{cuenta.cuenta}}</small></a></td>
+                <td><small>{{cuenta.descrip_cta}}<small></td>
+                <td class="text-center"><small>{{cuenta.item}}</small></td>
+                <td class="text-center">
+                    <small class="text-center">{{cuenta.grupo_item}}</small>
+                </td>
+                <td><small class="text-center">{{cuenta.descrip_item}}</small></td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalAsociarCuentas" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Asociar Cuentas de Gasto</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type='text' id='filatabla' hidden>
+                <input type="text" id="cuenta" hidden>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="Grupo">Grupo Gasto</label>
+                    </div>
+                    <select class="custom-select" id="Grupo" name='Grupo'>
+                        <option selected>...</option>
+                        <option value="GASTO COMERCIAL">Gasto Comercial</option>
+                        <option value="GASTO ADMINISTRATIVO">Gasto Administrativo</option>
+                        <option value="GASTO ALTTUM">Gasto Alttum</option>
+                        <option value="GASTO PROYECTOS">Gasto Proyectos</option>
+                        <option value="GASTO TIERRAS">Gasto Tierras</option>
+                    </select>
+                </div>
+                <br>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="Item" style="padding-right: 70px;">Item</label>
+                    </div>
+                    <select class="custom-select" id="Item" name='Item'>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button id="btnAsociar" type="button" class="btn btn-primary" onclick="AsociarItem()">Asociar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalNuevaCuenta" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Agregar nueva cuenta asociada</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form method="POST">{%csrf_token%}
+                <div class="modal-body">
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <label class="input-group-text" for="idCuenta" style="padding-right: 50px;">Cuenta</label>
+                        </div>
+                        <input type='text' class='form-control text-center' placeholder="00000000" id='idCuenta'
+                            name='idCuenta' minlength="8" maxlength="8" required >
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <label class="input-group-text" for="DescripCuenta" style="padding-right: 20px;">Descripcion</label>
+                        </div>
+                        <input type='text' class='form-control text-center' id='DescripCuenta'
+                            name='DescripCuenta' required >
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <label class="input-group-text" for="NuevaCtaGrupo">Grupo Gasto</label>
+                        </div>
+                        <select class="custom-select" id="NuevaCtaGrupo" name='NuevaCtaGrupo'>
+                            <option selected>...</option>
+                            <option value="GASTO COMERCIAL">Gasto Comercial</option>
+                            <option value="GASTO ADMINISTRATIVO">Gasto Administrativo</option>
+                            <option value="GASTO ALTTUM">Gasto Alttum</option>
+                            <option value="GASTO PROYECTOS">Gasto Proyectos</option>
+                            <option value="GASTO TIERRAS">Gasto Tierras</option>
+                        </select>
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <label class="input-group-text" for="NuevaCtaItem" style="padding-right: 70px;">Item</label>
+                        </div>
+                        <select class="custom-select" id="NuevaCtaItem" name='NuevaCtaItem'>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                    <input id="btnAsociar" type="submit" class="btn btn-primary" value='Crear'>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    var tablaCuentas = $('#tablaCuentas').DataTable({
+        "pageLength": 25,
+        'lengthMenu': [
+            [10, 25, 50, -1],
+            [10, 25, 50, 'All']
+        ],
+    })
+    $('#tablaCuentas tbody').on('click', 'tr', function () {
+        if ($(this).hasClass('selected')) {
+            $(this).removeClass('selected');
+        } else {
+            tablaCuentas.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        var pos = tablaCuentas.row(this).index();
+        $('#filatabla').val(tablaCuentas.row(pos)[0])
+    });
+    $('#NuevaCtaGrupo').on('change', function () {
+        var grupo = $('#NuevaCtaGrupo').val()
+        CargarOpciones(grupo,$('#NuevaCtaItem'));
+    });
+    $('#Grupo').on('change', function () {
+        var grupo = $('#Grupo').val()
+        CargarOpciones(grupo,$('#Item'));
+    });
+    $('#modalAsociarCuentas').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget) // Button that triggered the modal
+        var cuenta = button.data('cuenta')
+        var grupo = button.data('grupo')
+        var item = button.data('item')
+        $('#btnAsociar').text('')
+        $('#btnAsociar').text('Asociar')
+        $('#cuenta').val(cuenta)
+        $('#Grupo').val(grupo)
+        CargarOpciones(grupo,$('#Item'),parseInt(item))
+    });
+
+    function CargarOpciones(grupo_gasto, object_item, option_selected = 0) {
+        $.ajax({
+            url: "/contabilidad/informes/gastos/asociar_cuentas/{{empresa}}",
+            type: "GET",
+            data: {
+                'typecall': 'selectOptions',
+                'grupo': grupo_gasto
+            },
+            success: function (response) {
+                var items = JSON.parse(response['items'])
+                var selectItem = object_item
+                selectItem.empty()
+                for (i = 0; i < items.length; i++) {
+                    var item = items[i]['fields']
+                    var option = $('<option>')
+                    option.attr('value', items[i]['pk'])
+                    option.text(items[i]['pk'] + ". " + item['temas'])
+                    if (option_selected != 0) {
+                        var value = items[i]['pk']
+                        if (value == option_selected) {
+                            option.attr('selected', true)
+                        }
+                    }
+                    selectItem.append(option)
+                }
+            }
+        });
+    };
+
+    function AsociarItem() {
+        $('#btnAsociar').text('')
+        $('#btnAsociar').append('<i class="fas fa-circle-notch fa-spin"></i>')
+        var row = $('#filatabla').val()
+        var cuenta = $('#cuenta').val()
+        var item = $('#Item').val()
+        $.ajax({
+            url: '/contabilidad/informes/gastos/asociar_cuentas/{{empresa}}',
+            type: 'GET',
+            data: {
+                'typecall': 'ChangeAsociation',
+                'cuenta': cuenta,
+                'item': item,
+            },
+            success: function (response) {
+                var pass = response['passed']
+                var descripcion = response['descrip_item']
+                var grupo = response['grupo_item']
+                if (pass) {
+                    var nuevo_item = '<small>' + item + '</small>'
+                    var nuevo_descrip = '<small class="text-center">' + descripcion + '</small>'
+                    var nuevo_grupo = '<small class="text-center">' + grupo + '</small>'
+                    tablaCuentas.cell(row, 2).data(nuevo_item).draw()
+                    tablaCuentas.cell(row, 3).data(nuevo_grupo).draw()
+                    tablaCuentas.cell(row, 4).data(nuevo_descrip).draw()
+                    $('#modalAsociarCuentas').modal('hide')
+                }
+            }
+        });
+    }
+</script>
+{%endblock%}

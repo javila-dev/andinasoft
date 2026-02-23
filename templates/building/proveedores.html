@@ -1,0 +1,123 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Proyectos | Proveedores{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Proveedores
+        <button type='button' id='exportarActa' class='btn btn-primary btn-xl btn-circle float-right mr-3'
+            data-toggle="modal" data-target="#modalProveedores" data-new="1">
+        <i class="fas fa-plus"></i></button>
+    </h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaContratosPendientes' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Nit</th>
+                    <th>Nombre</th>
+                    <th>Telefono</th>
+                    <th>Direccion</th>
+                    <th>Rut</th>
+                    <th>Certificado bancario</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for proveedor in proveedores%}
+                <tr>
+                    <td class='text-center'>
+                        <a href="#" data-toggle='modal' data-target='#modalProveedores' 
+                            data-title='{{proveedor.nombre}}' data-nit="{{proveedor.pk}}"
+                            data-tel="{{proveedor.telefono}}" data-direc="{{proveedor.direccion}}">
+                        {{proveedor.pk}}</a></td>
+                    <td>{{proveedor.nombre}}</td>
+                    <td class='text-center'>{{proveedor.telefono}}</td>
+                    <td class='text-center'>{{proveedor.direccion}}</td>
+                    <td class='text-center'>
+                        {%if proveedor.doc_rut != ""%}
+                        <a href='/media/{{proveedor.doc_rut}}' target="_blank">Ver</a>
+                        {%else%}
+                        No cargado
+                        {%endif%}
+                    </td>
+                    <td class='text-center'>
+                        {%if proveedor.doc_cert_bancaria != ""%}
+                        <a href='/media/{{proveedor.doc_cert_bancaria}}' target="_blank">Ver</a>
+                        {%else%}
+                        No cargado
+                        {%endif%}
+                    </td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalProveedores" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form%}
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+    $(document).ready(function(){
+        $('form').on('submit',function(){
+            $('input[type="submit"]').addClass('disabled')
+            $('input[type="submit"]').on('click',function(){
+                $(this).prop('disabled',true)
+            })
+        })
+        $('#modalProveedores').on('show.bs.modal',function(event){
+            var trigger = $(event.relatedTarget)
+            var nuevo = trigger.data('new')
+            var titulo = trigger.data('title')
+            var nit = trigger.data('nit')
+            var tel = trigger.data('tel')
+            var direc = trigger.data('direc')
+            $('#id_Nit').val(nit)
+            $('#id_Nombre').val(titulo)
+            $('#id_Telefono').val(tel)
+            $('#id_Direccion').val(direc)
+            $(this).find('.modal-title').text('Datos ' + titulo)
+            if (nuevo==1){
+                $(this).find('.modal-title').text('Crear proveedor')
+            }
+
+        });
+        var tablaContratosPdtes = $('#tablaContratosPendientes').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "order": [[ 1, "asc" ]],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+            }
+        })
+    });
+</script>
+{%endblock%}

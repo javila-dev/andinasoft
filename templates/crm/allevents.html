@@ -1,0 +1,179 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}CRM | Administrar eventos{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: smaller;
+        text-align: center;
+    }
+    .dataTables_length {
+        padding-left: 8px;
+    }
+
+    .dataTables_filter {
+        padding-right: 8px;
+    }
+
+    .dataTables_info {
+        padding-left: 8px;
+    }
+    .dt-buttons{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Administrar eventos</h3>
+    <div class='table-responsive'>
+        <table id='tablaEventos' class='display' style='width:100%'>
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Operacion</th>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                    <th>Citas</th>
+                    <th>Pendientes</th>
+                    <th>Asistio</th>
+                    <th>No asistio</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+        </table>'
+    </div>
+</div>
+<div class="modal fade" id="modalDetEvento" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Asistentes Evento</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class='table-responsive'>
+              <table id='tablaAsistentes' class='display' style='width:100%'>
+                  <thead>
+                      <tr>
+                          <th>Lead</th>
+                          <th>Estado</th>
+                          <th>Gestor</th>
+                      </tr>
+                  </thead>
+              </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+    $(document).ready(function(){
+        var tablaEventos = $('#tablaEventos').DataTable({
+            "language": {
+                "url": "/ajax_request/datatable_spanish"
+            },
+            'order':[0,'desc'],
+            lengthChange: false,
+            dom: 'Bfrtip',
+            buttons: [ 'pageLength','copy', 'excel', 
+                {
+                    extend: 'pdfHtml5',
+                    mesageTop: 'Administrar Leads'
+                }    
+            ],
+            'ajax': {
+                'url': '/crm/ajax/admin_event',
+                "dataSrc": "data"
+            },
+            "columns": [{
+                    "data": "pk"
+                },
+                {
+                    "data": "operacion"
+                },
+                {
+                    "data": "fecha"
+                },
+                {
+                    "data": "hora"
+                },
+                {
+                    "data": "programados"
+                },
+                {
+                    "data": "pendientes"
+                },
+                {
+                    "data": "asistio"
+                },
+                {
+                    "data": "no_asistio"
+                },
+                {
+                    "data": "estado"
+                },
+            ],
+            "displayLength": 25,
+        });
+        tablaEventos.buttons().container()
+        .appendTo( '#tablaEventos_wrapper .col-md-6:eq(0)' );
+        var tablaAsistentes = $('#tablaAsistentes').DataTable({
+            "language": {
+                "url": "/ajax_request/datatable_spanish"
+            },
+            'order':[0,'desc'],
+            lengthChange: false,
+            dom: 'Bfrtip',
+            buttons: [ 'pageLength','copy', 'excel', 
+                {
+                    extend: 'pdfHtml5',
+                    mesageTop: 'Administrar Leads'
+                }    
+            ],
+            'ajax': {
+                'url': '/crm/ajax/eventleads?asesor=TODOS',
+                "dataSrc": "data"
+            },
+            "columns": [{
+                    "data": "nombre"
+                },
+                {
+                    "data": "asistencia"
+                },
+                {
+                    "data": "gestor_asignado"
+                },
+            ],
+            "displayLength": 25,
+        });
+        tablaAsistentes.buttons().container()
+        .appendTo( '#tablaAsistentes_wrapper .col-md-6:eq(0)' );
+        
+        $('#tablaEventos tbody').on('click','tr',function(){
+            var row = tablaEventos.row(this).data()
+            $('#tablaEventos tr').removeClass('selected')
+            $(this).addClass('selected')
+            var op = row.id_operacion
+            var evento = row.pk
+            var url = '/crm/ajax/eventleads?asesor=TODOS&operacion='+op+
+                '&evento='+evento+'&estado=TODOS'
+            tablaAsistentes.ajax.url(url).load()
+            $('#modalDetEvento').modal('show')
+        });
+
+        $('#modalDetEvento').on('hide.bs.modal',function(){
+            $('#tablaEventos tr').removeClass('selected')
+        })
+    });
+</script>
+{%endblock%}

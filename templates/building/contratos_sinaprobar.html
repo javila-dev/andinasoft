@@ -1,0 +1,70 @@
+{%extends 'base.html'%}
+{%load mathfilters%}
+{%block title%}Proyectos | Contratos sin aprobar{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Ordenes sin aprobar</h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaContratosPendientes' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Proveedor</th>
+                    <th>Fecha</th>
+                    <th>Proyecto</th>
+                    <th>Valor</th>
+                    <th>Inicio</th>
+                    <th>Fin</th>
+                    <th>Usuario</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for contrato in contratos_sinaprobar%}
+                <tr>
+                    <td class='text-center'>
+                        <a href='/buildingcontrol/viewcontract/{{contrato.pk}}'>
+                        {{contrato.pk}}</a></td>
+                    <td>{{contrato.proveedor.nombre}}</td>
+                    <td class='text-center'>{{contrato.fecha_creacion|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{contrato.proyecto.proyecto}}</td>
+                    <td class='text-center'>{{contrato.valor|default:0}}</td>
+                    <td class='text-center'>{{contrato.fecha_inicio|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{contrato.fecha_fin|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{contrato.usuario_crea.username}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    $(document).ready(function(){
+        var tablaContratosPdtes = $('#tablaContratosPendientes').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+            }
+        })
+    });
+</script>
+{%endblock%}

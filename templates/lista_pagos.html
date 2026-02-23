@@ -1,0 +1,128 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+
+{%block title%}Tesoreria | Pagos efectuados{%endblock%}
+
+{%block content%}
+<style>
+    td{
+        font-size: small;
+    }
+</style>
+<div class="bg-white rounded shadow principal-container" >
+    <h4 class='border-bottom border-gray section-title text-center text-white' >Pagos Realizados</h4>
+    <table id='tabla-pagos' class='hover row-border compact striped' style='width:100%;'>
+        <thead>
+            <tr>
+                <th class='text-center'>Radicado</th>
+                <th class='text-center'>Tercero</th>
+                <th class='text-center'>Fecha</th>
+                <th class='text-center'>Factura</th>
+                <th class='text-center'>Empresa</th>
+                <th class='text-center'>Cuenta</th>
+                <th class='text-center'>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            {%for pago in pagos%}
+            <tr>
+                <td class='text-center'><a href='#' data-toggle="modal" data-target="#modalRecibir" 
+                    data-radicado='{{pago.nroradicado}}' data-pago='{{pago.pk}}'>
+                        {{pago.nroradicado}}</td>
+                <td>{{pago.tercero}}</td>
+                <td class='text-center'>{{pago.fecha|date:'d/m/Y'}}</td>
+                <td class='text-center'>{{pago.factura}}</td>
+                <td class='text-center'>{{pago.empresa}}</td>
+                <td class='text-center'>{{pago.forma}}</td>
+                <td class='text-center'>${{pago.valor}}</td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>    
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalRecibir" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form method='post' action='' enctype="multipart/form-data" id='form-soportes'>{%csrf_token%}
+            <input type="text" id="numero-pago" name='numero-pago' hidden>
+            <input type="text" id="numero-radicado" name='numero-radicado' hidden>
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">¿Que deseas hacer?</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class='modal-body' id='modal-body'>
+            <p class="lead" id="codigoPago"></p>
+            <p class='lead'>Cargar Soporte</p>
+            <div class="input-group">
+                <div class="custom-file">
+                  <input type="file" class="custom-file-input" id="cargar-soporte" name='cargar-soporte' aria-describedby="inputGroupFileAddon04" required>
+                  <label class="custom-file-label" for="cargar-soporte">No se ha seleccionado ningun archivo...</label>
+                </div>
+                <div class="input-group-append">
+                  <button class="btn btn-outline-secondary" type="submit" id="inputGroupFileAddon04">Cargar</button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+          <div class='btn-group'>
+            
+            <a id ='link-ver' href="#" class="btn btn-primary" role="button">Ver Soporte</a>
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {%include 'alert.html'%}
+<script>
+    $(document).ready(function() {
+        bsCustomFileInput.init()
+    var tablapagos=$('#tabla-pagos').DataTable({
+                    'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+                    "pageLength": 25,
+                    "order": [[ 2, "desc" ]],
+                    columnDefs: [
+                { type: 'date-uk', targets: 2 }
+                ],
+                'scrollX':        true,
+        });
+        $('#tabla-pagos tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablapagos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+    });
+    $('#modalRecibir').on('show.bs.modal', function (event) {
+    var button = $(event.relatedTarget) // Button that triggered the modal
+    var radicado = button.data('radicado') // Extract info from data-* attributes
+    var pago = button.data('pago')
+    $('#codigoPago').text('Codigo del pago: '+pago)
+    // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+    // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
+    var modal = $(this)
+    document.getElementById('link-ver').setAttribute('href','/docs_andinasoft/docs_radicados/Soportes_Pago/Soporte_Pago_'+pago+'_Radicado_'+radicado+'.pdf')
+    $('#numero-radicado').val(radicado)
+    $('#numero-pago').val(pago)
+    });
+    $('#form-soportes').submit(function(e){
+        var nombredoc=$('#cargar-soporte').val();
+        if (nombredoc.endsWith('.pdf')){
+            
+        }
+        else {
+            e.preventDefault()
+            $('#alerta-general').modal('show')
+            document.getElementById('mensaje-alerta').innerHTML='El documento a cargar debe ser PDF';
+            document.getElementById('titulo-alerta').innerHTML='Error';
+        }
+    })
+});
+</script>
+{%endblock%}

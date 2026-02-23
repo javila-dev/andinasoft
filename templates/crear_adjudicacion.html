@@ -1,0 +1,354 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%load static%}
+
+{%block title%}Adjudicar contrato {{contrato}}{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <form id='formDesaprobar' method='POST'>{%csrf_token%}
+        <div class='row mx-0'>
+            <div class='d-flex'>
+                <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>
+                    <i class="far fa-plus-square"></i> Adjudicar Contrato {{contrato}}</strong>
+                </h4>
+            </div>
+            <div class='d-flex ml-sm-auto'>
+                <input class='btn btn-outline-danger  my-2' type='submit' value='Desaprobar' name='btnDesaprobar'>
+            </div>
+        </div>
+    
+    </form>
+    <br/>
+    <nav>
+        <div class="nav nav-tabs" id="nav-tab" role="tablist">
+            <a class="nav-item nav-link active" id="nav-infocontrato-tab" data-toggle="tab" href="#nav-infocontrato" role="tab" aria-controls="nav-infocontrato" aria-selected="true">Informacion Contrato</a>
+            <a class="nav-item nav-link" id="nav-escala-tab" data-toggle="tab" href="#nav-escalacomis" role="tab"
+                aria-controls="nav-escala" aria-selected="false">Escala de comisiones</a>
+            <a class="nav-item nav-link" id="nav-infocontrato-tab" data-toggle="tab" href="#nav-recibos" role="tab" aria-controls="nav-recibos" aria-selected="false">Recaudos</a>
+            <a class="nav-item nav-link" id="nav-infocontrato-tab" data-toggle="tab" href="#nav-documentos" role="tab" aria-controls="nav-documentos" aria-selected="false">Documentos</a>
+            <a class="nav-item nav-link" id="nav-infocontrato-tab" data-toggle="tab" href="#nav-operaciones" role="tab" aria-controls="nav-operaciones" aria-selected="false">Revision Operaciones</a>
+        </div>
+        </nav>
+        <div class="tab-content" id="nav-tabContent">
+        <div class="tab-pane fade show active" id="nav-infocontrato" role="tabpanel" aria-labelledby="nav-infocontrato-tab">{%include 'form_contrato_venta.html'%}</div>
+        <div class="tab-pane fade" id="nav-escala" role="tabpanel" aria-labelledby="nav-escala-tab">{%include 'form_escala_comis.html'%}</div>
+        <div class="tab-pane fade" id="nav-escalacomis" role="tabpanel" aria-labelledby="nav-escalacomis-tab">
+            <form id='formEscala' class='g-3' method="POST">{%csrf_token%}
+                <div class='d-inline-flex gap-3 mt-3'>
+                  <div class=" input-group mb-3">
+                      <label for="cargo" class="input-group-text">Cargo</label>
+                      <select class="form-select form-control" name="cargo" id="id_cargo">
+                          <option selected>Selecciona...</option>
+                          {%for cargo in cargos_comisiones%}<option value="{{cargo.pk}}">{{cargo.nombrecargo}}</option>{%endfor%}
+                      </select>
+                  </div>
+                  <div class='ml-3'>
+                      <button type="button" class="btn btn-primary btn-circle" id="btnAgrCargoComis"> 
+                          <i class="fas fa-plus"></i>
+                      </button>
+                  </div>
+                </div>
+                <div class="table-responsive">
+                    <table id='tablaEscalaComis' class='table table-sm row-border' style="width: 100%;">
+                        <thead class='thead-dark'>
+                            <tr>
+                                <th style="width: 8%;"></th>
+                                <th style="width: 17%;">Id Asesor</th>
+                              <th style="width: 35%;">Asesor</th>
+                              <th style="width: 30%;">Cargo</th>
+                              <th style="width: 10%;">Comision</th>
+                            </tr>
+                        </thead>
+                      <tbody></tbody>
+                    </table>
+                </div>
+                <div class='d-flex'>
+                    <button type="submit" id='btnGrabarEscala' class="btn btn-primary ml-auto">Registrar</button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="tab-pane fade" id="nav-recibos" role="tabpanel" aria-labelledby="nav-recibos-tab">
+            <div class='container'>
+                <br/>
+            <div class='table-responsive'>
+                <table class='table table-sm table-striped'>
+                    <thead class='thead thead-light'>
+                        <tr>
+                            <th class='text-center'>Recibo</th>
+                            <th class='text-center'>Fecha</th>
+                            <th class='text-center'>Forma de Pago</th>
+                            <th class='text-center'>Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%for recibo in recibos_generados%}
+                        <tr>
+                            <td class='text-center'>{{recibo.recibo}}</td>
+                            <td class='text-center'>{{recibo.fecha}}</td>
+                            <td class='text-center'>{{recibo.formapago}}</td>
+                            <td class='text-center'> ${{recibo.valor}}</td>
+                        </tr>
+                        {%endfor%}
+                    </tbody>
+                </table>
+            </div>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="nav-documentos" role="tabpanel" aria-labelledby="nav-escala-tab">{%include 'docs_contratos.html'%}</div>
+        <div class="tab-pane fade" id="nav-operaciones" role="tabpanel" aria-labelledby="nav-operaciones-tab">
+            <br/>
+            <div class='container'>
+                <form method="post" action=''>{%csrf_token%}
+                    {{form_op|crispy}}
+                    <input type='submit' class='btn btn-primary right' value='Aprobar'>
+                </form>
+            </div>
+        </div>
+        </div>
+        
+    <!-- Modal -->
+    <div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+            </div>
+            <div class="modal-body">
+            {%if link%}
+                <a href="{{ruta_link}}" class='lead text-center'><p class='lead' id='mensaje-alerta'></p></a>
+            {%else%}
+                <p class='lead' id='mensaje-alerta'></p>
+            {%endif%}
+            </div>
+            <div class="modal-footer">
+            {%if redireccion%}
+                <a href='{{redirect}}' type="button" class="btn btn-primary" >Entendido</a>
+            {%else%}
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+            {%endif%}
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modal-cargando" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-body">
+          <h1 class='text-center' id='texto'>Desaprobando venta <i class="fas fa-cog fa-spin"></i></h1>
+        </div>
+    </div>
+</div>
+{{form_op.media}}
+<script>
+    $('#nro-ctas-ci').val(7)
+    $(document).ready(function() {
+        $('#formDesaprobar').on('submit',function(){
+            $('#modal-cargando').modal('show')
+        })
+    $('#tasa-valor').val('{{datos_venta.tasa|unlocalize}}')
+    $('#titular1').val('{{datos_venta.id_t1}}')
+    document.getElementById('nombre-titular1').innerHTML='{{datos_t1.nombrecompleto}}'
+    $('#titular2').val('{{datos_venta.id_t2}}')
+    document.getElementById('nombre-titular2').innerHTML='{{datos_t2.nombrecompleto}}'
+    $('#titular3').val('{{datos_venta.id_t3}}')
+    document.getElementById('nombre-titular3').innerHTML='{{datos_t3.nombrecompleto}}'
+    $('#titular4').val('{{datos_venta.id_t4}}')
+    document.getElementById('nombre-titular4').innerHTML='{{datos_t4.nombrecompleto}}'
+    $('#inmueble').val('{{datos_venta.inmueble}}')
+    document.getElementById('valor-letras').innerHTML='{{datos_inmueble.areaprivada}} mts2'
+    $('#valor').val('{{datos_venta.valor_venta|unlocalize}}')
+    var numero_en_letras=numeroALetras('{{datos_venta.valor_venta|unlocalize}}');
+    $('#valor_letras').val(numero_en_letras+'M/CTE')
+    $('#vr_ci').val('{{datos_venta.cuota_inicial|unlocalize}}')
+    $('#formas_de_pago').val('{{datos_venta.forma_pago}}')
+    $('#forma_plan_pagos').val('{{datos_venta.forma_saldo}}')
+    $('#cant_fn').val('{{datos_venta.nro_cuotas_fn}}')
+    $('#fecha_ini_fn').val('{{datos_venta.inicio_fn|date:"Y-m-d"}}')
+    $('#valor_fn').val('{{datos_venta.valor_ctas_fn|unlocalize}}')
+    $('#cant_ce').val('{{datos_venta.nro_cuotas_ce}}')
+    $('#periodo_ce').val('{{datos_venta.period_ce}}')
+    $('#fecha_ini_ce').val('{{datos_venta.inicio_ce|date:"Y-m-d"}}')
+    $('#valor_ce').val('{{datos_venta.valor_ctas_ce|unlocalize}}')
+    $('#cant_ci_1').val('{{datos_venta.cant_ci1}}')
+    $('#fecha_ini_ci1').val('{{datos_venta.fecha_ci1|date:"Y-m-d"}}')
+    $('#valor_ci1').val('{{datos_venta.valor_ci1|unlocalize}}')
+    $('#cant_ci_2').val('{{datos_venta.cant_ci2}}')
+    $('#fecha_ini_ci2').val('{{datos_venta.fecha_ci2|date:"Y-m-d"}}')
+    $('#valor_ci2').val('{{datos_venta.valor_ci2|unlocalize}}')
+    $('#cant_ci_3').val('{{datos_venta.cant_ci3}}')
+    $('#fecha_ini_ci3').val('{{datos_venta.fecha_ci3|date:"Y-m-d"}}')
+    $('#valor_ci3').val('{{datos_venta.valor_ci3|unlocalize}}')
+    $('#cant_ci_4').val('{{datos_venta.cant_ci4}}')
+    $('#fecha_ini_ci4').val('{{datos_venta.fecha_ci4|date:"Y-m-d"}}')
+    $('#valor_ci4').val('{{datos_venta.valor_ci4|unlocalize}}')
+    $('#cant_ci_5').val('{{datos_venta.cant_ci5}}')
+    $('#fecha_ini_ci5').val('{{datos_venta.fecha_ci5|date:"Y-m-d"}}')
+    $('#valor_ci5').val('{{datos_venta.valor_ci5|unlocalize}}')
+    $('#cant_ci_6').val('{{datos_venta.cant_ci6}}')
+    $('#fecha_ini_ci6').val('{{datos_venta.fecha_ci6|date:"Y-m-d"}}')
+    $('#valor_ci6').val('{{datos_venta.valor_ci6|unlocalize}}')
+    $('#cant_ci_7').val('{{datos_venta.cant_ci7}}')
+    $('#fecha_ini_ci7').val('{{datos_venta.fecha_ci7|date:"Y-m-d"}}')
+    $('#valor_ci7').val('{{datos_venta.valor_ci7|unlocalize}}')
+    $('#observaciones').val('{{datos_venta.observaciones}}')
+    
+    calcular_por_valor()
+    diferencia_ci()
+    plan_pagos=$('#forma_plan_pagos').val()
+    if (plan_pagos=='Regular'){
+            document.getElementById('valor_ce').readOnly=true
+            document.getElementById('fecha_ini_ce').disabled=true
+            document.getElementById('cant_ce').disabled=true
+            document.getElementById('valor_fn').readOnly=true
+            document.getElementById('periodo_ce').disabled=true
+        }
+        else{
+            document.getElementById('valor_fn').readOnly=false
+            document.getElementById('valor_ce').readOnly=true
+            document.getElementById('fecha_ini_ce').disabled=false
+            document.getElementById('cant_ce').disabled=false 
+            document.getElementById('periodo_ce').disabled=false
+        }
+    $('#cc_generador').val('{{generador.idgestor}}')
+    $('#porc_generador').val(parseFloat('{{generador.comision|unlocalize}}'))
+    document.getElementById('name-generador').innerHTML = '{{generador.nombre}}'
+    $('#cc_linea').val('{{linea.idgestor}}')
+    $('#porc_linea').val(parseFloat('{{linea.comision|unlocalize}}'))
+    document.getElementById('name-linea').innerHTML = '{{linea.nombre}}'
+    $('#cc_cerrador').val('{{cerrador.idgestor}}')
+    $('#porc_cerrador').val(parseFloat('{{cerrador.comision|unlocalize}}'))
+    document.getElementById('name-cerrador').innerHTML = '{{cerrador.nombre}}'
+    $('#cc_tlmk').val('{{tlmk.idgestor}}')
+    $('#porc_tlmk').val(parseFloat('{{tlmk.comision|unlocalize}}'))
+    document.getElementById('name-tlmk').innerHTML = '{{tlmk.nombre}}'
+    $('#cc_jefep').val('{{jefep.idgestor}}')
+    $('#porc_jefep').val(parseFloat('{{jefep.comision|unlocalize}}'))
+    document.getElementById('name-jefep').innerHTML = '{{jefep.nombre}}'
+    $('#cc_jefev').val('{{jefev.idgestor}}')
+    $('#porc_jefev').val(parseFloat('{{jefev.comision|unlocalize}}'))
+    document.getElementById('name-jefev').innerHTML = '{{jefev.nombre}}'
+    $("#botones-escala").css("display","none")
+    for (i=1;i<7;i++){
+        document.getElementById('btns-escala'+i+'a').disabled = true;
+        document.getElementById('btns-escala'+i+'b').disabled = true;
+    }
+    })
+</script>
+<script>
+    get_Escala()
+    function get_Escala(){
+            $('#tablaEscalaComis tbody').empty()
+            $.ajax({
+                type:'GET',
+                url:'/ajax_request/comisions',
+                data:{
+                    'tipo':'escala_asignada',
+                    'tipo_escala':'variable',
+                    'venta':'{{contrato}}',
+                    'proyecto':'{{proyecto}}'
+                },
+                success: function(response){
+                    data = response.data
+                    for (let i in data){
+                        let row = `
+                        <tr>
+                            <td>
+                                <div class="btn-toolbar gap-2" role="toolbar">
+                                    <button class="btn btn-outline-danger btn-circle"
+                                    onclick="eliminarCargoComis($(this))" type="button">
+                                            <i class="fas fa-minus"></i>
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-circle" type="button"  onclick="seleccionarRow(this)"
+                                        data-bs-target="#modalAsesoresComis" data-bs-toggle="modal" data-bs-dismiss="modal"
+                                        id="btnBuscarAsesor">
+                                            <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="">
+                                    <input type="text" name="id_asesor_comis" class="form-control" required="" readonly="" value="${data[i].gestor.cedula}">
+                                </div>
+                            </td>
+                            <td>
+                                <div class="">
+                                    <input type="text" name="asesor_comis" class="form-control" required="" readonly="" value="${data[i].gestor.nombre}">
+                                </div>
+                            </td>
+                            <td>
+                                <div class="">
+                                    <input type="text" name="cargo_comis" class="form-control text-center" required="" value="${data[i].cargo.id} - ${data[i].cargo.nombre}" readonly="">
+                                </div>
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" name="comision" class="form-control text-center" required="" min="0" value="${data[i].comision}">
+                            </td>
+                        </tr>
+                            `
+                        $('#tablaEscalaComis tbody').append(row)
+                    }
+                },
+            })
+        }
+    function calcular_por_valor(){
+        let valor_lote=$('#valor').val()
+        let valor_ci=$('#vr_ci').val()
+        let porc_ini=Math.round(valor_ci*100/valor_lote)
+        let porc_saldo=100-porc_ini
+        let valor_saldo=valor_lote-valor_ci
+        $('#porc_cta_ini').val(porc_ini)
+        $('#vr_saldo').val(valor_saldo)
+        $('#porc_saldo').val(porc_saldo)
+    }
+    function calcular_por_porcentaje(){
+        let valor_lote=$('#valor').val()
+        let porc_ini=($('#porc_cta_ini').val())/100
+        let porc_saldo=(1-porc_ini)*100
+        let valor_ci=Math.round(porc_ini*valor_lote)
+        let valor_saldo=valor_lote-valor_ci
+        $('#vr_ci').val(valor_ci)
+        $('#vr_saldo').val(valor_saldo)
+        $('#porc_saldo').val(porc_saldo)
+    }
+    function diferencia_ci(){
+        ci1=parseInt($('#valor_ci1').val())
+        valorci1=parseInt($('#cant_ci_1').val())
+        var totalci1=(ci1*valorci1)||0
+        ci2=parseInt($('#valor_ci2').val())
+        valorci2=parseInt($('#cant_ci_2').val())
+        var totalci2=(ci2*valorci2)||0
+        ci3=parseInt($('#valor_ci3').val())
+        valorci3=parseInt($('#cant_ci_3').val())
+        var totalci3=(ci3*valorci3)||0
+        ci4=parseInt($('#valor_ci4').val())
+        valorci4=parseInt($('#cant_ci_4').val())
+        var totalci4=(ci4*valorci4)||0
+        ci5=parseInt($('#valor_ci5').val())
+        valorci5=parseInt($('#cant_ci_5').val())
+        var totalci5=(ci5*valorci5)||0
+        ci6=parseInt($('#valor_ci6').val())
+        valorci6=parseInt($('#cant_ci_6').val())
+        var totalci6=(ci6*valorci6)||0
+        ci7=parseInt($('#valor_ci7').val())
+        valorci7=parseInt($('#cant_ci_7').val())
+        var totalci7=(ci7*valorci7)||0
+
+        vr_ci=parseInt($('#vr_ci').val())
+        lleva_ci=totalci1+totalci2+totalci3+totalci4+totalci5+totalci6+totalci7
+        restante_ci=vr_ci-lleva_ci
+        $('#restante_ci').val(restante_ci)
+        return restante_ci
+    }
+</script>
+{%if alerta%}
+<script>
+    $('#alerta-general').modal('show')
+    document.getElementById('mensaje-alerta').innerHTML='{{mensaje}}';
+    document.getElementById('titulo-alerta').innerHTML='{{titulo_alerta}}';
+</script>
+{%endif%}
+<script type="text/javascript" language="javascript" src="{%static 'js/numero_letras.js'%}"></script>
+{%endblock%}

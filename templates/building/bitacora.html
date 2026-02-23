@@ -1,0 +1,152 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%block title%}Proyectos | Bitacora{%endblock%}
+{%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Bitacora de obras
+        <button type='button' id='exportarActa' class='btn btn-primary btn-xl btn-circle float-right mr-3'
+            data-toggle="modal" data-target="#modalBitacora" data-new="1">
+        <i class="fas fa-plus"></i></button>
+    </h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaBitacora' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Fecha</th>
+                    <th>Proyecto</th>
+                    <th>Usuario</th>
+                    <th>Bitacora</th>
+                    <th>Fecha registro</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for registro in bitacora%}
+                <tr>
+                    <td class='text-center'>
+                        <a href='#' data-toggle="modal" data-target="#modalBitacora"
+                        data-id='{{registro.pk|unlocalize}}' data-fecha='{{registro.fecha_bitacora|date:"Y-m-d"}}'
+                        data-obs='{{registro.observaciones}}' data-proy='{{registro.proyecto.pk}}'>
+                        {{registro.pk|unlocalize}}</a>
+                        </td>
+                    <td class='text-center'>{{registro.fecha_bitacora|date:"d/m/y"}}</td>
+                    <td class='text-center'>{{registro.proyecto.proyecto}}</td>
+                    <td class='text-center'>{{registro.usuario.username}}</td>
+                    <td>{{registro.observaciones}}</td>
+                    <td>{{registro.fecha_registro}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalBitacora" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    $(document).ready(function(){
+        $('#modalBitacora').on('show.bs.modal',function(event){
+            var trigger = $(event.relatedTarget)
+            var nuevo = trigger.data('new')
+            var id = trigger.data('id')
+            var fecha = trigger.data('fecha')
+            var obs = trigger.data('obs')
+            var proyecto = trigger.data('proy')
+            $('#id_fecha').val(fecha)
+            $('#id_proyecto').val(proyecto)
+            $('#id_Observaciones').val(obs)
+            if (nuevo==1){
+                $(this).find('.modal-title').text('Nuevo registro')
+                $('#submit-id-grabar').val('Registrar')
+            }
+            else{
+                $(this).find('.modal-title').text('Informacion registro Nº' + id)
+                $('#submit-id-grabar').val('Modificar')
+                $('#id_Observaciones').prop('readonly',true)
+                $('#id_id_bitacora').val(id)
+                $('#container-photo').children().remove()
+                $.ajax({
+                    url:'/buildingcontrol/logbook',
+                    type:'GET',
+                    data:{
+                        'id_bit':id
+                    },
+                    success: function(response){
+                        var data = JSON.parse(response['fotos'])
+                        for (i=0;i<data.length;i++){
+                            href = data[i]['fields']['foto']
+                            var photo = "<div class='col-6'>"+
+                                "<img class='img-fluid' src='/media/"+href+"'>"+
+                            "</div>"
+                            $('#container-photo').append(photo)
+                        }
+                    }
+                })
+            }
+
+
+        });
+        var tablaBitacora = $('#tablaBitacora').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "order": [[ 0, "desc" ]],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+            }
+        })
+        
+        $('#nuevaFoto').click(function(){
+            var newPhotoField = $(
+                '<div class="row mb-3">'+
+                    '<div class="col-10">'+
+                        '<input type="file" name="registro_foto" accept="image/*" class="pb-2 clearablefileinput form-control-file" required>'+
+                    '</div>'+
+                    '<div class="col-2">'+
+                        '<button type="button" id="removePhoto" onclick="removeDivPhoto($(this))" class="close">'+
+                            '<span aria-hidden="true">&times;</span>'+
+                        '</button>'+
+                    '</div>'+
+                '</div>'
+                              
+                )
+                $('#photosContainer').append(newPhotoField)
+        });
+    });
+    function removeDivPhoto(element){
+            element.closest('.row').remove()
+        }
+</script>
+{%endblock%}

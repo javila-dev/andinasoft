@@ -1,0 +1,170 @@
+{%load static%}{% load humanize %}
+<body>
+    <div id="footer_content">
+        <table style="margin-bottom:0.4rem">
+            <tr>
+                <td>
+                    <p style="text-align: right;font-size:7px">Recibo elaborado por <b>{{recibo.usuario}}</b> impreso 
+                        el {% now "j F Y H:i a" %}</p>
+                </td>
+            </tr>
+        </table>
+        <table style="color:#34554c;font-size:7px">
+            <tr>
+                <td style="text-align:left;border-right: darkslategrey solid 0.5px;padding-right: 5px;">
+                    <b>Medellín</b><br>
+                    Cra 48A # 10 Sur 56<br>
+                    Teléfono: (4) 444 62 91
+                </td>
+                <td style="text-align: right;width:65%">
+                    VERSIÓN: 1<br>
+                    TODOS LOS CHEQUES, CONSIGNACIONES Y TRANSFERENCIAS DEBEN SER GIRADOS A NOMBRE DE<br>
+                    <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-4</strong>
+                    </td>
+            </tr>
+        </table>
+    </div>
+    <table id='encabezados-logos' style='margin-bottom: 0.8rem;'>
+        <tr>
+            <td style='text-align: center; vertical-align: middle;'>
+                <img src="/media/logos_empresas/Andina_Coceptos_1.png" width="160" height="90">
+            </td>
+            <th style="width:50%;align:center;margin-top: -30px;">
+                <img src="{%static 'img/conceptos_inmob_carmelo.png'%}" width="180">
+                <p style="color:lightcoral;font-size:15px;"><b>No.&nbsp;{{recibo.numrecibo}}</b></p>
+            </th>
+            <td style='text-align: center;vertical-align: middle;'>
+                <img src="{%static 'img/logo_carmelo.png'%}" width="240" height="80">
+            </td>
+        </tr>
+    </table>
+    <div style="font-size:small">
+        <table>
+            <tr>
+                <td style="width:10%" class="title">CLIENTE(S)</td>
+                <td class='underline' style="width:62%;padding-left: 0.5em;">
+                    {{recibo.info_adj.titulares.titular_1.nombrecompleto.upper}}
+                    {%if recibo.info_adj.titulares.titular_2.nombrecompleto != "" %}, {{recibo.info_adj.titulares.titular_2.nombrecompleto.upper}} {%endif%}
+                    {%if recibo.info_adj.titulares.titular_3.nombrecompleto != "" %}, {{recibo.info_adj.titulares.titular_3.nombrecompleto.upper}} {%endif%}
+                    {%if recibo.info_adj.titulares.titular_4.nombrecompleto != "" %}, {{recibo.info_adj.titulares.titular_4.nombrecompleto.upper}} {%endif%}
+                </td>
+                <td style="width:8%" class="title text-center">FECHA</td>
+                <td class='underline text-center' style="width:20%">{{recibo.fecha|date:'F j, Y'}}</td>
+            </tr>
+        </table>
+        <table style="margin-top:1rem">
+            <tr>
+                <td style="width:10%" class="title">CONCEPTO</td>
+                <td class='underline' style="width:44%">{{recibo.concepto.upper}}</td>       
+                <td style="width:8%" class="title text-center">ID VENTA</td>
+                <td class='underline text-center' style="width:15%">{{recibo.info_adj.pk}}</td>        
+                <td style="width:8%" class="title text-center">INMUEBLE</td>
+                <td class='underline text-center' style="width:15%">{{recibo.info_adj.idinmueble}}</td>   
+            </tr>
+        </table>
+    </div>
+    <table id='detail-table' style='margin-top: 1rem;margin-left: 2rem;
+        margin-right: 1.5rem;'>
+        <thead>
+            <tr style="background-color: lightgray;">
+                <th>Fecha de transacción</th>
+                <th>Forma de pago</th>
+                <th>Valor total</th>
+            </tr>
+        </thead>
+            <tr>
+                <td class='text-center'>{{recibo.fecha_pago|date:'F j, Y'}}</td>
+                <td class='text-center'>{{recibo.formapago}}</td>
+                <td class='text-center'>${{recibo.valor|intcomma }}</td>
+            </tr>
+        </tbody>
+    </table>
+    <table id='detail-table' style='margin-left: 2rem;margin-right: 2rem;font-size:small'>
+        <thead>
+            <tr style="background-color: lightgray;">
+                <th colspan="3">Abonos por propietarios</th>
+            </tr>
+            <tr style="background-color: lightgray;">
+                <th>Identificación</th>
+                <th>Cliente</th>
+                <th>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_1.pk}}</td>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_1.nombrecompleto.upper}}</td>
+                <td class='text-center'>${{recibo.pago_por_titular|floatformat:2 }}</td>
+            </tr>
+            {% if recibo.info_adj.titulares.titular_2.nombrecompleto != "" %}<tr>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_2.pk}}</td>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_2.nombrecompleto.upper}}</td>
+                <td class='text-center'>${{recibo.pago_por_titular|floatformat:2}}</td>
+            </tr>{%endif%}
+            {% if recibo.info_adj.titulares.titular_3.nombrecompleto != "" %}<tr>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_3.pk}}</td>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_3.nombrecompleto.upper}}</td>
+                <td class='text-center'>${{recibo.pago_por_titular|floatformat:2}}</td>
+            </tr>{%endif%}
+            {% if recibo.info_adj.titulares.titular_4.nombrecompleto != "" %}<tr>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_4.pk}}</td>
+                <td class='text-center'>{{recibo.info_adj.titulares.titular_4.nombrecompleto.upper}}</td>
+                <td class='text-center'>${{recibo.pago_por_titular|floatformat:2}}</td>
+            </tr>{%endif%}
+        </tbody>
+    </table>
+</body>
+
+{%block css%}
+<style>
+    @font-face {
+        font-family: Ubuntu;
+        src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+    }
+
+    /* Bold */
+    @font-face {
+        font-family: Ubuntu;
+        src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+        font-weight: bold;
+    }
+    @page{
+        size: a6 landscape;
+        @frame content_frame {
+            /* Content Frame */
+            left: 0.5cm;
+            width: 14cm;
+            top: 0.3cm;
+            height: 8.3cm;
+        }
+        @frame footer_frame  {
+            /* Static Frame */
+            -pdf-frame-content: footer_content;
+            left: 0.3cm;
+            width: 14cm;
+            top: 8.8cm;
+            height: 2.5cm;
+        }
+    }
+    body {
+        font-family: Ubuntu;
+    }
+    #encabezados-logos p{
+        padding:0px;
+        margin:0px;
+        font-size: medium;
+    }
+    #detail-table th,#detail-table td{
+        padding:1.5px;
+    }
+    .underline{
+        border-bottom: 0.5px solid gray;
+    }
+    .text-center{
+        text-align: center;
+    }
+    .title{
+        font-weight: bold;
+    }
+</style>
+{%endblock%}

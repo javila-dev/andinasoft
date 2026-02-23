@@ -1,0 +1,183 @@
+{%extends 'base_fomantic.html'%}
+{%load static%}
+{%block title%}Cartera{%endblock%}
+{%block content%}
+<h2 class="ui center aligned icon violet header" style="margin-bottom: 2rem;">
+    <i class="folder open circular icon"></i>
+    <div class="content">
+      Ventas Adjudicadas
+      <div class="sub header">Aquí encontrarás las ventas adjudicadas y verificadas por el area de operaciones.</div>
+    </div>
+  </h2>
+  <div class="ui basic segment" id="lista-ventas-segment">
+    <table class="ui selectable table" style="width: 100%;" id="table-ventas">
+      <thead>
+        <tr class="text-center">
+            <th rowspan="2">ADJ</th>
+            <th rowspan="2">Cliente</th>
+            <th rowspan="2">Valor</th>
+            <th rowspan="2">Recaudo</th>
+            <th rowspan="2">Dias mora</th>
+            <th rowspan="2">Ultimo pago</th>
+            <th colspan="5">Edades</th>
+        </tr>
+        <tr class="text-center">
+            <th>Por vencer</th>
+            <th>0 a 30</th>
+            <th>30 a 60</th>
+            <th>> 60</th>
+            <th>Total</th>
+        </tr>
+      </thead>
+      <tfoot>
+        <tr>
+          <th colspan="6" style="text-align:right">Total</th>
+          <th style="text-align:right"></th>
+          <th style="text-align:right"></th>
+          <th style="text-align:right"></th>
+          <th style="text-align:right"></th>
+          <th style="text-align:right"></th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+{%endblock%}
+{%block script%}
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/css/dataTables.semanticui.min.css"></script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src='{%static "js/utilsfomantic.js"%}'></script>
+<script>
+  const param_meses_ci = 3
+  const param_meses_saldo = 10
+  const param_fechas_manuales = false  
+  const param_tasa = 0
+  const proyecto = 'Fractal'
+</script>
+<script>
+  $(document).ready(function(){
+    var table_ventas = $('#table-ventas').DataTable({
+        processing: true,
+        ordering: false,
+        deferRender: true,
+        serverSide: true,
+        lengthMenu: [
+            [10, 25, 50, -1],
+            [10, 25, 50, 'All'],
+        ],
+        ajax:{
+              url:`/andinasoftajx/detallesventa?todo=datatable&proyecto=${proyecto}&showcommercial=1&showadmin=0`,
+              dataSrc: "data"
+        },
+        columns:[
+          {'data':'IdAdjudicacion'},
+          {'data':'Nombre'},
+          {'data':'Valor', render: $.fn.dataTable.render.number( ',', '.', 0)},
+          {'data':'rcdo_total', render: $.fn.dataTable.render.number( ',', '.', 0)},/* aqui falta el valor recaudado */
+          {'data':'fractal.presupuesto.dias_mora'},
+          {'data':'fractal.presupuesto.ultimo_pago',},
+          {'data':'fractal.presupuesto.por_vencer', render: $.fn.dataTable.render.number( ',', '.', 0)},
+          {'data':'fractal.presupuesto.lt30', render: $.fn.dataTable.render.number( ',', '.', 0)},
+          {'data':'fractal.presupuesto.lt60', render: $.fn.dataTable.render.number( ',', '.', 0)},
+          {'data':'fractal.presupuesto.gte60', render: $.fn.dataTable.render.number( ',', '.', 0)},
+          {'data':'fractal.presupuesto.total_pendiente', render: $.fn.dataTable.render.number( ',', '.', 0)},
+        ],
+        columnDefs: [
+            {targets:[7,6,7,8,9,10],className:'right aligned'},
+            {targets:[0,2,3,4,5],className: 'center aligned'},
+        ],
+        /* initComplete: function () {
+            // Apply the search
+            this.api()
+                .columns()
+                .every(function () {
+                    var that = this; 
+                    console.log(this)
+                    $('input', this.footer()).on('keyup change clear', function () {
+                        if (that.search() !== this.value) {
+                          console.log(that)
+                          that.search(this.value).draw();
+                        }
+                    });
+                });
+        }, */
+        footerCallback: function (row, data, start, end, display) {
+            var api = this.api();
+ 
+            // Remove the formatting to get integer data for summation
+            var intVal = function (i) {
+                return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
+            };
+ 
+            
+
+            // Update footer
+            for (i=6; i<=10;i++) {
+              total = api
+                .column(i)
+                .data()
+                .reduce(function (a, b) {
+                    return intVal(a) + intVal(b);
+                }, 0);
+              $(api.column(i).footer()).html(
+                  '$' + new Intl.NumberFormat('en-EN').format(total)
+                  );
+            }
+           
+        },
+      })
+      $('#table-ventas tbody').on('click','tr',function() {
+        $('#lista-ventas-segment').addClass('loading')
+        let row = table_ventas.row(this).data()
+        let venta = row.IdAdjudicacion
+        $.ajax({
+          url: '/andinasoftajx/detallesventa',
+          type:'GET',
+          data: {
+            'proyecto':proyecto,
+            'venta':venta,
+            'tipodoc':'estadocuenta',
+            'todo':'printdoc'
+          },
+          success: function(response){
+            $.toast({
+              class: response.message.class,
+              showIcon: false,
+              message: response.message.text,
+              displayTime: 0,
+              closeIcon: true,
+            })
+          },
+          complete: function(){
+            $('#lista-ventas-segment').removeClass('loading')
+          }
+        })     
+      })
+
+  })
+      
+</script>
+
+{%endblock%}
+{%block style%}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.semanticui.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/select/1.7.0/css/select.dataTables.min.css">
+<style>
+    th {
+        text-align: center!important;
+        font-size: x-small;
+    }
+    tfoot th {
+        text-align: right!important;
+        font-size: x-small;
+    }
+    .ui.labeled input {
+      text-align: center;
+    }
+    td {
+      font-size: x-small;
+    }
+</style>
+{%endblock%}

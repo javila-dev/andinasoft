@@ -1,0 +1,730 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{% load l10n %}
+{% load humanize %}
+{% load static %}
+{%block title%}{{adj}} {{proyecto}}{%endblock%}
+{%block style%}
+<style>
+  .dt-buttons{
+    padding-left: 8px;
+    padding-bottom: 8px;
+}
+
+</style>
+{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+  <a class="" href="/adjudicaciones/{{proyecto}}" aria-label="Previous">
+    <span aria-hidden="true">&laquo;</span> Lista de Adjudicaciones
+  </a>
+  <div class="row">
+    <div class="col-xs-12 col-md-4">
+      <h3>Adjudicacion: <small class="text-muted"> {{adj}}</small></h3>
+      <h6>Fecha de Venta: <small class="text-muted"> {{info_adj.FechaContrato}}</small></h6>
+      <h6>Contrato Procesable: <small class="text-muted"> {{procesable}}</small></h6>
+    </div>
+    <div class='col-xs-12 col-md-8'>
+      <form id='form-documentos' method="post" action=''>{%csrf_token %}
+        <div class="btn-group float-right" role="group" aria-label="options-adj" name=options-adj>
+          <a id="boton-recaudo" href="/nuevo_recaudo/{{proyecto}}/{{adj}}" target='_blank' class="btn btn-secondary" role="button"
+            aria-pressed="true" data-pendientes="{{tiene_recaudos_pendientes|yesno:'true,false'}}"
+            {% if tiene_recaudos_pendientes %}aria-disabled="true"{% endif %}>
+            <i class="fas fa-file-invoice-dollar"></i>&nbsp;Recaudo</a>
+          <div class="btn-group" role="group">
+            <button id="btnPQRS" type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown"
+              aria-haspopup="true" aria-expanded="false">
+              <i class="fas fa-mail-bulk"></i>&nbsp;PQRS
+            </button>
+            <div class="dropdown-menu" aria-labelledby="btnPQRS">
+              <a href="#" class="dropdown-item" data-toggle="modal" data-target="#modalRadicarPQRS">Radicar PQRS</a>
+              <a href="#" class="dropdown-item" data-toggle="modal" data-target="#modalListaPQRS">Historico PQRS</a>
+            </div>
+          </div>
+          <div class="btn-group" role="group">
+            <button id="btnGroupDrop1" type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown"
+              aria-haspopup="true" aria-expanded="false">
+              <i class="far fa-id-card"></i>&nbsp;Acciones
+            </button>
+            <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
+              <a class="dropdown-item" target='_blank' href="/operaciones/cambio_fechas/{{proyecto}}/{{adj}}">Mover fechas</a>
+              <a class="dropdown-item" target='_blank' href="/operaciones/reestructuraciones/{{proyecto}}/{{adj}}">Reestructuración</a>
+              <a class="dropdown-item" href="#" data-toggle="modal"
+                data-target="#modal-procesabilidad">Procesabilidad</a>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modal-cesion">Cesión</a>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalCambiarLote">Cambiar lote</a>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modal-desistimiento">Desistir</a>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modal-restaurar">Restaurar plan de pagos</a>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalDesvincularRecaudos">Desvincular recaudos</a>
+              <a class="dropdown-item {% if not recaudos_pendientes %}disabled{% endif %}" href="#" data-toggle="modal" data-target="#modalReapplyPendings">
+                Reaplicar pendientes
+              </a>
+              <a class="dropdown-item" href="#" id='btn-ajuste-al-peso'>Ajustar al peso</a>
+              <input class="dropdown-item btn" value='Verificar Pagado' type='submit' name='btnVerifPagado'>
+            </div>
+          </div>
+          <div class="btn-group" role="group">
+            <button id="btnGroupDrop1" type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown"
+              aria-haspopup="true" aria-expanded="false">
+              <i class="far fa-file-pdf"></i>&nbsp;Documentos
+            </button>
+            <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
+              <input type='submit' class='dropdown-item' name='impPortada' value='Portada Adj'>
+              <input type='submit' class='dropdown-item' name='impEstadodeCuenta' value='Estado de Cuenta'>
+              <input type='submit' class='dropdown-item' name='impResumenPagos' value='Resumen de Pagos'>
+              <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Paz y Salvo</a>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <!-- Modals -->
+  {%include 'desistir_venta.html'%}
+  {%include 'cesion_titular.html'%}
+  {%include 'procesabilidad.html'%}
+  {%include 'modal_pqrs.html'%}
+  {%include 'modal_cambiarlote.html'%}
+  <div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+        </div>
+        <div class="modal-body">
+          {%if link%}
+          <a href="{{ruta_link}}" class='lead text-center'>
+            <p class='lead' id='mensaje-alerta'></p>
+          </a>
+          {%else%}
+          <p class='lead' id='mensaje-alerta'></p>
+          {%endif%}
+        </div>
+        <div class="modal-footer">
+          {%if redireccion%}
+          <a href='{{redirect}}' type="button" class="btn btn-primary">Entendido</a>
+          {%else%}
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+          {%endif%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Modal -->
+  <div class="modal fade" id="modal-cargando" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-body">
+        <p class='text-center'><i class="fas fa-spinner fa-5x fa-pulse"></i></p>
+      </div>
+    </div>
+  </div>
+    <!-- Modal -->
+  <div class="modal fade" id="modal-restaurar" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          {%if ultimobk.exists%}
+          <h5 class="modal-title" id="staticBackdropLabel">Seleccionar punto de restauración</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3">Selecciona el backup que deseas restaurar. Esto reemplazará el plan de pagos actual.</p>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Seleccionar</th>
+                  <th>Fecha</th>
+                  <th>Hora</th>
+                  <th>Usuario</th>
+                  <th>Cuotas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for bk in ultimobk %}
+                <tr class="backup-row" data-bk-id="{{ bk.pk }}" style="cursor: pointer;">
+                  <td>
+                    <div class="custom-control custom-radio">
+                      <input type="radio" class="custom-control-input" id="bk-{{ bk.pk }}" name="backup_select" value="{{ bk.pk }}">
+                      <label class="custom-control-label" for="bk-{{ bk.pk }}"></label>
+                    </div>
+                  </td>
+                  <td>{{ bk.fecha_bk|date:"d/m/Y" }}</td>
+                  <td>{{ bk.fecha_bk|date:"H:i:s" }}</td>
+                  <td>{{ bk.usuario_bk.username }}</td>
+                  <td>{{ bk.bk_planpagos_set.count }} cuotas</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btnrestorebk" disabled>Restaurar</button>
+        </div>
+        {%else%}
+        <h5 class="modal-title" id="staticBackdropLabel">Sin backups</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          Esta adjudicación no tiene ningún backup asociado aún.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Ok</button>
+        </div>
+        {%endif%}
+      </div>
+    </div>
+  </div>
+  
+  <!-- Endmodals -->
+  <div class="modal fade" id="modalDesvincularRecaudos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="modalDesvincularRecaudosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalDesvincularRecaudosLabel">Desvincular recaudos</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body" id="desvincular-modal" data-saldo="{{saldo_capital|unlocalize}}">
+          <div class="alert alert-info py-2">
+            Selecciona los recaudos empezando por el más reciente. Solo se permite desvincularlos en orden descendente y podrás visualizar el saldo proyectado antes de confirmar.
+          </div>
+          <div class="row text-center mb-3">
+            <div class="col-md-4 mb-2">
+              <div class="border rounded py-2 h-100">
+                <div class="text-muted small">Saldo pendiente actual</div>
+                <div class="font-weight-bold" id="desvincular-saldo-actual">$ {{saldo_capital|floatformat:0|intcomma}}</div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-2">
+              <div class="border rounded py-2 h-100">
+                <div class="text-muted small">Capital a desvincular</div>
+                <div class="font-weight-bold" id="desvincular-total-seleccionado">$ 0</div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-2">
+              <div class="border rounded py-2 h-100">
+                <div class="text-muted small">Saldo pendiente proyectado</div>
+                <div class="font-weight-bold" id="desvincular-saldo-proyectado">$ {{saldo_capital|floatformat:0|intcomma}}</div>
+              </div>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0" id="tablaDesvincularRecaudos">
+              <thead class="thead-light">
+                <tr>
+                  <th style="width: 60px;">Desvincular</th>
+                  <th>Recibo</th>
+                  <th>Fecha</th>
+                  <th>Valor</th>
+                  <th>Forma de pago</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for recaudo in recaudos %}
+                <tr data-recibo="{{recaudo.numrecibo}}" data-capital="{{recaudo.capital_total|default_if_none:0|unlocalize}}">
+                  <td class="text-center">
+                    <input type="checkbox" class="form-check-input position-static js-unlink-checkbox">
+                  </td>
+                  <td>{{recaudo.numrecibo}}</td>
+                  <td>{{recaudo.fecha|date:'d/m/Y'}}</td>
+                  <td>$ {{recaudo.valor|floatformat:0|intcomma}}</td>
+                  <td>{{recaudo.formapago}}</td>
+                  <td>{{recaudo.usuario}}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No hay recaudos aplicados para esta adjudicación.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-danger" id="btn-confirm-desvincular" disabled>Desvincular seleccionados</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalReapplyPendings" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="modalReapplyPendingsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalReapplyPendingsLabel">Reaplicar recaudos pendientes</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning py-2">
+            Selecciona los recibos en orden cronológico (del más antiguo al más reciente). Al reaplicarlos no se cobrará ningún interés de mora.
+          </div>
+          <div class="table-responsive" style="max-height: 350px;">
+            <table class="table table-sm table-hover mb-0" id="tablaReaplicarRecaudos">
+              <thead class="thead-light">
+                <tr>
+                  <th style="width:60px;">Aplicar</th>
+                  <th>Recibo</th>
+                  <th>Fecha</th>
+                  <th>Valor</th>
+                  <th>Forma de pago</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for recaudo in recaudos_pendientes %}
+                <tr data-recibo="{{recaudo.numrecibo}}" data-abono-capital="{{recaudo.abono_capital|yesno:'true,false'}}">
+                  <td class="text-center">
+                    <input type="checkbox" class="form-check-input position-static js-reapply-checkbox">
+                  </td>
+                  <td>{{recaudo.numrecibo}}</td>
+                  <td>{{recaudo.fecha|date:'d/m/Y'}}</td>
+                  <td>$ {{recaudo.valor|floatformat:0|intcomma}}</td>
+                  <td>{{recaudo.formapago}}</td>
+                  <td>{{recaudo.usuario}}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No hay recaudos pendientes por aplicar.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-reapply" disabled>Reaplicar seleccionados</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class='row'>
+    <div class='col-xs-12 col-sm-12 col-md-5'>
+      {{form_info_adj.titular1|as_crispy_field}}
+      {{form_info_adj.titular2|as_crispy_field}}
+      {{form_info_adj.titular3|as_crispy_field}}
+      {{form_info_adj.titular4|as_crispy_field}}
+    </div>
+    <div class='col-xs-12 col-sm-12 col-md-3'>
+      {{form_info_adj.cartera|as_crispy_field}}
+      <div class='row'>
+        <div class='col-xs-12 col-sm-12 col-md-6'>
+          {{form_info_adj.inmueble|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-sm-12 col-md-6'>
+          {{form_info_adj.estado|as_crispy_field}}
+        </div>
+      </div>
+      {{form_info_adj.oficina|as_crispy_field}}
+      {{form_info_adj.tipo_venta|as_crispy_field}}
+    </div>
+    <div class='col-xs-12 col-sm-12 col-md-4'>
+      <div class='d-flex'>
+        {{form_info_adj.valor|as_crispy_field}}
+        <div id='id_tasa ml-2'>
+          <label for='tasaadj'>Tasa</label>
+          <input class='form-control text-center' readonly type='text' id='tasaadj' value="{{datos_adj.tasafnc}}"/>
+        </div>
+      </div>
+      <div class='row'>
+        <div class='col-xs-12 col-sm-12 col-md-6'>
+          {{form_info_adj.cuota_inicial|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-sm-12 col-md-6'>
+          {{form_info_adj.saldo|as_crispy_field}}
+        </div>
+      </div>
+      {{form_info_adj.pagado|as_crispy_field}}
+      {{form_info_adj.por_pagar|as_crispy_field}}
+    </div>
+  </div>
+</div>
+
+<ul class="nav nav-tabs nav-justified bg-white shadow" id="myTab" role="tablist" style="margin-top:1rem;">
+  <li class="nav-item" role="presentation">
+    <a class="nav-link active" id="seguimientos-tab" data-toggle="tab" href="#seguimientos" role="tab"
+      aria-controls="seguimientos" aria-selected="true" style="color: #838080;">
+      <i class="far fa-clock fa-lg"></i>&nbsp;<strong>Timeline</strong></a>
+  </li>
+  <li class="nav-item" role="presentation">
+    <a class="nav-link" id="titulares-tab" data-toggle="tab" href="#titulares" role="tab" aria-controls="titulares"
+      aria-selected="false" style="color:  #838080;">
+      <i class="fas fa-info fa-lg"></i>&nbsp;&nbsp;<strong>Info Clientes</strong></a>
+  </li>
+  <li class="nav-item" role="presentation">
+    <a class="nav-link" id="recaudos-tab" data-toggle="tab" href="#recaudos" role="tab" aria-controls="recaudos"
+      aria-selected="false" style="color:  #838080;">
+      <i class="fas fa-money-bill-wave fa-lg"></i>&nbsp;<strong>Recaudos</strong></a>
+  </li>
+  <li class="nav-item" role="presentation">
+    <a class="nav-link" id="recaudos-tab" data-toggle="tab" href="#plan_pagos" role="tab" aria-controls="plan_pagos"
+      aria-selected="false" style="color:  #838080;">
+      <i class="fas fa-file-invoice-dollar fa-lg"></i>&nbsp;<strong>Plan de Pagos</strong></a>
+  </li>
+  <li class="nav-item" role="presentation">
+    <a class="nav-link" id="documentos-tab" data-toggle="tab" href="#documentos" role="tab" aria-controls="documentos"
+      aria-selected="false" style="color:  #838080;">
+      <i class="fas fa-folder-open fa-lg"></i>&nbsp;<strong>Documentos</strong></a>
+  </li>
+</ul>
+<div class="tab-content bg-white rounded shadow" id="myTabContent">
+  <div class="tab-pane fade show active" id="seguimientos" role="tabpanel" aria-labelledby="seguimientos-tab">
+    {%include 'history_adj.html'%}</div>
+  <div class="tab-pane fade" id="titulares" role="tabpanel" aria-labelledby="titulares-tab">
+    {%include 'info_titular.html'%}</div>
+  <div class="tab-pane fade" id="recaudos" role="tabpanel" aria-labelledby="recaudos-tab">
+    {%include 'recaudos_detallados.html'%}</div>
+  <div class="tab-pane fade" id="plan_pagos" role="tabpanel" aria-labelledby="plan_pagos-tab">
+    {%include 'resumen_credito.html'%}</div>
+  <div class="tab-pane fade" id="documentos" role="tabpanel" aria-labelledby="documentos-tab">
+    {%include 'docs_contratos.html'%}</div>
+</div>
+
+{%include 'alert.html'%}
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script>
+  $(document).ready(function () {
+    $('.money').mask("#,##0", {reverse: true});  
+    $("#titular1").val('{{info_adj.Nombre}}');
+    $("#titular2").val('{{titulares.titular2}}');
+    $("#titular3").val('{{titulares.titular3}}');
+    $("#titular4").val('{{titulares.titular4}}');
+    $("#inmueble").val('{{info_adj.Inmueble}}');
+    $("#estado").val('{{info_adj.Estado}}');
+    $("#origen").val('{{info_adj.Origen}}');
+    $("#cartera").val('{{info_adj.tipo_cartera}}');
+    $("#valor").val('{{info_adj.Valor}}');
+    $("#cta_inicial").val('{{info_adj.cta_inicial}}');
+    $("#saldo").val('{{info_adj.saldo}}');
+    $('#capital_por_pagar').val('{{saldo_capital}}');
+    $('#capital_pagado').val('{{pagado}}')
+    $('#oficina').val('{{datos_adj.oficina}}')
+    const $btnRecaudo = $('#boton-recaudo');
+    const hasPendingReceipts = ($btnRecaudo.data('pendientes') === true || $btnRecaudo.data('pendientes') === 'true');
+    if (hasPendingReceipts){
+      $btnRecaudo.addClass('disabled').attr('href','#');
+      $btnRecaudo.on('click', function(e){
+        e.preventDefault();
+        alert('No puedes generar un nuevo recibo hasta aplicar los recaudos pendientes.');
+      });
+    }
+    $('#btn-ajuste-al-peso').click(function () {
+      let valor = $('#capital_por_pagar').val()
+      $('#alert-title').text('Andinasoft dice:')
+      $('#alert-data').text('')
+      .append('Estamos ajustando valores <i class="fas fa-circle-notch fa-spin"></i>')
+      $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+      $.ajax({
+        type:'POST',
+        url:'/andinasoftajx/ajustealpeso',
+        data:{
+          'csrfmiddlewaretoken':getCookie('csrftoken'),
+          'proyecto':'{{proyecto}}',
+          'adj':'{{adj}}',
+          'valor_ajuste':valor
+        },
+        success: (xhr) => {
+          
+          $('#alert-data').text('')
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text(xhr.msj)
+          $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+          if (xhr.class == 'alert-success'){
+            window.location.reload()
+          }
+        }
+      })
+    })
+
+    const $modalDesvincular = $('#modalDesvincularRecaudos');
+    const $tablaDesvBody = $('#tablaDesvincularRecaudos tbody');
+    const $btnConfirmDesv = $('#btn-confirm-desvincular');
+    const desvincularState = {
+      baseSaldo: parseFloat($('#desvincular-modal').data('saldo')) || 0,
+      selectedCount: 0
+    };
+
+    const formatCurrency = (value) => {
+      const numeric = isNaN(value) ? 0 : value;
+      if (window.Intl && Intl.NumberFormat){
+        return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0}).format(numeric);
+      }
+      return '$ ' + Math.round(numeric).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+    };
+
+    const getSelectableRows = () => $tablaDesvBody.find('tr').filter(function(){
+      return $(this).data('recibo');
+    });
+
+    const updateSummaryValues = () => {
+      const rows = getSelectableRows().toArray();
+      let total = 0;
+      for (let i = 0; i < desvincularState.selectedCount && i < rows.length; i++){
+        const capital = parseFloat($(rows[i]).data('capital')) || 0;
+        total += capital;
+      }
+      const proyectado = desvincularState.baseSaldo + total;
+      $('#desvincular-saldo-actual').text(formatCurrency(desvincularState.baseSaldo));
+      $('#desvincular-total-seleccionado').text(formatCurrency(total));
+      $('#desvincular-saldo-proyectado').text(formatCurrency(proyectado));
+      $btnConfirmDesv.prop('disabled', desvincularState.selectedCount === 0);
+    };
+
+    const refreshCheckboxStates = () => {
+      const rows = getSelectableRows();
+      rows.each(function(idx){
+        const $checkbox = $(this).find('.js-unlink-checkbox');
+        const enable = idx <= desvincularState.selectedCount;
+        $checkbox.prop('disabled', !enable);
+        const isActive = idx < desvincularState.selectedCount && $checkbox.prop('checked');
+        $(this).toggleClass('table-warning', isActive);
+      });
+      if (rows.length === 0){
+        $btnConfirmDesv.prop('disabled', true);
+      }
+    };
+
+    const resetDesvincularModal = () => {
+      desvincularState.selectedCount = 0;
+      getSelectableRows().each(function(){
+        $(this).find('.js-unlink-checkbox').prop('checked', false);
+        $(this).removeClass('table-warning');
+      });
+      refreshCheckboxStates();
+      updateSummaryValues();
+    };
+
+    $modalDesvincular.on('show.bs.modal', function(){
+      resetDesvincularModal();
+    });
+
+    $modalDesvincular.on('hidden.bs.modal', function(){
+      resetDesvincularModal();
+    });
+
+    $tablaDesvBody.on('change','.js-unlink-checkbox', function(){
+      if ($(this).prop('disabled')){
+        $(this).prop('checked', false);
+        return;
+      }
+      const rows = getSelectableRows();
+      const idx = rows.index($(this).closest('tr'));
+      if (idx === -1){
+        return;
+      }
+      if ($(this).is(':checked')){
+        if (idx === desvincularState.selectedCount){
+          desvincularState.selectedCount += 1;
+        } else {
+          $(this).prop('checked', false);
+          alert('Debes seleccionar los recaudos en orden, empezando por el más reciente.');
+        }
+      } else {
+        for (let i = idx; i < desvincularState.selectedCount; i++){
+          const $row = $(rows.get(i));
+          $row.find('.js-unlink-checkbox').prop('checked', false);
+          $row.removeClass('table-warning');
+        }
+        desvincularState.selectedCount = idx;
+      }
+      refreshCheckboxStates();
+      updateSummaryValues();
+    });
+
+    $btnConfirmDesv.on('click', function(){
+      if (desvincularState.selectedCount === 0){
+        alert('Selecciona al menos un recaudo.');
+        return;
+      }
+      const rows = getSelectableRows().toArray().slice(0, desvincularState.selectedCount);
+      const recibos = rows.map(row => $(row).data('recibo'));
+      const $btn = $(this);
+      $btn.prop('disabled', true).text('Procesando...');
+      $.ajax({
+        type:'POST',
+        url: window.location.pathname,
+        data:{
+          'csrfmiddlewaretoken': getCookie('csrftoken'),
+          'todo':'desvincular_recaudos',
+          'recibos[]':recibos
+        },
+        success: function(response){
+          alert(response.message || 'Los recaudos fueron desvinculados.');
+          window.location.reload();
+        },
+        error: function(xhr){
+          const response = xhr.responseJSON || {};
+          alert(response.message || 'No fue posible desvincular los recaudos seleccionados.');
+        },
+        complete: function(){
+          $btn.text('Desvincular seleccionados').prop('disabled', false);
+        }
+      });
+    });
+
+    refreshCheckboxStates();
+    updateSummaryValues();
+
+    const $modalReapply = $('#modalReapplyPendings');
+    const $tableReapplyBody = $('#tablaReaplicarRecaudos tbody');
+    const $btnConfirmReapply = $('#btn-confirm-reapply');
+    const reapplyState = {
+      selectedCount: 0
+    };
+
+    const getReapplyRows = () => $tableReapplyBody.find('tr').filter(function(){
+      return $(this).data('recibo');
+    });
+
+    const resetReapplyModal = () => {
+      reapplyState.selectedCount = 0;
+      getReapplyRows().each(function(){
+        $(this).find('.js-reapply-checkbox').prop('checked', false);
+      });
+      $btnConfirmReapply.prop('disabled', getReapplyRows().length === 0);
+    };
+
+    $modalReapply.on('show.bs.modal', function(){
+      resetReapplyModal();
+    });
+
+    $modalReapply.on('hidden.bs.modal', function(){
+      resetReapplyModal();
+    });
+
+    $tableReapplyBody.on('change','.js-reapply-checkbox', function(){
+      const rows = getReapplyRows();
+      const idx = rows.index($(this).closest('tr'));
+      if (idx === -1){
+        return;
+      }
+      if ($(this).is(':checked')){
+        if (idx === reapplyState.selectedCount){
+          reapplyState.selectedCount += 1;
+        } else {
+          $(this).prop('checked', false);
+          alert('Debes seleccionar los recaudos en orden, empezando por el más antiguo.');
+        }
+      } else {
+        for (let i = idx; i < reapplyState.selectedCount; i++){
+          $(rows.get(i)).find('.js-reapply-checkbox').prop('checked', false);
+        }
+        reapplyState.selectedCount = idx;
+      }
+      $btnConfirmReapply.prop('disabled', reapplyState.selectedCount === 0);
+    });
+
+    $btnConfirmReapply.on('click', function(){
+      if (reapplyState.selectedCount === 0){
+        alert('Selecciona al menos un recaudo pendiente.');
+        return;
+      }
+      const rows = getReapplyRows().toArray().slice(0, reapplyState.selectedCount);
+      const recibos = rows.map(row => $(row).data('recibo'));
+      const hasAbonoCapital = rows.some(row => $(row).data('abonoCapital') === true);
+      let allowAbono = false;
+      const $btn = $(this);
+      $btn.prop('disabled', true).text('Procesando...');
+      if (hasAbonoCapital){
+        const confirmed = confirm('Estás a punto de reaplicar abonos a capital. Esta acción ajustará el plan actual. ¿Deseas continuar?');
+        if (!confirmed){
+          $btn.text('Reaplicar seleccionados').prop('disabled', false);
+          return;
+        }
+        allowAbono = true;
+      }
+      $.ajax({
+        type:'POST',
+        url: window.location.pathname,
+        data:{
+          'csrfmiddlewaretoken': getCookie('csrftoken'),
+          'todo':'reaplicar_recaudos',
+          'recibos[]':recibos,
+          'allow_abono_capital': allowAbono ? 'true' : 'false'
+        },
+        success: function(response){
+          alert(response.message || 'Los recaudos fueron reaplicados correctamente.');
+          window.location.reload();
+        },
+        error: function(xhr){
+          const response = xhr.responseJSON || {};
+          alert(response.message || 'No fue posible reaplicar los recaudos seleccionados.');
+        },
+        complete: function(){
+          $btn.text('Reaplicar seleccionados').prop('disabled', false);
+        }
+      });
+    });
+  })
+  $('#form-documentos').on('submit', function () {
+    $('#modal-cargando').modal('show')
+  })
+  // Habilitar botón cuando se selecciona un backup
+  $('input[name="backup_select"]').on('change', function() {
+    $('#btnrestorebk').prop('disabled', false);
+  });
+
+  // Click en fila para seleccionar backup
+  $('.backup-row').on('click', function() {
+    const bkId = $(this).data('bk-id');
+    $(`#bk-${bkId}`).prop('checked', true).trigger('change');
+  });
+
+  $('#btnrestorebk').click(function(){
+    const selectedBk = $('input[name="backup_select"]:checked').val();
+
+    if (!selectedBk) {
+      alert('Debes seleccionar un backup para restaurar');
+      return;
+    }
+
+    $('#modal-restaurar').modal('hide')
+    $('#alert-title').text('Andinasoft dice:')
+    $('#alert-data').text('')
+    .append('Estamos restaurando el backup seleccionado <i class="fas fa-circle-notch fa-spin"></i>')
+    $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+    $.ajax({
+      type:'POST',
+      url:'/adjudicaciones/{{proyecto}}/{{adj}}/',
+      data:{
+        'csrfmiddlewaretoken':getCookie('csrftoken'),
+        'todo':'restore_bk',
+        'bk_id': selectedBk
+      },
+      success: (xhr) => {
+        window.location.reload()
+      },
+      error: (xhr) => {
+        $('#alert-data').text('')
+        .append('Ocurrió un error, contacta al administrador del sistema.')
+        $('#general-right-alert').toggleClass('alert-danger')
+      }
+
+    })
+  })
+</script>
+{%if alerta%}
+<script>
+  $('#alerta-general').modal('show')
+  document.getElementById('mensaje-alerta').innerHTML = '{{mensaje}}';
+  document.getElementById('titulo-alerta').innerHTML = '{{titulo_alerta}}';
+</script>
+{%endif%}
+{%endblock %}
+{%block js%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+{%include 'datatable_buttons.html'%}
+{%endblock%}

@@ -1,0 +1,132 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+
+{%block title%}Pagar Facturas{%endblock%}
+
+{%block content%}
+<style>
+    td{
+        font-size: small;
+    }
+</style>
+<div class="bg-white rounded shadow principal-container">
+    <h3 class='border-bottom border-gray section-title text-white text-center'>Pagar Factura</h4>
+    <div class='table-responsive'>
+        <table id='tabla-pagos' class='hover striped compact row-border' style="width:100%">
+            <thead>
+                <tr>
+                    <th class='text-center'>Radicado</th>
+                    <th class='text-center'>Factura</th>
+                    <th class='text-center'>Tercero</th>
+                    <th class='text-center'>Fecha Factura</th>
+                    <th class='text-center'>Causacion</th>
+                    <th class='text-center'>Vencimiento</th>
+                    <th class='text-center'>Valor a Pagar</th>
+                    <th class='text-center'>Abonos</th>
+                    <th class='text-center'>Saldo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for radicado in radicados%}
+                <tr>
+                    <td class='text-center'><a href='#' data-toggle="modal" data-target="#modalPagar" data-radicado='{{radicado.pk|unlocalize}}' data-factura='{{radicado.nrofactura}}'>{{radicado.pk}}</a></td>
+                    <td class='text-center'>{{radicado.nrofactura}}</td>
+                    <td>{{radicado.tercero.upper|truncatechars:35}}</td>
+                    <td class='text-center'>{{radicado.fechafactura|date:'d/m/Y'}}</td>
+                    <td class='text-center'>{{radicado.nrocausa}}</td>
+                    <td class='text-center'>{{radicado.fechavenc|date:'d/m/Y'}}</td>
+                    <td class='text-center'>{{radicado.pagoneto|default:"Sin causar"}}</td>
+                    <td class='text-center'>{{radicado.abonos}}</td>
+                    <td class='text-center'>{{radicado.saldo}}</td> 
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+        
+</div>
+<div class="modal fade" id="modalPagar" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form method='post' action=''>{%csrf_token%}
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <input type='text' id='numeroRadicado' name='numeroRadicado' hidden>
+            {{form|crispy}}
+            <label for='formapago' class='requiredField'>Cuenta de Pago*</label>
+            <select name="formapago" id="formapago" class="select form-control"></select>
+        </div>
+        <div class="modal-footer">
+            <div class='btn-group'>
+                <input type='submit' action='' value='Registrar' class='btn btn-primary'>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{%include 'alert.html'%}
+{{form.media}}
+<script>
+    $(document).ready(function() {
+    var tablapagos=$('#tabla-pagos').DataTable({
+                    'scrollX':        true,
+                    'scrollCollapse': true,
+                    'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+                    "pageLength": 25,
+                    "order": [[ 0, "desc" ]],
+                    columnDefs: [
+                { type: 'date-uk', targets: 5 }
+                ],
+        });
+        $('#tabla-pagos tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablapagos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        
+        $('#modalPagar').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget) // Button that triggered the modal
+        var radicado = button.data('radicado') // Extract info from data-* attributes
+        var factura = button.data('factura')
+        // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
+        // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
+        var modal = $(this)
+        modal.find('.modal-title').text('Registrar pago a la Factura ' + factura)
+        $('#numeroRadicado').val(radicado)
+        })
+        
+    });
+    });
+    $('#empresapago').on('change',function(){
+        $('#formapago').empty();
+        var empresa = $('#empresapago').val()
+        $.ajax({
+            type:'GET',
+            url:'/correspondencia/facturas/pagar',
+            data:{'empresa':empresa,'solicitud':'formapago'},
+            success:function(response){
+                var instance = JSON.parse(response['instance'])
+                for (i=0;i<instance.length;i++){
+                    var valor = instance[i]['fields'] 
+                    var newOption = $('<option>')
+                        newOption.attr('value',valor['cuentabanco'])
+                        newOption.text(valor['cuentabanco'])
+                    $('#formapago').append(newOption)
+                }
+                
+            }
+        })
+    })
+</script>
+{%endblock%}

@@ -1,0 +1,795 @@
+{%load static%}{%load extras%}
+<html>
+    <body>
+        <div id="footer_content">
+            <p style="margin-bottom: 0px;margin-right: 10rem;text-align: right;">
+                Página <pdf:pagenumber> de <pdf:pagecount></p>
+            <img style="margin-top: 0px" src="{%static 'img/pie-de-pagina-fractal.png'%}" width="820">
+        </div>
+        <div id="header_content">
+            <table>
+                <tr>
+                    <th style="align:left">
+                        <img src="{%static 'img/fractal450x.png'%}" width="200">
+                    </th>
+                    <th></th>
+                    <th style="align:right">
+                        <img src="{%static 'img/casas-de-verano450x.png'%}" width="180">
+                    </th>
+                </tr>
+            </table>
+        </div>
+
+        <div>
+            
+            <h1>
+                <b>ACUERDO PRIVADO DE INVERSIÓN “FRACTAL CASAS DE VERANO” 
+                    <span style="color:#7B50FF;font-size:15px;"> No.&nbsp;{{ctr.pk}}</span></b>
+            </h1>
+            <p>
+               El siguiente <b>ACUERDO PRIVADO DE INVERSI&#211;N</b> (en adelante el
+                &#8220;Contrato&#8221; o el &#8220;acuerdo&#8221;), se celebra entre
+                las siguientes personas:<br />
+            </p>
+            <p>
+                <b>PARTES:<br /></b>I. la sociedad denominada
+                <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b>, con NIT 900.993.044-9,
+                sociedad con domicilio en la ciudad de Medell&#237;n, inscrita
+                en la C&#225;mara de Comercio de Medell&#237;n, para Antioquia, con la
+                matricula mercantil N&#186; 21-671654-12, quien para los efectos del
+                presente contrato se denomina &#8220;<b>EL PROMOTOR</b>&#8221;,
+
+                <br />II. De una parte y de la otra parte,
+                <b>EL (LOS) SE&#209;OR (ES)</b>: <br />
+            </p>
+            <p style="text-align: justify;;margin-bottom:5px" class="cuerpo">
+                <b>Nombre/Razón social:</b> <u>{{ctr.titulares.0.nombrecompleto}}</u>&nbsp;&nbsp;
+                <b>Identificación/NIT:</b> <u>{{ctr.titulares.0.pk}}</u>&nbsp;&nbsp;
+                <b>Telefono:</b> <u>{{ctr.titulares.0.telefono1|default:"Sin informacion"}}</u>&nbsp;&nbsp;
+                <b>Dir. Residencia:</b> <u>{{ctr.titulares.0.domicilio}}</u>&nbsp;&nbsp;
+                <b>Ciudad/Municipio:</b><u>{{ctr.titulares.0.city.city_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                    {{ctr.titulares.0.estado.state_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                    {{ctr.titulares.0.pais.country_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                </u>&nbsp;&nbsp;
+                <b>Email:
+                </b><u>{{ctr.titulares.0.email|default:"Sin información"|default_if_none:"Sin información"}}</u>&nbsp;&nbsp;
+            </p>
+            <p>
+                Quien (es) comparece (n) en su propio nombre y derecho, En adelante,
+                &#8220;<b>EL INVERSIONISTA</b>&#8221;.<br /><b>EL PROMOTOR</b> y
+                <b>EL INVERSIONISTA</b>, en adelante se denominar&#225;n en su
+                conjunto como &#8220;<b>LAS PARTES</b>&#8221; y cada uno como
+                <b>PARTE</b>. Hemos decidido celebrar el presente acuerdo, el
+                cual, comprende algunas declaraciones sobre la causa del mismo y a su
+                vez est&#225; regido por las &#8220;consideraciones&#8221;,
+                &#8220;definiciones&#8221; y &#8220;cl&#225;usulas&#8221; que a
+                continuaci&#243;n se establecen, y en lo no dispuesto en ellas, por
+                las normas legales vigentes que resulten aplicables en la
+                materia, atendiendo a las siguientes: <br />
+            </p>
+            <p><b>CONSIDERACIONES</b></p>
+            <ol>
+                <li>Que, el presente acuerdo es un contrato
+                privado que tiene por objeto establecer acuerdos y condiciones
+                vinculantes para las Partes entres si, con el fin de regular las condiciones de inversi&#243;n en
+                <b>FRACTAL CASAS DE VERANO</b>.</li>
+                <li>Que, las partes
+                    declaran que no existen otros acuerdos, contratos, negociaciones o
+                    entendimientos previos, ya sean verbales o escritos, cuyo objeto sea
+                    regular sus relaciones de inversi&#243;n en
+                    <b>FRACTAL CASAS DE VERANO</b>.</li>
+                <li>Que, para los efectos
+                de este contrato, se entiende como <b>CASA DE VERANO</b>,
+                (&#8220;Proyecto&#8221;).</li>
+                <li>Que, para los efectos de este
+                    contrato, se entiende como &#8220;memoria descriptiva&#8221;, el
+                    documento que contiene la descripci&#243;n, planos, acabados y
+                    caracter&#237;sticas del proyecto.</li>
+                <li>Que, para los
+                    efectos de este contrato, se entiende como &#8220;Operador&#8221;, la
+                    empresa encargada de la comercializaci&#243;n y promoci&#243;n del
+                    proyecto.</li>
+                <li><b>FRACTAL CASA DE VERANO</b>, es un
+                    desarrollo inmobiliario de car&#225;cter asociativo, en la que cada
+                    proyecto, estar&#225; conformada hasta por
+                    <b>VEINTICINCO</b> (25) inversionistas.</li>
+                <li>Que,
+                    para los efectos de este contrato, se entiende como
+                    &#8220;Fracci&#243;n&#8221; al n&#250;mero de derechos de porcentajes
+                    de propiedad que, adquiri&#243; el inversionista.</li>
+                <li>Que,
+                    para los efectos de este contrato, el porcentaje de propiedad,
+                    corresponde al cuatro por ciento (4%), equivalente a una (1)
+                    fracci&#243;n.</li>
+                <li>Que, el desarrollo del Conjunto
+                    Residencial <b>FRACTAL CASA DE VERANO</b> estar&#225; a cargo de
+                    <b>EL PROMOTOR</b>. Y su desarrollo se realizar&#225; en un lote de
+                    terreno de mayor extensi&#243;n de su propiedad, el cual, tiene
+                    un &#225;rea de 23.696.11 m2, ubicado en el Municipio de Mo&#241;itos,
+                    Departamento de C&#243;rdoba. Y, el cual, ser&#225; subdividido,
+                    para la transferencia futura de los derechos de propiedad por parte de
+                    <b>EL PROMOTOR</b>, a la sociedad comercial que constituyan los
+                    inversionistas sobre el inmueble objeto del contrato.</li>
+                <li>Que, cada proyecto se transferir&#225; libre de demanda civiles,
+                    embargos, condiciones resolutorias, pleito pendiente, censo,
+                    anticresis, hipotecas, y en general, todo gravamen o
+                    limitaci&#243;n al dominio.</li>
+                <li>Que, el inversionista con
+                    los otros interesados inversionistas que har&#225;n parte del
+                    proyecto, compartir&#225; los gastos, as&#237; como las
+                    responsabilidades de mantener la casa.</li>
+                <li>Que, el proyecto se va a realizar a trav&#233;s de una sociedad
+                    por acciones simplificadas (S.A.S), como veh&#237;culo jur&#237;dico
+                    para agrupar a los interesados inversionistas y a <b>EL INVERSIONISTA</b> 
+                    en particular (en adelante, y para lo anterior, la &#8220;Sociedad&#8221;).</li>
+                <li>Que, la sociedad que se constituya tendr&#225; unos administradores
+                    que ser&#225;n nombrados por la sociedad en las mayor&#237;as
+                    establecidas en los estatutos sociales y el acuerdo de
+                    accionistas.</li>
+                <li>Que, los interesados inversionistas
+                    suscribir&#225;n como socios de la sociedad, un documento vinculante
+                    donde establecer&#225;n las condiciones generales y especificas
+                    del manejo del proyecto (en adelante, el &#8220;Manual&#8221;).</li>
+                <li>Que, anexo a este acuerdo, se le entregar&#225; a <b>EL
+                    INVERSIONISTA</b>, las especificaciones t&#233;cnicas del proyecto (en
+                    adelante, &#8220;Especificaciones del proyecto&#8221;).</li>
+                <li>Que, el proyecto ser&#225;
+                    entregado por la sociedad a un Operador (tercero), (en adelante el
+                    &#8220;operador&#8221;), para hacer el Manual, los documentos, y
+                    cumplir con las obligaciones del manejo del proyecto. Por los
+                    tanto, la sociedad suscribir&#225; un contrato de operaci&#243;n con
+                    el operador (en adelante &#8220;contrato de
+                    operaci&#243;n&#8221;).</li>
+                <li>Que, adem&#225;s del Manual, se firmar&#225; un Acuerdo de
+                    accionistas donde se establecer&#225;n las condiciones
+                    espec&#237;ficas de relacionamiento societario entre 
+                    los socios, administradores, el operador y la sociedad.</li>
+                <li>Que, es inter&#233;s de <b>EL INVERSIONISTA</b>, participar en el
+                    capital de la Sociedad, mediante aportes de capital y/o
+                    adquisici&#243;n de acciones,</li>
+                
+                <li>Que, en virtud de
+                    cuanto antecede, <b>LAS PARTES</b>, en la calidad con la que
+                    act&#250;an, y reconoci&#233;ndose capacidad jur&#237;dica para
+                    contratar y obligarse, y en especial para el otorgamiento del
+            </ol>
+            <p>
+                <b>CL&#193;USULAS:<br />PRIMERA. OBJETO: EL PROMOTOR</b> por s&#237; o
+                por interpuesta persona se obliga a transferir a cualquier t&#237;tulo
+                y/o a emitir &#8220;Acciones&#8221; de la Sociedad, a favor de
+                EL INVERSIONISTA, y &#233;ste se obliga a adquirir por el mismo
+                t&#237;tulo, el <b>{{ctr.fractal.porcentaje_propiedad|nombre_numero}} POR CIENTO</b> 
+                (<b>{{ctr.fractal.porcentaje_propiedad}}%</b>) del capital social
+                (porcentaje m&#237;nimo), una vez se cumplan la
+                &#8220;Condiciones de Inicio&#8221; y de acuerdo al valor establecido
+                en la &#8220;<b>CL&#193;USULA TERCERA</b>&#8221;. 
+                <b>EL INVERSIONISTA</b>
+                tendr&#225; asignado en proporci&#243;n al porcentaje adquirido,
+                mediante este acuerdo, la <b>CASA DE VERANO N&#176;
+                </b>&nbsp;<u><b>{{ctr.general_info.inmueble.numero_casa}}</b>&nbsp;</u>,
+                conjunto residencial <b>FRACTAL CASAS DE VERANO</b>, N&#176; de
+                fracciones <u>&nbsp;<b>{{ctr.fractal.cantidad}}</b>&nbsp;</u>; 
+                Porcentaje de propiedad <u>&nbsp;<b>{{ctr.fractal.porcentaje_propiedad}}</b>&nbsp;</u> por
+                ciento; La cual se encuentra dentro del 
+                Lote N&#176;: <u>&nbsp;<b>{{ctr.general_info.inmueble.lotenumero}}</b>&nbsp;</u>;
+                Manzana N&#186;: <u>&nbsp;<b>{{ctr.general_info.inmueble.manzananumero}}</b>&nbsp;</u>
+                . de la cual tendr&#225; el uso y disfrute
+                seg&#250;n el n&#250;mero de semanas y el Manual
+                <b>FRACTAL CASAS DE VERANO</b>. Ser&#225; el citado manual, el
+                Acuerdo de Accionistas y el Contrato Operaci&#243;n quien se
+                encargu&#233; de establecer las reglas de uso de cada Casa de
+                Verano.  <b><b>PAR&#193;GRAFO PRIMERO:</b></b> Dichas acciones
+                representar&#225;n los derechos y deberes de cada uno de los
+                inversionistas en el Proyecto. <b><b>PAR&#193;GRAFO SEGUNDO:</b></b> El
+                porcentaje siempre reflejar&#225; los mismos derechos frente al
+                disfrute, independiente del n&#250;mero de los interesados
+                inversionistas. <br /><b>SEGUNDA. COMPLEMENTO: EL INVERSIONISTA</b>,
+                de una parte, se compromete a realizar los aportes de los que da
+                cuenta este Acuerdo, y de otra parte, <b>EL PROMOTOR</b> y los
+                Administradores se comprometen a realizar todos los actos necesarios
+                para que <b>EL INVERSIONISTA</b> obtenga participaci&#243;n en la
+                sociedad que se constituya, conforme a lo previsto en el
+                presente Acuerdo, incluido, pero no limitado a firmar y adherirse al
+                acuerdo de accionistas, firmarel Manual, el Contrato de
+                Operaci&#243;n, los contratos de administraci&#243;n, desarrollo del
+                Proyecto, <b><b>PAR&#193;GRAFO PRIMERO:</b></b> En el presente Acuerdo se
+                regular&#225; el compromiso de <b>LAS PARTES</b> para la futura
+                vinculaci&#243;n de <b>EL INVERSIONISTA</b> como accionista de
+                la Sociedad. <b><b>PAR&#193;GRAFO SEGUNDO:</b></b> <b>EL INVERSIONISTA</b> se
+                encargar&#225; de entregar a <b>EL PROMOTOR </b>toda la
+                documentaci&#243;n legal necesaria para la transferencia del
+                porcentaje del derecho de propiedad del proyecto.<br />
+                <b>TERCERA. VALOR DE LA INVERSI&#211;N: 
+                </b>el valor del porcentaje de derecho de propiedad y futuro aporte de
+                capital, objeto de este acuerdo, es por la suma de
+                <b><u>&nbsp;{{ctr.general_info.valor_en_letras}}&nbsp;</u> 
+                (<u>&nbsp;$ {{ctr.general_info.valor|floatformat:"-3g"}}&nbsp;</u>)</b>,<br />
+              </p>
+            <b>Forma de pago:</b><br />
+            <table class='detalles'>
+                <tr>
+                    <td style="width:2%"></td>
+                    <td style="text-align:justify;vertical-align: top;">
+                        <b>1. CUOTA INICIAL:</b> la suma de {{ctr.general_info.ci|nombre_numero}}
+                         ($ <u><b>{{ctr.general_info.ci|floatformat:"-3g"}})</b>&nbsp;</u> pesos, 
+                         que serán pagados de la siguiente manera: 
+                        <u>{{ctr.general_info.fp_ci}}&nbsp;</u>.<br>
+                    </td>
+                    <td style="width:5%"></td>
+                    <td style="text-align:justify;vertical-align: top;">
+                        <b>2. SALDO A PAGAR:</b>{%if ctr.general_info.saldo == 0 %} <u>$ 0</u> {%else%} 
+                        la suma de {{ctr.general_info.saldo|nombre_numero}}
+                         ($ <u><b>{{ctr.general_info.saldo|floatformat:"-3g"}})&nbsp;</b></u> pesos, 
+                         que serán pagados de la siguiente manera: 
+                        <u>{{ctr.general_info.fp_saldo}}&nbsp;</u>.{%endif%}<br>
+                    </td>
+                    <td style="width:2%"></td>
+                </tr>
+            </table>
+            {%if ctr.observaciones != ""%}
+            <p class='detalles' style="text-align:justify">
+                <b>OBSERVACIONES DE LA FORMA DE PAGO: </b><u>{{ctr.observaciones}}</u>.<br>
+                <small>(SOLO SE TIENEN EN CUENTA LAS OBSERVACIONES QUE SE HAGAN SOBRE LA FORMA DE PAGO. CUALQUIER OBSERVACIÓN FUERA DE LA FORMA DE PAGO, NO TIENE VALIDEZ PARA ESTE
+                    CONTRATO).</small>
+            </p>
+            {%endif%}
+            <p>
+                <b>PAR&#193;GRAFO PRIMERO:</b> durante el plazo de pago establecido en el
+                presente acuerdo, no se causar&#225;n intereses de plazo al
+                inversionista. <b>PAR&#193;GRAFO SEGUNDO:</b> En caso de mora en el
+                pago de cualquiera de las cuotas pactadas para el pago de la
+                inversi&#243;n, por parte de <b>EL INVERSIONISTA</b>, pagar&#225;
+                este, a <b>EL PROMOTOR</b>, intereses moratorios a la tasa
+                m&#225;xima legal vigente mensual y/o fracci&#243;n de mes vencido,
+                establecida por la Superintendencia Financiera de Colombia, sin
+                perjuicio de los derechos, acciones y facultades de
+                <b>EL PROMOTOR</b>, pues, en tal evento y en cualquier momento,
+                durante la mora podr&#225; exigir el pago del saldo total
+                adeudado con sus intereses moratorios, adem&#225;s de hacer efectiva
+                la cl&#225;usula de penal del presente contrato. Par&#225;grafo
+                tercero: <b>EL PROMOTOR</b> solicitar&#225; a
+                <b>EL INVERSIONISTA</b> las garant&#237;as reales o personales que
+                juzgue convenientes para respaldar el pago de la obligaci&#243;n
+                adquirida en el presente contrato, como son pagar&#233;, o letra
+                de cambio. <b>PAR&#193;GRAFO CUARTO:</b> todos los aportes realizados por
+                <b>EL INVERSIONISTA</b> para el desarrollo del proyecto,
+                ser&#225;n realizados directamente a las cuentas bancarias de
+                <b>EL PROMOTOR</b>.
+                <b>CUARTA: CONDICIONES ADICIONALES: EL INVERSIONISTA</b> est&#225;
+                dando su consentimiento de manera informada y declara pleno
+                conocimiento de que <b>EL PROMOTOR</b> y sus equipos de trabajo han
+                presentado con total claridad la propuesta de negocio del
+                acuerdo de inversi&#243;n. Esto incluye, los aspectos relacionados con
+                los tiempos estimados para la ejecuci&#243;n, as&#237; como las
+                condiciones tanto generales como particulares del Proyecto, as&#237;
+                como, el car&#225;cter de asociativo del mismo. Por lo cual,
+                <b>EL INVERSIONISTA</b> acepta que este, es un negocio de
+                car&#225;cter asociativo, en la que cada casa de verano, estar&#225;
+                conformada por <b>VEINTICINCO (25) </b>inversionistas, quienes
+                ser&#225;n futuros accionistas de la sociedad que constituyan de
+                la casa de verano. <b>PAR&#193;GRAFO PRIMERO:</b> <b>LAS PARTES</b> reconocen
+                que el Proyecto se centra en el disfrute compartido de una casa
+                de verano. Aunque podr&#237;a generar rentabilidad y reducir gastos de
+                mantenimiento, se enfatiza que su prop&#243;sito principal es el
+                disfrute. No existe garant&#237;a alguna en t&#233;rminos de
+                rentabilidad o generaci&#243;n de utilidades. <b>PAR&#193;GRAFO SEGUNDO:</b>
+                <b>EL INVERSIONISTA</b> acepta que, este es una intenci&#243;n
+                de negocio de car&#225;cter asociativo y que las nuevas
+                capitalizaciones aceptadas por la mayor&#237;a de los accionistas y el
+                riesgo general del Proyecto lo comparten todos los accionistas
+                de la sociedad en proporci&#243;n de su porcentaje del capital.
+                <b>PAR&#193;GRAFO TERCERO:</b> En caso de necesitar m&#225;s capital para el
+                sostenimiento de la casa, realizaran una asamblea extraordinaria
+                y los accionistas en mayor&#237;a decidir&#225;n el monto que se
+                necesite. <b>PAR&#193;GRAFO CUARTO:</b>
+                <b>EL INVERSIONISTA</b> reconoce y acepta comprometerse plenamente a
+                  cumplir con las reglas definidas para el uso compartido del
+                  Proyecto, mediante la firma del
+                  Acuerdo de Accionistas, y el Contrato de Operaci&#243;n por parte de
+                los accionistas. Este compromiso garantizar&#225; el cumplimiento del
+                prop&#243;sito del Proyecto. El desarrollo del Manual podr&#225;
+                darse por parte del Operador por Plataformas tecnol&#243;gicas.
+                <b>QUINTA: DESARROLLO DEL PROYECTO: EL PROMOTOR</b>, tendr&#225;
+                la responsabilidad del recaudo y manejo de los recursos objeto de la
+                inversi&#243;n de <b>LOS INVERSIONISTAS</b>, para el desarrollo del
+                proyecto. Una vez completado, la gesti&#243;n pasara a manos de
+                los Accionistas a trav&#233;s de la Sociedad establecida, de
+                conformidad con los acuerdos y documentos determinados para la
+                administraci&#243;n conjunta de la sociedad y del proyecto. A su vez,
+                la operaci&#243;n ser&#225; manejada por el operador. El desarrollo
+                urban&#237;stico de la unidad residencial ser&#225; desarrollado
+                por etapas; en este sentido, ser&#225; desarrollada la
+                construcci&#243;n de cada proyecto. As&#237; mismo, ser&#225; la
+                entrega de las obras comunes, como son cerramiento,
+                porter&#237;as, v&#237;as peatonales, ciclorrutas, zonas verdes etc.
+                <b>PAR&#193;GRAFO PRIMERO:</b> para lo cual, se entregar&#225; la memoria
+                descriptiva del proyecto. <b>PAR&#193;GRAFO SEGUNDO:</b>
+                <b>EL PROMOTOR</b> no responde de ninguna manera por riesgo pa&#237;s
+                y el cambio de legislaci&#243;n nacional y local en que se vea
+                involucrada la sociedad y/o el Proyecto.
+                <b>SEXTA: CONDICIONES DE INICIO:</b> El inicio de obra ser&#225;
+                decretado por parte <b>EL PROMOTOR</b>, con el cumplimiento de
+                las siguientes condiciones: <br>
+                <b>a)</b> cuando se tengan el
+                <b>CIEN POR CIENTO (100%)</b>, de las fracciones vendidas por cada
+                proyecto.<br>
+                <b>b)</b> cuando el recaudo de la totalidad de los
+                inversionistas sea igual o superior al
+                <b>CINCUENTA POR CIENTO (50%)</b>, tanto a los aportes individuales de
+                cada inversionista, como al recaudo total del proyecto.<br>
+                <b>PAR&#193;GRAFO PRIMERO:</b> para llegar al punto de equilibrio de
+                inversionistas del proyecto, se tiene un t&#233;rmino de hasta 180
+                d&#237;as calendario, a partir de la firma del presente acuerdo.
+                <b>PAR&#193;GRAFO SEGUNDO:</b> en caso de que, no se llegue al punto de
+                equilibrio de inversionistas, en el t&#233;rmino establecido, se
+                prorrogar&#225; hasta noventa (90) d&#237;as calendario, con el
+                fin de que se llegue al punto de equilibrio establecido.
+                <b>PAR&#193;GRAFO TERCERO:</b> En caso de que no se pueda conformar la
+                sociedad por falta de inversionistas, o por inconvenientes normativos,
+                eventos que no representan incumplimiento contractual,
+                <b>EL PROMOTOR</b> deber&#225; devolver a
+                <b>EL INVERSIONISTA</b> el dinero entregado en desarrollo de este
+                Proyecto, en un m&#225;ximo de <b>CIENTO OCHENTA (180)</b> d&#237;as
+                calendario. En este caso <b>EL PROMOTOR</b> devolver&#225; los
+                dineros sin intereses. <b>PAR&#193;GRAFO CUARTO:</b> una vez se cumpla con el
+                punto de equilibrio para el inicio de las obras de urbanismo y
+                construcci&#243;n del proyecto objeto de este acuerdo, se tendr&#225;
+                un plazo preliminar de ciento ochenta (180) d&#237;as, para la
+                solicitud y obtenci&#243;n de la licencia de construcci&#243;n
+                del proyecto. Cumplido este t&#233;rmino, se dar&#225; inicio a las
+                obras.
+                <b>S&#201;PTIMA: TIPOS DE ACCIONES A CEDER O A EMITIR:</b> Dentro
+                de los estatutos sociales se debe estipular que, las acciones de
+                la compa&#241;&#237;a que recibir&#225; <b>EL INVERSIONISTA</b> son
+                nominativas, ordinarias y de capital; sin embargo, se debe
+                pactar la posibilidad de crear nuevos tipos de acciones lo cual
+                depender&#225; de la aprobaci&#243;n de la Asamblea General de
+                Accionistas. Las acciones conferir&#225;n a su poseedor los
+                derechos estipulados en los estatutos sociales y la normativa
+                societaria de Colombia, al igual que los deberes que dichos
+                estatutos y normas concordantes disponen para los accionistas.
+                <b>OCTAVA: DERECHO DE PREFERENCIA:</b> Se deja expresa constancia y<b>
+                  EL INVERSIONISTA</b
+                >
+                acepta y reconoce que, dentro de los estatutos sociales de la Sociedad
+                y del Acuerdo de accionistas, se encuentra regulado el derecho
+                de preferencia que regir&#225; a los Accionistas de la Sociedad,
+                por lo cual, todos los Accionistas de la Sociedad deber&#225;n
+                ce&#241;irse al mismo y efectuar cualquier enajenaci&#243;n de
+                acciones con sujeci&#243;n a este derecho de preferencia, a no ser que
+                el mismo sea levantado por disposici&#243;n de la Asamblea General de
+                Accionistas. <b>NOVENA: DOCUMENTOS: LAS PARTES</b> se obligan a
+                suscribir los documentos correspondientes para adquirir las acciones
+                objeto de este Acuerdo, en especial los siguientes
+                documentos:<br>
+                <b>A) </b>Acto constitutivo de la sociedad.<br>
+                <b>B) </b>Acuerdo de accionistas.<br>
+                <b>C) </b>Manual.<br>
+                <b>D)</b> Memoria descriptiva.<br>
+                <b>E)</b> Contrato de operaci&#243;n.<br>
+                <b>F)</b> Contratos generales.<br>
+                <b>D&#201;CIMA: CONSTITUCI&#211;N Y MANEJO DE LA SOCIEDAD: </b>
+                La sociedad ser&#225; constituida por los inversionistas, una vez, se
+                cumplan las condiciones estipuladas en la cl&#225;usula
+                D&#201;CIMA PRIMERA de este acuerdo. La sociedad ser&#225; la
+                encargada de firmar el contrato con el Operador y se acoger&#225; al
+                Manual. <b>PAR&#193;GRAFO PRIMERO:</b> El Acuerdo de accionistas
+                contar&#225; con una Junta de Part&#237;cipes que se encargar&#225; de
+                hacerle seguimiento a la administraci&#243;n, operaci&#243;n y
+                mantenimiento de la sociedad y del Proyecto.
+                <b>PAR&#193;GRAFO SEGUNDO: EL INVERSIONISTA</b> acepta de manera
+                previa que la sociedad entregar&#225; la operaci&#243;n y
+                administraci&#243;n del Proyecto a un Operador mediante un contrato de
+                operaci&#243;n. Este Operador ser&#225; escogido a discreci&#243;n de
+                <b>EL PROMOTOR</b> y se encargar&#225; de mantener y operar las
+                instalaciones, as&#237; como de comercializar periodos disponibles. A
+                cambio, el Operador recibir&#225; una compensaci&#243;n acordada
+                basada en los ingresos generados. Ambas partes acuerdan coordinar y
+                comunicar de manera efectiva para asegurar el &#233;xito
+                continuo del Proyecto.
+                <b>D&#201;CIMA PRIMERA. TRANSFERENCIA DEL PROYECTO:</b> Para la
+                transferencia del proyecto se estima una fecha aproximada de
+                <b>18 meses</b>, contados a partir del inicio de obra.
+                Siempre y cuando, se cumplan con las condiciones de inicio de obra, se
+                tenga la totalidad de los recursos, se encuentre individualizado
+                el proyecto, se halla constituido la sociedad, y no existan
+                imprevistos ni retrasos del proyecto, caso en cual
+                <b>EL PROMOTOR</b> tendr&#225; un t&#233;rmino adicional de
+                ciento ochenta (180) d&#237;as, sin que esto se considere
+                incumplimiento. De igual manera, podr&#225; prorrogarse la
+                transferencia del proyecto, en eventos de caso fortuito o fuerza
+                mayor, a partir del plazo inicialmente pactado en esta cl&#225;usula,
+                y su tiempo ser&#225; igual al tiempo del caso fortuito o fuerza
+                mayor, sin que esto constituya causal de incumplimiento y/o
+                desistimiento. <b>D&#201;CIMA SEGUNDA: EROGACIONES:</b> Las
+                erogaciones de estructuraci&#243;n y administraci&#243;n de la
+                sociedad ser&#225;n cubiertos por los propietarios de las acciones de
+                la misma, de acuerdo con la composici&#243;n accionaria de la
+                misma. <b>PAR&#193;GRAFO PRIMERO:</b> Los gastos, impuestos y retenciones que
+                se generen, o causen por la creaci&#243;n y constituci&#243;n de la
+                sociedad, as&#237; como lo correspondiente a las erogaciones de
+                transferencia del proyecto, estar&#225;n a cargo y ser&#225;n asumidos
+                por<b> EL INVERSIONISTA</b>.
+                <b>D&#201;CIMA TERCERA. CL&#193;USULA PENAL: </b>Ser&#225;
+                causal de incumplimiento del Acuerdo por parte de
+                <b>EL INVERSIONISTA: 1)</b> el desistimiento o determinaci&#243;n de
+                no continuar con las obligaciones del contrato, <b>2)</b> el
+                incumplimiento de cualquiera de las cl&#225;usulas en el convenidas,
+                <b>3)</b> la mora por m&#225;s sesenta (60) d&#237;as
+                calendario, en el pago de cualquiera de las cuotas establecidas
+                en la cl&#225;usula tercera este acuerdo, 4) as&#237; como, la
+                configuraci&#243;n de una de las causales previstas en
+                cl&#225;usula d&#233;cimo s&#233;ptima de este contrato, como lo es la
+                aparici&#243;n en listas restrictivas o la condena proveniente de
+                delitos relacionados con lavados de activos, y financiaci&#243;n
+                al terrorismo y conexos. Causales de Incumplimiento que, dar&#225;n
+                derecho a EL PROMOTOR, de declarar extra juicio, la
+                terminaci&#243;n unilateral del contrato, sin necesidad de
+                declaraci&#243;n judicial, y cobrar&#225; a EL INVERSIONISTA, a
+                t&#237;tulo de cl&#225;usula penal, el equivalente al cuarenta
+                por ciento (40%) del valor total del Acuerdo. En caso de quedar un
+                saldo a favor de EL INVERSIONISTA, luego de haber deducido el valor de
+                la cl&#225;usula penal, ser&#225;n devueltos por
+                <b>EL PROMOTOR</b>, sin que se generen intereses de ninguna naturaleza
+                a favor de <b>EL INVERSIONISTA</b>, en un m&#225;ximo de <b
+                  >CIENTO OCHENTA (180) d&#237;as calendario, contados a partir de la
+                  fecha en que EL INVERSIONISTA, manifieste por escrito la solicitud
+                  de la devoluci&#243;n, para </b
+                >llevar a cabo el desembolso del saldo a favor que quedare a su favor,
+                por parte de <b>EL PROMOTOR</b>. Ser&#225; causal de incumplimiento
+                del acuerdo, por parte de EL PROMOTOR, el desistimiento
+                injustificado o determinaci&#243;n de no continuar con las
+                obligaciones del acuerdo. Lo que, faculta a EL INVERSIONISTA al
+                cobro de la cl&#225;usula penal, equivalente al cuarenta por ciento
+                (40%) del valor del presente Acuerdo, y la restituci&#243;n de los
+                valores cancelados por parte de estos para la inversi&#243;n.
+                <b>EL PROMOTOR</b> acordar&#225; con <b>EL INVERSIONISTA</b> los
+                plazos, fechas y montos para la devoluci&#243;n. En caso que no exista
+                un acuerdo entre las partes, se fijar&#225; un plazo m&#225;ximo
+                de CIENTO OCHENTA (180) d&#237;as calendario, contados a partir de la
+                fecha en que EL INVERSIONISTA, manifieste por escrito la
+                solicitud de la devoluci&#243;n, para llevar a cabo el desembolso de
+                los valores quedare a su favor, por parte de EL PROMOTOR. <b
+                  >PAR&#193;GRAFO: </b
+                >En caso que el incumplimiento de las obligaciones derivadas del
+                presente contrato por parte de <b>EL PROMOTOR</b> se genere por el
+                acaecimiento de caso fortuito o fuerza mayor comprobable e
+                imputable al presente contrato, se podr&#225; exonerar del pago de la
+                cl&#225;usula penal pactada.
+                <b>D&#201;CIMA CUARTA. CESI&#211;N:</b> Los deberes y derechos
+                de este contrato por parte de <b>EL PROMOTOR</b> pueden ser cedidos a
+                la(s) persona(s) natural(es) y/o jur&#237;dica(s) que estime
+                conveniente; as&#237; mismo, lo podr&#225;(n) hacer<b>
+                  EL INVERSIONISTA</b
+                >
+                si y solo si <b>EL PROMOTOR</b> acepta al nuevo solicitante mediante
+                el diligenciamiento de los requisitos exigidos por esta, estando
+                <b>EL INVERSIONISTA</b> a <b>PAZ Y SALVO</b> por todo concepto al
+                momento se solicitar la cesi&#243;n, y cancelando la suma
+                equivalente al 5% del valor presente contrato.
+                <b>D&#201;CIMA QUINTA. AUTORIZACI&#211;N PARA EL TRATAMIENTO DE DATOS
+                  PERSONALES</b
+                >. Para efectos de la protecci&#243;n de los datos personales y
+                su tratamiento de acuerdo a lo establecido en la Ley 1581 de 2012, y
+                su decreto reglamentario 1377 de 2013,
+                <b>EL INVERSIONISTA</b> manifiesta que acepta la pol&#237;tica de
+                tratamiento de datos adoptada por EL PROMOTOR; en consecuencia,
+                autorizo de manera libre, 
+                expresa, voluntaria a<b> EL PROMOTOR</b>, para que realice el
+                tratamiento de mis datos personales, incluyendo compilar, almacenar,
+                consultar, usar, compartir, intercambiar, transmitir,
+                transferir, circular, divulgar mis datos personales durante y con
+                posterioridad a la relaci&#243;n contractual que tengo con
+                <b>EL PROMOTOR</b>, de conformidad con la pol&#237;tica de
+                  tratamiento de datos personales y de seguridad de la
+                  informaci&#243;n de EL PROMOTOR, con el fin de facilitar 
+                  la venta de bienes y servicios de la empresa, adelantar acciones de
+                cobro y de recuperaci&#243;n de cartera a trav&#233;s de la empresa o
+                de terceros que este encargue, realice consultas, reportes y
+                actualizaciones en centrales de riesgos. Para que, a trav&#233;s, de
+                proveedor tecnol&#243;gico, realice la toma de firma
+                electr&#243;nica y validaci&#243;n de quien firma a trav&#233;s
+                de fotograf&#237;a digital, de todos los documentos necesarios para la
+                vinculaci&#243;n contractual entre las partes, como los son: el
+                contrato de vinculaci&#243;n, formulario de conocimiento de clientes
+                para debida diligencia y debida diligencia ampliada del
+                <b>SAGRILAFT</b>, pagar&#233;, autorizaci&#243;n para
+                diligenciar espacios en blanco, formulario de verificaci&#243;n, y
+                dem&#225;s documentos que requiera EL PROMOTOR, en raz&#243;n a la
+                vinculaci&#243;n contractual de las partes. Para que, realice
+                llamadas a los n&#250;meros de tel&#233;fonos por mi proporcionados,
+                env&#237;e mensajes de texto, mensajes de Whatsapp, mensajes de
+                correo electr&#243;nico, correspondencia f&#237;sica a mi
+                direcci&#243;n de residencia, o lugar de trabajo, de contenidos
+                institucionales, notificaciones con informaci&#243;n del
+                proyecto, informaci&#243;n del estado de cuenta, informaci&#243;n de
+                saldos, recibos de pago, cartas de cobro pre jur&#237;dico y
+                jur&#237;dico, y dem&#225;s documentos e informaci&#243;n que,
+                requiera emitir <b>EL PROMOTOR</b>, en virtud de la obligaci&#243;n
+                contractual derivada de este acuerdo; as&#237; como tambi&#233;n
+                a enviar informaci&#243;n sobre nuevos proyectos que este desarrolle.
+                realice consultas, reportes y actualizaciones en centrales de riesgos,
+                necesarias para verificar el comportamiento crediticio,
+                h&#225;bitos de pago. De igual manera, autorizo a EL PROMOTOR, para
+                que, realice el tratamiento de mis datos personales,
+                suministrados en el formulario de verificaci&#243;n de clientes, para
+                la debida diligencia en la vinculaci&#243;n contractual como cliente.
+                En consecuencia, autorizo a <b>EL PROMOTOR</b>, para, que valide
+                la informaci&#243;n suministrada, realice por cualquier medio, la
+                consulta en listas vinculantes para Colombia, solicite los
+                documentos soportes para la debida diligencia, como lo son
+                declaraciones de renta, RUT, certificados de ingresos y retenciones,
+                declaraciones de activos en el exterior, certificados de
+                existencia y representaci&#243;n legal y certificado de
+                composici&#243;n accionaria, en caso de que correspondan, copias de
+                documentos de identificaci&#243;n, o cualquier otro documento
+                que, estime necesario para realizar y soportar la debida diligencia, y
+                realice reporte a los diferentes entes de control u autoridades
+                competentes, en caso de ser necesario. Todo esto, en cumplimiento al
+                mandato legal que, le asiste, a trav&#233;s de la Circular
+                Externa 100-000016 de diciembre 24 de 2020, que modific&#243; el Cap.
+                X circular b&#225;sica Jur&#237;dica (Circular Externa N&#176;
+                100-000005 del 22 de noviembre de 2017, de la Superintendencia
+                de Sociedades, y que le es, de obligatorio cumplimiento, para la
+                prevenci&#243;n integral de riesgos de Lavado de Activos,
+                Financiaci&#243;n del Terrorismo y Financiamiento de la
+                Proliferaci&#243;n de Armas de Destrucci&#243;n Masiva y/o delitos
+                conexos. En general, declaro conocer que, los datos personales
+                objeto del tratamiento, ser&#225;n utilizados para las finalidades
+                derivadas de la relaci&#243;n contractual suscrita entre LAS PARTES.
+                Igualmente declaro conocer el derecho de supresi&#243;n de datos
+                personales que me asiste, para lo cual, en caso de solicitarlo,
+                <b>EL PROMOTOR</b>, proceder&#225; conforme a lo contemplado en
+                su pol&#237;tica de tratamiento de datos personales.
+                <b
+                  >D&#201;CIMA SEXTA. REPORTE A CENTRALES DE RIESGO: EL
+                  INVERSIONISTA</b
+                >
+                acepta(n) que <b>EL PROMOTOR </b>puede hacer p&#250;blica la
+                informaci&#243;n de este contrato y da su autorizaci&#243;n expresa
+                para que las centrales de riesgo o cualquier otra
+                instituci&#243;n de cr&#233;dito la mantenga en su historial de
+                cr&#233;dito.
+                <b
+                  >D&#201;CIMA S&#201;PTIMA. CL&#193;USULA SAGRILAFT (SISTEMA DE
+                  AUTOCONTROL Y GESTI&#211;N DEL RIESGO INTEGRAL DE LAVADO DE
+                  ACTIVOS Y FINANCIACI&#211;N DE TERRORISMO):</b
+                >
+                que, a <b>EL PROMOTOR</b>, le asiste el deber legal de dar
+                cumplimiento a lo preceptuado en la Circular Externa 100-000016
+                de diciembre 24 de 2020, que modific&#243; el Cap. X circular
+                b&#225;sica Jur&#237;dica (Circular Externa N&#176; 100-000005
+                del 22 de noviembre de 2017, de la Superintendencia de Sociedades,
+                para la cooperaci&#243;n en la prevenci&#243;n de delitos de lavado de
+                activos, la financiaci&#243;n del terrorismo y cualquier otro
+                delito conexo; por lo cual, ha implementado el Sistema de Autocontrol
+                y Gesti&#243;n del Riesgo Integral de Lavado de Activos,
+                Financiaci&#243;n del Terrorismo y Financiamiento de la
+                Proliferaci&#243;n de Armas de Destrucci&#243;n Masiva
+                &#8220;<b>SAGRILAFT</b>&#8221;. Raz&#243;n por la cual, en mi
+                calidad de inversionista, me <b>OBLIGO</b> a dar cumplimiento de este
+                sistema y en virtud a ello, <b>ACEPTO </b>que, en el evento en que, me
+                encuentre en la lista OFAC (Office of Foreign Assets Control) o
+                la lista ONU (Lista del Consejo de Seguridad de la Organizaci&#243;n
+                de las Naciones Unidas) o de alguna otra de igual o similar
+                naturaleza, de car&#225;cter nacional o internacional, o este
+                vinculados, o haya sido sentenciado judicialmente por cualquier delito
+                fuente o relacionado con el lavado de activos, financiaci&#243;n
+                del terrorismo o la proliferaci&#243;n de armas de destrucci&#243;n
+                masiva, o haya sido extraditado, o tenga presencia en pa&#237;ses
+                considerados para&#237;sos fiscales, pa&#237;ses sancionados por
+                la OFAC y pa&#237;ses no cooperantes, ser&#233; responsable por los
+                da&#241;os y perjuicios que dicho reporte o sentencia le
+                ocasione a <b>EL PROMOTOR</b>, sin perjuicio de la responsabilidad
+                penal que me asiste. Y, faculto a<b> EL PROMOTOR</b>, para dar por
+                terminado unilateralmente el acuerdo suscrito, en cualquier
+                momento y sin previo aviso, por configurarse una causal objetiva de
+                terminaci&#243;n del contrato, y hacer el reporte a los
+                diferentes entes de control u autoridades competentes del hallazgo del
+                mismo. PAR&#193;GRAFO PRIMERO: Igualmente, declaro y certifico que no
+                tengo presencia en pa&#237;ses considerados para&#237;sos
+                fiscales, pa&#237;ses sancionados por la OFAC y pa&#237;ses no
+                cooperantes. PAR&#193;GRAFO SEGUNDO: Igualmente, declaro que no
+                soy una persona expuesta pol&#237;ticamente seg&#250;n la
+                legislaci&#243;n nacional y asumo el compromiso de informar cualquier
+                modificaci&#243;n que se produzca al respecto, dentro de los
+                treinta (30) d&#237;as de ocurrencia de la novedad, mediante la
+                presentaci&#243;n de una nueva declaraci&#243;n.
+                <b>PAR&#193;GRAFO TERCERO: </b>que,<b> EL PROMOTOR</b>, en
+                cumplimiento del Sistema de Autocontrol y Gesti&#243;n del Riesgo
+                Integral de Lavado de Activos, Financiaci&#243;n del Terrorismo
+                y Financiamiento de la Proliferaci&#243;n de Armas de Destrucci&#243;n
+                Masiva &#8220;<b>SAGRILAFT</b>&#8221;, realiza un estudio de seguridad
+                para la vinculaci&#243;n de contrapartes, por lo cual,
+                <b>EL INVERSIONISTA</b>, se obliga a diligenciar con absoluta
+                honestidad y sin omisi&#243;n alguna, la totalidad de cada uno de los
+                &#237;tems del formulario de conocimiento de clientes que le es
+                entregado para su diligenciamiento. As&#237; como, entregar todos los
+                documentos requeridos en formato PDF, para que
+                <b>EL PROMOTOR</b> realice la debida diligencia al momento de la
+                vinculaci&#243;n como cliente, ya sea como persona natural o
+                jur&#237;dica, como son: Declaraci&#243;n de renta, RUT,
+                certificado de existencia y representaci&#243;n legal, copias de
+                c&#233;dulas, certificados de ingresos y retenciones, certificado de
+                composici&#243;n accionaria, y dem&#225;s documentos que
+                requiera EL PROMOTOR, por cada titular que firme el acuerdo,
+                seg&#250;n sea el caso. PAR&#193;GRAFO <b
+                  >CUARTO: EL INVERSIONISTA</b
+                >, se obliga a facilitar a <b>EL PROMOTOR</b>, las actualizaciones que
+                esta requiera, del sistema de autocontrol y gesti&#243;n del riego
+                integral de lavado de activos y financiaci&#243;n del terrorismo
+                (SAGRILAFT), para lo cual, deber&#225; diligenciar el formulario de
+                conocimiento de clientes, en los tiempos que la empresa
+                requiera, as&#237; como aportar los documentos requeridos para que, la
+                empresa realice la correspondiente actualizaci&#243;n de debida
+                diligencia.
+                <b
+                  >D&#201;CIMA OCTAVA. DECLARACI&#211;N DE OR&#205;GENES DE FONDO DE
+                  EL INVERSIONISTA: EL INVERSIONISTA</b
+                >
+                obrando en nombre propio, de manera voluntaria y dando certeza
+                de que todo lo aqu&#237; consignado es cierto, realizo la siguiente
+                declaraci&#243;n de or&#237;genes de fondos a
+                <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b> con NIT 900993044-9,
+                con el prop&#243;sito de dar cumplimiento a lo se&#241;alado en la
+                Circular Externa 100-000016 de diciembre 24 de 2020, que
+                modific&#243; el Cap. X circular b&#225;sica Jur&#237;dica (Circular
+                Externa N&#176; 100-000005 del 22 de noviembre de 2017, de la
+                Superintendencia de Sociedades, en cumplimiento al Sistema de
+                Autocontrol y Gesti&#243;n del Riesgo Integral de Lavado de Activos,
+                Financiaci&#243;n del Terrorismo y Financiamiento de la
+                Proliferaci&#243;n de Armas de Destrucci&#243;n Masiva
+                &#8220;LA/FT/FPADM o SAGRILAFT&#8221;, adoptadas por EL PROMOTOR, y
+                <b>DECLARO 1)</b> que, el patrimonio y las fuentes 
+                econ&#243;micas que permiten la inversi&#243;n para el
+                presente acuerdo, no son fruto de actividades il&#237;citas en lavados
+                de activos y financiaci&#243;n al terrorismo y/o delitos
+                fuentes, contemplados en el C&#243;digo Penal colombiano (Ley 599 de
+                2000), o en cualquier norma que lo modifique, adicione o sustituya. Y
+                que, por tanto, est&#225;n ligados al normal desarrollo de las
+                actividades comerciales registradas ante las autoridades competentes.
+                <b>2)</b> Que, no tengo presencia en pa&#237;ses considerados
+                para&#237;sos fiscales, pa&#237;ses sancionados por la OFAC y
+                pa&#237;ses no cooperantes. 3) Que, los recursos comprometidos para
+                atender las obligaciones suscitadas en la relaci&#243;n
+                comercial con EL PROMOTOR provienen de mi ocupaci&#243;n, oficio,
+                profesi&#243;n, actividad o negocio l&#237;cito. De igual
+                manera, declaro: que, la informaci&#243;n que he suministrado a
+                trav&#233;s de este documento es veraz, verificable y que adem&#225;s
+                asumo el compromiso de actualizarla en cualquier momento,
+                conforme a los requerimientos realizados por <b>EL PROMOTOR</b>. Que,
+                informar&#233; inmediatamente cualquier circunstancia que
+                modifique la presente declaraci&#243;n. Cuando a ello haya lugar,
+                autorizo a EL PROMOTOR, a dar inicio a la liquidaci&#243;n de este
+                Acuerdo, en el caso de verme vinculado en actividades
+                il&#237;citas y/o delitos fuentes, contempladas en el C&#243;digo
+                Penal colombiano (Ley 599 de 2000), o en cualquier norma que lo
+                modifique, adicione o sustituya, o ser condenado por estos
+                delitos. As&#237; como, la aparici&#243;n en listas restrictivas y/o
+                vinculantes en Colombia, o, en el eventual caso, de que, por
+                aplicaci&#243;n de normas sancionadas con posterioridad a la firma de
+                este Acuerdo, se modifiquen las declaraciones por mi efectuadas,
+                eximiendo por lo tanto a <b>EL PROMOTOR</b>, de toda
+                responsabilidad que se derive por informaci&#243;n err&#243;nea, falsa
+                o inexacta que, yo hubiere proporcionado en este documento, o de
+                la violaci&#243;n del mismo. <b>D&#201;CIMA NOVENA: EL PROMOTOR</b>,
+                autoriza y entrega toda la comercializaci&#243;n del desarrollo
+                inmobiliario <b>FRACTAL CASA DE VERANO</b>, a la sociedad
+                STATUS COMERCIALIZADORA S.A.S., con NIT 901.018.375-4,
+                sociedad con domicilio en la ciudad de Medellín,
+                inscrita con en la C&#225;mara de Comercio de Medellín
+                con la matr&#237;cula N&#186;21-572509-12. <b
+                  >VIG&#201;SIMA. ARBITRAMENTO:</b
+                >
+                Toda controversia o diferencia relativa a este contrato, se resolverá 
+                por un Tribunal de Arbitramento presentado ante el Centro de Conciliación 
+                y Arbitraje de la Cámara de Comercio de Medellín para Antioquía, el cual 
+                estará sujeto a sus reglamentos y al procedimiento allí contemplado. El Tribunal 
+                estará integrado por tres (3) árbitros designados por el Centro de Conciliación y 
+                Arbitraje de la Cámara de Comercio de Medellín para Antioquía, a solicitud de 
+                cualquiera de las partes; siendo la parte convocante, quien asuma todos los 
+                costos que se llegaran a generen por el proceso.
+                <b>VIG&#201;SIMA PRIMERA. ACUERDOS ANTERIORES:</b>
+                Las partes manifiestan que no reconocen la validez de
+                estipulaciones verbales relacionadas con el presente acuerdo, ya que
+                el presente, constituye el acuerdo completo y total entre las partes.
+                De la misma manera, LAS PARTES acuerdan que cualquier reclamo,
+                solicitud, queja, petici&#243;n o informaci&#243;n que afecte
+                directamente el objeto de este acuerdo, debe ser comunicado
+                &#250;nicamente por medio escrito, y ser&#225; respondido dentro del
+                t&#233;rmino legal.
+                <b>VIG&#201;SIMA SEGUNDA. DECLARACIONES:</b> declara
+                <b>EL INVERSIONISTA: 1)</b> Que los recursos econ&#243;micos
+                  utilizados para la compra del lote son de origen l&#237;cito. <b>2)</b> que
+                  la direcci&#243;n oficial de correspondencia es la 
+                anotada en el encabezamiento de este contrato, <b>3)</b> que est&#225;(n) de
+                acuerdo con el contenido en todas las cl&#225;usulas del presente
+                acuerdo, por lo que firma(n) conforme(s). <b>4)</b> Que es su
+                obligaci&#243;n informar por escrito a <b>EL PROMOTOR</b> cualquier
+                cambio de direcci&#243;n o tel&#233;fonos. <b>5)</b> Que es su
+                obligaci&#243;n pagar oportunamente cualquiera de las
+                obligaciones pecuniarias enunciadas en este acuerdo, en las oficinas
+                de EL PROMOTOR o consignando los valores correspondientes en las
+                cuentas bancarias de <b>EL PROMOTOR</b>.
+                <b>VIG&#201;SIMA TERCERA. DOMICILIO:</b> Que, para todos los efectos
+                de este contrato el domicilio es la ciudad de Medell&#237;n,
+                departamento de Antioquia. 
+              </p>
+                    <p>
+                        En señal de aceptación de lo aquí suscrito, firman LAS PARTES,{%if es_promesa%} 
+                        el día <u> {{ctr.fechapromesa.day}} </u> de <u> {{ctr.fechapromesa|date:"F"}} </u> de <u> {{ctr.fechapromesa.year}} </u> .
+                        {%else%}
+                        el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+                        {%endif%}</p><br>
+                    <br><br>   
+                    <table>
+                        <tr>
+                            <td style="{%if ctr.titulares.1%}width:50%;{%endif%}text-align:center;font-size:12px">
+                                <b>EL INVERSIONISTA</b><br><br><br><br>
+                                ____________________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.0.pk}}
+                            </td>
+                            <td style="width:50%;text-align:center;font-size:12px">
+                                <b>EL PROMOTOR</b><br><br><br><br>
+                                ____________________________________________<br>
+                                <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b><br>
+                                <b>NIT.</b> 900.993.044-9
+                            </td>
+                        </tr>
+                    </table>
+        </div>
+
+        <head>
+            <style>
+                @page {
+                    size: legal;
+                    @frame content_frame {
+                        /* Content Frame */
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 3.4cm;
+                        height: 28.7cm;
+                    }
+                    @frame footer_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: footer_content;
+                        left: 0cm;
+                        width: 24cm;
+                        top: 32.6cm;
+                        height: 3.6cm;
+                    }
+                    @frame header_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: header_content;
+                        left: 0.5cm;
+                        width: 20cm;
+                        top: 0.5cm;
+                        height: 3cm;
+                    }
+                }
+            
+                @font-face {
+                    font-family: Outfit;
+                    src: url("{%static 'fonts/Outfit/Outfit-Light.ttf'%}");
+                }
+            
+                /* Bold */
+                @font-face {
+                    font-family: Outfit;
+                    src: url("{%static 'fonts/Outfit/Outfit-Bold.ttf'%}");
+                    font-weight: bold;
+                }
+            
+                body {
+                    font-family: Outfit;
+                }
+                p,li {
+                    font-size: 11px;
+                    line-height: normal;
+                    text-align: justify;
+                }
+            </style>
+        </head>
+    </body>
+</html>

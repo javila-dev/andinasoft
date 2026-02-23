@@ -1,0 +1,81 @@
+{%extends 'base.html'%}
+{%load mathfilters%}
+{%block title%}Actas de avance{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Actas de avances</h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaActas' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Fecha corte</th>
+                    <th>Proveedor</th>
+                    <th>Proyecto</th>
+                    <th>Obra</th>
+                    <th>Contrato</th>
+                    <th>Num Acta</th>
+                    <th>Valor</th>
+                    <th>Usuario</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for acta in actas_pendientes%}
+                <tr>
+                    <td class='text-center'>
+                        <a href='/buildingcontrol/viewprogress/{{acta.pk}}'>
+                        {{acta.pk}}</a></td>
+                    <td class='text-center'>{{acta.fecha_acta|date:"d/m/Y"}}</td>
+                    <td>{{acta.contrato.proveedor.nombre}}</td>
+                    <td class='text-center'>{{acta.contrato.proyecto.proyecto}}</td>
+                    <td class='text-center'>{{acta.contrato.tipo_obra.nombre_tipo}}</td>
+                    <td class='text-center'>
+                        <a href="#" data-toggle="tooltip" data-placement="top" title="{{acta.contrato.descripcion}}">
+                            {{acta.contrato.pk}}
+                        </a>
+                    </td>
+                    <td class='text-center'>{{acta.num_acta}}</td>
+                    <td class='text-center'>{{acta.total|floatformat:"-2"}}</td>
+                    <td class='text-center'>{{acta.usuario_crea.username}}</td>
+                    <td class='text-center'>{{acta.estado}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    $(document).ready(function(){
+        var tablaActas = $('#tablaActas').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "order": [[ 0, "desc" ]],
+            columnDefs: [
+                { type: 'date-uk', targets: 1 }
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+            }
+        })
+    })
+</script>
+{%endblock%}

@@ -1,0 +1,222 @@
+{%load static%}{%load l10n%}
+<html>
+    <body>        
+        <div id="header_content">
+            <table class="border-visible">
+                <tr>
+                    <th style="width:20%;text-align:center" rowspan="3">
+                        <img src="/media/{{anticipo.empresa.logo}}" width="140">
+                    </th>
+                    <th style="width:57%;text-align:center;color:#345555">
+                       <h4>LEGALIZACION DE ANTICIPOS</h4>
+                    </th>
+                    <th style="width:10%;">
+                        CÓDIGO
+                    </th>
+                    <th style="width:13%;">
+                        SCG-TES-01
+                    </th>
+                </tr>
+                <tr>
+                    <th rowspan="2" style="padding-top: 3px;">
+                        {{anticipo.empresa.nombre.upper}}<br>
+                        <small>Formato para el registro de los gastos realizados con un anticipo determinado; se incluyen los
+                            reembolsos a los que hubiere lugar (a empleado o a empresa).
+                        </small>
+                    </th>
+                    <th style="width:10%;">
+                        VERSIÓN
+                    </th>
+                    <th style="width:13%;">
+                        1
+                    </th>
+                </tr>
+                <tr>
+                    <th style="width:10%;">
+                        FECHA
+                    </th>
+                    <th style="width:13%;">
+                        23/10/2023
+                    </th>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table class="border-visible">
+                <tr style="padding-top: 3px;">
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Id solicitud</th>
+                    <td style="width: 10%;">{{anticipo.pk}}</td>
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Solicitado por</th>
+                    <td style="width: 30%;">{{anticipo.usuario_solicita.get_full_name.upper}}</td>
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Fecha solicitud</th>
+                    <td style="width: 15%;">{{anticipo.fecha|date:"d/m/Y"}}</td> 
+                </tr>
+                <tr style="padding-top: 3px;">
+                    <th style="text-align: left;padding-left: 2px;">Valor solicitado</th>
+                    <td>${{anticipo.valor}}</td>
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Aprobado por</th>
+                    <td style="width: 30%;">{{anticipo.usuario_aprueba.get_full_name.upper}}</td>
+                    <th style="text-align: left;padding-left: 2px;">Fecha legalización</th>
+                    <td>{{anticipo.fecha_legalizacion|date:"d/m/Y"}}</td>
+                    
+                </tr>
+                <tr style="padding-top: 3px;text-align: left;">
+                    <td colspan="6" style="padding-left: 2px;text-align: left;">
+                        <b>Descripción de solicitud: </b>{{anticipo.descripcion.upper}}
+                    </td>
+                </tr>
+            </table><br>
+            <table class="border-visible">
+                <tr style="padding-top: 3px;" class="title">
+                    <th colspan="5">Relación de gastos</th>
+                </tr>
+                <tr style="padding-top: 3px;" class="title">
+                    <th style="width: 10%;">Nit</th>
+                    <th style="width: 28%;">Nombre</th>
+                    <th style="width: 10%;">Fecha</th>
+                    <th style="width: 40%;">Descripción</th>
+                    <th style="width: 12%;">Valor</th>
+                </tr>
+                {%for leg in legalizaciones%}<tr style="padding-top: 3px;">
+                    <td>{{leg.tercero.pk}}</td>
+                    <td style="text-align: left;padding-left: 2px;">{{leg.tercero.nombre_completo}}</td>
+                    <td>{{leg.fecha_gasto|date:"d/m/Y"}}</td>
+                    <td style="text-align: left;padding-left: 2px;">{{leg.descripcion.upper}}</td>
+                    <td>${{leg.valor}}</td>
+                </tr>{%endfor%}
+                <tr>
+                    <th colspan="4" class="text-align:right;">TOTAL</th>
+                    <th>${{anticipo.total_legalizado}}</th>
+                </tr>
+            </table>
+            
+            <table class="border-visible">
+                <tr style="padding-top: 3px;" class="title">
+                    <th colspan="2">Reembolsos y/o devoluciones</th>
+                </tr>
+                <tr style="padding-top: 3px;">
+                    {%if anticipo.reembolsos.reembolso_a == "empresa"%}
+                    <th>Devolución a EMPRESA</th>
+                    {%else%}
+                    <th>Reembolso a EMPLEADO</th>
+                    {%endif%}
+                    <td>${{anticipo.reembolsos.valor}}</td>
+                </tr>
+            </table>
+            {%if anticipo.reembolsos.reembolso_a == "empresa"%}
+            <table class="border-visible">
+                <tr style="padding-top: 3px;" class="title">
+                    <th colspan="4">Detalle Devolución</th>
+                </tr>
+                <tr style="padding-top: 3px;">
+                    <th>Fecha</th>
+                    <th>Recibido por</th>
+                    <th>Cuenta</th>
+                    <th>Valor</th>
+                </tr>
+                <tr style="padding-top: 3px;">
+                    <td>{{anticipo.reembolsos.detalle.0.id_otros_ingresos.fecha_ing|date:"d/m/Y"}}</td>
+                    <td>{{anticipo.reembolsos.detalle.0.id_otros_ingresos.usuario.username}}</td>
+                    <td>{{anticipo.reembolsos.detalle.0.id_otros_ingresos.cuenta.cuentabanco}}</td>
+                    <td>${{anticipo.reembolsos.detalle.0.valor}}</td>
+                </tr>
+
+            </table>{%endif%}
+            
+        </div><br>
+        <p style="text-align:right">Reporte generado por <b>{{user.get_full_name}}</b> el <b>{{now}}</b></p>
+    </body>
+
+    <head>
+        <style>
+            @page {
+                size: a4;
+                @frame header_frame {           /* Static Frame */
+                    -pdf-frame-content: header_content;
+                    left: 40pt; 
+                    width: 520pt; 
+                    top: 55px; 
+                    height: 100px;
+                }
+                @frame footer_frame {           /* Another static Frame */
+                    -pdf-frame-content: footer_content;
+                    left: 50pt; width: 530pt; top: 950pt; height: 40pt;
+                }
+                @frame content_frame {          /* Content Frame */
+                    left: 40pt; 
+                    width: 520pt; 
+                    top: 157.5px; 
+                    height: 810pt;
+                }
+        
+            }
+        
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+            }
+        
+            /* Bold */
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                font-weight: bold;
+            }
+        
+            body {
+                font-family: Ubuntu;
+            }
+            
+            table {
+                font-size: 8.5pt;
+                
+            }
+            table.border-visible{
+                border: darkgray 1px solid;
+            }
+            td{
+                vertical-align: top!important;
+                text-align: center;
+            }
+            tr {
+                padding-top: 3px;
+            }
+            
+            .text-muted{
+                color: gray;
+                
+            }
+            tr.title{
+                background-color: gray;
+                color: white;
+            }
+        
+            #encabezados-logos p {
+                padding: 0px;
+                margin: 0px;
+                font-size: large;
+                color: lightslategray;
+            }
+        
+            #detail-table th,
+            #detail-table td {
+                padding: 2px;
+                width: 50%;
+                height: 50%;
+            }
+        
+            .underline {
+                border-bottom: 0.5px solid gray;
+            }
+        
+            .text-center {
+                text-align: center;
+            }
+        
+            .title {
+                font-weight: bold;
+            }
+        </style>
+    </head>
+
+</html>

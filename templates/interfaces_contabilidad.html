@@ -1,0 +1,253 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Interfaces Contables {{proyecto}}{%endblock%}
+{%block style%}
+<style>
+    input{
+        text-align:center;
+    }
+    .input-group{
+        padding-right:2rem;
+    }
+    .lead{
+        margin-top:1rem;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Interfaces Contables {{proyecto}}</strong></h4>
+    <br>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalIntRecibos">Recibos</a></p>
+            </div>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalIntComisiones">Comisiones</a></p>
+            </div>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow mt-3" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' 
+                    data-toggle="modal" data-target="#modaldistrcdos">Distribucion de recaudos</a></p>
+            </div>
+        </div>
+        
+    </div>
+    
+    <p class='lead border-bottom border-gray'><strong>Todos los proyectos</strong></p>
+    <div class='col-xs-12 col-lg-6'>
+        <div class="bg-light rounded shadow mt-3" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+            <p class='lead text-center'><a href='#' 
+                data-toggle="modal" data-target="#modalConciliarSIIGOTerceros">Conciliar saldos de terceros</a></p>
+        </div>
+    </div>
+    <p class='lead border-bottom border-gray'><strong>Parametrizaciones</strong></p>
+    
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalParamRecibos">Parametrizar Recibos</a></p>
+            </div>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalParamComis">Parametrizar Comisiones</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalEgresos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Interfaz Egreso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form-int-egr%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modaldistrcdos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Distribucion de recaudos</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <label>Fecha de corte</label>
+          <input type="text" id="fecha-corte-rcdos" class="form-control">
+        </div>
+        <div class="modal-footer">
+            <button id="btnDistribucionRec" class="btn btn-primary">Generar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalConciliarSIIGOTerceros" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Conciliar Terceros</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+        <form id="form-conciliar-terceros" enctype="multipart/form-data">{%csrf_token%}
+            <div class="input-group mb-3">
+                <div class="input-group-prepend"> 
+                    <label class="input-group-text" for="id_empresa">Proyecto(s)</label> 
+                </div> 
+                <select name="proyecto" class="select form-control custom-select" multiple required id="id_proyecto">
+                    {%for proyecto in proyectos%}
+                    <option value="{{proyecto.proyecto}}">{{proyecto.proyecto}}</option>
+                    {%endfor%}
+                </select>
+            </div>
+          <div class="custom-file">
+            <input type="file" class="custom-file-input" id="filesiigoTerceros" name='filesiigo' required> 
+            <label class="custom-file-label" for="customFileLangHTML" data-browse="Buscar">Cargar archivo...</label>
+          </div>
+        </form>
+        </div>
+        <div class="modal-footer">
+            <button id="btnConciliarTerceros" class="btn btn-primary">Generar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+  <script>
+      
+    $(document).ready(function () {
+        bsCustomFileInput.init();
+        $('#id_cuentas_egr').prop('multiple',true)
+        $('#id_empresa_egr').on('change',function(){
+            let empresa = $(this).val()
+            $('#id_cuentas_egr').empty()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuentas_egr').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa').on('change', function () {
+            var empresa = $(this).val()
+            $.ajax({
+                type: 'GET',
+                url: '/tesoreria/interfaces_tesoreria',
+                data: {
+                    'data_request': 'cuentas_por_empresa',
+                    'empresa': empresa
+                },
+                success: function (response) {
+                    var cuentas = JSON.parse(response['data'])
+                    $('#id_cuenta').children().remove()
+                    $.each(cuentas, function (index, item) {
+                        cuenta = item['fields']['cuentabanco']
+                        var option = "<option value='" + cuenta + "'>" + cuenta +
+                            "</option>"
+                        $('#id_cuenta').append(option)
+                    })
+                }
+            })
+        })
+        $('#formInterfEgr').on('submit',function(e){
+            e.preventDefault();
+            data = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/interfazEgresos',
+                data:data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').html(response.texto)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                }
+            })
+        })
+        $('#btnDistribucionRec').click(function(){
+            let fecha_corte = $('#fecha-corte-rcdos').val()
+            $('#alert-title').html('Cargando... <i class="fas fa-circle-notch fa-spin"></i>')
+            $('#alert-data').html('Esto puede tomar un poco de tiempo')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+            const options = {
+                method:'GET',
+            }
+            const req = fetch('/contabilidad/interfaces/{{proyecto}}?tipo=distribucionrecaudos&fecha='+fecha_corte,options)
+            req.then(response => response.json()
+            )
+            .then(data => {
+                $('#alert-title').html('Listo')
+                $('#alert-data').html(`Puedes descargar el archivo <strong><a href="${data.url}">aqui</a></strong>`)
+                $('#general-right-alert').removeClass('alert-info').addClass('alert-success')
+            })
+        })
+        $('#fecha-corte-rcdos').datepicker({
+            iconsLibrary: 'fontawesome',
+            locale: 'es-es',
+            format: 'yyyy-mm-dd',
+            uiLibrary: 'bootstrap4'
+        });
+        $('#btnConciliarTerceros').click(function(){
+            $(this).addClass('disabled')
+            $('#form-conciliar-terceros').submit(function(e){
+                e.preventDefault();
+                $('#alert-title').html('Cargando... <i class="fas fa-circle-notch fa-spin"></i>')
+                $('#alert-data').html('Esto puede tomar un poco de tiempo')
+                $('#general-right-alert').addClass('show').addClass('alert-info')
+                let data = new FormData(this)
+                $.ajax({
+                    type:'POST',
+                    url:'/andinasoftajx/conciliartercerosiigo',
+                    data: data,
+                    contentType:false,
+                    processData: false,
+                    success: (xhr) => {
+                        $('#alert-title').text('Listo!')
+                        $('#alert-data').html(xhr.corpus)
+                        $('#general-right-alert').removeClass('alert-info').addClass('alert-success')
+                    },
+                    complete: (xhr) => {
+                        $('#btnConciliarTerceros').removeClass('disabled')
+                    }
+                })
+            })
+            $('#form-conciliar-terceros').trigger('submit')
+        })
+    })
+  </script>
+{%include 'interfaz_recibos.html'%}
+{%include 'parametrizar_intrecibos.html'%}
+{%include 'alert.html'%}
+
+{%endblock%}

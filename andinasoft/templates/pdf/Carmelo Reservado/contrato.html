@@ -1,0 +1,715 @@
+{%load static%}
+<html>
+    <body>
+        <div id="footer_content">
+            <table style="color:#34554c;font-size:9px">
+                <tr>
+                    <td style="text-align:center;border-right: darkslategrey solid 0.5px;padding-right: 5px;">
+                        <b>Medellín</b><br>
+                        Cra 48A # 10 Sur 56<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align:center">
+                        <b>Montería</b><br>
+                        Cra 8A # 63-09<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align: right;width:70%">
+                        VERSIÓN: 2<br>
+                        TODOS LOS CHEQUES, CONSIGNACIONES Y TRANSFERENCIAS DEBEN SER GIRADOS A NOMBRE DE<br>
+                        <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9</strong>
+                        </td>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table>
+                <tr>
+                    <th>
+        
+                    </th>
+                    <th style="width:80%;align:center">
+                        <img src="{%static 'img/conceptos_inmob_carmelo.png'%}" width="180">
+                    </th>
+                    <th>
+                        <p style="color:lightcoral;font-size:15px;"><b>No.&nbsp;{{ctr.pk}}</b></p>
+                    </th>
+                </tr>
+            </table>
+            <table>
+                <tr>
+                    <th style="align:center">
+                        <img src="{%static 'img/Andina-Conceptos.png'%}">
+                    </th>
+                    <th style="width:70%;align:center">
+                        <p style="color:#345555;font-size: 15px">Contrato de Promesa De Compraventa de bien futuro proyecto de
+                            urbanización denominado “EL CARMELO RESERVADO TERRITORIO CAMPESTRE”</p>
+                    </th>
+                    <th style="align:center">
+                        <img src="{%static 'img/logo_carmelo_reservado.png'%}">
+                    </th>
+                </tr>
+            </table>
+            <p style="text-align:justify;" class="cuerpo">Entre los suscritos a saber: por una parte, la sociedad denominada
+                <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S (ANTES PROMOTORA SANDVILLE S.A.S)</b>,
+                con <b>NIT 900.993.044-9</b>, sociedad con domicilio en la ciudad de Medellín, inscrita en la Cámara de Comercio
+                de Medellín, para Antioquia, con la matricula
+                mercantil Nº 21-671654-12, quien para los efectos del presente contrato se denomina <b>LA PROMITENTE
+                    VENDEDORA</b>, y de la otra parte, EL (LOS) SEÑOR (ES):
+            </p>
+            <ol class="detalles">
+                {%for titular in ctr.titulares%}
+                <li style="text-align: justify;font-size:12px;margin-bottom:5px" class=".cuerpo">
+                    <b>Nombre:</b> <u>{{titular.nombrecompleto}}</u>&nbsp;&nbsp;
+                    <b>CC:</b> <u>{{titular.pk}}</u>&nbsp;&nbsp;
+                    <b>Telefono:</b> <u>{{titular.telefono1|default:"Sin informacion"}}</u>&nbsp;&nbsp;
+                    <b>Dir. Residencia:</b> <u>{{titular.domicilio}}</u>&nbsp;&nbsp;
+                    <b>Ciudad/Municipio:</b><u>{{titular.city.city_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                        {{titular.estado.state_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                        {{titular.pais.country_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                    </u>&nbsp;&nbsp;
+                    <b>Email:
+                    </b><u>{{titular.email|default:"Sin información"|default_if_none:"Sin información"}}</u>&nbsp;&nbsp;
+                </li>
+                {%endfor%}
+            </ol>
+            <p class='cuerpo' style="text-align:justify">
+                Quien (es) para los efectos del presente contrato se denomina <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, y
+                ambos conjuntamente se denominarán LAS
+                PARTES, hemos decidido celebrar el presente contrato de <b>PROMESA DE COMPRAVENTA DE BIEN FUTURO</b>, de acuerdo
+                a los preceptos establecidos en
+                nuestra Legislación Civil colombiana y demás normas concordantes, previa las siguientes:<br><br>
+                <b>DECLARACIONES</b><br>
+                <b>PRIMERO: LA PROMITENTE VENDEDORA</b> adelanta un proyecto de urbanización de futuro desarrollo con
+                construcción simultánea y venta garantizada de
+                lotes, localizado en el Municipio de Venecia, Departamento de Antioquia, denominado <b>“EL CARMELO RESERVADO TERRITORIO CAMPESTRE”.</b><br>
+                <b>SEGUNDO:</b> Las características de los lotes, zonas públicas y zonas comunes que conforman el proyecto, se
+                encuentran descritas en el plano comercial y piezas
+                promocionales del mismo, el cual, <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> declara(n) conocer.<br>
+                <b>TERCERO:</b> Los lotes que conforman el proyecto de urbanización <b>EL CARMELO RESERVADO TERRITORIO CAMPESTRE,</b>
+                tienen en la actualidad la condición legal de bien
+                futuro o cosa futura de acuerdo a los preceptos establecidos en el Artículo 1869 del Código Civil colombiano y
+                así, las partes declaran conocerlo y aceptarlo,
+                plenamente conscientes y capaces.<br>
+                De acuerdo a las anteriores declaraciones, se celebra el presente Contrato de Promesa de Compraventa de Bien
+                Futuro, el cual se regirá por las siguientes
+                cláusulas: <b>CLÁUSULA PRIMERA. OBJETO DEL CONTRATO Y DESCRIPCIÓN DEL INMUEBLE:</b> El presente contrato tiene
+                por objeto la compra por parte de
+                <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES),</b> de un lote de terreno en el proyecto de urbanización <b>“EL CARMELO RESERVADO TERRITORIO CAMPESTRE”</b>, localizado
+                en el Municipio de Venecia, Departamento de Antioquia, mediante contrato de Promesa de Compraventa de Bien Futuro, con descripción, nomenclatura,
+                medidas y linderos, tal y como se describen a continuación:
+            </p>
+            <p class='cuerpo' style="text-align:justify">
+                <p>Lote N° <u> {{ctr.general_info.inmueble.lotenumero}} </u> Manzana <u> {{ctr.general_info.inmueble.manzananumero}} 
+
+                </u> Área <u> {{ctr.general_info.inmueble.area_lt}} </u> Metros Cuadrados,
+                con las siguientes medidas y linderos:</p>
+                <b>Por el norte</b> <u>{{ctr.general_info.inmueble.norte}}</u> metros con
+                <u>{{ctr.general_info.inmueble.colindante_norte}}</u>,
+                <b>Por el este</b> <u>{{ctr.general_info.inmueble.este}}</u> metros con
+                <u>{{ctr.general_info.inmueble.colidante_este}}</u>,
+                <b>Por el sur</b> <u>{{ctr.general_info.inmueble.sur}}</u> metros con
+                <u>{{ctr.general_info.inmueble.colindante_sur}}</u>,
+                <b>Por el oeste</b> <u>{{ctr.general_info.inmueble.oeste}}</u> metros con
+                <u>{{ctr.general_info.inmueble.colindante_oeste}}</u>.</p>
+            <p class='cuerpo' style="text-align:justify">
+                El bien inmueble identificado aparece señalado en el plano oficial de la urbanización, que es parte integrante
+                de este contrato. No obstante, el área citada,
+                esta venta se hace como cuerpo cierto.<br>
+                <b>PARÁGRAFO PRIMERO</b>: Este lote se identificará con el número de matrícula inmobiliaria que le asigne la
+                Oficina de Registro de Instrumentos Públicos de
+                Fredonia (Antioquia), para cada lote, al momento de registrar la escritura de Reloteo y Reglamento de Propiedad
+                Horizontal.<br>
+                <b>PARÁGRAFO SEGUNDO: </b>En caso de presentarse alguna variación en el diseño inicial urbanístico, el cual
+                afecte la ubicación del lote adquirido en esta promesa
+                de compraventa, <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, aceptan desde ya cualquier cambio de ubicación
+                siempre y cuando el lote esté dentro la misma
+                urbanización, que esté en la misma etapa constructiva, que su orientación en la manzana correspondiente sea
+                equivalente a la inicialmente escogida y que el área del terreno sea igual o mayor a la inicialmente pactada.<br>
+                <b>CLÁUSULA SEGUNDA. ANTECEDENTES:</b>  El lote de terreno en donde se desarrolla el proyecto urbanístico <b>EL CARMELO
+                RESERVADO TERRITORIO CAMPESTRE</b>, hace parte del lote de mayor extensión identificado con folio de matrícula inmobiliaria número 010-10561, de la
+                oficina de Instrumentos Públicos de Fredonia, y cédula catastral N° 8612001000000800252000000000. El cual, fue adquirido por el señor <b>JUAN CARLOS
+                GUISAO GIRALDO</b>, identificado con cédula de ciudadanía número 98.661.548, mediante escritura pública N° 2881 del 21 de noviembre de 2016, otorgada en
+                la notaria 26 de Medellín.
+                
+                <b>CLÁUSULA TERCERA. AUTORIZACIÓN DE PREVENTA: LICENCIA DE URBANISMO:</b> Que, el proyecto urbanístico <b>EL CARMELO RESERVADO
+                TERRITORIO CAMPESTRE</b>, localizado en el Municipio de la Venecia, Departamento de Antioquia, fue aprobado por la
+                Secretaría de Planeación y obras Públicas de Municipio de Venecia, Departamento de Antioquia, mediante Resolución N°
+                584 de septiembre 28 de 2023, “Por medio de la cual se expide una licencia de urbanización de un predio de mayor
+                extensión en el área urbana del municipio de Venencia.”.<br>
+                <b>PARÁGRAFO PRIMERO: AUTORIZACIÓN DE PREVENTA:</b> Que, el proyecto urbanístico <b>EL CARMELO RESERVADO
+                TERRITORIO CAMPESTRE</b>, localizado en el Municipio de la Venecia, Departamento de Antioquia, se encuentra
+                habilitado para anunciar, promocionar y ejercer las actividades de preventa de 164 unidades resultantes de la adecuación
+                de terrenos para la construcción de vivienda, por haber cumplido con la Radicación de Documentos en debida forma,
+                según lo establece el Artículo 2.2.5.3.1. del Decreto 1077 de 2015.
+            </p>
+            <p class='detalles' style="text-align:justify">
+                <b>CLÁUSULA CUARTA. VALOR DEL INMUEBLE Y FORMA DE PAGO:</b> El valor del lote objeto de este contrato, es la
+                suma de:
+                <u>{{ctr.general_info.valor_en_letras}}</u> ($<u>{{ctr.general_info.valor|floatformat:"-3g"}}</u>)
+            </p>
+            <table class='detalles'>
+                <tr>
+                    <td style="width:2%"></td>
+                    <td style="text-align:justify;vertical-align: top;">
+                        <b>1. CUOTA INICIAL:</b> la suma de $ <u><b>{{ctr.general_info.ci|floatformat:"-3g"}}</b> </u> a pagar así, 
+                        <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                    </td>Antioquia
+                    <td style="width:5%"></td>
+                    <td style="text-align:justify;vertical-align: top;">
+                        <b>2. SALDO A PAGAR:</b>{%if ctr.general_info.saldo == 0 %} <u>$ 0</u> {%else%} la suma de $ <u><b>{{ctr.general_info.saldo|floatformat:"-3g"}}</b></u> a pagar con
+                        plan <u>{{ctr.forma_pago}}</u>
+                        {%if ctr.forma_pago == 'Amortizacion'%} (El valor de las cuotas mensuales incluye los intereses
+                        corrientes) {%endif%}
+                        así,
+                        <u>{{ctr.general_info.fp_saldo}}</u>.{%endif%}<br>
+                    </td>
+                    <td style="width:2%"></td>
+                </tr>
+            </table>
+            {%if ctr.observaciones != ""%}
+            <p class='detalles' style="text-align:justify">
+                <b>OBSERVACIONES DE LA FORMA DE PAGO: </b><u>{{ctr.observaciones}}</u>.<br>
+                <small>(SOLO SE TIENEN EN CUENTA LAS OBSERVACIONES QUE SE HAGAN SOBRE LA FORMA DE PAGO. CUALQUIER OBSERVACIÓN FUERA DE LA FORMA DE PAGO, NO TIENE VALIDEZ PARA ESTE
+                    CONTRATO).</small>
+            </p>
+            {%endif%}
+            <p class='cuerpo' style="text-align:justify">
+                <b>PARÁGRAFO PRIMERO: </b>En caso de mora en el pago de cualquiera de las cuotas correspondientes a la cuota
+                inicial o a las cuotas mensuales
+                de amortización para el pago del saldo del LOTE, objeto de este contrato, por parte de <b>EL (LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>, pagará
+                (n) estos a <b>LA PROMITENTE VENDEDORA</b>, intereses moratorios a la tasa máxima legal vigente mensual y/o
+                fracción de mes vencido,
+                establecida por la Superintendencia Financiera de Colombia, sin perjuicio de los derechos, acciones y facultades
+                de <b>LA PROMITENTE
+                    VENDEDORA</b>, pues, en tal evento y en cualquier momento, durante la mora podrá exigir el pago del saldo
+                total adeudado con sus intereses,
+                además de hacer efectiva la cláusula de penal del presente contrato. PARÁGRAFO SEGUNDO: En los casos que haya
+                saldos pendientes, los
+                pagos que haga(n) <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> serán aplicados, en primer lugar, al pago de
+                intereses que tenga(n) pendientes
+                de cancelación por cualquier concepto; y el excedente se aplicará al capital. PARÁGRAFO TERCERO: Si dentro del
+                valor del LOTE objeto de
+                este contrato, <b>LA PROMITENTE VENDEDORA</b> le otorgó a <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> un
+                descuento financiero por valores
+                recibidos anticipadamente, dicho descuento finalmente se aplicará, previa verificación de los dineros recibidos
+                en las fechas pactadas, al
+                saldo por pagar. <b>PARÁGRAFO CUARTO: LA PROMITENTE VENDEDORA</b> solicitará a <b>EL(LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b> las
+                garantías reales o personales que juzgue convenientes para respaldar el pago de la obligación adquirida en el
+                presente contrato, como son
+                pagaré, o letra de cambio. <b>CLÁUSULA QUINTA. LA PROMITENTE VENDEDORA</b> se obliga al saneamiento por evicción
+                y a responder por
+                cualquier gravamen y acción que resultare contra el derecho que transferirá y, además, responderá por cualquier
+                vicio redhibitorio sobre el
+                LOTE de acuerdo al Código Civil. <b>CLÁUSULA SEXTA. FECHA DE ESCRITURACIÓN:</b> Las partes acuerdan que la fecha
+                de escrituración del bien
+                inmueble, objeto de este contrato, será el día <u> {{fecha_escritura.day}} </u> del mes de <u>
+                    {{fecha_escritura|date:"F"}} </u>
+                del año <u> {{fecha_escritura.year}} </u>, en la Notaría Quinta de Medellín,
+                a las 10:00 de la mañana., siempre y cuando se cumpla con las condiciones indicadas en la cláusula séptima de
+                este contrato.<b></b> PARÁGRAFO
+                PRIMERO: </b>Si la fecha estipulada para la celebración de la escritura pública de compraventa fuese un día no
+                hábil, se tendrá por cierto para su
+                celebración el día hábil siguiente. <b>PARÁGRAFO SEGUNDO: </b>Si, llegada la fecha para el otorgamiento de la
+                escritura pública de compraventa,
+                <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, presenta (n) un saldo por pagar al valor del lote, y este no ha
+                sido cancelado antes del
+                otorgamiento de la misma, podrá <b><b>LA PROMITENTE VENDEDORA</b></b>, escriturar el lote a <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b>, con una
+                Hipoteca Abierta sin límite de cuantía, a favor de la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.
+                    PARÁGRAFO TERCERO:</b> Si, el
+                lote objeto de este contrato se encuentra individualizado con folio de matrícula inmobiliaria, y cédula
+                catastral, antes de la fecha de
+                escrituración pactada en esta cláusula, <b>LA PROMITENTE VENDEDORA</b>, otorgará de manera inmediata a <b>EL
+                    (LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>, la escritura pública de compraventa. En caso de existir un saldo pendiente por pagar del
+                valor del lote, por parte de <b>EL
+                    (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, se otorgará dicha escritura con una Hipoteca Abierta sin límite de
+                cuantía, a favor de la sociedad
+                <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S. PARÁGRAFO CUARTO:</b> A partir del otorgamiento de la escritura pública
+                de compraventa del
+                lote objeto de compra, por parte de <b>LA PROMITENTE VENDEDORA</b>, correrá(n) por cuenta de <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b>
+                todos los impuestos que se deriven del bien inmueble prometido en venta. <b>PARÁGRAFO QUINTO:</b> En caso que
+                <b>LA PROMITENTE VENDEDORA</b>
+                no escriture en la fecha estipulada, podrá prorrogar la fecha por un término hasta de trescientos sesenta y
+                cinco (365) días, sin que esto se
+                considere incumplimiento. <b>PARÁGRAFO SEXTO:</b> De igual manera, podrá prorrogarse la firma de la escritura
+                pública en eventos de caso
+                fortuito o fuerza mayor; y la fecha de la escrituración se prorrogará a partir del plazo inicialmente pactada en
+                la cláusula sexta, y su tiempo
+                será igual al tiempo del caso fortuito o fuerza mayor, sin que esto constituya causal de incumplimiento y/o
+                desistimiento. <b>CLÁUSULA
+                    SÉPTIMA. CONDICIONES DE ESCRITURACIÓN:</b> <b>LA PROMITENTE VENDEDORA</b> se obliga a celebrar la escritura
+                pública que solemniza la
+                venta del lote objeto de este contrato, en la fecha establecida en la cláusula sexta, si, se cumplen con las
+                siguientes condiciones: 1) Que,
+                <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> haya (n) cancelado la totalidad de los valores correspondientes a la
+                cuota inicial y el saldo a
+                pagar establecido en la cláusula CUARTA del presente contrato, y presente(n) el respectivo certificado de paz y
+                salvo, expedido por el área
+                administrativa de <b>LA PROMITENTE VENDEDORA</b>. 2) Que, el LOTE, objeto de este contrato, se encuentre
+                completamente individualizado
+                con el fin de realizar el registro ante la oficina de instrumentos públicos de la jurisdicción correspondiente.
+                <b>PARÁGRAFO PRIMERO:</b> En caso
+                de no cumplirse la condición número uno (1), establecida en esta cláusula, queda a discreción de <b>LA
+                    PROMITENTE VENDEDORA</b>, realizar de
+                manera anticipada la escritura pública de compraventa, conforme a los parágrafos segundo y tercero de la
+                cláusula SEXTA de este contrato.
+                <b>PARÁGRAFO SEGUNDO:</b> El pago anticipado del valor total del contrato por parte de <b>EL (LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>, antes de
+                la fecha de escrituración, no dará lugar al otorgamiento de la escritura pública de compraventa del lote, de
+                manera anticipada por parte de
+                <b>LA PROMITENTE VENDEDORA</b>. <b>CLÁUSULA OCTAVA. ENTREGA MATERIAL:</b> La fecha cierta de entrega del lote,
+                se encontrará establecida
+                en la escritura pública de compraventa que suscriban las partes. No obstante, <b>LA PROMITENTE VENDEDORA</b>, se
+                reserva el derecho de hacer
+                la entrega material del lote objeto de este contrato, a título de mera tenencia, antes del otorgamiento de la
+                escritura pública de compraventa.
+                Para lo cual, se estima una fecha aproximada de entrega del lote, de <u>{{meses_entrega}}</u> meses, contados a
+                partir de la firma de este contrato. Para
+                lo cual, se establecerá un acuerdo de tenencia con <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>. <b>PARÁGRAFO
+                    PRIMERO:</b> Si <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b> no comparece(n) a recibir el LOTE, o presentándose se abstiene (n) de
+                recibirlo sin causa suficiente a
+                juicio de <b>LA PROMITENTE VENDEDORA</b>, este se entenderá entregado para todos, dejando constancia en acta de
+                entrega firmada por dos
+                (2) testigos. Así mismo, si <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b> no comparece(n) a recibir el LOTE por
+                razones de caso fortuito o
+                fuerza mayor en la fecha señalada para la entrega, deberá(n) justificar por escrito el incumplimiento dentro de
+                tres (3) días hábiles siguientes
+                a la fecha de entrega. Una vez aceptada dicha justificación por parte de <b>LA PROMITENTE VENDEDORA</b>,
+                <b>EL(LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b> deberá(n) cumplir y, por ende, recibir el inmueble en la nueva fecha establecida por <b>LA
+                    PROMITENTE VENDEDORA</b>.
+                <b>PARÁGRAFO SEGUNDO: </b><b>LA PROMITENTE VENDEDORA</b> realizará la entrega material del LOTE, objeto de este
+                contrato, con su vegetación
+                natural y como se encuentre en el momento de la entrega de acuerdo con las variaciones climáticas. La entrega de
+                las obras comunes se
+                realizará por etapas, las cuales incluyen: cerramiento perimetral, portería, vías vehiculares y peatonales,
+                zonas verdes, etc. Estas entregas por
+                etapas se harán a la Junta Administradora para que sea esta la responsable del mantenimiento y conservación.
+                <b>PARÁGRAFO TERCERO:</b> De
+                acuerdo al avance de obra, permanecerá personal de obra en la urbanización, hasta tanto se integre el total de
+                las construcciones y se haga
+                entrega de las mismas. Además, <b>LA PROMITENTE VENDEDORA</b> se reserva el derecho de tener en la obra la casa
+                modelo y sala de ventas, de
+                acceder y permitir la entrada a particulares durante toda la gestión de ventas, tomando las medidas de seguridad
+                necesarias. <b>CLÁUSULA
+                    NOVENA:</b> Para la construcción de la vivienda en el LOTE, objeto de este contrato, <b>EL(LOS)
+                    PROPIETARIO(S)</b> final, deberá(n) cumplir con el
+                estatuto urbano de la copropiedad, por lo que deberá(n) obtener el acta de aprobación del diseño de su casa,
+                otorgado por el comité
+                regulador del estatuto urbano de la Urbanización y los permisos municipales para la construcción de la vivienda;
+                Una vez obtenidos estos
+                permisos, se obliga a presentar un acta de inicio de obra a LA VENDEDORA. Si al momento de la firma del acta de
+                inicio de obra, el LOTE,
+                objeto de este contrato, no cuenta con las acometidas de acueducto, alcantarillado y energía eléctrica, LA
+                VENDEDORA contará con
+                doscientos setenta (270) días para proveer al predio de las acometidas mencionadas. Las partes acuerdan que esta
+                cláusula será incluida en
+                la escritura pública de compraventa. <b>PARÁGRAFO PRIMERO:</b> Los tramites de conexión y abastecimiento de los
+                servicios públicos ante las
+                entidades correspondientes serán por cuenta de <b>EL(LOS) PROPIETARIO(S) final del LOTE</b> objeto de este contrato.
+                    Una vez se haya realizado
+                    el trámite de escrituración y posterior registro ante la Oficina de Instrumentos Públicos correspondiente,
+                    que detente la titularidad del
+                    mismo. <b>PARÁGRAFO SEGUNDO:</b> LA VENDEDORA podrá hacer entrega de las acometidas eléctricas, sanitarias y
+                    de acueducto antes de que
+                    se den las condiciones de esta cláusula.
+                    <strong>PARÁGRAFO TERCERO:</strong>
+                    Los tramites de conexión y/o abastecimiento de los servicios públicos de
+                    gas natural, aseo y telecomunicaciones serán por cuenta de EL(LOS)
+                    PROPIETARIO(S) final del LOTE, objeto de este contrato, una vez se haya
+                    realizado el trámite de escrituración y registro ante la Oficina de
+                    Instrumentos Públicos correspondiente, que detente la titularidad del
+                    mismo. No obstante, el órgano que se designe como administrador del
+                    proyecto “<strong>EL CARMELO RESERVADO TERRITORIO CAMPESTRE</strong>”, deberá
+                    hacer la solicitud ante las empresas prestadoras de estos servicios, una
+                    vez se cumpla con el porcentaje de ocupación requerido por las mismas para
+                    tal efecto. <strong>CLÁUSULA</strong> <strong> DÉCIMA. RÉGIMEN DE COPROPIEDAD:</strong> El proyecto de
+                    urbanización “<strong>EL CARMELO RESERVADO TERRITORIO CAMPESTRE</strong>”, estará
+                    sometido con todos sus bienes de dominio particular y de dominio común al
+                    régimen de Propiedad Horizontal contenido en la Ley 675 de 2001 y demás
+                    normas complementarias, El Estatuto Urbano para la construcción de casas
+                    será obligatorio y formará parte del Reglamento de la Copropiedad, para lo
+                    cual, <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong> lo acatarán en
+                    todos sus términos y condiciones, obligándose desde ya, a dar cumplimento a
+                    todas las obligaciones que se estipulen en dicho reglamento, especialmente
+                    el pago oportuno de las cuotas de administración que le corresponda a
+                    partir de la fecha fijada, al igual que sus causahabientes a cualquier
+                    título. <strong>PARÁGRAFO PRIMERO:</strong> A partir de la entrega de la
+                    garita de vigilancia y el cerramiento perimetral por parte de
+                    <strong>
+                        LA PROMITENTE VENDEDORA, EL (LOS) PROMITENTE(S) COMPRADOR(ES)
+                    </strong>
+                    acepta(n) pagar la cuota mensual de administración correspondiente al
+                    porcentaje del área del lote objeto de este contrato, que le corresponde al
+                    lote, según el índice de propiedad. <strong> CLÁUSULA DÉCIMA PRIMERA: </strong>Las partes establecen que, en
+                    lo
+                    concerniente al LOTE o bien futuro prometido en venta, objeto de este
+                    contrato, se regirán por los Títulos VI, XII y XXIII del segundo libro del
+                    Código Civil colombiano y demás normas concordantes en materia civil. <strong>CLÁUSULA DÉCIMA
+                        SEGUNDA.</strong><strong> CLÁUSULA PENAL: </strong>
+                    Será causal de incumplimiento del contrato de promesa de compraventa de
+                    bien futuro, por parte de <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES),</strong> el desistimiento o
+                    determinación de no continuar con las obligaciones del contrato, el
+                    incumplimiento de cualquiera de las cláusulas en el convenidas, la mora por
+                    más noventa (90) días calendario en el pago de cualquiera de las cuotas
+                    correspondiente a la cuota inicial, o de las cuotas mensuales de
+                    amortización para el pago del saldo lote establecido en la cláusula cuarta
+                    del mismo, así como, la configuración de una de las causales previstas en
+                    cláusula décimo octava de este contrato, como lo es la aparición en listas
+                    restrictivas o la condena proveniente de delitos relacionados con lavados
+                    de activos y conexos. Incumplimiento que, dará derecho a <strong>LA PROMITENTE VENDEDORA</strong>, de
+                    declarar extra juicio, la
+                    terminación unilateral del contrato, sin necesidad de declaración judicial,
+                    y cobrará a <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES), </strong>a título
+                    de cláusula penal, el equivalente al treinta por ciento (30%) del valor
+                    total del contrato. Además, dispondrá del inmueble objeto de la promesa de
+                    venta. En caso de quedar un saldo a favor de <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES), </strong>luego de
+                    haber
+                    deducido el valor de la cláusula penal, serán devueltos por <strong>LA PROMITENTE VENDEDORA, </strong>sin
+                    que se generen intereses de
+                    ninguna naturaleza a favor de<strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong>.<strong>LA PROMITENTE
+                        VENDEDORA</strong> acordará con <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>, los plazos, fechas
+                    y
+                    montos para la devolución. En caso que no exista un acuerdo entre las
+                    partes, se fijará un plazo máximo de trescientos sesenta y cinco (365) días
+                    contados a partir de la fecha en que <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong> manifieste por
+                    escrito
+                    la solicitud de la devolución para llevar a cabo el desembolso de las
+                    sumas, anteriormente mencionadas, por parte de <strong>LA PROMITENTE VENDEDORA</strong>. Será causal de
+                    incumplimiento del
+                    contrato de promesa de compraventa de bien futuro, por parte de <strong>LA PROMITENTE VENDEDORA, </strong>el
+                    desistimiento injustificado o
+                    determinación de no continuar con las obligaciones del contrato, así como
+                    el incumplimiento de cualquiera de las cláusulas en el convenidas. Lo que,
+                    faculta a <strong>EL (LOS) PROMITENTE(S) COMPRADOR (ES), </strong>al cobro
+                    de la cláusula penal, equivalente al treinta por ciento (30%) del valor del
+                    presente contrato, y la restitución de los valores cancelados por parte de
+                    estos para la compra del lote. <strong>LA PROMITENTE VENDEDORA</strong>
+                    acordará con <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>, los
+                    plazos, fechas y montos para la devolución. En caso que no exista un
+                    acuerdo entre las partes, se fijará un plazo máximo de trescientos sesenta
+                    y cinco (365) días contados a partir de la fecha en que <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>
+                    manifieste por escrito
+                    la solicitud de la devolución para llevar a cabo el desembolso de las
+                    sumas, anteriormente mencionadas, por parte de <strong>LA PROMITENTE VENDEDORA</strong>.
+                    <strong>PARÁGRAFO:</strong> En
+                    caso que el incumplimiento de las obligaciones derivadas del presente
+                    contrato por parte de <strong>LA PROMITENTE VENDEDORA</strong> se genere
+                    por el acaecimiento de caso fortuito o fuerza mayor comprobable e imputable
+                    al presente contrato, se podrá exonerar del pago de la cláusula penal
+                    pactada.
+                    <strong>
+                        CLÁUSULA DÉCIMA TERCERA. LIBERTAD DE GRAVÁMENES Y OBLIGACIÓN DE
+                        SANEAMIENTO:
+                    </strong>
+                    <strong>LA PROMITENTE VENDEDORA</strong>
+                    garantiza que no ha enajenado a ninguna persona el LOTE prometido en venta
+                    y que tiene el dominio de posesión tranquila del inmueble, y declara que
+                    hará su entrega libre de registro por demanda civil, uso y habitación,
+                    arrendamiento por escritura pública, patrimonio de familia inembargable y
+                    condiciones suspensivas o resolutorias de dominio.<strong>PARÁGRAFO PRIMERO</strong>: Declara igualmente
+                    <strong>LA PROMITENTE VENDEDORA</strong>, que al momento de la escritura
+                    pública el LOTE prometido en venta, estará a paz y salvo por todo concepto,
+                    en especial libre de tasas, impuestos, valorizaciones, contribuciones
+                    municipales. En el evento que por algún motivo no se hubiere cancelado,
+                    éstos correrán por cuenta de <strong>LA PROMITENTE VENDEDORA</strong>
+                    siempre que su liquidación sea anterior a la fecha de otorgamiento de la
+                    escritura pública, o entrega del inmueble que legalice el presente Contrato
+                    de Promesa de Compraventa. <strong>CLÁUSULA DÉCIMA CUARTA. GASTOS: </strong>Todos los gastos fiscales,
+                    notariales y legales que se ocasionen por la firma de la escritura pública
+                    de compraventa, donde se solemnice la transferencia del derecho de
+                    propiedad del LOTE, que aquí se promete en venta, así como los timbres y
+                    gastos de Registro Público, correrán por cuenta de<strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>.
+                    <strong>CLÁUSULA DÉCIMA QUINTA. CESIÓN</strong>: Los deberes y derechos de
+                    este contrato por parte de <strong>LA PROMITENTE VENDEDORA</strong> pueden
+                    ser cedidos a la(s) persona(s) natural(es) y/o jurídica(s) que estime
+                    conveniente; así mismo, lo podrá(n) hacer<strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES) </strong>si y solo si
+                    <strong>LA PROMITENTE VENDEDORA</strong> acepta al nuevo solicitante
+                    mediante el diligenciamiento de los requisitos exigidos por esta, estando
+                    el PROMITENTE COMPRADOR a PAZ Y SALVO por todo concepto al momento de solicitar la
+                        cesión, y cancelando
+                    la suma equivalente al 5% del valor presente contrato.
+                    
+                    <strong>CLÁUSULA DÉCIMA SEXTA</strong> <strong>:
+                        AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES. </strong>
+                    Para efectos de
+                    la protección de los datos personales y su tratamiento de acuerdo a lo establecido en la Ley 1581 de 2012, y su decreto
+                    reglamentario 1377 de 2013, <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b> autoriza (mos) de manera libre, expresa,
+                    voluntaria, a <b>LA PROMITENTE VENDEDORA</b>, la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b>, para
+                    recolectar, manejar, almacenar, usar, circular, actualizar, cruzar información propia, con el fin de facilitar la venta de
+                    bienes y servicios de la empresa, adelantar acciones de cobro y de recuperación de cartera a través de la empresa o de
+                    terceros que este encargue, reportar a centrales de riesgo cuando corresponda, y demás fines que estipule la empresa
+                    en cumplimiento de la obligación contractual derivada de este contrato; y en general realizar toda acción tendiente al
+                    tratamiento de mis datos personales de acuerdo con la política establecida para tal fin por la empresa como responsable
+                    y encargada de la información. El alcance de la autorización comprende además, la facultad que tiene la empresa para
+                    que, a través de proveedor tecnológico, realice la toma de firma electrónica y validación de quien firma a través de
+                    fotografía digital, de todos los documentos necesarios para la vinculación contractual entre las partes, como los son:
+                    contratos, formularios, pagaré, autorización para diligenciar espacios en blanco, y demás documentos requeridos en
+                    razón a la vinculación contractual de las partes; para que, envíe mensajes de correo electrónico, mensajes de texto,
+                    mensajes de Whatsapp, correspondencia a mi dirección de residencia, o lugar de trabajo, de contenidos institucionales,
+                    notificaciones, información del estado de cuenta, saldos, recibos de pago, envió de cartas de cobro pre jurídico y jurídico,
+                    y demás fines que estipule la empresa en cumplimiento de la obligación contractual derivada de este contrato. 
+                    Adicionalmente, manifiesto que, la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</b> sus filiales, sucursales o
+                    subordinados podrán: realizar las consultas, reportes y actualizaciones necesarias en diferentes listas restrictivas
+                    requeridas en cumplimiento del deber legal que le asiste a la empresa para el sistema de autocontrol y gestión del riego
+                    integral de lavado de activos y financiación del terrorismo (SAGRILAFT); consulta, reportes y actualizaciones necesarias
+                    en bancos de datos del comportamiento y crédito comercial, hábitos de pago, manejo de las cuentas(s) bancaria(s) y en
+                    general el cumplimiento de las obligaciones pecuniarias, en torno al contrato.  
+                    En ese sentido, declaro conocer que los datos personales objeto del tratamiento, serán utilizados para las finalidades
+                    derivadas de la relación contractual suscrita entre las partes.  
+                    Igualmente declaro conocer el derecho de supresión de datos personales que me asiste, para lo cual, en caso de
+                    solicitarlo, <b>LA PROMITENTE VENDEDORA</b>, procederá conforme a las políticas de tratamiento de datos personales
+                    establecida por misma para tal fin.
+                                        
+                    <strong> CLÁUSULA DÉCIMA SÉPTIMA. REPORTE A CENTRALES DE RIESGO:</strong><strong>EL (LOS)
+                        PROMITENTE(S) COMPRADOR(ES)</strong> acepta(n) que <strong>LA PROMITENTE VENDEDORA </strong>puede hacer
+                    pública la información
+                    de este contrato y da su autorización expresa para que las centrales de
+                    riesgo o cualquier otra institución de crédito la mantenga en su historial
+                    de crédito. 
+                    
+                    <strong>CLÁUSULA DÉCIMA OCTAVA. </strong>
+                    <strong>
+                        CLÁUSULA SAGRILAFT (SISTEMA DE AUTOCONTROL Y GESTIÓN DEL RIESGO
+                        INTEGRAL DE LAVADO DE ACTIVOS Y FINANCIACIÓN DE TERRORISMO):
+                    </strong>
+                    En cumplimiento del deber legal que le asiste a la sociedad <strong>ANDINA CONCEPTOS INMOBILIARIOS
+                        S.A.S</strong><strong>, </strong>con
+                    NIT 900993044-9, sus filiales, sucursales o subordinados, en relación con
+                    la cooperación para la prevención del lavado de activos, la financiación
+                    del terrorismo y cualquier otro delito conexo contemplado en normas
+                    nacionales e internacionales, declaro (amos) como <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES) </strong>que,
+                    el patrimonio y
+                    las fuentes económicas que permiten la compra mediante el presente contrato
+                    de Promesa de Compraventa de bien futuro, del lote en el proyecto de
+                    urbanización “<strong>EL CARMELO RESERVADO TERRITORIO CAMPESTRE</strong>”, no son
+                    fruto de actividades ilícitas u otros delitos conexos, razón por la cual,
+                    acepto (amos) que, en el evento en que me (nos) encuentre (n) en la lista
+                    OFAC (Office of Foreign Assets Control) o la lista ONU (Lista del Consejo
+                    de Seguridad de la Organización de las Naciones Unidas) o de alguna otra de
+                    igual o similar naturaleza, de carácter nacional o internacional, o haya
+                    (mos) sido sentenciado (s) judicialmente por cualquier delito fuente o
+                    relacionado con el lavado de activos, financiación del terrorismo o la
+                    proliferación de armas de destrucción masiva, o haya sido extraditado, seré
+                    (mos) responsable (s) por los daños y perjuicios que dicho reporte o
+                    sentencia le ocasione a la sociedad <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</strong><strong>,
+                    </strong>con
+                    NIT 900993044-9, sus filiales, sucursales o subordinados, sin perjuicio de
+                    la responsabilidad penal que me (nos) asiste y, faculto (amos) a la
+                    sociedad <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</strong> <strong>,</strong> con NIT 900993044-9, sus
+                    filiales, sucursales o
+                    subordinados, para dar por terminado unilateralmente el contrato de promesa
+                    de compraventa de bien futuro en cualquier momento y sin previo aviso, por
+                    configurarse una causal objetiva de terminación del contrato, y hacer el
+                    reporte a los diferentes entes de control u autoridades competentes del
+                    hallazgo del mismo. <strong>PARÁGRAFO PRIMERO: </strong>En el evento en que
+                    se configure una de las causales previstas en el presente clausula como lo
+                    es la aparición en listas restrictivas o la condena proveniente de delitos
+                    relacionados con lavados de activos y conexos, autorizamos a la sociedad <strong>ANDINA CONCEPTOS
+                        INMOBILIARIOS S.A.S, </strong>con NIT 900993044-9,
+                    para que descuente el uno por ciento (1%), de la suma de dinero que, haya
+                    (mos) pagado, para la compra del lote, por concepto de gastos
+                    administrativos, que se generaron por la suscripción del contrato. Esto sin
+                    perjuicio de las estipulaciones por incumplimiento del contrato
+                    establecidas en la cláusula penal del presente contrato, y de los daños y
+                    perjuicios que dicho reporte o sentencia le ocasione a la <strong>VENDEDORA</strong>, y de la
+                    responsabilidad penal que me (nos)
+                    asistiera frente a esta sociedad. <strong>PARÁGRAFO SEGUNDO:</strong>
+                    Igualmente, declaramos y certificamos que no tenemos presencia en países
+                    considerados paraísos fiscales, países sancionados por la OFAC y países no
+                    cooperantes. 
+                    <b>PARÁGRAFO TERCERO:</b> Igualmente, ME OBLIGO (AMOS) a diligenciar con absoluta honestidad la totalidad de cada
+                    uno de los ítems del formulario de conocimiento de clientes y entregar todos los documentos soportes para que la
+                    empresa <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b>, con NIT 900993044-9, realice la debida diligencia al momento
+                    de la vinculación como clientes, ya sea como persona natural o jurídica, como son: Declaración de renta, RUT, certificado
+                    de existencia y representación legal, copias de cédulas, certificados de ingresos y retenciones, certificado de existencia y
+                    representación legal, certificado de composición accionaria, y demás documentos que requiera la empresa, por cada
+                    titular que firme el contrato de promesa de documentos, según sea el caso. Los documentos que correspondan, deberán
+                    ser entregados dentro de los cinco (5) días calendario siguientes, a la firma del contrato de promesa de compraventa,
+                    debidamente escaneado y en formato PDF.  
+                    <b>PARÁGRAFO CUARTO:</b> Igualmente, ME OBLIGO (AMOS) a facilitar a la empresa <b>ANDINA CONCEPTOS
+                    INMOBILIARIOS S.A.S</b>, con NIT 900993044-9, las actualizaciones que esta requiera, del el sistema de autocontrol y
+                    gestión del riego integral de lavado de activos y financiación del terrorismo (SAGRILAFT), para lo cual, me (nos)
+                    obligamos a diligenciar el formulario de conocimiento de clientes, en los tiempos que la empresa requiera, así como
+                    aportaré (mos), los documentos soportes para que, la empresa realice la correspondiente debida diligencia.  
+
+
+                    
+                    
+                    <strong>CLÁUSULA DÉCIMA NOVENA</strong><strong>. DECLARACIÓN DE ORIGENES DE FONDO DE </strong>
+                    <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong><strong>:</strong>
+                    Quien suscribe el presente contrato de Promesa de Compraventa de bien
+                    futuro, del lote en el proyecto “ <strong>EL CARMELO RESERVADO TERRITORIO CAMPESTRE</strong>”<strong>,</strong>
+                    obrando en nombre propio, de manera voluntaria y dando certeza de que todo
+                    lo aquí consignado es cierto, realiza la siguiente declaración de
+                    utilización de fondos a <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</strong>. con NIT 900993044-9,
+                    con el propósito de que se pueda dar cumplimiento a lo señalado al respecto
+                    en la Circular Básica Jurídica de la Superintendencia de Sociedades: 1. Que
+                    mi actividad, profesión y/u oficio las ejerzo dentro del marco regulatorio
+                    aplicable y que los recursos que poseo no provienen del desarrollo de las
+                    actividades contempladas en el Código Penal Colombiano (Ley 599 de 2000 o
+                    cualquier norma que lo adicione, complemente o modifique). 2. Que la
+                    información que he suministrado a través de este documento es veraz,
+                    verificable y que además asumo el compromiso de actualizarla anualmente
+                    conforme a los requerimientos realizados por ANDINA CONCEPTOS INMOBILIARIOS
+                    S.A.S, con NIT 900993044-9. 3. Informaré inmediatamente cualquier
+                    circunstancia que modifique la presente declaración, una vez tenga
+                    conocimiento de la misma. 4. Cuando a ello haya lugar, autorizo a ANDINA
+                    CONCEPTOS INMOBILIARIOS S.A.S,, con NIT 900993044-9, a dar inicio a la
+                    liquidación del (los) Contrato (s) que me vincule (n), en el caso de
+                    infracción de cualquiera de los numerales anteriores o en el eventual caso
+                    de que por aplicación de normas sancionadas con posterioridad a la firma de
+                    este documento se modifiquen las declaraciones por mi efectuadas, eximiendo
+                    por lo tanto a ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9,
+                    de toda responsabilidad que se derive por información errónea, falsa o
+                    inexacta que yo hubiere proporcionado en este documento, o de la violación
+                    del mismo. 6. Me comprometo y obligo a actualizar al menos una vez cada año
+                    los datos e información que fueren requeridos por ANDINA CONCEPTOS
+                    INMOBILIARIOS S.A.S. 7. No soy una persona expuesta políticamente según la
+                    legislación nacional y asumo el compromiso de informar cualquier
+                    modificación que se produzca al respecto, dentro de los treinta (30) días
+                    de ocurrencia de la novedad, mediante la presentación de una nueva
+                    declaración. <strong>CLÁUSULA </strong><strong>VIGÉCIMA</strong> <strong>.</strong> <strong>LA PROMITENTE
+                        VENDEDORA</strong>, autoriza y
+                    entrega toda la comercialización del proyecto denominado “<strong>EL CARMELO RESERVADO TERRITORIO CAMPESTRE</strong>”, a la sociedad <strong>STATUS COMERCIALIZADORA S.A.S</strong>., con NIT 901018375-4,
+                    sociedad con domicilio en la ciudad de Medellín, inscrita con en la Cámara
+                    de Comercio de Medellín para Antioquia con la matrícula Nº 21-572509-12.
+                    quien comercializará y recaudará los dineros correspondientes de las ventas
+                    de los lotes de este proyecto. <strong>CLÁUSULA</strong> <strong> VIGÉCIMA PRIMERA. ARBITRAMENTO:</strong>
+                    Toda controversia o
+                    diferencia relativa a este contrato, se resolverá por un Tribunal de
+                    Arbitramento presentado ante el Centro de Conciliación y Arbitraje de la
+                    Cámara de Comercio de Medellín para Antioquia, el cual estará sujeto a sus
+                    reglamentos y al procedimiento allí contemplado. El Tribunal estará
+                    integrado por tres (3) árbitros designados por el Centro de Conciliación y
+                    Arbitraje de la Cámara de Comercio de Medellín para Antioquia, a solicitud
+                    de cualquiera de las partes. <strong>CLÁUSULA VIGÉCIMA SEGUNDA.</strong> <strong>ACUERDOS
+                        ANTERIORES:</strong> Las partes manifiestan que no
+                    reconocen la validez de estipulaciones verbales relacionadas con el
+                    presente contrato o cualquier acuerdo escrito con anterioridad relacionado
+                    con el LOTE FUTURO, objeto de este contrato, ya que el presente contrato
+                    constituye el acuerdo completo y total entre las partes. De la misma
+                    manera, las partes acuerdan que cualquier reclamo, solicitud, queja,
+                    petición o información que afecte directamente el objeto de este contrato,
+                    debe ser comunicado únicamente por medio escrito, y será respondido dentro
+                    del término legal. <strong>CLÁUSULA</strong> <strong> VIGÉCIMA TERCERA</strong><strong>.
+                        DECLARACIÓNES:</strong>
+                    Declara(n) <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong>: 1) <strong> </strong>Que los recursos
+                    económicos utilizados para la compra del
+                    lote son de origen lícito. 2)<strong> </strong>que la dirección oficial de
+                    correspondencia es la anotada en el encabezamiento de este contrato, 3) que
+                    está(n) de acuerdo con el contenido en todas las cláusulas del presente
+                    contrato, por lo que firma(n) conforme(s). 4) Que es su obligación informar
+                    por escrito a <strong>LA PROMITENTE VENDEDORA</strong> cualquier cambio de
+                    dirección o teléfonos. 5) Que es su obligación pagar oportunamente
+                    cualquiera de las obligaciones pecuniarias enunciadas en este contrato, en
+                    las oficinas de <strong>LA PROMITENTE VENDEDORA</strong> o consignando los
+                    valores correspondientes en las cuentas bancarias de<strong>LA PROMITENTE VENDEDORA</strong>.
+                    <strong>CLÁUSULA VIGÉCIMA CUARTA</strong><strong>. DOMICILIO: </strong>Que,
+                    para todos los efectos de este contrato el domicilio es la ciudad de
+                    Medellín, departamento de Antioquia. </p><br>
+                    <p>
+                        En señal de aceptación de lo aquí suscrito, firman LAS PARTES,{%if es_promesa%} 
+                        el día <u> {{ctr.fechapromesa.day}} </u> de <u> {{ctr.fechapromesa|date:"F"}} </u> de <u> {{ctr.fechapromesa.year}} </u> .
+                        {%else%}
+                        el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+                        {%endif%}en la ciudad de <u>{{oficina}}</u></p><br>
+                    <p class="detalles" style="text-align:center;font-size:12px">
+                        <b>LA PROMITENTE VENDEDORA</b><br><br><br><br>
+                        ____________________________________________<br>
+                        <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b><br>
+                        NIT. 900.993.044-9
+                    </p>
+                    <br>
+                    <p class="detalles" style="text-align:center;font-size:12px">
+                        <b>EL (LOS) PROMITENTE (S) COMPRADOR (ES)</b><br><br><br>   
+                    <table>
+                        <tr>
+                            <td style="{%if ctr.titulares.1%}width:50%;{%endif%}text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.0.pk}}
+                            </td>
+                            {%if ctr.titulares.1%}
+                            <td style="width:50%;text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.1.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.1.pk}}
+                            </td>
+                            {%endif%}
+                        </tr>
+                        {%if ctr.titulares.2%}
+                        <tr style="padding-top:20px;">
+                            <td style="{%if ctr.titulares.3%}width:50%;{%endif%}text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.2.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.2.pk}}
+                            </td>
+                            {%if ctr.titulares.3%}
+                            <td style="width:50%;text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.3.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.3.pk}}
+                            </td>
+                            {%endif%}
+                        </tr>
+                        
+                        {%endif%}
+                    </table>
+        </div>
+        <head>
+            <style>
+                @page {
+                    size: legal;
+                    @frame content_frame {
+                        /* Content Frame */
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 1cm;
+                        height: 31.7cm;
+                    }
+                    @frame footer_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: footer_content;
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 33.5cm;
+                        height: 1.5cm;
+                    }
+                }
+            
+                @font-face {
+                    font-family: Ubuntu;
+                    src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+                }
+            
+                /* Bold */
+                @font-face {
+                    font-family: Ubuntu;
+                    src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                    font-weight: bold;
+                }
+            
+                body {
+                    font-family: Ubuntu;
+                }
+            
+                .cuerpo {
+                    font-size: 11px;
+                    color: rgb(81, 81, 81);
+                    line-height: normal;
+                }
+                .detalles{
+                    font-size: 11px;
+                    color: rgb(81, 81, 81);
+                }
+            </style>
+        </head>
+    </body>
+</html>

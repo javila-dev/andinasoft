@@ -1,0 +1,304 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%block title%}Tesoreria | Lista de recaudos{%endblock%}
+{%block style%}
+<style>
+    label {
+        padding-right: 0.5rem;
+        font-weight: bold;
+        width: 100%;
+    }
+
+    h4 {
+        padding-bottom: 1rem;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow-sm"
+    style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h3 class='section-title text-white text-center'>Listado de Recaudos</h3>
+    <!-- Modal -->
+    <div class="modal fade" id="modal-recibos" data-backdrop="static" tabindex="-1" role="dialog"
+        aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title" id="ModalLabel">¿Que deseas hacer?</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <form class="form" method="post" action="">{%csrf_token%}
+                    <div class="modal-body">
+                        <div class='col-xs-11 offset-2'>
+                            <div class="btn-group" role="group" aria-label="botones-recibos">
+                                <input type="submit" class="btn btn-primary" value="Reimprimir" name='reimprimir'
+                                    id='reimprimir'>
+                                <div class="btn-group" role="group">
+                                    <button id="btnGroupDrop1" type="button" class="btn btn-secondary dropdown-toggle"
+                                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        Modificar
+                                    </button>
+                                    <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
+                                        <a class="dropdown-item" href="#" name='modif-fecha' id='modif-fecha'>Fecha</a>
+                                        <a class="dropdown-item" href="#" name='modif-consecut'
+                                            id='modif-consecut'>Consecutivo</a>
+                                        <a class="dropdown-item" href="#" name='modif-formapago'
+                                            id='modif-formapago'>Forma de pago</a>
+                                        <a class="dropdown-item" href="#" name='modif-valor'
+                                            id='modif-valor'>Valor</a>
+                                    </div>
+                                </div>
+                                <div class="btn-group" role="group">
+                                    <button id="btnGroupDrop1" type="button" class="btn btn-secondary dropdown-toggle"
+                                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                        Eliminar
+                                    </button>
+                                    <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
+                                        <input class="dropdown-item" name='eliminar-regresando' type='submit'
+                                            value='Eliminar Regresando en 1 el Consecutivo'>
+                                        <input class="dropdown-item" name='eliminar-sinregresar' type='submit'
+                                            value='Eliminar Sin Regresar Consecutivo'>
+                                        <input class="dropdown-item" name='eliminar-anulando' type='submit'
+                                            value='Eliminar Anulando Consecutivo'>
+                                    </div>
+                                </div>
+                            </div>
+                            {{form_modificaciones.nrorecibo}}
+                            {{form_modificaciones.proyecto}}
+                            <!-- Esto controla el numero de recibo -->
+                            <div class='col-xs-12 col-md-6' id='block-modif-fecha'
+                                style='display:""!important;margin-top:0.7rem;'>
+                                {{form_modificaciones.fecha_modif|as_crispy_field}}
+                            </div>
+                            <div class='col-xs-12 col-md-6' id='block-modif-consec'
+                                style='display:""!important;margin-top:0.7rem;'>
+                                {{form_modificaciones.consecutivo_modif|as_crispy_field}}
+                            </div>
+                            <div class='' id='block-modif-forma'
+                                style='display:""!important;margin-top:0.7rem;'>
+                                <div class="form-group w-100">
+                                    {{form_modificaciones.forma_pago_modif|as_crispy_field}}
+                                </div>
+                                {% if not formas_pago %}
+                                <small class="form-text text-muted">Busca un proyecto para cargar las formas de pago disponibles.</small>
+                                {% endif %}
+                            </div>
+                            <div class='col-xs-12 col-md-6' id='block-modif-valor'
+                                style='display:""!important;margin-top:0.7rem;'>
+                                {{form_modificaciones.valor_modif|as_crispy_field}}
+                                <small class="form-text text-muted">Solo se puede modificar el valor si el recaudo no tiene detalles aplicados.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <input type="submit" class="btn btn-primary" id='boton-modificar-fecha'
+                            name='boton-modificar-fecha' value='Modificar'>
+                        <input type="submit" class="btn btn-primary" id='boton-modificar-consec'
+                            name='boton-modificar-consec' value='Modificar'>
+                        <input type="submit" class="btn btn-primary" id='boton-modificar-forma'
+                            name='boton-modificar-forma' value='Modificar'>
+                        <input type="submit" class="btn btn-primary" id='boton-modificar-valor'
+                            name='boton-modificar-valor' value='Modificar'>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <br />
+    <form method='POST' action=''>{%csrf_token %}
+        <div class='row mx-0'>
+            <div class="col-md-4">
+                {{form.Proyecto|as_crispy_field}}
+            </div>
+            <div class="col-md-3">
+                {{form.Fecha_Desde|as_crispy_field}}
+            </div>
+            <div class="col-md-3">
+                {{form.Fecha_Hasta|as_crispy_field}}
+            </div>
+            <div class="col-md-2 mt-md-2">
+                <input type="submit" class="btn btn-primary mt-4 ml-auto"  name='boton-buscar' value='Buscar'>
+            </div>
+            
+        </div>
+       
+    </form>
+    <br />
+    {%if reimpresion%}
+    <a href='{{ruta_recibo}}'>
+        <p class='lead text-center'>Descargar Recibo</p>
+    </a>
+    {%else%}
+    <div class='table-responsive'>
+        <table id="tabla-listarecaudos" class='table table-sm table-striped table-bordered'>
+            <thead class='thead thead-light'>
+                <tr>
+                    <th class='text-center'>Recibo</th>
+                    <th class='text-center'>Fecha</th>
+                    <th class='text-center'>Adj</th>
+                    <th class='text-center'>Cliente</th>
+                    <th class='text-center'>Operacion</th>
+                    <th class='text-center'>Valor</th>
+                    <th class='text-center'>Forma de Pago</th>
+                    <th class='text-center'>Soporte</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for recibo in recibos%}
+                <tr>
+                    <td class='text-center'><a href='#' data-toggle="modal" data-target="#modal-recibos"
+                            data-proyecto='{{recibo.proyecto}}'
+                            data-recibo="{{recibo.numrecibo}}">{{recibo.numrecibo}}</a></td>
+                    <td class='text-center'>{{recibo.fecha|date:'d/m/Y'}}</td>
+                    <td class='text-center'>{{recibo.idadjudicacion}}</td>
+                    <td>{{recibo.nombrecompleto}}</td>
+                    <td class='text-center'>{{recibo.operacion}}</td>
+                    <td class='text-center'>{{recibo.valor}}</td>
+                    <td class='text-center'>{{recibo.formapago}}</td>
+                    <td class='text-center'>
+                        {% if recibo.soporte_finance %}
+                            <a href='{{recibo.soporte_finance}}' target='_blank' class='btn btn-sm btn-outline-primary'>Ver soporte</a>
+                        {% else %}
+                            <span class='text-muted'>N/A</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+    {%endif%}
+</div>
+<div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+
+            </div>
+            <div class="modal-body">
+                {%if link%}
+                <a href="{{ruta_link}}" class='lead text-center'>
+                    <p class='lead' id='mensaje-alerta'></p>
+                </a>
+                {%else%}
+                <p class='lead' id='mensaje-alerta'></p>
+                {%endif%}
+            </div>
+            <div class="modal-footer">
+
+                {%if redireccion%}
+                <a href='{{redirect}}' type="button" class="btn btn-primary">Entendido</a>
+                {%else%}
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+                {%endif%}
+            </div>
+        </div>
+    </div>
+</div>
+{{form.media}}
+{%if alerta%}
+<script>
+    $('#alerta-general').modal('show')
+    document.getElementById('mensaje-alerta').innerHTML = '{{mensaje_alerta}}';
+    document.getElementById('titulo-alerta').innerHTML = 'Error';
+</script>
+{%endif%}
+<script>
+    $(document).ready(function () {
+        $('#tabla-listarecaudos').DataTable({
+            "pageLength": 25,
+            'lengthMenu': [
+                [10, 25, 50, -1],
+                [10, 25, 50, 'All']
+            ],
+            "order": [
+                [0, "asc"]
+            ],
+            columnDefs: [{
+                type: 'date-uk',
+                targets: 0
+            }]
+        })
+        $("#block-modif-fecha").css("display", "none")
+        $("#block-modif-consec").css("display", "none")
+        $("#block-modif-forma").css("display", "none")
+        $("#block-modif-valor").css("display", "none")
+        $("#boton-modificar-fecha").css("display", "none")
+        $("#boton-modificar-consec").css("display", "none")
+        $("#boton-modificar-forma").css("display", "none")
+        $("#boton-modificar-valor").css("display", "none")
+        $("#modif-fecha").click(function () {
+            $("#block-modif-fecha").css("display", "block")
+            $("#boton-modificar-fecha").css("display", "block")
+            $("#boton-modificar-consec").css("display", "none")
+            $("#block-modif-consec").css("display", "none")
+            $("#block-modif-forma").css("display", "none")
+            $("#boton-modificar-forma").css("display", "none")
+            $("#block-modif-valor").css("display", "none")
+            $("#boton-modificar-valor").css("display", "none")
+            $('#consecutivo_modif').val(null)
+            $('#forma_pago_modif').val('')
+            $('#valor_modif').val(null)
+        });
+        $("#modif-consecut").click(function () {
+            $('#fecha_modif').val(null)
+            $("#block-modif-fecha").css("display", "none")
+            $("#boton-modificar-fecha").css("display", "none")
+            $("#boton-modificar-consec").css("display", "block")
+            $("#block-modif-consec").css("display", "block")
+            $("#block-modif-forma").css("display", "none")
+            $("#boton-modificar-forma").css("display", "none")
+            $("#block-modif-valor").css("display", "none")
+            $("#boton-modificar-valor").css("display", "none")
+            $('#forma_pago_modif').val('')
+            $('#valor_modif').val(null)
+        })
+        $("#modif-formapago").click(function () {
+            $('#fecha_modif').val(null)
+            $('#consecutivo_modif').val(null)
+            $("#block-modif-fecha").css("display", "none")
+            $("#boton-modificar-fecha").css("display", "none")
+            $("#block-modif-consec").css("display", "none")
+            $("#boton-modificar-consec").css("display", "none")
+            $("#block-modif-forma").css("display", "block")
+            $("#boton-modificar-forma").css("display", "block")
+            $("#block-modif-valor").css("display", "none")
+            $("#boton-modificar-valor").css("display", "none")
+            $('#valor_modif').val(null)
+        })
+        $("#modif-valor").click(function () {
+            $('#fecha_modif').val(null)
+            $('#consecutivo_modif').val(null)
+            $('#forma_pago_modif').val('')
+            $("#block-modif-fecha").css("display", "none")
+            $("#boton-modificar-fecha").css("display", "none")
+            $("#block-modif-consec").css("display", "none")
+            $("#boton-modificar-consec").css("display", "none")
+            $("#block-modif-forma").css("display", "none")
+            $("#boton-modificar-forma").css("display", "none")
+            $("#block-modif-valor").css("display", "block")
+            $("#boton-modificar-valor").css("display", "block")
+        })
+        $('#modal-recibos').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var recipient = button.data('recibo')
+            var recipient2 = $('#proyecto').val()
+            var modal = $(this)
+            $('#nrorecibo').val(recipient)
+            $('#proyecto_modif').val(recipient2)
+            document.getElementById('ModalLabel').innerHTML = '¿Qué deseas hacer con el Recibo ' +
+                recipient + '?'
+        });
+    });
+</script>
+<script>
+    $('#proyecto').val('{{proyecto}}')
+    $('#desde').val('{{desde|date:"Y-m-d"}}')
+</script>
+{%endblock%}

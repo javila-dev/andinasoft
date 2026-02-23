@@ -1,0 +1,1031 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Accounting | Planilla diaria{%endblock%}
+{%block style%}
+<style>
+    th {
+        font-size: smaller;
+        text-align: center;
+    }
+
+    td {
+        font-size: x-small;
+        text-align: center;
+    }
+
+    .dataTables_length {
+        padding-left: 8px;
+    }
+
+    .dataTables_filter {
+        padding-right: 8px;
+    }
+
+    .dataTables_info {
+        padding-left: 8px;
+    }
+
+    .dt-buttons {
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+{%include 'datatable_buttons.html'%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Planilla movimiento diario</h3>
+    <div class='row'>
+        <div class='col-md-4 position-relative'>
+            <div class='p-2'>
+                {%crispy form%}
+                <label class='pt-2'>Cuentas</label>
+                <div id='listaCuentas' class="list-group">
+                    <a href="#" class="list-group-item list-group-item-action" aria-current="true">&nbsp;</a>
+                </div>
+            </div>
+            <button class='btn btn-circle btn-primary shadow m-2 float-right' 
+                id='btnSearchPlanilla' data-toggle="tooltip" data-placement="bottom" title="Buscar movimientos"
+                style='bottom:14px;right:14px'>
+                <i class="fas fa-search"></i>
+            </button>
+            <button class='btn btn-circle btn-primary shadow m-2 float-right' 
+                id='btnDownloadPlanilla' data-toggle="tooltip" data-placement="bottom" title="Descargar planilla"
+                style='bottom:14px;right:14px'>
+                <i class="fas fa-file-download"></i>
+            </button>
+            <button class='btn btn-circle btn-primary shadow m-2 float-right' 
+                id='btnSaldosInciales' data-toggle="tooltip" data-placement="bottom" title="Registrar saldo final"
+                style='bottom:14px;right:14px'>
+                <i class="fas fa-dollar-sign"></i>
+            </button>
+        </div>
+        <div class="col-md-8">
+            <div class='bg-light rounded shadow mb-3'>
+                <p class='lead font-weight-bold p-2'>Ingresos recibidos</p>
+                <div class='table-responsive'>
+                    <table class='display' id='tablaIngresos' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Consecutivo</th>
+                                <th>Descripcion</th>
+                                <th>Valor</th>
+                                <th>Cuenta</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total:</th>
+                                <th class='text-right'>Valor</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class='bg-light rounded shadow mb-3'>
+                <p class='lead font-weight-bold p-2'>Otros Ingresos</p>
+                <div class='table-responsive'>
+                    <table class='display' id='tablaOtrosIngresos' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Consecutivo</th>
+                                <th>Cuenta</th>
+                                <th>Tercero</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total:</th>
+                                <th class='text-right' >Valor</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class='bg-light rounded shadow mb-3'>
+                <p class='lead font-weight-bold p-2'>Consignaciones y transferencias entre cuentas</p>
+                <div class='table-responsive'>
+                    <table class='display' id='tablaConsigTransf' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Cuenta sale</th>
+                                <th>Cuenta entra</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total:</th>
+                                <th class='text-right' >Valor</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class='bg-light rounded shadow mb-3'>
+                <p class='lead font-weight-bold p-2'>Transferencias entre compañias</p>
+                <div class='table-responsive'>
+                    <table class='display' id='tablaIntercomp' style='width:100%'>
+                        <thead>
+                            <thead>
+                                <tr>
+                                    <th colspan="2">Entra</th>
+                                    <th colspan="2">Sale</th>
+                                    <th rowspan="2">Valor</th>
+                                </tr>
+                                <tr>
+                                    <th>Empresa</th>
+                                    <th>Cuenta</th>
+                                    <th>Empresa</th>
+                                    <th>Cuenta</th>
+                                </tr>
+                            </thead>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total:</th>
+                                <th class='text-right'>Valor</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            
+            <div class='bg-light rounded shadow mb-3'>
+                <p class='lead font-weight-bold p-2'>Anticipos Girados</p>
+                <div class='table-responsive'>
+                    <table class='display' id='tablaAnticipos' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Tercero</th>
+                                <th>Descripcion</th>
+                                <th>Cuenta</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total:</th>
+                                <th class='text-right'>Valor</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class='bg-light rounded shadow mb-3'>
+                <p class='lead font-weight-bold p-2'>Pagos efectuados</p>
+                <div class='table-responsive'>
+                    <table class='display' id='tablaPagos' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Radicado</th>
+                                <th>Tercero</th>
+                                <th>Descripcion</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total:</th>
+                                <th class='text-right'>Valor</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalSaldoInicial" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Saldo</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <ul class="nav nav-tabs" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <a class="nav-link active" id="home-tab" data-toggle="tab" 
+                    href="#home" role="tab" aria-controls="home" aria-selected="true">Registrar</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <a class="nav-link" id="profile-tab" data-toggle="tab" 
+                    href="#profile" role="tab" aria-controls="profile" aria-selected="false">Historico</a>
+                </li>
+              </ul>
+              <div class="tab-content" id="myTabContent">
+                <div class="tab-pane fade show active" id="home" role="tabpanel">
+                    <form class='form mt-3' id='formSaldoIni' method='post'>{%csrf_token%}
+                        <div class='row'>
+                            <div class='col-md-6'>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>50</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='50' id='mnd50' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>100</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='100' id='mnd100' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>200</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='200' id='mnd200' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>500</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='500' id='mnd500' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>1000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='1.000' id='mnd1000' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class='col-md-6'>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>1.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='1000' id='bll1k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>2.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='2000' id='bll2k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>5.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='5000' id='bll5k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>10.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='10000' id='bll10k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>20.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='20000' id='bll20k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>50.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='50000' id='bll50k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                                <div class='row'>
+                                    <div class='col-6'>
+                                        <p>100.000</p>
+                                    </div>
+                                    <div class='col-6'>
+                                        <input type='number' data-denom='100000' id='bll100k' class='arqueofisico form-control text-center'>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class='row  mt-3'>
+                            <div class='col-md-6'>  
+                                <input name="saldoinicial" class='form-control text-center mr-3' 
+                                id='saldoinicial' placeholder="Valor" required>
+                            </div>
+                            <div class='col-md-6 d-flex'>
+                            <button type="submit" class="btn btn-primary ml-auto">Registrar</button>
+                            </div>
+                        </div>
+                      </form>
+                </div>
+                <div class="tab-pane fade" id="profile" role="tabpanel">
+                    <div class='table-responsive mt-3'>
+                        <table class='display' id='tablaHistSaldos' style='width: 100%;'>
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Usuario</th>
+                                    <th>Saldo</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+              </div>
+        </div>
+      </div>
+    </div>
+</div>
+<script>
+    $(document).ready(function () {
+        var tablaIngresos = $('#tablaIngresos').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/getmvtosplanilla',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'fecha'
+                },
+                {
+                    'data': 'comprobante'
+                },
+                {
+                    'data': 'descripcion'
+                },
+                {
+                    'data': 'valor'
+                },
+                {
+                    'data': 'cuenta'
+                },
+                {
+                    'data': 'proyecto'
+                }
+            ],
+            order: [
+                [1,'asc']
+            ],
+            columnDefs: [{
+                    "targets": [2],
+                    "className": "dt-body-left"
+                },
+                {
+                    "targets": [3],
+                    "className": "dt-body-right"
+                },
+                {
+                    "visible": false,
+                    "targets": 5
+                }
+            ],
+            footerCallback: function (row, data, start, end, display) {
+                var api = this.api(),
+                    data;
+
+                // Remove the formatting to get integer data for summation
+                var intVal = function (i) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '') * 1 :
+                        typeof i === 'number' ?
+                        i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column(3)
+                    .data()
+                    .reduce(function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0);
+                // Update footer
+                total = new Intl.NumberFormat().format(total)
+                $(api.column(3).footer()).html(
+                    '$' + total
+                );
+            },
+            drawCallback: function (settings) {
+                var api = this.api();
+                var rows = api.rows({
+                    page: 'current'
+                }).nodes();
+                var last = null;
+
+                api.column(5, {
+                    page: 'current'
+                }).data().each(function (group, i) {
+                    if (last !== group) {
+                        $(rows).eq(i).before(
+                            '<tr class="group"><td colspan="5" class="text-left"><strong>Proyecto: </strong>' +
+                            group + '</td></tr>'
+                        );
+                        last = group;
+                    }
+                });
+            }
+
+        })
+        var tablaConsigTransf = $('#tablaConsigTransf').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/getmvtosplanilla',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'fecha'
+                },
+                {
+                    'data': 'cuenta_sale'
+                },
+                {
+                    'data': 'cuenta_entra'
+                },
+                {
+                    'data': 'valor'
+                },
+            ],
+            order: [
+                [1,'asc']
+            ],
+            columnDefs: [
+                {
+                    "targets": [3],
+                    "className": "dt-body-right"
+                },
+            ],
+            footerCallback: function (row, data, start, end, display) {
+                var api = this.api(),
+                    data;
+
+                // Remove the formatting to get integer data for summation
+                var intVal = function (i) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '') * 1 :
+                        typeof i === 'number' ?
+                        i : 0;
+                };
+
+                // Total over all pages
+                total = api
+                    .column(3)
+                    .data()
+                    .reduce(function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0);
+                // Update footer
+                total = new Intl.NumberFormat().format(total)
+                $(api.column(3).footer()).html(
+                    '$' + total
+                );
+            },
+
+        })
+        var tablaIntercomp = $('#tablaIntercomp').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/getmvtosplanilla',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'empresa_entra'
+                },
+                {
+                    'data': 'cuenta_entra'
+                },
+                {
+                    'data': 'empresa_sale'
+                },
+                {
+                    'data': 'cuenta_sale'
+                },
+                {
+                    'data': 'valor'
+                },
+            ],
+            order: [
+                [0,'asc']
+            ],
+            columnDefs: [{
+                    "targets": [0, 2],
+                    "className": "dt-body-left"
+                },
+                {
+                    "targets": [4],
+                    "className": "dt-body-right"
+                },
+            ],
+            footerCallback: function (row, data, start, end, display) {
+                var api = this.api(),
+                    data;
+
+                // Remove the formatting to get integer data for summation
+                var intVal = function (i) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '') * 1 :
+                        typeof i === 'number' ?
+                        i : 0;
+                };
+
+                // Total over all pages
+                total = api
+                    .column(4)
+                    .data()
+                    .reduce(function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0);
+                // Update footer
+                total = new Intl.NumberFormat().format(total)
+                $(api.column(4).footer()).html(
+                    '$' + total
+                );
+            },
+        })
+        var tablaAnticipos = $('#tablaAnticipos').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/getmvtosplanilla',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'fecha'
+                },
+                {
+                    'data': 'tercero'
+                },
+                {
+                    'data': 'descripcion'
+                },
+                {
+                    'data': 'cuenta'
+                },
+                {
+                    'data': 'valor'
+                }
+            ],
+            order: [
+                [3,'asc']
+            ],
+            columnDefs: [{
+                    "targets": [1, 2],
+                    "className": "dt-body-left"
+                },
+                {
+                    "targets": [4],
+                    "className": "dt-body-right"
+                },
+            ],
+            footerCallback: function (row, data, start, end, display) {
+                var api = this.api(),
+                    data;
+
+                // Remove the formatting to get integer data for summation
+                var intVal = function (i) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '') * 1 :
+                        typeof i === 'number' ?
+                        i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column(4)
+                    .data()
+                    .reduce(function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0);
+                // Update footer
+                total = new Intl.NumberFormat().format(total)
+                $(api.column(4).footer()).html(
+                    '$' + total
+                );
+            },
+
+        })
+        var tablaPagos = $('#tablaPagos').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/getmvtosplanilla',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'radicado'
+                },
+                {
+                    'data': 'tercero'
+                },
+                {
+                    'data': 'descripcion'
+                },
+                {
+                    'data': 'valor'
+                },
+            ],
+            order: [
+               [1,'asc']
+            ],
+            columnDefs: [{
+                    "targets": [1, 2],
+                    "className": "dt-body-left"
+                },
+                {
+                    "targets": [3],
+                    "className": "dt-body-right"
+                },
+            ],
+            footerCallback: function (row, data, start, end, display) {
+                var api = this.api(),
+                    data;
+
+                // Remove the formatting to get integer data for summation
+                var intVal = function (i) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '') * 1 :
+                        typeof i === 'number' ?
+                        i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column(3)
+                    .data()
+                    .reduce(function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0);
+                // Update footer
+                total = new Intl.NumberFormat().format(total)
+                $(api.column(3).footer()).html(
+                    '$' + total
+                );
+            },
+        })
+        var tablaSaldos = $('#tablaHistSaldos').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/saldosiniciales',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'fecha'
+                },
+                {
+                    'data': 'usuario'
+                },
+                {
+                    'data': 'saldo'
+                },
+            ],
+            order: [
+                [0,'desc']
+            ],
+            columnDefs: [
+                {
+                "targets": [2],
+                "className": "dt-body-right"
+                },
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        var tablaOtrosIngresos = $('#tablaOtrosIngresos').DataTable({
+            scrollY: "30vh",
+            scrollX: true,
+            scrollCollapse: true,
+            paging: false,
+            info: false,
+            language: {
+                url: '/ajax_request/datatable_spanish'
+            },
+            ajax: {
+                url: '/accounting/ajax/getmvtosplanilla',
+                dataSrc: 'data'
+            },
+            columns: [{
+                    'data': 'consecutivo'
+                },
+                {
+                    'data': 'cuenta'
+                },
+                {
+                    'data': 'tercero'
+                },
+                {
+                    'data': 'valor'
+                }
+            ],
+            order: [
+                [3,'asc']
+            ],
+            columnDefs: [{
+                    "targets": [2],
+                    "className": "dt-body-left"
+                },
+                {
+                    "targets": [3],
+                    "className": "dt-body-right"
+                },
+            ],
+            footerCallback: function (row, data, start, end, display) {
+                var api = this.api(),
+                    data;
+
+                // Remove the formatting to get integer data for summation
+                var intVal = function (i) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '') * 1 :
+                        typeof i === 'number' ?
+                        i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column(3)
+                    .data()
+                    .reduce(function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0);
+                // Update footer
+                total = new Intl.NumberFormat().format(total)
+                $(api.column(3).footer()).html(
+                    '$' + total
+                );
+            },
+
+        })
+        $('#formSaldoIni').on('submit',function(e){
+            e.preventDefault();
+            data = new FormData(this)
+            let empresa = $('#id_empresa').val()
+            let fecha =$('#id_fecha').val()
+            let cuenta = $('#listaCuentas .active').data('pk')
+            data.append('empresa',empresa)
+            data.append('fecha',fecha)
+            data.append('cuenta',cuenta)
+            let arqueo = []
+            $('.arqueofisico').each(function(index,elem){
+                let cantidad = $(elem).val()
+                let denom = $(elem).data('denom')
+                if (cantidad>0) arqueo.push(`"${denom}":${cantidad}`)
+            })
+            data.append('forma',`{${arqueo}}`)
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/saldosiniciales',
+                data:data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').text(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    $('#modalSaldoInicial').modal('hide')
+                }
+            })
+        })
+
+        $('#id_empresa').on('change',function(){
+            var empresa = $(this).val()
+            $('#listaCuentas').empty()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<a href="#" onclick="selectCuenta($(this))" class="list-group-item list-group-item-action" aria-current="true" data-pk='+pk_cuenta+'>'+cuenta+'</a>'
+                        $('#listaCuentas').append(option)
+                    }
+                }
+            })
+        })
+        $('#btnSearchPlanilla').click(function(){
+            let empresa = $('#id_empresa').val()
+            let fecha =$('#id_fecha').val()
+            let cuentas = []
+            $('#listaCuentas .active').each(function(index,element){
+                cuentas.push($(element).data('pk'))
+            })
+            if (empresa==""||fecha==""||cuentas.length==0){
+                mensaje=""
+                if (empresa=='') mensaje += "una empresa, "
+                if (fecha=="") mensaje += "la fecha, "
+                if (cuentas.length==0) mensaje += 'la(s) cuenta(s), '
+                cerrarAlerta()
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('Debes diligenciar '+mensaje+'para generar una planilla')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return false;
+            }
+            $('#alert-title').text('Cargando')
+            $('#alert-data').html(`Estamos cargando los movimientos de la fecha seleccionada <i class="fas fa-circle-notch fa-spin"></i>` )
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+            verMvtoDia()
+        })
+        $('#btnDownloadPlanilla').click(function(){
+            let empresa = $('#id_empresa').val()
+            let fecha =$('#id_fecha').val()
+            let conteo_cajas = 0
+            let cuentas = []
+            $('#listaCuentas .active').each(function(index,element){
+                let tipo_cta = $(element).text()
+                if (tipo_cta.includes('Efectivo')) conteo_cajas += 1
+                if (conteo_cajas > 1){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('Solo puedes generar movimientos diarios con 1 cuenta de efectivo')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    return;
+                }
+                cuentas.push($(element).data('pk'))
+            })
+            if (empresa==""||fecha==""||cuentas.length==0){
+                mensaje=""
+                if (empresa=='') mensaje += "una empresa, "
+                if (fecha=="") mensaje += "la fecha, "
+                if (cuentas.length==0) mensaje += 'la(s) cuenta(s), '
+                cerrarAlerta()
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('Debes diligenciar '+mensaje+'para generar una planilla')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return false;
+            }
+            cerrarAlerta()
+            $('#alert-title').text('Cargando')
+            $('#alert-data').html(`Estamos generando la planilla seleccionada <i class="fas fa-circle-notch fa-spin"></i>` )
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/printplanilla',
+                data:{
+                    'fecha':fecha,
+                    'empresa':empresa,
+                    'cuentas':Array(cuentas).toString()
+                },
+                success:function(response){
+                    cerrarAlerta()
+                    let file = response['file']
+                    setTimeout(function(){
+                        $('#alert-title').text(response.title)
+                        $('#alert-data').html(response.msj)
+                        $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    },700)
+                    
+                }
+            })
+        });
+
+        function verMvtoDia() {
+            let empresa = $('#id_empresa').val()
+            let fecha = $('#id_fecha').val()
+            let cuentas = []
+            $('#listaCuentas .active').each(function(index,element){
+                cuentas.push($(element).data('pk'))
+            })
+            let url_ingreso = '/accounting/ajax/getmvtosplanilla?tipo=ingresos&fecha=' + fecha + '&empresa=' +
+                empresa+'&cuentas='+cuentas
+            let url_consig_transf_ing = '/accounting/ajax/getmvtosplanilla?tipo=transferencias&fecha=' +
+                fecha + '&empresa=' + empresa+'&cuentas='+cuentas
+            let url_intercomp = '/accounting/ajax/getmvtosplanilla?tipo=intercomp&fecha=' +
+                fecha + '&empresa=' + empresa+'&cuentas='+cuentas
+            let url_anticipo = '/accounting/ajax/getmvtosplanilla?tipo=anticipo&fecha=' + fecha + '&empresa=' +
+                empresa+'&cuentas='+cuentas
+            let url_pagos = '/accounting/ajax/getmvtosplanilla?tipo=pago&fecha=' + fecha + '&empresa=' + empresa +
+                '&cuentas='+cuentas
+            let url_otrosing = '/accounting/ajax/getmvtosplanilla?tipo=otrosingresos&fecha=' + fecha + '&empresa=' + empresa +
+                '&cuentas='+cuentas
+            tablaIngresos.ajax.url(url_ingreso).load()
+            tablaConsigTransf.ajax.url(url_consig_transf_ing).load()
+            tablaIntercomp.ajax.url(url_intercomp).load()
+            tablaAnticipos.ajax.url(url_anticipo).load()
+            tablaPagos.ajax.url(url_pagos).load()
+            tablaOtrosIngresos.ajax.url(url_otrosing).load() 
+            setTimeout(function(){cerrarAlerta();},800)
+        }
+        $('#btnSaldosInciales').click(function(){
+            $('#formSaldoIni').trigger('reset')
+            let empresa = $('#id_empresa').val()
+            let fecha =$('#id_fecha').val()
+            let cuenta_select = $('#listaCuentas .active').text()
+            let cuenta_select_pk = $('#listaCuentas .active').data('pk')
+            let cuentas = []
+            $('#listaCuentas .active').each(function(index,element){
+                cuentas.push($(element).data('pk'))
+            })
+            if (empresa==""||fecha==""||cuentas.length!=1){
+                mensaje=""
+                if (empresa=='') mensaje += "una empresa, "
+                if (fecha=="") mensaje += "la fecha, "
+                if (cuentas.length==0) mensaje += 'la cuenta, '
+                if (cuentas.length>1) mensaje = 'solo una cuenta, '
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('Debes escoger '+mensaje+'para cargar el saldo inicial')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return false;
+            }
+            tablaSaldos.ajax.url(`/accounting/ajax/saldosiniciales?cuenta=${cuenta_select_pk}`).load()
+            $('#modalSaldoInicial').find('.modal-title').text(`Saldo ${cuenta_select} el ${fecha}`)
+            $('#modalSaldoInicial').modal('show')
+        });
+        $('.arqueofisico').on('change',function(e){
+            let valor = 0
+            $('.arqueofisico').each(function(index,elem){
+                let cantidad = $(elem).val()
+                let denom = $(elem).data('denom')*1
+                if (denom == 1) denom = 1000
+                valor += cantidad*denom
+            })
+            valor = new Intl.NumberFormat('en-EN').format(valor)
+            $('#saldoinicial').val(valor)
+        })
+        $('#saldoinicial').mask("#,##0", {reverse: true});
+    })
+    function selectCuenta(element){
+        if (element.hasClass('active')){
+            element.removeClass('active')
+        }
+        else{
+            element.addClass('active')
+        }
+    }
+</script>
+{%endblock%}

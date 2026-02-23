@@ -1,0 +1,524 @@
+{%load static%}{%load l10n%}
+<html>
+
+    <body>
+        <div id="footer_content">
+            <table style="color:#34554c;font-size:9px">
+                <tr>                    
+                    <td style="text-align: right;width:25%"></td>
+                    <td style="text-align:center;border-right: darkslategrey solid 0.5px;padding-right: 5px;">
+                        <b>Medellín</b><br>
+                        Parque empresarial Calle 11 Oficina 508<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align:center">
+                        <b>Montería</b><br>
+                        Cra 8A # 63-09<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align: right;width:25%; vertical-align: bottom;">
+                        Página <pdf:pagenumber> de <pdf:pagecount>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        
+        <div id="header_content">
+            <table class="border-visible">
+                <tr>
+                    <th style="width:20%;text-align:center" rowspan="3">
+                        <img src="{%static 'img/Andina-Conceptos.png'%}" width="140">
+                    </th>
+                    <th style="width:57%;text-align:center;color:#345555">
+                       <h4>FORMULARIO DE CONOCIMIENTO CLIENTE PERSONA NATURAL</h4>
+                    </th>
+                    <th style="width:10%;">
+                        CÓDIGO
+                    </th>
+                    <th style="width:13%;">
+                        FC-CPN-01
+                    </th>
+                </tr>
+                <tr>
+                    <th rowspan="2" style="padding-top: 3px;">
+                        <small>Sistema de autocontrol, prevención y gestión de riesgo integral contra el lavado de activos, 
+                            financiación del terrorismo, y financiamiento de la proliferación de armas de destrucción masiva 
+                            -SAGRILAFT-</small>
+                    </th>
+                    <th style="width:10%;">
+                        VERSIÓN
+                    </th>
+                    <th style="width:13%;">
+                        1
+                    </th>
+                </tr>
+                <tr>
+                    <th style="width:10%;">
+                        FECHA
+                    </th>
+                    <th style="width:13%;">
+                        30/05/2023
+                    </th>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table class="border-visible">
+                <tr>
+                    <td style="text-align: justify;line-height: 90%; padding:3px">
+                        Teniendo en cuenta que la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S, (antes PROMOTORA SANDVILLE S.A.S)</b>,  
+                        identificada con NIT 900993044-9, así como sus filiales, sucursales o subordinados, debe reportar sus 
+                        operaciones comerciales a la Superintendencia de Sociedades, le son aplicables las reglamentaciones de 
+                        la Circular Externa 100-00016 del 24 de Diciembre de 2020 y Circular Externa 100-0004 de 9 abril 2021 que, 
+                        modificaron la Circular Básica Juridica de la misma Entidad en su Capitulo X.  Razón por la cual, le 
+                        asiste el deber legal de dar a plicación al Sistema de autocontrol, prevención y gestión de riesgo integral 
+                        contra el lavado de activos, financiación del terrorismo, y financiamiento de la proliferación de armas 
+                        de destrucción masiva -SAGRILAFT-. En razón a ello, realizará  a cada una de las contrapartes con la que 
+                        vaya a tener vinculación contractual, un estudio de seguridad, para la prevención del lavado de activos, 
+                        la financiación del terrorismo y cualquier otro delito conexo contemplado en en el codigo (Ley 599 de 2000 
+                        o cualquier norma que lo adicione, complemente o modifique),  con el propósito de que se pueda dar 
+                        cumplimiento a lo señalado en la Circular Externa 100-000016 de diciembre 24 de 2020, que modificó  
+                        el Cap. X circular básica Jurídica (Circular Externa N° 100-000005 del 22 de noviembre de 2017, de la 
+                        Superintendencia de Sociedades).
+                    </td>
+                </tr>
+            </table>
+            <table class="border-visible">
+                <tr style="padding-top: 3px;">
+                    <th rowspan="2" style="width: 10%;">Fecha</th>
+                    <th style="width: 4%;">DD</th>
+                    <th style="width: 4%;">MM</th>
+                    <th style="width: 7%;">AAAA</th>
+                    <th style="width: 18%;">CIUDAD</th>
+                    <td style="width: 22%;">MEDELLIN</td>
+                    <th style="width: 19%;" rowspan="2">TIPO DE RELACIONAMIENTO</th>
+                    <td rowspan="2" style="vertical-align: middle;">Vinculación</td>
+                </tr>
+                <tr  style="padding-top: 3px;">
+                    <td>{{today.day}}</td>
+                    <td>{{today|date:"m"}}</td>
+                    <td>{{today.year|unlocalize}}</td>
+                    <th>DEPARTAMENTO</th>
+                    <td>ANTIOQUIA</td>
+                </tr>
+            </table>
+            <table class="border-visible">
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">1. INFORMACIÓN GENERAL PERSONA NATURAL</th>
+                </tr>
+                <tr style="padding-top: 3px;">
+                    <th colspan="2">NOMBRES</th>
+                    <th colspan="2">APELLIDOS</th>
+                </tr>
+                <tr>
+                    <td colspan="2">{{cliente.nombres}}</td>
+                    <td colspan="2">{{cliente.apellidos}}</td>
+                </tr>
+                <tr>
+                    <th>TIPO DE IDENTIFICACIÓN</th>
+                    <th>NÚMERO DE IDENTIFICACIÓN</th>
+                    <th>LUGAR DE EXPEDICIÓN</th>
+                    <th>FECHA DE EXPEDICIÓN</th>
+                </tr>
+                <tr>
+                    <td>{{cliente.tipo_documento_str}}</td>
+                    <td>{{cliente.pk}}</td>
+                    <td>{{cliente.lugar_exp_id.upper}}</td>
+                    <td>{{cliente.fecha_exp_id|date:"d/m/Y"}}</td>
+                </tr>
+                <tr>
+                    <th>FECHA DE NACIMIENTO</th>
+                    <th colspan="2">LUGAR DE NACIMIENTO</th>
+                    <th>NACIONALIDAD</th>
+                </tr>
+                <tr>
+                    <td>{{cliente.fecha_nac|date:"d/m/Y"}}</td>
+                    <td colspan="2">{{cliente.lugar_nac.upper}}</td>
+                    <td>{{cliente.nacionalidad.upper}}</td>
+                </tr>
+                <tr>
+                    <th>CELULAR</th>
+                    <th>TELEFONO FIJO</th>
+                    <th>CORREO ELECTRONICO</th>
+                    <th>TIPO DE VIVIENDA</th>
+                </tr>
+                <tr>
+                    <td>{{cliente.celular1}}</td>
+                    <td>{{cliente.telefono1}}</td>
+                    <td>{{cliente.email}}</td>
+                    <td>{{cliente.vivienda}}</td>
+                </tr>
+                <tr style="padding-top: 3px;">
+                    <th colspan="4">OCUPACIÓN - OFICIO- PROFESIÓN </th>
+                </tr>
+                <tr>
+                    <th>OCUPACIÓN</th>
+                    <th colspan="2">EMPRESA</th>
+                    <th>CARGO ACTUAL</th>
+                </tr>
+                <tr>
+                    <td>{{cliente.tipo_ocupacion.upper}}{%if cliente.ocupacion == "O"%}: {{cliente.cual_otro_ocupacion.upper}}{%endif%}</td>
+                    <td colspan="2">{{cliente.sagrilaft_info.empresa_labora.upper}}</td>
+                    <td>{{cliente.sagrilaft_info.cargo_actual.upper}}</td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">2. INFORMACIÓN FINANCIERA</th>
+                </tr>
+                <tr>
+                    <th colspan="2">INGRESOS MENSUALES</th>
+                    <th colspan="2">SUS INGRESOS PROVIENEN DE</th>
+                </tr>
+                <tr>
+                    <td colspan="2">{{cliente.nivel_ingresos}}</td>
+                    <td colspan="2">{{cliente.sagrilaft_info.origen_ingresos.upper}}</td>
+                </tr>
+                <tr>
+                    <th colspan="2">OBLIGADO A DECLARAR RENTA</th>
+                    {%if cliente.sagrilaft_info.tiene_rut == 1%}
+                    <th>TIENE REGISTRO TRIBUTARIO (RUT)</th>
+                    <th>CODIGO CIIU PPAL</th>
+                    {%else%}
+                    <th colspan="2">TIENE REGISTRO TRIBUTARIO (RUT)</th>
+                    {%endif%}
+                </tr>
+                <tr>
+                    <td colspan="2">{{cliente.sagrilaft_info.humanize_declara_renta.upper}}</td>
+                    {%if cliente.sagrilaft_info.tiene_rut%}
+                    <td>SI</td>
+                    <td>{{cliente.sagrilaft_info.codigo_ciuu}}</td>
+                    {%else%}
+                    <td colspan="2">NO</td>
+                    {%endif%}
+                </tr>
+                <tr style="padding-top: 3px;">
+                    <th colspan="4">Información financiera complementaria</th>
+                </tr>
+                {%for pregunta in cliente.sagrilaft_info.json_preguntas.data%}
+                <tr>
+                    <td colspan="2" style="text-align: left;padding-left: 3px;">{{pregunta.pregunta}}</td>
+                    {%if pregunta.respuesta == "Si"%}
+                    <td>{{pregunta.respuesta}}</td>
+                    <td>{{pregunta.complemento}}</td>
+                    {%else%}
+                    <td colspan="2">{{pregunta.respuesta}}</td>
+                    {%endif%}
+                </tr>
+                {%endfor%}
+            </table>
+            <table class="border-visible">
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">3. PERSONA EXPUESTA POLITICAMENTE PEPS</th>
+                </tr>
+                <tr>
+                    <td colspan="4" style="text-align: justify;line-height: 90%; padding:3px">
+                        <b>DEFINICIÓN:</b> Las personas políticamente expuestas son aquellas personas nacionales o 
+                        extranjeras que cumplen funciones públicas destacadas de alto nivel o con mando y 
+                        jurisdicción en un Estado, como jefes de Estado o de un gobierno, políticos de alta 
+                        jerarquía, funcionarios gubernamentales, judiciales o militares de alta jerarquía, 
+                        altos ejecutivos de empresas estatales, funcionarios importantes de partidos 
+                        políticos o familiar cercano o estrecho colaborador de cualquier categoría de 
+                        persona expuesta  políticamente (extranjero, nacionales o de organismo internacional). 
+                        Ver cargos relacionados en el Art. 2.1.4.2.3. del Decreto 1674 de 2016. Se 
+                        considerará persona políticamente expuesta desde el momento de su nombramiento 
+                        hasta su separación del cargo y por un periodo posterior no mayor de dos (2) años 
+                        desde el momento que cesa de ejercer funciones u obligaciones.  
+                        Los PEP (Personas Expuestas Políticamente) y sus relacionados están obligados a 
+                        identificarse según Artículo 2.1.4.2.4. del Decreto 1674 de 2016. Adicionalemente 
+                        son considerados PEPS: los Familiares por vínculo sangüíneo, de afinidad o civil; 
+                        como padres, hijos, abuelos, nietos, hermanos, sobrinos, tíos, cónyuge o pareja, 
+                        suegros, yernos o nueras. 
+                        <b>*</b> En caso de requerir registrar más PEP, adjuntar relación.                                         </td>
+                </tr>
+                {%if cliente.sagrilaft_info.es_peps%}
+                <tr>
+                    <th colspan="2">¿ES USTED UN PEPS?</th>
+                    <th>DESDE</th>
+                    <th>HASTA</th>
+                <tr>
+                    <td colspan="2">SI</td>
+                    <td>{{ cliente.sagrilaft_info.peps_desde}}</td>
+                    <td>{{ cliente.sagrilaft_info.peps_hasta|default_if_none:"Actualmente"}}</td>
+                </tr>
+                <tr>
+                    <th colspan="2">ENTIDAD</th>
+                    <th colspan="2">CARGO</th>
+                </tr>
+                <tr>
+                    <td colspan="2">{{ cliente.sagrilaft_info.peps_entidad}}</td>
+                    <td colspan="2">{{ cliente.sagrilaft_info.peps_cargo}}</td>
+                </tr>
+                {%else%}
+                <tr>
+                    <th colspan="3">¿ES USTED UN PEPS?</th>
+                    <td>NO</td>
+                </tr>
+                {%endif%}
+                
+                {%if cliente.sagrilaft_info.peps_familiar%}
+                <tr>
+                    <th colspan="3">¿ES FAMILIAR O ASOCIADO DE UNA PERSONA POLITICAMENTE EXPUESTA PEPS?</th>
+                    <th>PARENTESCO</th>
+                <tr>
+                    <td colspan="3">SI</td>
+                    <td>{{ cliente.sagrilaft_info.peps_familiar_parentesco}}</td>
+                </tr>
+                <tr>
+                    <th colspan="2">ENTIDAD</th>
+                    <th colspan="2">CARGO</th>
+                </tr>
+                <tr>
+                    <td colspan="2">{{ cliente.sagrilaft_info.peps_familiar_entidad}}</td>
+                    <td colspan="2">{{ cliente.sagrilaft_info.peps_familiar_cargo}}</td>
+                </tr>
+                {%else%}
+                <tr>
+                    <th colspan="3">¿ES FAMILIAR O ASOCIADO DE UNA PERSONA POLITICAMENTE EXPUESTA PEPS?</th>
+                    <td>NO</td>
+                </tr>
+                {%endif%}
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">4. REFERENCIA FAMILIAR</th>
+                </tr>
+                <tr>
+                    <th colspan="3">NOMBRES Y APELLIDOS</th>
+                    <th>TELEFONO</th>
+                </tr>
+                <tr>
+                    <td colspan="3">{{cliente.sagrilaft_info.referencia_familiar}}</td>
+                    <td>{{cliente.sagrilaft_info.referencia_familiar_telefono}}</td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">5. REFERENCIA PERSONAL</th>
+                </tr>
+                <tr>
+                    <th colspan="3">NOMBRES Y APELLIDOS</th>
+                    <th>TELEFONO</th>
+                </tr>
+                <tr>
+                    <td colspan="3">{{cliente.sagrilaft_info.referencia_personal}}</td>
+                    <td>{{cliente.sagrilaft_info.referencia_personal_telefono}}</td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">6. DECLARACION DE ORIGEN DE FONDOS</th>
+                </tr>   
+                <tr>
+                    <td colspan="4" style="text-align: justify;line-height: 90%; padding:3px">
+                        Quien suscribe el presente, obrando en nombre propio, de manera voluntaria y 
+                        dando certeza de que todo lo aquí consignado es cierto, realizo la siguiente 
+                        declaración de origenes de fondos a 
+                        <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S (antes PROMOTORA SANDVILLE S.A.S)</b> con NIT 900993044-9. 
+                        con el propósito de que se pueda dar cumplimiento a lo señalado al respecto,  a la Circular 
+                        Externa 100-000016 de diciembre 24 de 2020, que modificó  el Cap. X circular básica Jurídica 
+                        (Circular Externa N° 100-000005 del 22 de noviembre de 2017, de la Superintendencia de 
+                        Sociedades: 
+                        <b>1)</b> Que mi actividad, profesión y/u oficio las ejerzo dentro del marco regulatorio aplicable y que 
+                        los recursos que poseo no provienen del desarrollo de actividades de lavado de activos, financiación 
+                        del terrorismo, y financiamiento de la proliferación de armas de destrucción masiva (LA/FT/FPADM), 
+                        ni delitos conexos  contemplados en el Código Penal Colombiano (Ley 599 de 2000 o cualquier norma 
+                        que lo adicione, complemente o modifique).  
+                        <b>2)</b> Que la información que he suministrado  a través de 
+                        este documento es veraz, verificable y que además asumo el compromiso de actualizarla anualmente 
+                        conforme a los requerimientos realizados por 
+                        ANDINA CONCEPTOS INMOBILIARIOS S.A.S. (antes PROMOTORA SANDVILLE S.A.S).  
+                        <b>3)</b> Informaré inmediatamente cualquier circunstancia que modifique la presente declaración, una vez 
+                        tenga conocimiento de la misma.  
+                        <b>4)</b> De darse configuración de infracción, de alguna de las acciones contempladas en los numerales 
+                        anteriores, autorizo a ANDINA CONCEPTOS INMOBILIARIOS S.A.S, (antes PROMOTORA SANDVILLE S.A.S), a la 
+                        liquidación inmediata del (los) Contrato (s) que me vincule (n) a ella, y reportar a los diferentes 
+                        entes de control u autoridades competentes, los hallazgos que se llegaran a encontrar por 
+                        actividades de lavado de activos, financiación del terrorismo, y financiamiento de la proliferación 
+                        de armas de destrucción masiva (LA/FT/FPADM) y delitos conexos. Quedando por lo tanto la sociedad 
+                        ANDINA CONCEPTOS INMOBILIARIOS S.A.S, (antes PROMOTORA SANDVILLE S.A.S), indemne de toda 
+                        responsabilidad que se derive de información errónea, falsa o inexacta que yo hubiere proporcionado 
+                        en este documento, o de la configuración de actividades de lavado de activos, financiación del 
+                        terrorismo, y financiamiento de la proliferación de armas de destrucción masiva (LA/FT/FPADM), y 
+                        delitos conexos.  
+                        <b>5)</b> Me comprometo y obligo a actualizar al menos una vez cada año los datos e información que fueren 
+                        requeridos por ANDINA CONCEPTOS INMOBILIARIOS S.A.S., (antes PROMOTORA SANDVILLE S.A.S).  
+                        <b>6)</b>  Que, en caso de ser  una persona expuesta políticamente (PEPS), sea por vinculación directa o 
+                        por vinculación a través de un familiar, asumo el compromiso de informar mi calidad a 
+                        ANDINA CONCEPTOS INMOBILIARIOS S.A.S., (antes PROMOTORA SANDVILLE S.A.S). De igual manera me 
+                        comprometo a informar cualquier modificación que se produzca al respecto, dentro de los treinta 
+                        (30) días de ocurrencia de la novedad, mediante la presentación de una nueva declaración. 
+                    </td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">7. AUTORIZACIÓN TRATAMIENTO DATOS PERSONALES</th>
+                </tr>
+                <tr>
+                    <td colspan="4" style="text-align: justify;line-height: 90%; padding:3px;">
+                        Para efectos de la protección de los datos personales y su tratamiento de acuerdo a lo establecido 
+                        en la Ley 1581 de 2012, "Por el cual se dictan disposiciones generales para la protección de datos 
+                        personales", y su decreto reglamentario 1377 de 2013, autorizo de manera libre, expresa, voluntaria, 
+                        a ANDINA CONCEPTOS INMOBILIARIOS S.A.S  (antes PROMOTORA SANDVILLE S.A.S), para recolectar, manejar, 
+                        almacenar, usar, circular, actualizar, cruzar información propia, derivada del vínculo contractual 
+                        entre las partes;  y en general realizar toda acción  tendiente al tratamiento de datos personales, 
+                        de acuerdo con la política establecida para tal fin, por la empresa como responsable y encargada de 
+                        la información.  En ese sentido, declaro conocer que, los datos personales objeto del tratamiento, 
+                        serán utilizados específicamente para las finalidades derivadas del contrato que se suscriba entre 
+                        las partes.<br>
+                        Adicionalmente, autorizo a ANDINA CONCEPTOS INMOBILIARIOS S.A.S  (antes PROMOTORA SANDVILLE S.A.S), 
+                        para realizar las consultas en diferentes listas restrictivas, reportes y actualizaciones necesarias, 
+                        requeridas en cumplimiento del deber legal que le asiste para el Sistema de autocontrol, prevención y 
+                        gestión de riesgo integral contra el lavado de activos, financiación del terrorismo, y financiamiento 
+                        de la proliferación de armas de destrucción masiva -SAGRILAFT-, ante la Superintendencia de Sociedades.
+                        <br> 
+                        De igual manera, LA EMPRESA, podrá ejercer sus derechos a conocer actualizar, rectificar, modificar, 
+                        acceder o solicitar la supresión de un dato o revocar la autorización otorgada, presentando petición 
+                        o consulta, conforme con lo dispuesto en la ley vigente aplicable.                     
+                    </td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">8. DOCUMENTOS REQUERIDOS</th>
+                </tr>  
+                <tr>
+                    <td colspan="4" style="text-align: left;padding: 3px;">Teniendo en cuenta la información brindada anteriormente, el cliente se
+                        compromete a aportar la siguiente documentacion:<br>
+                        <ol>
+                            <li>Copia de cédula de ciudanía.</li>
+                            {%if cliente.sagrilaft_info.tiene_rut%}
+                            <li>Copia registro unico tributario (RUT)</li>
+                            {%endif%}
+                            <li>{%if cliente.sagrilaft_info.declara_renta%}
+                                Declaración de renta del año inmediatamente anterior.
+                                {%endif%}
+                            </li>
+                        </ol>
+                    </td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">9. ACEPTACIÓN</th>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        En constancia de haber leido, entendido y aceptado,  firmo el presente documento:<br><br><br><br>
+                        ____________________________________________________<br>
+                        <b>FIRMA</b>
+                        <br>Nombre: {{cliente.nombrecompleto}}
+                        <br>N° Documento: {{cliente.pk}}
+                    </td>
+                    <td style="vertical-align: bottom;padding: 3px;">
+                        <b>HUELLA</b><br><small>(Solo para formularios firmados de forma fisica)</small>
+                    </td>
+                </tr>
+                <tr class="title" style="padding-top: 3px;">
+                    <th colspan="4">10. VERIFICACIÓN (Para uso interno de ANDINA CONCEPTOS INMOBILIARIOS S.A.S)</th>
+                </tr>
+                <tr>
+                    <td colspan="2" style="text-align: left;">CONSULTA EN LISTAS RESTRICTIVAS: SI ____ NO ____</td>
+                    <td colspan="2" style="text-align: left;">AREA RESPONSABLE DE VERIFICAR:</td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="text-align: left;">FECHA CONSULTA: ____ /____ /_______</td>
+                    <td colspan="2" style="text-align: left;">RESPONSABLE DE VERIFICAR:</td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="text-align: left;">FECHA INFORME CONSULTA: ____ /____ /_______</td>
+                    <td colspan="2" style="text-align: left;">CARGO DEL RESPONSABLE:</td>
+                </tr>
+                <tr style="padding-bottom: 2rem;">
+                    <td colspan="2" style="text-align: left;">OBSERVACIONES:</td>
+                    <td colspan="2" style="text-align: left;">VoBo OFICIAL DE CUMPLIMIENTO:</td>
+                </tr>
+                
+
+            </table>
+            
+        </div>
+    </body>
+
+    <head>
+        <style>
+            @page {
+                size: legal;
+                background-image: url("/static/img/bg-andina-legal.jpg");
+                background-repeat: repeat;
+                @frame header_frame {           /* Static Frame */
+                    -pdf-frame-content: header_content;
+                    left: 40pt; 
+                    width: 540pt; 
+                    top: 30px; 
+                    height: 100px;
+                }
+                @frame footer_frame {           /* Another static Frame */
+                    -pdf-frame-content: footer_content;
+                    left: 50pt; width: 530pt; top: 950pt; height: 40pt;
+                }
+                @frame content_frame {          /* Content Frame */
+                    left: 40pt; 
+                    width: 540pt; 
+                    top: 127.5px; 
+                    height: 810pt;
+                }
+        
+            }
+        
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+            }
+        
+            /* Bold */
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                font-weight: bold;
+            }
+        
+            body {
+                font-family: Ubuntu;
+            }
+            
+            table {
+                font-size: 8.5pt;
+                
+            }
+            table.border-visible{
+                border: darkgray 1px solid;
+            }
+            td{
+                vertical-align: top!important;
+                text-align: center;
+            }
+            tr {
+                padding-top: 3px;
+            }
+            
+            .text-muted{
+                color: gray;
+                
+            }
+            tr.title{
+                background-color: gray;
+                color: white;
+            }
+        
+            #encabezados-logos p {
+                padding: 0px;
+                margin: 0px;
+                font-size: large;
+                color: lightslategray;
+            }
+        
+            #detail-table th,
+            #detail-table td {
+                padding: 2px;
+                width: 50%;
+                height: 50%;
+            }
+        
+            .underline {
+                border-bottom: 0.5px solid gray;
+            }
+        
+            .text-center {
+                text-align: center;
+            }
+        
+            .title {
+                font-weight: bold;
+            }
+        </style>
+    </head>
+
+</html>

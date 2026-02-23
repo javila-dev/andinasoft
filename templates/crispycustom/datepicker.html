@@ -1,0 +1,16 @@
+{% load crispy_forms_field %}
+{% if field.label != ""%}
+<label for="{{ field.id_for_label }}">{{ field.label }}</label>
+{%endif%}
+{% crispy_field field %}
+<script>
+    $('#{{ field.id_for_label }}').datepicker({
+        uiLibrary: 'bootstrap4',
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        format: 'yyyy-mm-dd',
+        modal: true,
+        header: true,
+    });
+</script>
+

@@ -1,0 +1,468 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%load static%}
+{% block title%}Reestructuraciones{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow-sm" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'>Reestructuracion {{adj}}</h4>
+    <form id='form-restruct' class='form' method='post' action=''>{%csrf_token%}
+    <div class='row'>
+        <div class='col-xs-12 col-lg-4 col-xl-2'>
+            {{form.valor_credito|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-lg-4 col-xl-2'>
+            {{form.saldo_capital|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-lg-4 col-xl-2'>
+            {{form.ajuste|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-lg-4 col-xl-2'>
+            {{form.nuevo_valor|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-lg-4 col-xl-2'>
+            {{form.pendiente_ci|as_crispy_field}}
+        </div>
+        <div class='col-xs-12 col-lg-4 col-xl-2'>
+            {{form.pendiente_saldo|as_crispy_field}}
+        </div>
+    </div>
+    <div class='row' id='block-plandepagos'>
+        <div class='col-xs-12 col-lg-6'>
+            <p class='lead border-bottom border-gray text-center' style='padding-bottom:1rem;'>Cuota Inicial
+            <button type='button' class='btn btn-outline-secondary btn-circle ml-auto' id='btnblockCI'>
+                <i class="fas fa-ban"></i></button>
+            <input type='number' id='nro-ctas-ci' hidden>
+            <div id='ci-linea1' class='cidetail'>
+                <div class='row'>
+                    <div class='col-xs-12 col-lg-3'>
+                        {{form.cant_ci_1|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-4'>
+                        {{form.fecha_ini_ci1|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-5'>
+                        {{form.valor_ci1|as_crispy_field}}
+                    </div>
+                </div>
+            </div>
+            <div id='ci-linea2' class='cidetail'>
+            <div class='row'>
+                <div class='col-xs-12 col-lg-3'>
+                    {{form.cant_ci_2|as_crispy_field}}
+                </div>
+                <div class='col-xs-12 col-lg-4'>
+                    {{form.fecha_ini_ci2|as_crispy_field}}
+                </div>
+                <div class='col-xs-12 col-lg-5'>
+                    {{form.valor_ci2|as_crispy_field}}
+                </div>
+            </div>
+            </div>
+            <div id='ci-linea3' class='cidetail'>
+                <div class='row' id='ci-linea3'>
+                    <div class='col-xs-12 col-lg-3'>
+                        {{form.cant_ci_3|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-4'>
+                        {{form.fecha_ini_ci3|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-5'>
+                        {{form.valor_ci3|as_crispy_field}}
+                    </div>
+                </div>
+            </div>
+            <div id='ci-linea4' class='cidetail'>
+                <div class='row' id='ci-linea4'>
+                    <div class='col-xs-12 col-lg-3'>
+                        {{form.cant_ci_4|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-4'>
+                        {{form.fecha_ini_ci4|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-5'>
+                        {{form.valor_ci4|as_crispy_field}}
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class='d-flex'>
+                <p class='lead border-bottom border-gray' style='padding-bottom:1rem;'>Cuotas Regulares</p>
+                <div class='ml-auto'>
+                    <label for='tasafn'>Tasa*</label>
+                    <select class='form-control text-center' name='tasafn' id='tasa-valor' required='false'>
+                        {%for t in tasa%}
+                        <option value="{{t.value}}">{{t.name}}</option>
+                        {%endfor%}
+                    </select>
+                </div>
+            </div>
+            <div class='row'>
+                <div class='col-xs-12 col-lg-6'>
+                    {{form.forma_pago|as_crispy_field}}
+                </div>
+                <div class='col-xs-12 col-lg-6'>
+                    {{form.forma_plan_pagos|as_crispy_field}}
+                </div>
+            </div>
+            <div id='linea-fn'>
+                <p class='lead border-bottom border-gray' style='padding-bottom:1rem;'>Cuotas Regulares</p>
+                <div class='row'>
+                    <div class='col-xs-12 col-lg-5 col-xl-3'>
+                        {{form.cant_fn|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-7 col-xl-4'>
+                        {{form.fecha_ini_fn|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-12 col-xl-5'>
+                        {{form.valor_fn|as_crispy_field}}
+                    </div>
+                </div>
+            </div>
+            <div id='linea-ce'>
+                <p class='lead border-bottom border-gray' style='padding-bottom:1rem;'>Cuotas Extraordinarias</p>
+                <div class='row'>
+                    <div class='col-xs-12 col-lg-5 col-xl-3'>
+                        {{form.periodo_ce|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-7 col-xl-2'>
+                        {{form.cant_ce|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-6 col-xl-4'>
+                        {{form.fecha_ini_ce|as_crispy_field}}
+                    </div>
+                    <div class='col-xs-12 col-lg-6 col-xl-3'>
+                        {{form.valor_ce|as_crispy_field}}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <p class='lead' style='padding-bottom:1rem;'>Diferencia CI: 
+            <input class='numberinput form-control text-center' id='restante_ci' name='restante_ci' readonly></p>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <p class='lead' style='padding-bottom:1rem;'>Diferencia Saldo: 
+            <input class='numberinput form-control text-center' id='restante_saldo' name='restante_saldo' readonly></p>
+        </div>
+    </div>
+    <input class='btn btn-primary float-right' type='submit' name='btnGuardar' value='Guardar'>
+    <button class='btn btn-primary mr-3 float-right' type="button" id="btn-reestr-pagado">Dcto pago total</button>
+    
+    <br/>
+    <br/>
+    {{form.notificar}}
+    {{form.correos_notificacion}}
+</form>
+</div>
+<!-- Modales -->
+<div class="modal fade" id="confirmacion-correos" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header">
+        <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¿Deseas Enviar Notificacion?</h4>
+        
+        </div>
+        <div class="modal-body">
+            <p>Los correos deben ir separados por comas</p>
+            <input id='correos-en-modal' type='text' class='form-control text-wrap'>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="confirmar_submit('Si')">Si</button>
+            <button type="button" class="btn btn-secondary" onclick="confirmar_submit('No')">No</button>
+        </div>
+    </div>
+    </div>
+  </div>
+
+{%include 'alert.html'%}
+{{form.media}}
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script>
+    const project = '{{proyecto}}'
+    const adjd = '{{adj}}'
+    $('#btnblockCI').click(function(){
+
+        let restante_ci = $('#restante_ci').val()
+        let pendiente_ci = $('#pendiente_ci').val()
+        if( restante_ci  == 0 && pendiente_ci > 0){
+            $('.cidetail input').prop('readonly',false) 
+            $('#pendiente_ci').prop('readonly',false) 
+            diferencia_ci()
+            $(this).html('<i class="fas fa-ban"></i>')
+        }   
+        else if (restante_ci  > 0 && pendiente_ci > 0){
+            $('.cidetail input').prop('readonly',true)
+            $('#pendiente_ci').prop('readonly',true) 
+            $('#restante_ci').val(0)
+            $(this).html('<i class="fas fa-check"></i>')
+        }
+        
+    })
+    $('#correos-en-modal').val('{{email_clientes}}')
+    $('#valor_credito').val('{{datos_venta.valor|unlocalize}}')
+    $('#saldo_capital').val('{{pendiente_capital|unlocalize}}')
+    console.log('{{datos_venta.tasafnc|unlocalize}}')
+    $('#tasa-valor').val('{{datos_venta.tasafnc|unlocalize}}')
+    $('#ajuste').val(0)
+    $('#formas_de_pago').on('change',function(){
+        borrar_formapago()
+        if ($('#formas_de_pago').val()=='Amortizacion'){
+            $('#tasa-valor').val('{{datos_venta.tasafnc|unlocalize}}')
+        }
+        else{
+            $('#tasa-valor').val('0.0000')
+        }
+    })
+    diferencia_ci()
+    diferencia_saldo()
+    nuevo_valor()
+    borrar_formapago()
+    calcular_planpagos()
+    cambios_saldos()
+    $('#ajuste').on('change',function (){
+        nuevo_valor()
+    })
+    for (i=1;i<5;i++){
+        $('#cant_ci_'+i).on('change',function(){
+        diferencia_ci()
+        })
+        $('#valor_ci'+i).on('change',function(){
+        diferencia_ci()
+        })
+    }
+    
+    $('#pendiente_ci').val('{{pendiente_ci|unlocalize}}')
+    $('#pendiente_saldo').val('{{pendiente_saldo|unlocalize}}')
+    diferencia_ci()
+    diferencia_saldo()
+    if (parseFloat($('#pendiente_ci').val())==0){
+        document.getElementById('pendiente_ci').readOnly=true
+    }
+    $('#btn-reestr-pagado').click(function(){
+        let saldo = $('#nuevo_valor').val()
+
+        if (saldo != 0){
+            openmodal('Error','Existe saldo pendiente por reestructurar')
+            return
+        }
+        let btn = $(this)
+        btn.prop('disabled',true).html('<i class="fas fa-circle-notch fa-spin"></i>')
+        $.ajax({
+            type:'POST',
+            url:window.location.url,
+            data: {
+                todo:'reestruc_pagado',
+                vr_ajuste: $('#ajuste').val(),
+                csrfmiddlewaretoken:getCookie('csrftoken'),
+            },
+            success:function(data){
+                window.location.replace(`/adjudicaciones/${project}/${adjd}`)
+            }
+        })
+    })
+    
+    $('#form-restruct').on('submit', function(e){
+        var valorFinal=parseFloat($('#nuevo_valor').val())
+        var pendiente_ci=parseFloat($('#pendiente_ci').val())
+        var pendiente_saldo=parseFloat($('#pendiente_saldo').val())
+        if ((pendiente_ci+pendiente_saldo)!=valorFinal){
+            openmodal('Error','El valor a reestructurar no coincide con la suma de la CI y el Saldo')
+            e.preventDefault();
+        }
+        else if($('#restante_ci').val()!=0){
+            openmodal('Error','Las cuotas de CI no suman el valor pendiente')
+            e.preventDefault();
+        }
+        else if($('#restante_saldo').val()!=0){
+            openmodal('Error','Las cuotas del Saldo no suman el valor pendiente')
+            e.preventDefault();
+        }
+        else {
+            e.preventDefault();
+            $('#confirmacion-correos').modal('show')
+        }
+    })
+    function confirmar_submit(respuesta){
+        if(respuesta=='Si'){
+            $('#notificar').val('Si')
+            var correos_verificados=$('#correos-en-modal').val()
+            $('#correos_notificacion').val(correos_verificados)
+            document.getElementById('form-restruct').submit();
+        }
+        else{
+            $('#notificar').val('No')
+            document.getElementById('form-restruct').submit();
+    }
+}
+    function openmodal(titulo,mensaje){
+        
+        document.getElementById('mensaje-alerta').innerHTML=mensaje;
+        $('#titulo-alerta').text(titulo);
+        $('#alerta-general').modal('show')
+    }
+    function nuevo_valor(){
+        var valorInicial=parseFloat($('#saldo_capital').val())
+        var ajuste=parseFloat($('#ajuste').val())
+        var valorFinal=valorInicial+ajuste
+        $('#nuevo_valor').val(valorFinal)
+    }
+    function cambios_saldos(){
+        $('#pendiente_saldo').on('change',function(){
+            borrar_formapago()
+            diferencia_saldo()
+        })
+        $('#pendiente_ci').on('change',function(){
+            diferencia_ci()
+            diferencia_saldo()
+        })
+    }
+    function protecciones(){
+        var valorFinal=parseFloat($('#nuevo_valor').val())
+        var pendiente_ci=parseFloat($('#pendiente_ci').val())
+        var pendiente_saldo=parseFloat($('#pendiente_saldo').val())
+        if ((pendiente_ci+pendiente_saldo)!=valorFinal){
+            openmodal('Error','El valor a reestructurar no coincide con la suma de la CI y el Saldo')
+            return false;
+        }
+        else if($('#restante_ci').val()!=0){
+            openmodal('Error','Las cuotas de CI no suman el valor pendiente')
+            return false;
+        }
+        else if($('#restante_saldo').val()!=0){
+            openmodal('Error','Las cuotas del Saldo no suman el valor pendiente')
+            return false;
+        }
+        
+    }
+    function diferencia_ci(){
+        var pendiente_ci=parseFloat($('#pendiente_ci').val())
+        var acumulado=0
+        for (i=1;i<5;i++){
+            var cantidad=$('#cant_ci_'+i).val()
+            var valor=$('#valor_ci'+i).val()
+            acumulado+=cantidad*valor
+        }
+        restante=pendiente_ci-acumulado
+        if(isNaN(restante)){
+            restante=0;
+        }
+        $('#restante_ci').val(restante)
+    }
+    function diferencia_saldo(){
+        var valor=parseFloat($('#nuevo_valor').val())
+        var pendiente_ci=parseFloat($('#pendiente_ci').val())
+        var pendiente_saldo=parseFloat($('#pendiente_saldo').val())
+        var verificacion=valor-(pendiente_ci+pendiente_saldo)
+        if (isNaN(verificacion)){
+            verificacion=0
+        }
+        $('#restante_saldo').val(verificacion)
+    }
+    function calcular_cuotas(capital,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(capital/nCuotas)
+        }
+        else{
+            up=capital*tasa
+            down=1-(Math.pow(1+(parseFloat(tasa)),-1*nCuotas))
+            cuota=Math.ceil(up/down)
+            return cuota
+        }
+    }
+    function calcularvp(cuota,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(cuota*nCuotas)
+        }
+        up=(1-Math.pow(1+(parseFloat(tasa)),-1*nCuotas))*cuota
+        down=tasa
+        capital=up/down
+        console.log(up)
+        console.log(down)
+        return Math.ceil(capital)       
+    }
+    
+    
+    function borrar_formapago(){
+        $('#valor_fn').val(null)
+        $('#fecha_ini_fn').val(null)
+        $('#cant_fn').val(null)
+        $('#valor_ce').val(null)
+        $('#fecha_ini_ce').val(null)
+        $('#cant_ce').val(null)
+        $('#periodo_ce').val(null)
+    }
+    function calcular_planpagos(){
+        document.getElementById('valor_ce').readOnly=true
+        document.getElementById('cant_ce').disabled=true
+        document.getElementById('fecha_ini_ce').disabled=true
+        document.getElementById('valor_fn').readOnly=true
+        document.getElementById('periodo_ce').disabled=true
+        $('#forma_plan_pagos').on('change',function(){
+            plan_pagos=$('#forma_plan_pagos').val()
+            borrar_formapago()
+            if (plan_pagos=='Regular'){
+                document.getElementById('valor_ce').disabled=true
+                document.getElementById('fecha_ini_ce').disabled=true
+                document.getElementById('cant_ce').disabled=true
+                document.getElementById('valor_fn').readOnly=true
+                document.getElementById('periodo_ce').disabled=true
+
+            }
+            else{
+                document.getElementById('valor_fn').readOnly=false
+                document.getElementById('valor_ce').readOnly=true
+                document.getElementById('fecha_ini_ce').disabled=false
+                document.getElementById('cant_ce').disabled=false 
+                document.getElementById('periodo_ce').disabled=false
+                document.getElementById('valor_ce').disabled=false
+            }
+        });
+        $('#cant_fn').on('change',function(){
+            plan_pagos=$('#forma_plan_pagos').val()
+            tasa=$('#tasa-valor').val()
+            capital=$('#pendiente_saldo').val()
+            ncuotas=$('#cant_fn').val()
+                if (plan_pagos=='Regular'){
+                    valor_cuotafn=calcular_cuotas(capital,tasa,ncuotas)
+                    $('#valor_fn').val(valor_cuotafn)
+            }
+        })
+        $('#cant_ce').on('change',function(){
+            if (plan_pagos!='Regular'){
+            periodoce=$('#periodo_ce').val()
+            if (periodoce=='Mensual'){
+                periodo=1
+            }
+            else if (periodoce=='Trimestral'){
+                periodo=3
+            }
+            else if (periodoce=='Semestral'){
+                periodo=6
+            }
+            else{
+                periodo=12
+            }
+            tasa=$('#tasa-valor').val()
+            saldo=$('#pendiente_saldo').val()
+            cuota_regular=$('#valor_fn').val()
+            nro_ctas_reg=$('#cant_fn').val()
+            console.log('capitalfn',cuota_regular,tasa,nro_ctas_reg)
+            capital_fn=calcularvp(cuota_regular,tasa,nro_ctas_reg)
+            ncuotas=$('#cant_ce').val()
+            capital_ce=saldo-capital_fn
+            console.log('capital_ce',capital_ce,tasa,periodo,ncuotas)
+            cuota_ce=calcular_cuotas(capital_ce,tasa*periodo,ncuotas)
+            $('#valor_ce').val(cuota_ce)
+        }
+        })
+    }
+</script>
+
+
+{%endblock%}

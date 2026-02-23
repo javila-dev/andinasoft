@@ -1,0 +1,703 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%load static%}
+{%block title%}Tesoreria | Nuevo recaudos{%endblock%}
+{%block style%}
+<style>
+    h4{
+        padding-bottom:0.5rem;
+    }
+    input{
+        text-align: center;
+    }
+    select{
+        text-align: center;
+    }
+    #tabla-ctas-pendientes,#tabla-rcdoaplicado th,tr{
+        font-size: x-small!important;
+    }
+    /* Estilos para el modal de movimientos bancarios */
+    #modalMovimientosBanco .modal-dialog {
+        max-height: 90vh;
+        margin: 1.75rem auto;
+    }
+    #modalMovimientosBanco .modal-content {
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+    #modalMovimientosBanco .modal-body {
+        overflow-y: auto;
+        max-height: calc(90vh - 200px);
+    }
+    #modalMovimientosBanco .table-responsive {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    #modalMovimientosBanco table {
+        font-size: 12px;
+    }
+    #modalMovimientosBanco thead th {
+        position: sticky;
+        top: 0;
+        background-color: #343a40;
+        color: white;
+        z-index: 10;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow-sm" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+      <h3 class='section-title text-white text-center'>
+        Recibos de caja
+        </h3>
+        {% if bloquear_formulario %}
+        <div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
+            <i class="fas fa-exclamation-triangle mr-2"></i>
+            <div>
+                Existen recaudos pendientes por aplicar. No puedes generar un nuevo recibo hasta que sean validados.
+            </div>
+        </div>
+        {% endif %}
+        <br/>
+    <form id='form-recibo' method="post" action="" data-post-url='nuevo_recaudo/{{proyecto}}/{{adj}}'>{%csrf_token%}
+        <fieldset {% if bloquear_formulario %}disabled{% endif %}>
+        <input type="hidden" name="form_token" value="{{form_token}}">
+        <div class="row">
+            <div class='col-xs-12 col-md-2'>
+                {{form.numrecibo|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-md-2'>
+                {{form.numsolicitud|as_crispy_field}}
+            </div>
+        </div>
+        <div class="row">
+            <div class='col-xs-12 col-sm-4 col-md-2'>
+                {{form.fecha|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-sm-4 col-md-2'>
+                {{form.id_adj|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-sm-4 col-md-2'>
+                {{form.idtercero|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-md-6'>
+                {{form.nombre_cliente|as_crispy_field}}
+            </div>
+            
+        </div>
+        <div class="row">
+            <div class='col-xs-12 col-md-2'>
+                {{form.fecha_pago|as_crispy_field}}
+            </div>  
+            <div class='col-xs-12 col-md-2'>
+                {{form.valor|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-md-2'>
+                    {{form.condonacion_mora|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-md-2' id='block-moraporc'> 
+                {{form.condonacion_porc|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-md-2' style='margin-top:2.5rem;'>
+                {{form.abonocapital|as_crispy_field}}
+            </div>
+            <div class='col-xs-12 col-md-4'>
+                {{form.forma_pago|as_crispy_field}}
+            </div>
+        </div>
+        <div class='row'>
+            <div class="col-xs-12 col-lg-12">
+                {{form.concepto|as_crispy_field}}
+            </div>
+        </div>
+        <div class='container'>
+            <div class="col-md-12 text-center">
+                <input class="btn btn-info" type="submit" name='validar-recaudo' value="Validar">
+                {%if verif_valor%}
+                <button type="button" class="btn btn-success" id="btn-abrir-modal-movimientos">Guardar</button>
+                <input type="hidden" name="movimiento_banco_id" id="movimiento_banco_id_hidden" value="">
+                {%endif%}
+            </div>
+        </div>
+        </fieldset>
+        <br/><br>
+        <h4 class='text-center border-bottom border-gray'>Detalle de cuotas</h4>
+        <div class='row'>
+            <div class='col-xs-12 col-md-6'>
+                <p class='lead text-center border-bottom border-gray'>Cuotas Pendientes</p>
+                <div class='table-responsive' style="max-height: 40vh;">
+                    <table class='table table-bordered table-sm table-striped' id='tabla-ctas-pendientes'>
+                        <thead>
+                            <tr class='thead thead-light'>
+                                <th class='text-center'>Fecha</th>
+                                <th class='text-center'>Id Cuota</th>
+                                <th class='text-center'>Capital</th>
+                                <th class='text-center'>Int Cte</th>
+                                <th class='text-center'>Mora</th>
+                                <th class='text-center'>Dias Mora</th>
+                                <th class='text-center'>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {%for cuota in saldo_cuotas%}{%if cuota.pendiente.total > 0 %}
+                                <tr>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.fecha|date:'Y-m-d'}}</td>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.idcta}}</td>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.pendiente.capital}}</td>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.pendiente.interes}}</td>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.mora.valor}}</td>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.mora.dias}}</td>
+                                    <td class='text-center' style='font-size: small;'>{{cuota.pendiente.total|add:cuota.mora.valor}}</td>
+                                </tr>
+                            {%endif%}{%endfor%}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-xs-12 col-md-6">
+                <p class='lead text-center border-bottom border-gray'>Recaudo Aplicado</p>
+                <div class='table-responsive' style="max-height: 40vh;">
+                    <table class='table table-bordered table-sm table-striped' id='tabla-rcdoaplicado'>
+                        <thead>
+                            <tr class='thead thead-light'>
+                                <th class='text-center'>Fecha</th>
+                                <th class='text-center'>Id Cuota</th>
+                                <th class='text-center'>Capital</th>
+                                <th class='text-center'>Int Cte</th>
+                                <th class='text-center'>Mora</th>
+                                <th class='text-center'>Dias Mora</th>
+                                <th class='text-center'>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {%if guardar and verif_valor%}
+                            {%for cuota in detalle_recaudo%}
+                            <tr>
+                                <td class='text-center' style='font-size: small;'>{{cuota.0|date:'Y-m-d'}}</td>
+                                <td class='text-center' style='font-size: small;'>{{cuota.1}}</td>
+                                <td class='text-center' style='font-size: small;'>{{cuota.2}}</td>
+                                <td class='text-center' style='font-size: small;'>{{cuota.3}}</td>
+                                <td class='text-center' style='font-size: small;'>{{cuota.5}}</td>
+                                <td class='text-center' style='font-size: small;'>{{cuota.4}}</td>
+                                <td class='text-center' style='font-size: small;'>{{cuota.6}}</td>
+                            </tr>
+                            {%endfor%}
+                        
+                        </tbody>
+                        <tfoot>
+                            <td class='text-right' colspan=2 style='font-size: small;'><strong>Total:</strong></td>
+                            <td class='text-center' style='font-size: small;'><strong>{{totales.0}}</strong></td>
+                            <td class='text-center' style='font-size: small;'><strong>{{totales.1}}</strong></td>
+                            <td class='text-center' style='font-size: small;'><strong>{{totales.2}}</strong></td>
+                            <td></td>
+                            <td class='text-center' style='font-size: small;'><strong>{{totales.3}}</strong></td>
+                        </tfoot>
+                        {%endif%}
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+</main>
+<div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header">
+        <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+        
+        </div>
+        <div class="modal-body">
+        {%if link%}
+            <a href="{{ruta_link}}" class='lead text-center'><p class='lead' id='mensaje-alerta'></p></a>
+        {%else%}
+            <p class='lead' id='mensaje-alerta'></p>
+        {%endif%}
+        </div>
+        <div class="modal-footer">
+        
+        {%if redireccion%}
+        <a class="btn btn-primary btn-sm" href="/tesoreria/adjudicaciones/{{proyecto}}" type="button" aria-label="Previous">
+            Ir a Adjudicaciones
+          <a class="btn btn-sm btn-primary" href="/adjudicaciones/{{proyecto}}/{{adj}}" type="button" aria-label="Previous">
+            Ir a Adjudicacion
+          </a>
+          <a class="btn btn-sm btn-primary" href="/finance/requirereceipts" type="button" aria-label="Previous">
+            Ir a solicitudes
+          </a>
+        {%else%}
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+        {%endif%}
+        </div>
+    </div>
+    </div>
+</div>
+{{form.media}}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+    <script>
+        $('#valor_recibo').mask("#,##0.99", {reverse: true});  
+        $("#block-moraporc").css("display","none")
+        $(document).ready(function(){
+            $("#condonacion_mora").click(function(){
+                if ($("#condonacion_mora").val()=='Si'){
+                    $("#block-moraporc").css("display","block")
+                }
+                else{
+                    $("#block-moraporc").css("display","none")
+                }
+            })
+        })
+    </script>
+    <script>
+        $("#adj").val('{{adj}}');
+        $('#nombre_cliente').val('{{titulares.titular1}}');
+        $('#numrecibo').val('{{num_recibo.consecutivo}}');
+        $('#idtercero').val('{{titulares.IdTercero1}}');
+    </script>
+    {%if guardar and verif_valor%}
+    <script>
+        function replaceAll(value){
+            var valor_recibo=value
+            for (i=0;i<6;i++){
+                var valor_recibo=valor_recibo.replace('.','')
+            
+            };
+            return valor_recibo;
+        };
+        $(document).ready(function(){
+        $('#valor_recibo').val(replaceAll('{{valor_recibo}}'));
+        
+        
+        if ('{{abono_capital}}'=='False'){
+            var checked = false;
+        }
+        else{
+            var checked = true;
+        }
+        $('#abonocapital').prop("checked",checked);
+        $('#forma_pago').val('{{forma_pago}}');
+        $('#condonacion_mora').val('{{condonacion}}');
+        if ($("#condonacion_mora").val()=='Si'){
+                $("#block-moraporc").css("display","block")
+                }
+        else{
+            $("#block-moraporc").css("display","none")
+        }
+        $('#condonacion_mora').val('{{condonacion}}');
+        $('#cond_porc').val(replaceAll('{{procentaje_condonado}}'));
+        $('#concepto').val('{{concepto.upper}}');
+        });
+    </script>
+    {%endif%}
+    {%if guardar and not verif_valor%}
+    <script>
+        $('#alerta-general').modal('show')
+        document.getElementById('mensaje-alerta').innerHTML='El valor a pagar no puede ser mayor al plan de pagos pendientes';
+        document.getElementById('titulo-alerta').innerHTML='Error';
+    </script>
+    {%endif%}
+    {%if count_cuota > 2%}
+    <script>
+        $('#alerta-general').modal('show')
+        document.getElementById('mensaje-alerta').innerHTML='Este pago se esta aplicando a muchas cuotas futuras, revisalo!';
+        document.getElementById('titulo-alerta').innerHTML='Advertencia';
+    </script>
+    {%endif%}
+    {%if alerta%}
+    <script>
+        $('#alerta-general').modal('show')
+        document.getElementById('mensaje-alerta').innerHTML='{{mensaje}}';
+        document.getElementById('titulo-alerta').innerHTML='{{titulo}}';
+    </script>
+    {%endif%}
+    {%if validation_alerts%}
+    <script>
+        // Mostrar alertas de validación
+        {%for alert in validation_alerts%}
+        {%if alert.severity == 'error'%}
+        $('#alerta-general').modal('show');
+        document.getElementById('mensaje-alerta').innerHTML='{{alert.message|escapejs}}';
+        document.getElementById('titulo-alerta').innerHTML='Error';
+        {%elif alert.severity == 'warning'%}
+        $('#alerta-general').modal('show');
+        document.getElementById('mensaje-alerta').innerHTML='{{alert.message|escapejs}}';
+        document.getElementById('titulo-alerta').innerHTML='Advertencia';
+        {%endif%}
+        {%endfor%}
+    </script>
+    {%endif%}
+
+    <!-- Modal para seleccionar movimiento bancario -->
+    <div class="modal fade" id="modalMovimientosBanco" tabindex="-1" role="dialog" aria-labelledby="modalMovimientosBancoLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalMovimientosBancoLabel">
+                        <i class="fas fa-university mr-2"></i>Seleccionar Movimiento Bancario
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <strong>Recibo:</strong> #<span id="modal-num-recibo"></span> |
+                        <strong>Cliente:</strong> <span id="modal-cliente"></span> |
+                        <strong>Valor:</strong> $<span id="modal-valor"></span>
+                    </div>
+
+                    <div class="form-row mb-3">
+                        <div class="col-md-3">
+                            <label>Empresa:</label>
+                            <select id="filtro-empresa-mvto" class="form-control form-control-sm">
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Cuenta bancaria:</label>
+                            <select id="filtro-cuenta-mvto" class="form-control form-control-sm">
+                                <option value="">Seleccione empresa primero...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label>Fecha desde:</label>
+                            <input type="date" id="filtro-fecha-desde-mvto" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-3">
+                            <label>Fecha hasta:</label>
+                            <input type="date" id="filtro-fecha-hasta-mvto" class="form-control form-control-sm">
+                        </div>
+                    </div>
+                    <div class="form-row mb-3">
+                        <div class="col-md-12 text-right">
+                            <button type="button" id="btn-filtrar-movimientos" class="btn btn-primary btn-sm">
+                                <i class="fas fa-search mr-1"></i>Buscar
+                            </button>
+                            <button type="button" id="btn-limpiar-filtros" class="btn btn-secondary btn-sm ml-2">
+                                <i class="fas fa-eraser mr-1"></i>Limpiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="movimientos-loading" class="text-center py-4" style="display: none;">
+                        <i class="fas fa-spinner fa-spin fa-3x text-primary"></i>
+                        <p class="mt-2">Cargando movimientos bancarios...</p>
+                    </div>
+
+                    <div id="movimientos-error" class="alert alert-danger" style="display: none;">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        <span id="movimientos-error-text"></span>
+                    </div>
+
+                    <div id="movimientos-table-wrapper" style="display: none;">
+                        <table id="tablaMovimientosBanco" class="table table-sm table-hover table-bordered">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Descripción</th>
+                                    <th>Referencia</th>
+                                    <th>Valor</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="movimientos-tbody">
+                            </tbody>
+                        </table>
+                        <div id="no-movimientos" class="alert alert-warning" style="display: none;">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            No se encontraron movimientos bancarios para los filtros seleccionados.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times mr-1"></i>Cancelar
+                    </button>
+                    <button type="button" id="btn-guardar-sin-movimiento" class="btn btn-warning">
+                        <i class="fas fa-forward mr-1"></i>Guardar sin asociar movimiento
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Variables globales
+    let valorRecibo = null;
+    let fechaPagoRecibo = null;
+
+    // Función para cargar empresas
+    function cargarEmpresas() {
+        $.ajax({
+            type: 'GET',
+            url: '/ajax_request/empresas',
+            success: function(response) {
+                const $select = $('#filtro-empresa-mvto');
+                $select.empty().append('<option value="">Todas las empresas</option>');
+
+                if (response.data && response.data.length > 0) {
+                    response.data.forEach(empresa => {
+                        $select.append(`<option value="${empresa.Nit}">${empresa.nombre}</option>`);
+                    });
+                }
+            },
+            error: function(xhr) {
+                console.error('Error al cargar empresas:', xhr);
+            }
+        });
+    }
+
+    // Función para cargar cuentas bancarias según la empresa
+    function cargarCuentasBancarias(empresaNit) {
+        const $select = $('#filtro-cuenta-mvto');
+        $select.empty().append('<option value="">Cargando...</option>');
+
+        if (!empresaNit) {
+            $select.empty().append('<option value="">Seleccione empresa primero...</option>');
+            return;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/ajax_request/cuentas_bancarias',
+            data: { 'empresa': empresaNit },
+            success: function(response) {
+                $select.empty().append('<option value="">Todas las cuentas</option>');
+
+                if (response.data && response.data.length > 0) {
+                    response.data.forEach(cuenta => {
+                        $select.append(`<option value="${cuenta.idcuenta}">${cuenta.cuentabanco} - ${cuenta.empresa}</option>`);
+                    });
+                } else {
+                    $select.empty().append('<option value="">No hay cuentas disponibles</option>');
+                }
+            },
+            error: function(xhr) {
+                console.error('Error al cargar cuentas:', xhr);
+                $select.empty().append('<option value="">Error al cargar cuentas</option>');
+            }
+        });
+    }
+
+    // Función para abrir el modal de movimientos bancarios
+    function abrirModalMovimientos() {
+        // Obtener datos del formulario
+        const numRecibo = $('#numrecibo').val();
+        const cliente = $('#nombre_cliente').val();
+        const valor = $('#valor_recibo').val().replace(/\./g, '').replace(/,/g, '');
+        const fechaPago = $('#fecha_de_pago').val();
+
+        valorRecibo = parseInt(valor);
+        fechaPagoRecibo = fechaPago;
+
+        // Actualizar información en el modal
+        $('#modal-num-recibo').text(numRecibo);
+        $('#modal-cliente').text(cliente);
+        $('#modal-valor').text(parseInt(valor).toLocaleString('es-CO'));
+
+        // Configurar fechas por defecto (15 días antes y después de la fecha de pago)
+        const fechaPagoDate = new Date(fechaPago);
+        const fechaDesde = new Date(fechaPagoDate);
+        fechaDesde.setDate(fechaDesde.getDate() - 15);
+        const fechaHasta = new Date(fechaPagoDate);
+        fechaHasta.setDate(fechaHasta.getDate() + 15);
+
+        $('#filtro-fecha-desde-mvto').val(fechaDesde.toISOString().split('T')[0]);
+        $('#filtro-fecha-hasta-mvto').val(fechaHasta.toISOString().split('T')[0]);
+
+        // Cargar empresas
+        cargarEmpresas();
+
+        // Abrir modal
+        $('#modalMovimientosBanco').modal('show');
+
+        // No cargar movimientos automáticamente, esperar a que el usuario seleccione filtros
+    }
+
+    // Función para cargar movimientos bancarios
+    function cargarMovimientosBancarios() {
+        const fechaDesde = $('#filtro-fecha-desde-mvto').val();
+        const fechaHasta = $('#filtro-fecha-hasta-mvto').val();
+        const empresa = $('#filtro-empresa-mvto').val();
+        const cuenta = $('#filtro-cuenta-mvto').val();
+
+        if (!fechaDesde || !fechaHasta) {
+            mostrarError('Debes seleccionar un rango de fechas');
+            return;
+        }
+
+        if (!empresa && !cuenta) {
+            mostrarError('Debes seleccionar al menos una empresa o cuenta bancaria');
+            return;
+        }
+
+        // Mostrar loading
+        $('#movimientos-loading').show();
+        $('#movimientos-error').hide();
+        $('#movimientos-table-wrapper').hide();
+
+        // Construir parámetros de la petición
+        const requestData = {
+            'fecha_desde': fechaDesde,
+            'fecha_hasta': fechaHasta,
+            'usado_agente': 'false',
+            'valor_positivo': 'true',
+            'page_size': 100
+        };
+
+        // Agregar empresa o cuenta según lo seleccionado
+        if (cuenta) {
+            requestData.cuenta = cuenta;
+        } else if (empresa) {
+            requestData.empresa = empresa;
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/accounting/api/bank-movements/list',
+            headers: {
+                'Authorization': 'Token ' + '{{request.user.auth_token.key}}'
+            },
+            data: requestData,
+            success: function(response) {
+                $('#movimientos-loading').hide();
+                mostrarMovimientos(response.movimientos);
+            },
+            error: function(xhr) {
+                $('#movimientos-loading').hide();
+                const errorMsg = xhr.responseJSON?.detail || 'Error al cargar movimientos bancarios';
+                mostrarError(errorMsg);
+            }
+        });
+    }
+
+    // Función para mostrar los movimientos en la tabla
+    function mostrarMovimientos(movimientos) {
+        const $tbody = $('#movimientos-tbody');
+        $tbody.empty();
+
+        if (!movimientos || movimientos.length === 0) {
+            $('#no-movimientos').show();
+            $('#tablaMovimientosBanco').hide();
+            $('#movimientos-table-wrapper').show();
+            return;
+        }
+
+        $('#no-movimientos').hide();
+        $('#tablaMovimientosBanco').show();
+        $('#movimientos-table-wrapper').show();
+
+        // Filtrar movimientos que coincidan aproximadamente con el valor
+        const margen = valorRecibo * 0.05; // 5% de margen
+
+        movimientos.forEach(function(mvto) {
+            const diferencia = Math.abs(mvto.valor - valorRecibo);
+            const esCoincidente = diferencia <= margen;
+            const rowClass = esCoincidente ? 'table-success' : '';
+
+            const row = `
+                <tr class="${rowClass}" data-movimiento-id="${mvto.id_mvto}">
+                    <td>${mvto.fecha}</td>
+                    <td>${mvto.descripcion || '-'}</td>
+                    <td>${mvto.referencia || '-'}</td>
+                    <td class="text-right font-weight-bold">$${mvto.valor.toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-primary btn-seleccionar-mvto"
+                                data-id="${mvto.id_mvto}"
+                                data-valor="${mvto.valor}">
+                            <i class="fas fa-check mr-1"></i>Seleccionar
+                        </button>
+                    </td>
+                </tr>
+            `;
+            $tbody.append(row);
+        });
+    }
+
+    // Función para mostrar errores
+    function mostrarError(mensaje) {
+        $('#movimientos-error-text').text(mensaje);
+        $('#movimientos-error').show();
+        $('#movimientos-table-wrapper').hide();
+    }
+
+    // Función para guardar el recibo con movimiento
+    function guardarReciboConMovimiento(movimientoId = null) {
+        $('#movimiento_banco_id_hidden').val(movimientoId || '');
+        $('#modalMovimientosBanco').modal('hide');
+
+        // Crear y enviar el formulario con el botón de guardar-recaudo
+        const form = $('#form-recibo');
+        $('<input>').attr({
+            type: 'hidden',
+            name: 'guardar-recaudo',
+            value: 'true'
+        }).appendTo(form);
+        form.submit();
+    }
+
+    // Event handlers
+    $('#btn-abrir-modal-movimientos').click(function() {
+        abrirModalMovimientos();
+    });
+
+    // Cuando cambia la empresa, cargar las cuentas bancarias
+    $('#filtro-empresa-mvto').change(function() {
+        const empresaNit = $(this).val();
+        cargarCuentasBancarias(empresaNit);
+    });
+
+    $('#btn-filtrar-movimientos').click(function() {
+        cargarMovimientosBancarios();
+    });
+
+    $('#btn-limpiar-filtros').click(function() {
+        const fechaPagoDate = new Date(fechaPagoRecibo);
+        const fechaDesde = new Date(fechaPagoDate);
+        fechaDesde.setDate(fechaDesde.getDate() - 15);
+        const fechaHasta = new Date(fechaPagoDate);
+        fechaHasta.setDate(fechaHasta.getDate() + 15);
+
+        $('#filtro-fecha-desde-mvto').val(fechaDesde.toISOString().split('T')[0]);
+        $('#filtro-fecha-hasta-mvto').val(fechaHasta.toISOString().split('T')[0]);
+        $('#filtro-empresa-mvto').val('');
+        $('#filtro-cuenta-mvto').empty().append('<option value="">Seleccione empresa primero...</option>');
+
+        // Limpiar tabla y mensajes
+        $('#movimientos-tbody').empty();
+        $('#movimientos-table-wrapper').hide();
+        $('#movimientos-error').hide();
+    });
+
+    $('#btn-guardar-sin-movimiento').click(function() {
+        if (confirm('¿Estás seguro de guardar este recibo sin asociar un movimiento bancario?')) {
+            guardarReciboConMovimiento(null);
+        }
+    });
+
+    $(document).on('click', '.btn-seleccionar-mvto', function() {
+        const movimientoId = $(this).data('id');
+        const valor = $(this).data('valor');
+
+        if (Math.abs(valor - valorRecibo) > valorRecibo * 0.1) {
+            if (!confirm(`El valor del movimiento ($${valor.toLocaleString()}) difiere del valor del recibo ($${valorRecibo.toLocaleString()}).\n\n¿Deseas continuar?`)) {
+                return;
+            }
+        }
+
+        guardarReciboConMovimiento(movimientoId);
+    });
+
+    // Limpiar al cerrar el modal
+    $('#modalMovimientosBanco').on('hidden.bs.modal', function() {
+        $('#movimientos-tbody').empty();
+        $('#movimientos-error').hide();
+        $('#movimientos-table-wrapper').hide();
+    });
+    </script>
+{%endblock%}
+
+  

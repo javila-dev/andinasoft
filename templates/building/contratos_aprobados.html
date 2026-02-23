@@ -1,0 +1,260 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load mathfilters%}
+{%block title%}Proyectos | Contratos de obra{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+    a.body-a[aria-expanded="true"]{
+        color:#a0a0a0!important;
+        font-weight: 700;
+    }
+</style>
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Ordenes Aprobadas</h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaContratosActivos' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th>Proyecto</th>
+                    <th>Canje</th>
+                    <th>Valor</th>
+                    <th>Adicionales</th>
+                    <th>Total</th>
+                    <th>% Ejecutado</th>
+                    <th>% Pagado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for contrato in contratos_activos%}
+                <tr>
+                    <td class='text-center'>
+                        <div class="dropright">
+                            <a class="dropdown-toggle body-a" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                {{contrato.pk}}
+                            </a>
+                            <div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
+                                <a class="dropdown-item" href="/buildingcontrol/viewcontract/{{contrato.pk}}">
+                                    Ver contrato</a>
+                                <a class="dropdown-item" href="/buildingcontrol/newprogress/{{contrato.pk}}">
+                                    Agregar acta de avance/recibido</a>
+                                <a class="dropdown-item" href="/buildingcontrol/addotrosi/{{contrato.pk}}">
+                                    Agregar adicionales</a>
+                                <a class="dropdown-item" href="#" data-toggle='modal' data-target="#modalPagar"
+                                    data-contrato="{{contrato.pk}}">
+                                    Abonar a contrato</a>
+                                {%if contrato.contrato_docs != ''%}
+                                <a class="dropdown-item" href="/media/{{contrato.contrato_docs}}"
+                                    target='_blank'>
+                                    Ver soporte contrato</a>
+                                {%else%}
+                                <a class="dropdown-item" href="#" data-toggle='modal' data-target="#modalCargaDocs"
+                                    data-contrato="{{contrato.pk}}">
+                                    Cargar soportes de contrato</a>
+                                {%endif%}
+                            </div>
+                        </div>
+                    </td>
+                    <td class='text-center'>{{contrato.fecha_creacion|date:"d/m/Y"}}</td>
+                    <td>{{contrato.proveedor.nombre}}</td>
+                    <td class='text-center'>{{contrato.proyecto.proyecto}}</td>
+                    <td class='text-center'>{{contrato.porcentaje_canje|floatformat:"-2"}}%</td>
+                    <td class='text-center'>{{contrato.total_costo}}</td>
+                    <td class='text-center'>{{contrato.adicionales|floatformat:"-2"|default:0}}</td>
+                    <td class='text-center'>{{contrato.total_orden|default:contrato.total_costo}}</td>
+                    <td>
+                        <div class="progress" data-toggle="tooltip" data-placement="top" 
+                        title='{{contrato.recibido|div:contrato.total_orden|mul:100|floatformat:"-2"}}%'>
+                            <div class="progress-bar" role="progressbar" 
+                            style='width: {{contrato.recibido|div:contrato.total_orden|mul:100|floatformat:"0"}}%;'
+                            aria-valuenow='{{contrato.recibido|div:contrato.total_orden|mul:100|floatformat:"0"}}' 
+                            aria-valuemin="0" aria-valuemax="100">{{contrato.recibido|div:contrato.total_orden|mul:100|floatformat:"-2"}}%</div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="progress" data-toggle="tooltip" data-placement="top" 
+                        title='{{contrato.pagado|div:contrato.pago_efectivo|mul:100|floatformat:"-2"}}%'>
+                            <div class="progress-bar" role="progressbar" 
+                            style='width: {{contrato.pagado|div:contrato.pago_efectivo|mul:100|floatformat:"0"}}%;'
+                            aria-valuenow='{{contrato.pagado|div:contrato.pago_efectivo|mul:100|floatformat:"0"}}' 
+                            aria-valuemin="0" aria-valuemax="100">{{contrato.pagado|div:contrato.pago_efectivo|mul:100|floatformat:"-2"}}%</div>
+                        </div>
+                    </td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalCargaDocs" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            {%crispy form%}
+        </div>
+      </div>
+    </div>
+  </div>
+    <div class="modal fade" id="modalPagar" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <form method='post' action=''>{%csrf_token%}
+            <div class="modal-header">
+              <h5 class="modal-title" id="staticBackdropLabel"></h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs justify-content-center" id="myTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                      <a class="nav-link active" id="home-tab" data-toggle="tab" 
+                      href="#home" role="tab" aria-controls="home" aria-selected="true">Anticipo</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                      <a class="nav-link" id="profile-tab" data-toggle="tab" 
+                      href="#profile" role="tab" aria-controls="profile" aria-selected="false">Aplicar</a>
+                    </li>
+                  </ul>
+                  <div class="tab-content pt-2" id="myTabContent">
+                    <div class="tab-pane fade show active" id="home" role="tabpanel" aria-labelledby="home-tab">
+                        <form method="post">{%csrf_token%}
+                            <input type='text' id='contratoAbono' name='contrato' hidden>
+                            {{form_pagos|crispy}}
+                            <label for='formapago' class='requiredField'>Cuenta de Pago*</label>
+                            <select name="formapago" id="formapago" class="select form-control"></select>
+                            <br>
+                            <input type='submit' name='btnAbono' id ='btnAbono' value='Registrar' class='btn btn-primary float-right mb-2'>
+                        </form>
+                    </div>
+                    <div class="tab-pane fade" id="profile" role="tabpanel" aria-labelledby="profile-tab">
+                        <form method="post">{%csrf_token%}
+                            <input type='text' id='contratoAsociar' name='contrato' hidden>
+                            <div class='input-group'>
+                                <div class='input-group-prepend'>
+                                    <span class='input-group-text'>Id Pago</span>
+                                </div>
+                                <input class='form-control text-center' type="number" name='idpago' id='idpago' required>
+                                <div class='input-group-append'>
+                                    <button class='btn btn-outline-secondary' id='Btnbuscarpago' type='button'>
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <p class='lead pt-2' id='infoPago'></p>
+                            <input type='submit' name='btnAsociar' id='btnAsociar' value='Asociar' class='btn btn-primary float-right mb-2'>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            </form>
+          </div>
+        </div>
+      </div>  
+  {{form_pagos.media}}
+<script>
+    $(document).ready(function(){
+        var tablaContratosActivos = $('#tablaContratosActivos').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "order": [[ 1, "desc" ],[0,'desc']],
+            columnDefs: [
+                { type: 'date-uk', targets: 1 },
+                { type: 'formatted-num', targets: 9 }
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+            }
+        })
+    $('#tablaContratosActivos tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablaContratosActivos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+    })
+    $('#modalCargaDocs').on('show.bs.modal',function(e){
+        var trigger = $(e.relatedTarget)
+        var contrato = trigger.data('contrato')
+        $('#id_contrato').val(contrato)
+        $(this).find('.modal-title').text('')
+        $(this).find('.modal-title').append('<i class="far fa-file-pdf"></i> Contrato '+contrato)
+    })
+    $('#modalPagar').on('show.bs.modal',function(e){
+        var trigger = $(e.relatedTarget)
+        var contrato = trigger.data('contrato')
+        $('#contratoAbono').val(contrato)
+        $('#contratoAsociar').val(contrato)
+        $('#btnAsociar').prop('disabled',false)
+        $('#idpago').val(null)
+        $('#infoPago').text('')
+        $(this).find('.modal-title').text('Abonar a contrato '+ contrato)
+    })
+    $('#empresapago').on('change',function(){
+        $('#formapago').empty();
+        var empresa = $('#empresapago').val()
+        $.ajax({
+            type:'GET',
+            url:'/correspondencia/facturas/pagar',
+            data:{'empresa':empresa,'solicitud':'formapago'},
+            success:function(response){
+                var instance = JSON.parse(response['instance'])
+                for (i=0;i<instance.length;i++){
+                    var valor = instance[i]['fields'] 
+                    var newOption = $('<option>')
+                        newOption.attr('value',valor['cuentabanco'])
+                        newOption.text(valor['cuentabanco'])
+                    $('#formapago').append(newOption)
+                }
+                
+            }
+        })
+    })
+    })
+    $('#Btnbuscarpago').on('click',function(){
+        var idpago=$('#idpago').val()
+        $.ajax({
+            type:'GET',
+            url:"/buildingcontrol/aprovedcontracts",
+            data:{
+                'idpago':idpago,
+            },
+            success: function(response){
+                var data = response['pago']
+                $('#infoPago').text(data)
+                if (data == 'Este pago ya se encuentra asociado'){
+                    $('#btnAsociar').prop('disabled',true)
+                }
+            }
+        })
+    })
+</script>
+{%endblock%}

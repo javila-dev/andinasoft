@@ -1,0 +1,136 @@
+{%load static%}{% load humanize %}
+<body>
+    <div id="footer_content">
+            <p style="text-align: right;font-size:7px;margin-right: 2rem;">Recibo elaborado por <b>{{recibo.usuario}}</b> impreso 
+                el {% now "j F Y H:i a" %}</p>
+        <img style="margin-top: 0px" src="{%static 'img/pie-de-pagina-fractal.png'%}" width="820">
+    </div>
+    <table id='encabezados-logos' style='margin-bottom: 0.8rem;'>
+        <tr>
+            <td style='text-align: center; vertical-align: middle;'>
+                <img src="{%static 'img/fractal450x.png'%}" width="200">
+            </td>
+            <th style="width:50%;align:center;margin-top: -30px;">
+                <p style="font-size:15px;"><b>Recibo de caja<br>
+                    <span style="color:#7B50FF;">No.&nbsp;{{recibo.recibo|default_if_none:recibo.idrecaudo}}</span></b></p>
+            </th>
+            <td style='text-align: center;vertical-align: middle;'>
+                <img src="{%static 'img/casas-de-verano450x.png'%}" width="180" style="margin-left: -10px;">
+            </td>
+        </tr>
+    </table>
+    <div style="font-size:medium">
+        <table>
+            <tr>
+                <th style="width:10%" class="title">CLIENTE(S)</th>
+                <td class='underline' style="width:62%;padding-left: 0.5em;">
+                    {{recibo.infocontrato.titulares.0.nombrecompleto.upper}}
+                    
+                </td>
+                <th style="width:8%" class="title text-center">FECHA</th>
+                <td class='underline text-center' style="width:20%">{{recibo.fecha}}</td>
+            </tr>
+        </table>
+        <table style="margin-top:1rem">
+            <tr>
+                <th style="width:12%" class="title">CONCEPTO</th>
+                <td class='underline' style="width:38%">{{recibo.concepto.upper}}</td>       
+                <th style="width:12%" class="title text-center">ID VENTA</th>
+                <td class='underline text-center' style="width:10%">{{recibo.contrato}}</td>        
+                <th style="width:12%" class="title text-center">PROPIEDAD</th>
+                <td class='underline text-center' style="width:16%">  {{recibo.infocontrato.inmueble}}</td>   
+            </tr>
+        </table>
+    </div>
+    <table class='detail-table' style='margin-top: 1rem;margin-left: 2rem;
+        margin-right: 1.5rem;'>
+        <thead>
+            <tr style="background-color: lightgray;">
+                <th>Fecha de transacción</th>
+                <th>Forma de pago</th>
+                <th>Valor total</th>
+            </tr>
+        </thead>
+            <tr style="text-align: center;">
+                <td class='text-center'>{{recibo.fecha_pago|date:'F j, Y'}}</td>
+                <td class='text-center'>{{recibo.formapago}}</td>
+                <td class='text-center'>${{recibo.valor|intcomma }}</td>
+            </tr>
+        </tbody>
+    </table>
+    <table class='detail-table' style='margin-left: 2rem;margin-right: 2rem;font-size:medium'>
+        <thead>
+            <tr style="background-color: lightgray;">
+                <th colspan="3">Abonos por propietarios</th>
+            </tr>
+            <tr style="background-color: lightgray;">
+                <th>Identificación</th>
+                <th>Cliente</th>
+                <th>Valor</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="text-align: center;">
+                <td class='text-center'>{{recibo.infocontrato.titulares.0.pk}}</td>
+                <td class='text-center'>{{recibo.infocontrato.titulares.0.nombrecompleto.upper}}</td>
+                <td class='text-center'>${{recibo.valor|floatformat:2 }}</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+
+{%block css%}
+<style>
+    @page{
+        size: a6 landscape;
+        @frame content_frame {
+            /* Content Frame */
+            left: 0.5cm;
+            width: 14cm;
+            top: 0.3cm;
+            height: 8.3cm;
+        }
+        @frame footer_frame  {
+            /* Static Frame */
+            -pdf-frame-content: footer_content;
+            left: 0cm;
+            width: 15cm;
+            top: 8.1cm;
+            height: 6cm;
+        }
+        @font-face {
+            font-family: Outfit;
+            src: url("{%static 'fonts/Outfit/Outfit-Light.ttf'%}");
+        }
+            
+        /* Bold */
+        @font-face {
+            font-family: Outfit;
+            src: url("{%static 'fonts/Outfit/Outfit-Bold.ttf'%}");
+            font-weight: bold;
+        }
+    
+        body {
+            font-family: Outfit;
+        }
+        
+        #encabezados-logos p{
+            padding:0px;
+            margin:0px;
+            font-size: medium;
+        }
+        .detail-table th, .detail-table td{
+            padding:2px;
+            text-align: center!important;
+        }
+        .underline{
+            border-bottom: 0.5px solid gray;
+        }
+        .text-center{
+            text-align: center;
+        }
+        .title{
+            font-weight: bold;
+        }
+</style>
+{%endblock%}

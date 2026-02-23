@@ -1,0 +1,56 @@
+{%extends 'base.html'%}
+
+{%block title%}Ventas por Adjudicar{%endblock%}
+
+{%block content%}
+<style>
+    .button-titulares{
+        margin-top:1.95rem;
+        padding-left: 0rem;
+    }
+    .no-margin-right{
+        padding-right:0rem;
+        margin-right: 0rem;
+    }
+    .onlytext-nueva-venta{
+        margin-top:2.2rem;
+        padding-left: 0rem;
+        padding-right: 0rem;
+    }
+    .botones-centrados{
+
+        display: flex;
+        align-items: center;
+    }
+</style>
+<div class="bg-white rounded shadow-lg">
+    <h3 class='text-center section-title text-white'><i class="fas fa-folder-open"></i> Ventas por Adjudicar</h3>
+    <br/>
+    <div class='table-responsive p-3'>
+        <table id='tabla-ventas-sin-aprobar' class='table table-bordered table-striped table-sm'>
+            <thead class='thead thead-light'>
+                <tr>
+                    <th class='text-center'>Contrato</th>
+                    <th class='text-center'>Fecha</th>
+                    <th class='text-center'>Cliente</th>
+                    <th class='text-center'>Inmueble</th>
+                    <th class='text-center'>Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for venta in ventas%}
+                <tr>
+                    <td class='text-center'><a href='/operaciones/adjudicar_contrato/{{proyecto}}/{{venta.id_venta}}'>{{venta.id_venta}}</a></td>
+                    <td class='text-center'>{{venta.fecha_contrato|date:'d-m-Y'}}</td>
+                    <td>{{venta.nombre_cliente}}</td>
+                    <td class='text-center'>{{venta.inmueble}}</td>
+                    <td class='text-center'>$ {{venta.valor_venta}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+{%endblock%}

@@ -1,0 +1,71 @@
+{%extends 'base.html'%}
+{%block title%}Listado Adjudicaciones{%endblock%}
+{%load crispy_forms_tags%}
+{%block content%}
+<style>
+    td{
+        font-size: small;
+    }
+</style>
+<div class="bg-white rounded shadow-lg" style='max-width:80vw'>
+<h3 class="text-center text-white section-title">Adjudicaciones</h3>
+<div class="table-responsive p-2">
+<table id='adjudicaciones' class='display' style='width:100%'>
+    <thead class="thead thead-light">
+        <tr>
+            <th class='text-center'>Adjudicacion</th>
+            <th class='text-center'>Fecha</th>
+            <th class='text-center'>Titular 1</th>
+            <th class='text-center'>Inmueble</th>
+            <th class='text-center'>Valor</th>  
+            <th class='text-center'>Cartera</th>  
+            <th class='text-center'>Estado</th>
+            <th class='text-center'>Origen</th>
+            <th class='text-center'>Oficina</th>  
+        </tr>
+    </thead>
+    <tbody>
+    {%for adjudicacion in adjudicaciones%}
+        <tr>
+            <td class='text-center'><a href='{{proyecto}}/{{adjudicacion.IdAdjudicacion}}'>{{adjudicacion.IdAdjudicacion}}</a></td>
+            <td class='text-center'>{{adjudicacion.FechaContrato|date:'d/m/Y'}}</td>
+            <td>{{adjudicacion.Nombre}}</td>
+            <td class='text-center'>{{adjudicacion.Inmueble}}</td>
+            <td class='text-center'>${{adjudicacion.Valor}}</td>
+            <td class='text-center'>{{adjudicacion.tipo_cartera}}</td>
+            <td class='text-center'>{{adjudicacion.Estado}}</td>
+            <td class='text-center'>{{adjudicacion.Origen}}</td>
+            <td class='text-center'>{{adjudicacion.oficina}}</td>
+        </tr>
+    {%endfor%}
+    </tbody>
+</table>
+</div>
+</div>
+
+<script>
+    $(document).ready(function() {
+    $('#adjudicaciones').DataTable({
+        language:{
+            url:'/ajax_request/datatable_spanish'
+        },
+        dom: 'Bfrtip',
+        buttons: ['copy', 'excel', 'pdf'],
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 25,
+        "order": [[ 1, "desc" ]],
+        scrollY : "70vh",
+        scrollX : true,
+        scrollCollapse : true,
+        paging : false,  
+        columnDefs: [
+       { type: 'date-uk', targets: 1 }
+     ]
+  });
+});
+</script>
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+{%endblock%}

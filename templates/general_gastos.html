@@ -1,0 +1,184 @@
+{%extends 'base.html'%}
+{%block title%}Gastos compañia{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Modulo de gastos</strong></h4>
+    <br>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='/contabilidad/informes/gastos/cargar' class="text-muted"><i
+                            class="far fa-hand-point-right"></i> <strong>Cargar
+                            Gastos</strong></a></p>
+            </div>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle="modal" data-target="#modalParametrosGastos"
+                        class="text-muted"><i class="far fa-hand-point-right"></i> <strong>Detalle
+                            Gastos</strong></a></p>
+            </div>
+        </div>
+    </div>
+    <br>
+    <p class='lead border-bottom border-gray'><strong>Parametrizaciones</strong></p>
+
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalEmpresas" data-type="Cuentas"
+                        class="text-muted"><i class="far fa-hand-point-right"></i> <strong>Asociar Cuentas</strong></a>
+                </p>
+            </div>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle="modal" data-target="#modalEmpresas" data-type="CentroCosto"
+                        class="text-muted"><i class="far fa-hand-point-right"></i> <strong>Asociar Centros de
+                            Costo</strong></a></p>
+            </div>
+        </div>
+    </div>
+    <br>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalParamRecibos"
+                        class="text-muted"><i class="far fa-hand-point-right"></i> <strong>Items de Gasto</strong></a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalParametrosGastos" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Ver Detalle Gastos</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group text-center">
+                    <div class='input-group-prepend'>
+                        <span class="input-group-text">Empresa</span>
+                    </div>
+                    <select class="custom-select" id="EmpresaGasto" name='EmpresaGasto'>
+                        <option selected>Choose...</option>
+                        <option value="Andina Conceptos Inmobiliarios">Andina Conceptos Inmobiliarios</option>
+                        <option value="Status Comercializadora">Status Comercializadora</option>
+                        <option value="Quadrata Constructores">Quadrata Constructores</option>
+                        <option value="Promotora Westville">Promotora Westville</option>
+                        <option value="Terranova Desarrolladora Turistica">Terranova Desarrolladora Turistica
+                        </option>
+                    </select>
+                </div>
+                <br>
+                <div class="input-group text-center">
+                    <div class='input-group-prepend'>
+                        <span class="input-group-text">Año</span>
+                    </div>
+                    <input type="number" class='text-center form-control' id="añoGastos" name='añoGastos'>
+                </div>
+                <br>
+                <div class="input-group text-center">
+                    <div class='input-group-prepend'>
+                        <span class="input-group-text">Mes</span>
+                    </div>
+                    <select class='custom-select text-center' id='mesGastos' name='mesGastos'>
+                        <option value='1' selected>Enero</option>
+                        <option value="2">Febrero</option>
+                        <option value="3">Marzo</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Mayo</option>
+                        <option value="6">Junio</option>
+                        <option value="7">Julio</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Septiembre</option>
+                        <option value="10">Octubre</option>
+                        <option value="11">Noviembre</option>
+                        <option value="12">Diciembre</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer" id='footer'>
+                <button class='btn btn-primary' id='cargarDetalleGastos' onclick="IrAGastos()">Cargar</a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalEmpresas" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Asociar cuentas de gasto</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group text-center">
+                    <div class='input-group-prepend'>
+                        <span class="input-group-text">Empresa</span>
+                    </div>
+                    <select class="custom-select" id="EmpresaAsociar" name='EmpresaAsociar'>
+                        <option selected>Choose...</option>
+                        <option value="Andina Conceptos Inmobiliarios">Andina Conceptos Inmobiliarios</option>
+                        <option value="Status Comercializadora">Status Comercializadora</option>
+                        <option value="Quadrata Constructores">Quadrata Constructores</option>
+                        <option value="Promotora Westville">Promotora Westville</option>
+                        <option value="Terranova Desarrolladora Turistica">Terranova Desarrolladora Turistica
+                        </option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer" id='footer'>
+                <button class='btn btn-primary' id='AsociarCuentas'>Ver</a>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $('#modalEmpresas').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget) // Button that triggered the modal
+        var recipient = button.data('type')
+        var modal = $(this)
+        if(recipient=='Cuentas'){
+            modal.find('.modal-title').text('Asociar Items de gasto')
+            $('#AsociarCuentas').attr('onclick',"IrAsociarCta()")
+        }
+        else if(recipient=='CentroCosto'){
+            modal.find('.modal-title').text('Asociar Centros de Costo')
+            $('#AsociarCuentas').attr('onclick',"IrAsociarCC()")
+        }
+        
+        })
+    function IrAGastos() {
+        var año = $('#añoGastos').val()
+        var mes = $('#mesGastos').val()
+        var empresa = $('#EmpresaGasto').val()
+        var parametros_gasto = '/contabilidad/gastos/detalle/' + empresa + '/' + año + '/' + mes
+        window.location.href = parametros_gasto
+    }
+
+    function IrAsociarCta() {
+        var empresa = $('#EmpresaAsociar').val()
+        var url_href = '/contabilidad/informes/gastos/asociar_cuentas/' + empresa
+        window.location.href = url_href
+    }
+    function IrAsociarCC() {
+        var empresa = $('#EmpresaAsociar').val()
+        var url_href = '/contabilidad/informes/gastos/asociar_cc/' + empresa
+        window.location.href = url_href
+    }
+</script>
+{%endblock%}

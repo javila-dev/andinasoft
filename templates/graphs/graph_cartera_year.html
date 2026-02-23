@@ -1,0 +1,367 @@
+{%extends 'base.html'%}
+{%load l10n%}
+{%load extras%}
+{%block title%}Graficos | Cartera por mes{%endblock%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchpanes/1.2.0/css/searchPanes.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+{%endblock %}
+{%block js%}
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchpanes/1.2.0/js/dataTables.searchPanes.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://code.highcharts.com/highcharts.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js"></script>
+{%endblock%}
+{%block content%}
+<style>
+    td{
+        font-size: smaller;
+    }
+    tfoot{
+        font-size: smaller;
+    }
+</style>
+<div class='container-xl bg-light rounded shadow' style="padding:1rem;">
+    <div class='row' id='grafico'></div>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-12'>
+            <div class='table-responsive'>
+                <table id='tablaCartera' class='display compact' style='width: 100%;'>
+                    <thead>
+                        <tr>
+                            <th class='text-center'>Mes</th>
+                            <th class='text-center'>Edad</th>
+                            <th class='text-center'>Tipo Cartera</th>
+                            <th class='text-center'>Ppto Mes</th>
+                            <th class='text-center'>Rcdo Mes</th>
+                            <th class='text-center'>Ppto Vencido</th>
+                            <th class='text-center'>Rcdo Vencido</th>
+                            <th class='text-center'>Ppto Total</th>
+                            <th class='text-center'>Recaudo Pptado</th>
+                            <th class='text-center'>No Pptado</th>
+                            <th class='text-center'>Total Rcdo</th>
+                            <th class='text-center'>Cumplimiento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%for cartera in cartera_año%}
+                        <tr>
+                            <td class='text-center'>{{cartera.mes}}</td>
+                            <td class='text-center'>{{cartera.edad}}</td>
+                            <td class='text-center'>{{cartera.tipocartera}}</td>
+                            <td class='text-center'>{{cartera.pptomes|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.rcdomes|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.pptovenc|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.rcdovenc|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.totalppto|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.rcdopptado|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.rcdonopptado|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.rcdototal|unlocalize}}</td>
+                            <td class='text-center'>{{cartera.rcdopptado|porcentaje_entero:cartera.totalppto}}</td>
+                        </tr>
+                        {%endfor%}
+                    </tbody>
+                    <tfoot>
+                        <th colspan="3" style="text-align:right">Total:</th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                        <th class='text-center'></th>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{%include 'periodo_graphs.html'%}
+<script>
+    $(document).ready(function(){
+        $('#form-periodo').on('submit',function(){
+            $('#btnCargar').attr('disabled',true)
+            $('#btnCargar').text('')
+            $('#btnCargar').append('<i class="fas fa-circle-notch fa-spin"></i>')
+        })
+        var tabla = $('#tablaCartera').DataTable({
+            'scrollY':        "600px",
+            'scrollX':        true,
+            'scrollCollapse': true,
+            'paging':         false,
+            "ordering": false,
+            searchBuilder:{
+                        conditions: {
+                                num: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    '<': {
+                                        conditionName: 'Menor que'
+                                    },
+                                    '<=': {
+                                        conditionName: 'Menor o igual que'
+                                    },
+                                    '>': {
+                                        conditionName: 'Mayor que'
+                                    },
+                                    '>=': {
+                                        conditionName: 'Mayor o igual que'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'between': {
+                                        conditionName: 'Entre'
+                                    },
+                                    '!between': {
+                                        conditionName: 'No esta entre'
+                                    }
+                                },
+                                string: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'starts': {
+                                        conditionName: 'Empieza con'
+                                    },
+                                    'ends': {
+                                        conditionName: 'Termina en'
+                                    },
+                                    'contains': {
+                                        conditionName: 'Contiene'
+                                    },
+                                }
+                            },
+                    },
+            language:{
+                        searchBuilder: {
+                            add:'Nuevo filtro',
+                            clearAll:'Borrar filtro',
+                            deleteTitle:'Borrar',
+                            data:'Columna',
+                            logicAnd:'Y',
+                            logicOr:'O',
+                            condition: 'Condición',
+                            value: 'Valor',
+                            title: 'Filtro Avanzado',
+                        }
+                    },
+            dom: 'Qlfrtip',
+            "footerCallback": function ( row, data, start, end, display ) {
+                    var api = this.api(), data;
+        
+                    // Remove the formatting to get integer data for summation
+                    var intVal = function ( i ) {
+                        return typeof i === 'string' ?
+                            i.replace(/[\$,]/g, '')*1 :
+                            typeof i === 'number' ?
+                                i : 0;
+                    };
+                    // Total over all pages
+                    for (i=3;i<11;i++){
+                        total = api
+                        .column( i ,{ page: 'current'})
+                        .data()
+                        .reduce( function (a, b) {
+                            return intVal(a) + intVal(b);
+                        }, 0 );
+                        
+                    // Update footer
+                    $( api.column( i ).footer() ).html(
+                        '$'+new Intl.NumberFormat().format(total)
+                    );
+                    }
+                }
+            })
+        $('#periodomes').prop('disabled',true)
+        var serie = seriesData(tabla,0,5)['sum']
+        var dataperc = ComparisionsData(tabla,0,8,7)['perc']
+        var container = $('#grafico')
+        var chart = Highcharts.chart(container[0], {
+            title: {
+                text: 'Comportamiento Cartera {{proyecto}} {{año}}',
+            },
+            xAxis: {
+                title: 'Mes',
+                categories: Object.keys(serie)
+            },
+            yAxis:[{
+                title: {
+                    text: 'Valor'
+                }                
+                },
+                {
+                title: {
+                    text: 'Cumplimiento'
+                },
+                minorTickInterval:0.1,
+                max:1,
+                opposite:true                
+                }
+            ],
+            plotOptions: {
+                area:{
+                    stacking: 'normal',
+                },
+                column:{
+                    stacking: 'normal',
+                }
+            },
+            series: [
+                {
+                    name:'Presupuesto Mes',
+                    yAxis:0,
+                    type:'area',
+                    data: chartData(tabla,0,3),
+                },
+                {
+                    name:'Presupuesto Vencido',
+                    yAxis:0,
+                    type:'area',
+                    color: '#F68D8D',
+                    data: chartData(tabla,0,5),
+                },
+                {
+                    name:'Recaudo Mes',
+                    yAxis:0,
+                    type:'column',
+                    color:"#F7DC6F",
+                    data: chartData(tabla,0,4),
+                },
+                {
+                    name:'Recaudo Vencido',
+                    yAxis:0,
+                    type:'column',
+                    color:"#117A65",
+                    data: chartData(tabla,0,6),
+                },
+                {
+                    name:'Cumplimiento',
+                    yAxis:1,
+                    type:'line',
+                    color:"#717D7E",
+                    data: chartDataSerie(dataperc),
+                }
+            ],
+        });
+        tabla.on('draw', function () {
+            var dataperc = ComparisionsData(tabla,0,8,7)['perc']
+            chart.series[0].setData(chartData(tabla,0,3));
+            chart.series[1].setData(chartData(tabla,0,5));
+            chart.series[2].setData(chartData(tabla,0,4));
+            chart.series[3].setData(chartData(tabla,0,6));
+            chart.series[4].setData(chartDataSerie(dataperc));
+            var xaxis=Object.keys(seriesData(tabla,0,5)['sum'])
+            console.log(xaxis)
+            chart.xAxis['categories']=xaxis
+        });
+        function chartData(table,index,value,type="sum") {
+            var sums = seriesData(table,index,value)[type]
+            // And map it to the format highcharts uses
+            return $.map(sums, function (val, key) {
+                return {
+                    name:key,
+                    y:val}
+            });
+        }
+        function chartDataSerie(data) {
+            // And map it to the format highcharts uses
+            return $.map(data, function (val, key) {
+                return {
+                    name:key,
+                    y:val}
+            });
+        }
+        function chartDataCount(table) {
+            var sums = seriesData(table,2,4)['count']
+            // And map it to the format highcharts uses
+            return $.map(sums, function (val, key) {
+                return {
+                    name:key,
+                    y:val}
+            });
+        }
+        function seriesData(table,index,value){
+            var counts = {};
+            var sums = {};
+            var indexes = table.rows({search:'applied'}).indexes().toArray();
+            
+            for (var i=0; i<indexes.length; i++){
+                var key = table.cell(indexes[i],index).data()
+                var valor = parseFloat(table.cell(indexes[i],value).data())
+                if(key in counts){
+                    counts[key]+=1
+                    sums[key]+=valor
+                }
+                else{
+                    counts[key]=1
+                    sums[key]=valor
+                }
+            }
+            var data = {
+                'count':counts,
+                'sum':sums,
+            }
+            return data
+        }
+        function ComparisionsData(table,index,columnUp,columnDown){
+            var counts = {};
+            var sumsUp = {};
+            var sumsDown = {};
+            var perc = {};
+            var indexes = table.rows({search:'applied'}).indexes().toArray();
+            for (var i=0; i<indexes.length; i++){
+                var key = table.cell(indexes[i],index).data()
+                var valor1 = parseFloat(table.cell(indexes[i],columnUp).data())
+                var valor2 = parseFloat(table.cell(indexes[i],columnDown).data())
+                if(key in counts){
+                    counts[key]+=1
+                    sumsUp[key]+=valor1
+                    sumsDown[key]+=valor2
+                }
+                else{
+                    counts[key]=1
+                    sumsUp[key]=valor1
+                    sumsDown[key]=valor2
+                }
+            }
+            for (let key in counts){
+                var valUp = sumsUp[key]
+                var valDown = sumsDown[key]
+                if (valDown==0){
+                    perc[key]=0
+                }
+                else{
+                    perc[key] = parseFloat((valUp/valDown).toFixed(2))
+                }
+            }
+            var data = {
+                'count':counts,
+                'sumsUp':sumsUp,
+                'sumsDown':sumsDown,
+                'perc':perc,
+            }
+            return data
+        }
+        })
+</script>
+{%endblock%}

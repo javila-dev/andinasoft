@@ -1,0 +1,287 @@
+{%load static%}
+<html>
+
+    <body>
+        <div id="footer_content">
+            <table style="color:#34554c;font-size:9px">
+                <tr>
+                    <td style="text-align:center;border-right: darkslategrey solid 0.5px;padding-right: 5px;">
+                        <b>Medellín</b><br>
+                        Parque empresarial Calle 11 Of 508<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align: right;width:60%">
+                        VERSIÓN: 2<br>
+                        TODOS LOS CHEQUES, CONSIGNACIONES Y TRANSFERENCIAS DEBEN SER GIRADOS A NOMBRE DE<br>
+                        <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9</strong>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table>
+                <tr>
+                    <th style="width:25%;text-align:left">
+                        <img src="{%static 'img/Andina-Conceptos.png'%}" width="140">
+                    </th>
+                    <th>
+                    </th>
+                    <th style="width:50%;text-align:center">
+                        <img src="{%static 'img/casas-de-verano450x.png'%}" width="180">
+                    </th>
+                </tr>
+            </table>
+            <h2 style="color:#345555; text-align:center">
+                <b>FORMATO DE VERIFICACIÓN AL CONTRATO DE PROMESA DE COMPRAVENTA DE BIEN FUTURO, PROYECTO DENOMINADO “CONJUNTO RESIDENCIAL FRACTAL CASAS DE VERANO” 
+                    <br>
+                    Nº <u><span style="color:lightcoral">{{ctr.pk}}</span></u> DE FECHA
+                    <u><span style="color:lightcoral">{{ctr.fecha_contrato}}</span></u></b>
+            </h2>
+            <p class="detalles">
+                Por medio del presente formato de verificación, la sociedad <strong>ANDINA CONCEPTOS INMOBILIARIOS
+                    S.A.S</strong>,
+                con <strong>NIT 900993044-9</strong>, deja constancia que, <strong>EL (LOS) PROMITENTE (S) COMPRADOR
+                    (ES)</strong>:<br>
+
+            </p>
+            <ol class="detalles">
+                {%for titular in ctr.titulares%}
+                <li style="font-size:12px;margin-bottom:5px">
+                    <b>Nombre:</b> <u>{{titular.nombrecompleto}}</u>&nbsp;&nbsp;
+                    <b>CC:</b> <u>{{titular.pk}}</u>&nbsp;&nbsp;
+                </li>
+                {%endfor%}
+            </ol>
+            <p class="detalles">
+                Están de acuerdo con los términos y condiciones del contrato suscrito con la sociedad <b>ANDINA CONCEPTOS
+                    INMOBILIARIOS S.A.S</b>, con <b>NIT 900993044-9</b>, para la compra del lote en el proyecto
+                <b>“CONJUNTO RESIDENCIAL FRACTAL CASAS DE VERANO”</b>, localizado en el Municipio de Moñitos, Departamento de Córdoba, 
+                identificado con folio de matrícula inmobiliaria de mayor extensión Nº 146-60548 de la Oficina de Registro de Instrumentos 
+                Públicos de Lórica. Y que, el formato de verificación hace parte integral del contrato de promesa de compraventa de bien futuro. 
+                A lo cual <b>EL (LOS) PROMITENTE (S) COMPRADOR (ES)</b>, indica (n) que conoce (n) y aceptan que: 
+            </p>
+            <ol class="detalles">
+                <li>
+                    El lote adquirido es: 
+                    <b>Manzana</b> <u> {{ctr.general_info.inmueble.manzananumero}}</u>, 
+                    <b>Lote N°</b> <u> {{ctr.general_info.inmueble.lotenumero}} </u>,
+                    <b>Área total del lote</b> <u> {{ctr.general_info.inmueble.area_lt}} </u> metros Cuadrados,
+                    <b>% del derecho</b> <u> {{ctr.general_info.inmueble.porcentaje_derecho}} %</u>, 
+                    <b>Fracción</b> <u> {{ctr.general_info.inmueble.nro_fraccion}} </u>, 
+                    <b>Área de la fraccion</b> <u> {{ctr.general_info.inmueble.areaprivada}} metros cuadrados </u>
+                </li>
+                <li>
+                    Que, el bien inmueble identificado aparece señalado en el plano oficial de la urbanización, que es parte integrante del 
+                    contrato de promesa de compraventa de bien futuro. No obstante, el área citada, esta venta se hace como cuerpo cierto. 
+                </li>
+                <li>
+                    El valor del lote objeto de este contrato, es la suma de <u>{{ctr.general_info.valor_en_letras}}</u>
+                    ($<u>{{ctr.valor_venta|floatformat:"-3g"}}</u>)
+                </li>
+                <li>
+                    La forma de pago del lote adquirido es:<br>
+                    a) <b>Cuota inicial:</b> $<u>{{ctr.cuota_inicial|floatformat:"-3g"}} </u>, que serán cancelados así:
+                    <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                    b) <b>Saldo a pagar</b> $<u>{{ctr.general_info.saldo|floatformat:"-3g"}}</u>{%if ctr.general_info.saldo > 0 %}, que serán cancelados
+                    así: <u>{{ctr.general_info.fp_saldo}}</u>{%endif%}.
+                </li>
+                <li>Que, el pago de la cuota inicial, en caso de pagarlo en mensualidades, estas se pagan sin intereses
+                    corrientes.</li>
+                <li>Que, el pago del saldo, si se paga mediante financiación directa con la sociedad vendedora, el pago
+                    es mediante amortización y las cuotas mensuales incluyen el valor de los intereses corrientes. 
+                    el cual es del UNO PUNTO CINCO POR CIENTO (1.5 %) mes vencido. 
+                </li>
+                <li>Que, en caso de mora en el pago de cualquiera de las cuotas correspondientes a la cuota inicial o a
+                    las cuotas
+                    mensuales de amortización para el pago del saldo del LOTE, pagará (n) a <b>LA PROMITENTE
+                        VENDEDORA</b>, intereses
+                    moratorios a la tasa máxima legal vigente mensual y/o fracción de mes vencido, establecida por la
+                    Superintendencia
+                    Financiera de Colombia.</li>
+                <li>Con la suscripción del contrato de promesa de compraventa de bien futuro para la compra de un lote, 
+                    en el <b>“CONJUNTO RESIDENCIAL FRACTAL CASAS DE VERANO”</b>, localizado en el Municipio de Moñitos, 
+                    Departamento de Córdoba, le fue entregado como obsequio, una membresía de uso denominada 
+                    <b>ALTTUM COLLECTION CLUB ALIANZA</b>, para el uso y usufructo del club <b>ALTTUM CARIBE</b>, localizado 
+                    en el Municipio de Moñitos, Departamento de Córdoba, Membresía la cual está sujeta a términos y condiciones de uso, 
+                    a partir de su activación, las cuales constan en el documento de términos y condiciones, que le fue entregado 
+                    al momento de la suscripción del contrato de promesa de compraventa de bien futuro, entre las partes. 
+                    Esta membresía no incluye pagos por concepto de administración de uso club. Estos deberán ser cancelados 
+                    por parte de <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.  
+                </li>
+                <li><b>LA PROMITENTE VENDEDORA</b>, se reserva el derecho de hacer la entrega material del lote objeto
+                    de este contrato,
+                    a título de mera tenencia, antes del otorgamiento de la escritura pública de compraventa. Para lo
+                    cual, se estima una
+                    fecha aproximada de entrega del lote, de <u>{{meses_entrega}}</u> meses, contados a partir de la
+                    firma de este contrato.
+                    Para lo cual, se establecerá un acuerdo de tenencia con <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.
+                </li>
+                <li>
+                    El conjunto residencial utilizará energía solar para la red de alumbrado público. 
+                    Y contará con redes de energía eléctrica, y acometida externa para cada lote,  
+                </li>
+                <li>
+                    El conjunto residencial contará con red de acueducto, proveniente de la red de 
+                    acueducto del municipio, para el suministro de agua potable a cada lote.  
+                </li>
+                <li>
+                    El conjunto residencial contará con red de alcantarillado y estará conectada a una 
+                    planta de tratamiento de aguas residuales, y caja de inspección para cada lote.
+                </li>
+                <li>
+                    Las vías del proyecto serán pavimentadas y su uso únicamente será peatonal. 
+                </li>
+                <li>
+                    El conjunto residencial contará con dos (2) zonas de parqueaderos, para el estacionamiento de 
+                    vehículos de propietarios y visitantes.
+                </li>
+                <li>
+                    Igualmente autorizamos a la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b>, con <b>NIT
+                    900993044-9</b>, para consultar,
+                    actualizar y reportar nuestros datos personales o cualquier otra información a las centrales de
+                    información de riesgos.
+                    La presente autorización faculta a <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b>, para que pueda
+                    solicitar información
+                    a las centrales de riesgos sobre las relaciones comerciales que tenemos con cualquier entidad
+                    financiera.
+                </li>
+                <li>
+                    Para efectos de la protección de los datos personales y su tratamiento de acuerdo a lo establecido 
+                    en la Ley 1581 de 2012, y su decreto reglamentario 1377 de 2013, <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>
+                    autoriza (mos) de manera libre, expresa, voluntaria, a LA <b>PROMITENTE VENDEDORA</b>, la sociedad 
+                    <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S</b>, para recolectar, manejar, almacenar, usar, circular, 
+                    actualizar, cruzar información propia, con el fin de facilitar la venta de bienes y servicios de la empresa, 
+                    adelantar acciones de cobro y de recuperación de cartera a través de la empresa o de terceros que este encargue,  
+                    reportar a centrales de riesgo cuando corresponda, y demás fines que estipule la empresa en cumplimiento de la 
+                    obligación contractual derivada de este contrato;  y en general realizar toda acción tendiente al tratamiento 
+                    de mis datos personales de acuerdo con la política establecida para tal fin por la empresa como responsable y 
+                    encargada de la información.  El alcance de la autorización comprende además, la facultad que tiene la empresa 
+                    para que, a través de proveedor tecnológico, realice la toma de firma electrónica y validación de quien firma 
+                    a través de fotografía digital, de todos los documentos necesarios para la vinculación contractual entre las 
+                    partes, como los son: contratos, formularios, pagaré, autorización para diligenciar espacios en blanco, y 
+                    demás documentos requeridos en razón a la vinculación contractual de las partes; para que, envíe mensajes de 
+                    correo electrónico, mensajes de texto, mensajes de Whatsapp, correspondencia a mi dirección de residencia, o 
+                    lugar de trabajo, de contenidos institucionales, notificaciones, información del estado de cuenta, saldos, 
+                    recibos de pago, envió de cartas de cobro pre jurídico y jurídico, y demás fines que estipule la empresa 
+                    en cumplimiento de la obligación contractual derivada de este contrato. Adicionalmente, manifiesto que, 
+                    la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</b> sus filiales, sucursales o subordinados podrán: 
+                    realizar las consultas, reportes y actualizaciones necesarias en diferentes listas restrictivas requeridas 
+                    en cumplimiento del deber legal que le asiste a la empresa para el sistema de autocontrol y gestión del 
+                    riesgo integral de lavado de activos y financiación del terrorismo (SAGRILAFT);  consulta, reportes y 
+                    actualizaciones necesarias en bancos de datos del comportamiento y crédito comercial, hábitos de pago, 
+                    manejo de las cuentas(s) bancaria(s) y en general el cumplimiento de las obligaciones pecuniarias, 
+                    en torno al contrato. En ese sentido, declaro conocer que los datos personales objeto del tratamiento, 
+                    serán utilizados para las finalidades derivadas de la relación contractual suscrita entre las partes.  
+                    Igualmente declaro conocer el derecho de supresión de datos personales que me asiste, para lo cual, 
+                    en caso de solicitarlo, <b>LA PROMITENTE VENDEDORA</b>, procederá conforme a las políticas de tratamiento 
+                    de datos personales establecida por misma para tal fin. 
+                </li>
+                <li>
+                    Declaramos que, el contenido de este documento es de mi (nuestro) conocimiento y que fue debidamente 
+                    informado por <b>LA PROMITENTE VENDEDORA</b>, en su obligación al deber de la información que le asiste, 
+                    frente a la relación contractual suscrita a través de contrato de promesa de compraventa de bien futuro, 
+                    del <b>“CONJUNTO RESIDENCIAL FRACTAL CASAS DE VERANO”</b>, localizado en el Municipio de Moñitos, 
+                    Departamento de Córdoba.
+                </li>
+            </ol>
+            <p class="detalles">
+                En constancia, de aceptación y conocimiento de lo aquí establecido, es firmado el presente formato de
+                verificación
+                por <strong>EL (LOS) PROMITENTE (S) COMPRADOR (ES) </strong>, <u>{{ctr.fecha_contrato.day}} </u> de <u>
+                    {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u>
+                en la ciudad de <u>{{oficina}}</u>.
+            </p>
+            <p class="detalles" style="text-align:center;font-size:12px">
+                <b>EL (LOS) PROMITENTE (S) COMPRADOR (ES)</b><br><br><br>
+                <table>
+                    <tr>
+                        <td style="{%if ctr.titulares.1%}width:50%;{%endif%}text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.0.pk}}
+                        </td>
+                        {%if ctr.titulares.1%}
+                        <td style="width:50%;text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.1.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.1.pk}}
+                        </td>
+                        {%endif%}
+                    </tr>
+                    {%if ctr.titulares.2%}
+                    <tr style="padding-top:20px;">
+                        <td style="{%if ctr.titulares.3%}width:50%;{%endif%}text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.2.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.2.pk}}
+                        </td>
+                        {%if ctr.titulares.3%}
+                        <td style="width:50%;text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.3.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.3.pk}}
+                        </td>
+                        {%endif%}
+                    </tr>
+
+                    {%endif%}
+                </table>
+        </div>
+    </body>
+
+    <head>
+        <style>
+            @page {
+                size: letter;
+                background-image: url("/static/img/bg-andina-a4.jpg");
+                @frame content_frame {
+                    /* Content Frame */
+                    left: 1cm;
+                    width: 19.5cm;
+                    top: 1cm;
+                    height: 24.6cm;
+                }
+
+                @frame footer_frame {
+                    /* Static Frame */
+                    -pdf-frame-content: footer_content;
+                    left: 1cm;
+                    width: 19.5cm;
+                    top: 26.4cm;
+                    height: 1.5cm;
+                }
+            }
+
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+            }
+
+            /* Bold */
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                font-weight: bold;
+            }
+
+            body {
+                font-family: Ubuntu;
+            }
+
+            .cuerpo {
+                font-size: 12px;
+                color: rgb(81, 81, 81);
+                line-height: normal;
+                text-align: justify;
+            }
+
+            .detalles {
+                font-size: 12px;
+                color: rgb(81, 81, 81);
+
+                text-align: justify;
+            }
+        </style>
+    </head>
+
+</html>

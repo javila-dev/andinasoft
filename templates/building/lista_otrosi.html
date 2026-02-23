@@ -1,0 +1,79 @@
+{%extends 'base.html'%}
+{%load mathfilters%}
+{%block title%}Proyectos | Adiciones a ordenes{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+    }
+    td{
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Adicion a ordenes</h3>
+    <div class='table-responsive py-2'>
+        <table id='tablaOtrosi' class='display' style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th>Proyecto</th>
+                    <th>Obra</th>
+                    <th>Orden</th>
+                    <th>Adicional Nº</th>
+                    <th>Valor</th>
+                    <th>Usuario</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for otrosi in otrosis%}
+                <tr>
+                    <td class='text-center'>
+                        <a href='/buildingcontrol/viewotrosi/{{otrosi.pk}}'>
+                        {{otrosi.pk}}</a></td>
+                    <td class='text-center'>{{otrosi.fecha_crea|date:"d/m/Y"}}</td>
+                    <td>{{otrosi.contrato.proveedor.nombre}}</td>
+                    <td class='text-center'>{{otrosi.contrato.proyecto.proyecto}}</td>
+                    <td class='text-center'>{{otrosi.contrato.tipo_obra.nombre_tipo}}</td>
+                    <td class='text-center'>
+                        {{otrosi.contrato.pk}}
+                    </td>
+                    <td class='text-center'>{{otrosi.num_otrosi}}</td>
+                    <td class='text-center'>{{otrosi.valor|floatformat:"-2"}}</td>
+                    <td class='text-center'>{{otrosi.usuario_crea.username}}</td>
+                    <td class='text-center'>{{otrosi.estado}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    $(document).ready(function(){
+        var tablaActas = $('#tablaOtrosi').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "order": [[ 0, "desc" ]],
+            columnDefs: [
+                { type: 'date-uk', targets: 1 }
+            ],
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+            }
+        })
+    })
+</script>
+{%endblock%}

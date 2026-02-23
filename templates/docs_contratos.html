@@ -1,0 +1,100 @@
+{%load static%}
+{%load crispy_forms_tags%}
+<br/>
+    <div class="container" style='padding-left:10%;padding-right: 10%;'>
+        <form enctype="multipart/form-data" action="" method="POST" name='form-docs' id='form-docs'>{% csrf_token %}
+            <input type='text' name='docEliminar' id='docEliminar' hidden>
+            <div class="form-row align-items-center">
+                <div class='form-group col-md-7 col-xs-12'>{{form_docs.documento_cargar|as_crispy_field}}</div>
+                <div class='form-group col-md-3 col-xs-12'>{{form_docs.tipo_doc|as_crispy_field}}</div>
+                <div class="form-group col-md-2 col-xs-12">
+                    <div class='btn-group float-right' role="group">
+                        <input class="btn btn-primary" type="submit" value="Cargar" name='cargar_docs'>
+                    </div>
+                </div>
+            </div>
+            
+        </form>
+        <div class="table-responsive">
+            <table id='tabla_documentos' class='table table-sm table-striped table-bordered'>
+                <thead class="thead thead-light">
+                    <tr>
+                        <th class='text-align-center'>Documento</th>
+                        <th class='text-align-center'>Fecha Carga</th>
+                        <th class='text-align-center'>Usuario Carga</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {%for documento in lista_documentos%}
+                    <tr>
+                        <th>{{documento.descripcion_doc}}</th>
+                        <th class='text-align-center'>{{documento.fecha_carga|date:"d/m/Y"}}</th>
+                        <th class='text-align-center'>{{documento.usuario_carga}}</th>
+                    </tr>
+                {%endfor%}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<form method='POST' id='formaccionesdocs'>{%csrf_token%} 
+<div class="modal fade" id="modalAccionesDocs" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">¿Que deseas hacer?</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-footer">
+            <input type='text' name='docAccion' id='docAccion' hidden>
+            <input class="btn btn-danger" type="submit" value="Eliminar" name='eliminar_docs'>
+            <a class="btn btn-primary" id='verDoc'>Ver</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+<script>
+    $(document).ready(function() {
+        var tabladocs=$('#tabla_documentos').DataTable({
+            order: [[ 1, "desc" ]],
+            columnDefs: [
+                { type: 'date-uk', targets: 1 },
+            ],
+        });
+        $('#tabla_documentos tbody').on( 'click', 'tr', function () {
+            if ( $(this).hasClass('selected') ) {
+                $(this).removeClass('selected');
+            }
+            else {
+                tabladocs.$('tr.selected').removeClass('selected');
+                $(this).addClass('selected');
+            }
+            var pos = tabladocs.row(this).index();
+            var row = tabladocs.row(pos).data();
+            $('#docAccion').val(row[0])
+            $('#modalAccionesDocs').modal('show')
+            var direccion = 'http://app.somosandina.co/media/docs_andinasoft/doc_contratos/{{proyecto}}/{{adj}}/'+row[0]+'.pdf'
+            $('#verDoc').attr('href',direccion).attr('target','_blank')
+        });
+    } );        
+    $('#form-docs').submit(function(e){
+        var nombredoc=$('#nombredoc').val();
+        if (nombredoc.endsWith('.pdf')){
+            
+        }
+        else {
+            e.preventDefault()
+            $('#alerta-general').modal('show')
+            document.getElementById('mensaje-alerta').innerHTML='El documento a cargar debe ser PDF';
+            document.getElementById('titulo-alerta').innerHTML='Error';
+        }
+    })
+    
+</script>
+
+
+
+

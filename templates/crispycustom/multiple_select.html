@@ -1,0 +1,7 @@
+{% load crispy_forms_field %}
+<div class="input-group">
+    <div class="input-group-prepend">
+        <label class="input-group-text" for="{{ field.id_for_label }}">{{ field.label }}</label>
+    </div>
+    {% crispy_field field 'class' 'custom-select'%}
+</div>

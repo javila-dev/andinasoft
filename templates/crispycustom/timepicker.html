@@ -1,0 +1,15 @@
+{% load crispy_forms_field %}
+{% if field.label != ""%}
+<label for="{{ field.id_for_label }}">{{ field.label }}</label>
+{%endif%}
+{% crispy_field field %}
+<script>
+    $('#{{ field.id_for_label }}').timepicker({
+        uiLibrary: 'bootstrap4',
+        iconsLibrary: 'fontawesome',
+        locale: 'es-es',
+        modal: true,
+        header: true,
+        mode: '24hr'
+    });
+</script>

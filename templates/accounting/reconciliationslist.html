@@ -1,0 +1,388 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Accounting | Lista conciliaciones{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+    }
+    .dataTables_length {
+        padding-left: 8px;
+    }
+
+    .dataTables_filter {
+        padding-right: 8px;
+    }
+
+    .dataTables_info {
+        padding-left: 8px;
+    }
+    .dt-buttons{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datatable_buttons.html'%}
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded pb-3'>
+    <h3 class='section-title text-white text-center'>Conciliaciones</h3>
+    <div class='container-fluid'>
+        <div class='row mb-3 d-flex'>
+            <div class='p-2'>
+                <label for='empresa_cont'>Empresa*</label>
+                <select id='empresa_cont' class='custom-select' required>
+                    <option value='' selected>Selecciona...</option>
+                    {%for empresa in empresas%}
+                    <option value="{{empresa.pk}}">{{empresa.nombre.upper}}</option>
+                    {%endfor%}
+                </select>
+            </div>
+            <div class='p-2'>
+                <label for='cuenta_cont'>Cuenta*</label>
+                <select id='cuenta_cont' class='custom-select' required>
+                    <option value='' selected>Selecciona...</option>
+                </select>
+            </div>
+        </div>
+        <div class=row>
+            <div class='col-md-4'>
+                <div class='table-responsive'>
+                    <table id='tablaConciliaciones' class='display' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Id</th>
+                                <th>Fecha</th>
+                                <th>Usuario</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+            <div class='col-md-8'>
+                <div class='table-responsive'>
+                    <table id='tablaContabilidad' class='display' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Comprobante</th>
+                                <th>Descripcion</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class='table-responsive'>
+                    <table id='tablaBancos' class='display' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripcion</th>
+                                <th>Referencia</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tfoot>
+                            <tr>
+                                <th></th>
+                                <th></th>
+                                <th class='text-right'>Total</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{%csrf_token%}
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuEvent' aria-labelledby="dropdownMenuLink"
+style="max-width: 150px;">
+  <a class="dropdown-item" id='Imprimir' href="#">Imprimir</a>
+  <a class="dropdown-item" id='Eliminar' href="#">Eliminar</a>
+</div>
+<div class="modal fade" id="modalConfirElim" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Eliminar conciliacion</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <p class='text-justify'>
+                ¿Estas seguro que deseas eliminar esta conciliación? Todos los movimientos asociados quedaran en estado no conciliados
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+            <button type="button" class="btn btn-primary" id='btnEliminarConcil' >Si</button>
+          </div>
+      </div>
+    </div>
+  </div>
+<script>
+    $(document).ready(function(){
+        var tablaConciliaciones = $('#tablaConciliaciones').DataTable({
+            language: {
+                url: '/ajax_request/datatable_spanish',
+            },
+            scrollY:        "70vh",
+            scrollX:        true,
+            scrollCollapse: true,
+            paging:         false,
+            order: [[0,'desc']],
+            ajax:{
+                url:'/accounting/ajax/reconciliationsdetail',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'fecha'},
+                {'data':'usuario'},
+            ],
+        })
+        var tablaContabilidad = $('#tablaContabilidad').DataTable({
+            language: {
+                url: '/ajax_request/datatable_spanish',
+            },
+            scrollY:        "35vh",
+            scrollX:        true,
+            scrollCollapse: true,
+            paging:         false,
+            ajax:{
+                url:'/accounting/ajax/accountsmovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'comprobante'},
+                {'data':'descripcion'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1,2],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+            footerCallback:function ( row, data, start, end, display ) {
+                var api = this.api(), data;
+     
+                // Remove the formatting to get integer data for summation
+                var intVal = function ( i ) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '')*1 :
+                        typeof i === 'number' ?
+                            i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column( 3 )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+     
+                // Update footer
+                $( api.column( 3 ).footer() ).html(
+                    '$'+total.toFixed(2)
+                );
+            }
+        })
+        var tablaBancos = $('#tablaBancos').DataTable({
+            language: {
+                url: '/ajax_request/datatable_spanish',
+            },
+            scrollY:        "35vh",
+            scrollX:        true,
+            scrollCollapse: true,
+            paging:         false,
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+            footerCallback:function ( row, data, start, end, display ) {
+                var api = this.api(), data;
+     
+                // Remove the formatting to get integer data for summation
+                var intVal = function ( i ) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '')*1 :
+                        typeof i === 'number' ?
+                            i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column( 3 )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+     
+                // Update footer
+                $( api.column( 3 ).footer() ).html(
+                    '$'+total.toFixed(2)
+                );
+            }
+        })
+        $('#tablaConciliaciones tbody').on('click','tr', function(){
+            var row = tablaConciliaciones.row(this).data()
+            var empresa = $('#empresa_cont').val()
+            var cuenta = $('#cuenta_cont').val()
+            tablaConciliaciones.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var url_cont = '/accounting/ajax/accountsmovements?empresa='+empresa+'&cuenta='+cuenta+'&conciliacion='+row.pk
+            tablaContabilidad.ajax.url(url_cont).load()
+            var url_bco = '/accounting/ajax/bancarymovements?empresa='+empresa+'&cuenta='+cuenta+'&conciliacion='+row.pk
+            tablaBancos.ajax.url(url_bco).load()
+
+        })
+        $('#tablaConciliaciones tbody').on('contextmenu','tr',function(e){
+            tablaConciliaciones.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuEvent').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $('#empresa_cont').on('change',function(){
+            var empresa = $(this).val()
+            reiniciarBusqueda()
+            $('#cuenta_cont').empty()
+            $('#cuenta_cont').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#cuenta_cont').append(option)
+                    }
+                }
+            })
+        })
+        $('#cuenta_cont').on('change',function(){
+            reiniciarBusqueda()
+            var empresa = $('#empresa_cont').val()
+            var cuenta = $(this).val()
+            if (cuenta!=''){
+                var url_conc = '/accounting/ajax/reconciliationsdetail?empresa='+empresa+'&cuenta='+cuenta
+                tablaConciliaciones.ajax.url(url_conc).load()
+            }
+        })
+        $("#contextMenuEvent").click(function(e){
+            switch(e.target.id){
+                case "Imprimir":
+                    ImprimirConciliacion()
+                    break; 
+                case "Eliminar":
+                    $('#modalConfirElim').modal('show')
+                    break;     
+            }
+        });
+        $('#btnEliminarConcil').click(function(){
+            var line = tablaConciliaciones.row('.selected').data()
+            var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/deletereconciliation',
+                data:{
+                    'csrfmiddlewaretoken':csrf_token,
+                    'conciliacion':line.pk
+                },
+                success:function(response){
+                    tablaConciliaciones.ajax.reload()
+                    tablaContabilidad.rows().remove().draw(false)
+                    tablaBancos.rows().remove().draw(false)
+                    $('#modalConfirElim').modal('hide')
+                    $('#alert-title').text('¡Listo!')
+                    $('#alert-data').text('Se eliminó la conciliacion seleccionada')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                }
+            })
+        })
+        $(this).click(function(e){
+            if(e.button == 0){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        function reiniciarBusqueda(){
+            tablaConciliaciones.rows().remove().draw(false)
+            tablaContabilidad.rows().remove().draw(false)
+            tablaBancos.rows().remove().draw(false)
+        }
+        function ImprimirConciliacion(){
+            var empresa = $('#empresa_cont').val()
+            var cuenta = $('#cuenta_cont').val()
+            var line = tablaConciliaciones.row('.selected').data()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/printreconciliate',
+                data:{
+                    'empresa':empresa,
+                    'cuenta':cuenta,
+                    'conciliacion':line.pk
+                },
+                success:function(response){
+                    var filename = response['filename']
+                    $('#alert-title').text('¡Listo!')
+                    $('#alert-data').text('Puedes descargar tu archivo ')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    $('#alert-data').append(
+                        '<a onclick="setTimeout(closeAlerta(),2000)" href="/media/tmp/pdf/'+filename+'" download="'+filename+'"><strong>aqui</strong></a>')
+                }
+            })
+            
+        }
+    });
+</script>
+{%endblock%}

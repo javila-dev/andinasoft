@@ -1,0 +1,70 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+
+{%block title%}Radicar Facturas{%endblock%}
+
+{%block content%}
+
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:50px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Radicar Facturas</strong></h4>
+    <form id='form-radicar-factura' enctype="multipart/form-data" method='POST'>{%csrf_token%}
+        <br/>
+        <div class='form-row'>
+            <div class='form-group col-sm-12 col-lg-3'>
+                {{form.empresa_radicado|as_crispy_field}}
+            </div>
+        </div>
+        <div class='form-row'>
+            <div class='form-group col-sm-12 col-lg-2'>
+                {{form.num_factura|as_crispy_field}}
+            </div>
+            <div class='form-group col-sm-12 col-lg-3'>
+                {{form.valor|as_crispy_field}}
+            </div>
+            <div class='form-group col-sm-12 col-lg-3'>
+                {{form.fecha_factura|as_crispy_field}}
+            </div>
+            <div class='form-group col-sm-12 col-lg-3'>
+                {{form.fecha_vencimiento|as_crispy_field}}
+            </div>
+        </div>
+        <div class='form-row'>
+            <div class='form-group col-sm-12 col-lg-3'>
+                {{form.idtercero|as_crispy_field}}
+            </div>
+            <div class='form-group col-sm-12 col-lg-9'>
+                {{form.nombretercero|as_crispy_field}}
+            </div>
+        </div>
+        <div class='form-row'>{{form.documento_cargar|as_crispy_field}}</div>
+        
+        <input type='submit' class='btn btn-primary float-right' value='Radicar'>
+        
+        
+        
+    </form>
+
+
+</div>
+{%include 'alert.html'%}
+{{form.media}}
+<script>
+    $('#form-radicar-factura').submit(function(e){
+        var nombredoc=$('#nombredoc').val();
+        if (nombredoc.endsWith('.pdf')){
+            
+        }
+        else if (nombredoc == ''){
+            
+        }
+        else {
+            e.preventDefault()
+            $('#alerta-general').modal('show')
+            document.getElementById('mensaje-alerta').innerHTML='El documento a cargar debe ser PDF';
+            document.getElementById('titulo-alerta').innerHTML='Error';
+        }
+    })
+</script>
+
+{%endblock%}
+

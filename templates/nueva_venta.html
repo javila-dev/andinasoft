@@ -1,0 +1,480 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%load extras%}
+{%block title%}Nueva venta {{proyecto}}{%endblock%}
+{%block content%}
+{%load static%}
+<style>
+    .button-titulares{
+        margin-top:1.95rem;
+        padding-left: 0rem;
+    }
+    .no-margin-right{
+        padding-right:0rem;
+        margin-right: 0rem;
+    }
+    .onlytext-nueva-venta{
+        margin-top:2.2rem;
+        padding-left: 0rem;
+        padding-right: 0rem;
+    }
+    .botones-centrados{
+
+        display: flex;
+        align-items: center;
+    }
+</style>
+<div class="container-fluid">
+    <div class="bg-white rounded shadow-lg">
+        <h3 class='text-center section-title text-white text-center'><i class="fas fa-file-contract"></i>
+            Nueva Venta</h3>
+        <div class='p-3'>
+            {%include 'form_contrato_venta.html'%}
+        </div>
+    </div>
+    <!-- Modal -->
+    <div class="modal fade" id="alertas" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Debes verificar esto</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            </div>
+            <div class="modal-body">
+                <p class='lead' id='msj-alert'></p>
+            </div>
+            <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+            </div>
+        </div>
+        </div>
+    </div>
+    <!-- Modal -->
+    <div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+            <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            </div>
+            <div class="modal-body">
+                <p class='lead' id='mensaje-alerta'></p>
+            </div>
+            <div class="modal-footer">
+            <a href='{{redirect}}' type="button" class="btn btn-primary" >Entendido</a>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modal-cargando" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-body">
+          <h1 class='text-center text-white' id='texto'>Creando contrato <i class="fas fa-cog fa-spin"></i></h1>
+        </div>
+    </div>
+</div>
+{{form.media}}    
+<script>
+    $(document).ready(function() {
+        $(this).keydown(function(e){
+          if(e.keyCode == 13){
+              e.preventDefault();
+          }
+      });
+    $('#tabla-clientes').DataTable({
+        "pageLength": 10,
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "autoWidth": false,
+  });
+} );
+</script>
+<script>
+    $('#form-venta').submit(function(event){
+        
+        restante_ci=$('#restante_ci').val()
+        titular1=$('#titular1').val()
+        plan=$('#forma_plan_pagos').val()
+        forma=$('#formas_de_pago').val()
+        vr_regular=$('#valor_fn').val()
+        vr_extra=$('#valor_ce').val()
+        cant_fn=parseInt($('#cant_fn').val())
+        
+        if (titular1==''||null){
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML='El titular 1 no puede estar vacio';
+            event.preventDefault();
+            $('#modal-cargando').modal('show')
+        } else if (restante_ci!=0){
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML='La cuota inicial no coincide con las cuotas aplicadas';
+            event.preventDefault();
+            $('#modal-cargando').modal('show')
+        } else if (vr_regular==''||null){
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML='No hay ninguna cuota regular asignada';
+            event.preventDefault();
+            $('#modal-cargando').modal('show')
+        } else if (forma!='Amortizacion'&&cant_fn>12){
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML='Para planes de pago mayores a 12 cuotas debes seleccionar tipo Amortizacion';
+            event.preventDefault();
+            $('#modal-cargando').modal('show')
+        } else if (vr_extra==''&&plan=='Extraordinario'){
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML='Seleccionaste un plan extraordinario pero no asignaste ninguna cuota';
+            event.preventDefault();
+            $('#modal-cargando').modal('show')
+        }
+       
+    })
+</script>
+<script>
+    
+    $(document).ready(function() {
+        $('#tasa-valor').val(0)
+        $('#nro-ctas-ci').val(1)
+        $('#inmueble').val('{{inmueble}}')
+        $('#valor').val(parseFloat('{{valor_lote|unlocalize}}'))
+        var numero_en_letras=numeroALetras($('#valor').val());
+        $('#valor_letras').val(numero_en_letras+'M/CTE')
+        $('#porc_cta_ini').val('{{default_ci}}')
+        $('#porc_saldo').val('{{default_saldo}}')
+        $("#ci-linea2").css("display","none")
+        $("#ci-linea3").css("display","none")
+        $("#ci-linea4").css("display","none")
+        $("#ci-linea5").css("display","none")
+        $("#ci-linea6").css("display","none")
+        $("#ci-linea7").css("display","none")
+        calcular_por_porcentaje()
+        diferencia_ci()
+        var oTable = $('#tabla-clientes').DataTable();
+        $('#modal-clientes').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var recipient = button.data('whatever')
+            var modal = $(this)
+            $('#nro-titular').val(recipient)
+        });
+        $('#tabla-clientes tbody').on( 'click', 'tr', function () {
+            $(this).toggleClass('selected');
+            var pos = oTable.row(this).index();
+            var row = oTable.row(pos).data();
+            var destino=$('#nro-titular').val()
+            $('#'+destino).val(row[0])
+            document.getElementById('nombre-'+destino).innerHTML =row[1]
+            $('#modal-clientes').modal('hide')
+        } );
+        } );
+    $('#vr_ci').on('change',function(){
+        calcular_por_valor()
+        borrar_formapago()
+        diferencia_ci()
+    })
+    $('#valor').on('change',function(){
+        var numero_en_letras=numeroALetras($('#valor').val());
+        $('#valor_letras').val(numero_en_letras+'M/CTE')
+        calcular_por_porcentaje()
+        borrar_formapago()
+        diferencia_ci()
+    })
+    $('#porc_cta_ini').on('change', function (){
+        calcular_por_porcentaje()
+        borrar_formapago()
+        diferencia_ci()
+    })
+    $('#valor_ci1').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci2').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci3').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci4').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci5').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci6').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci7').on('change',function(){
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+
+    function borrar_titular(titular){
+        $('#'+titular).val(null);
+        document.getElementById('nombre-'+titular).innerHTML =null
+    }
+    function calcular_por_valor(){
+        let valor_lote=$('#valor').val()
+        let valor_ci=$('#vr_ci').val()
+        let porc_ini=Math.round(valor_ci*100/valor_lote)
+        let porc_saldo=100-porc_ini
+        let valor_saldo=valor_lote-valor_ci
+        $('#porc_cta_ini').val(porc_ini)
+        $('#vr_saldo').val(valor_saldo)
+        $('#porc_saldo').val(porc_saldo)
+    }
+    function calcular_por_porcentaje(){
+        let valor_lote=$('#valor').val()
+        let porc_ini=($('#porc_cta_ini').val())/100
+        let porc_saldo=(1-porc_ini)*100
+        let valor_ci=Math.round(porc_ini*valor_lote)
+        let valor_saldo=valor_lote-valor_ci
+        $('#vr_ci').val(valor_ci)
+        $('#vr_saldo').val(valor_saldo)
+        $('#porc_saldo').val(porc_saldo)
+    }
+    function mostrar_lineaci(){
+        nro_ctas=parseInt($('#nro-ctas-ci').val())+1
+        if (nro_ctas<2){
+            nro_ctas=2
+        }
+        $("#ci-linea"+nro_ctas).css("display","block")
+        $('#nro-ctas-ci').val(nro_ctas)
+        lineas_ini=nro_ctas-1
+        nro_cta=$('#cant_ci_'+lineas_ini).val()
+        fecha_ini_ci=$('#fecha_ini_ci'+lineas_ini).val()
+        fecha_fin=sumar_meses(new Date(fecha_ini_ci),parseInt(nro_cta))
+        $('#fecha_ini_ci'+nro_ctas).datetimepicker('date', fecha_fin)
+        
+    };
+    function quitar_lineaci(){
+        nro_ctas=parseInt($('#nro-ctas-ci').val())
+        if(nro_ctas>7){
+            nro_ctas=7
+        }
+        if(nro_ctas!=1){
+        $("#ci-linea"+nro_ctas).css("display","none")
+        }
+        $('#nro-ctas-ci').val(nro_ctas-1)
+        $('#cant_ci_'+nro_ctas).val(null)
+        $('#fecha_ini_ci'+nro_ctas).datetimepicker('date',null)
+        $('#valor_ci'+nro_ctas).val(null)
+        diferencia=diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    };
+    function calcular_cuotas(capital,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(capital/nCuotas)
+        }
+        else{
+            up=capital*tasa
+            down=1-(1+tasa)**(-1*nCuotas)
+            cuota=up/down
+            return Math.ceil(cuota)
+        }
+    }
+    function calcularvp(cuota,tasa,nCuotas){
+        up=(1-(1+tasa)**(-1*nCuotas))*cuota
+        down=tasa
+        capital=up/down
+        return Math.ceil(capital)      
+    }
+    function diferencia_ci(){
+        ci1=parseInt($('#valor_ci1').val())
+        valorci1=parseInt($('#cant_ci_1').val())
+        var totalci1=(ci1*valorci1)||0
+        ci2=parseInt($('#valor_ci2').val())
+        valorci2=parseInt($('#cant_ci_2').val())
+        var totalci2=(ci2*valorci2)||0
+        ci3=parseInt($('#valor_ci3').val())
+        valorci3=parseInt($('#cant_ci_3').val())
+        var totalci3=(ci3*valorci3)||0
+        ci4=parseInt($('#valor_ci4').val())
+        valorci4=parseInt($('#cant_ci_4').val())
+        var totalci4=(ci4*valorci4)||0
+        ci5=parseInt($('#valor_ci5').val())
+        valorci5=parseInt($('#cant_ci_5').val())
+        var totalci5=(ci5*valorci5)||0
+        ci6=parseInt($('#valor_ci6').val())
+        valorci6=parseInt($('#cant_ci_6').val())
+        var totalci6=(ci6*valorci6)||0
+        ci7=parseInt($('#valor_ci7').val())
+        valorci7=parseInt($('#cant_ci_7').val())
+        var totalci7=(ci7*valorci7)||0
+
+        vr_ci=parseInt($('#vr_ci').val())
+        lleva_ci=totalci1+totalci2+totalci3+totalci4+totalci5+totalci6+totalci7
+        restante_ci=vr_ci-lleva_ci
+        $('#restante_ci').val(restante_ci)
+        return restante_ci
+    }
+</script>
+<script>
+    document.getElementById('valor_ce').readOnly=true
+    document.getElementById('cant_ce').disabled=true
+    document.getElementById('fecha_ini_ce').disabled=true
+    document.getElementById('valor_fn').readOnly=true
+    document.getElementById('periodo_ce').disabled=true
+    $('#forma_plan_pagos').on('change',function(){
+        plan_pagos=$('#forma_plan_pagos').val()
+        borrar_formapago()
+
+        if (plan_pagos=='Regular'){
+            document.getElementById('valor_ce').disabled=true
+            document.getElementById('fecha_ini_ce').disabled=true
+            document.getElementById('cant_ce').disabled=true
+            document.getElementById('valor_fn').readOnly=true
+            document.getElementById('periodo_ce').disabled=true
+
+        }
+        else{
+            document.getElementById('valor_fn').readOnly=false
+            document.getElementById('valor_ce').readOnly=true
+            document.getElementById('fecha_ini_ce').disabled=false
+            document.getElementById('cant_ce').disabled=false 
+            document.getElementById('periodo_ce').disabled=false
+        }
+    });
+    $('#tasa-valor').val('0.0000')
+    $('#formas_de_pago').on('change',function(){
+        forma_pago=$('#formas_de_pago').val()
+        borrar_formapago()
+        
+        if (forma_pago=='Amortizacion'){
+            $('#tasa-valor option[value="0.0000"]').prop('disabled',true)
+            $('#tasa-valor').val('0.0150')
+        }
+        else{
+            $('#tasa-valor option[value=0]').prop('disabled',false)
+            $('#tasa-valor').val('0.0000')
+        }
+    })
+    $('#tasa-valor').on('change',function(){
+        borrar_formapago()
+    })
+    $('#cant_fn').on('change',function(){
+        plan_pagos=$('#forma_plan_pagos').val()
+        lineas_ini=parseInt($('#nro-ctas-ci').val())
+        nro_ctas=$('#cant_ci_'+lineas_ini).val()
+        fecha_ini_ci=$('#fecha_ini_ci'+lineas_ini).val()
+        fecha_fin=sumar_meses(new Date(fecha_ini_ci),parseInt(nro_ctas))
+        $('#fecha_ini_fn').datetimepicker('date', fecha_fin)
+        tasa=$('#tasa-valor').val()*1
+        capital=$('#vr_saldo').val()
+        ncuotas=$('#cant_fn').val()
+            if (plan_pagos=='Regular'){
+                valor_cuotafn=calcular_cuotas(capital,tasa,ncuotas)
+                $('#valor_fn').val(valor_cuotafn)
+        }
+    })
+    $('#cant_ce').on('change',function(){
+        if (plan_pagos!='Regular'){
+          periodoce=$('#periodo_ce').val()
+          if (periodoce=='Trimestral'){
+              periodo=3
+          }
+          else if (periodoce=='Semestral'){
+              periodo=6
+          }
+          else{
+              periodo=12
+          }
+
+          tasa=$('#tasa-valor').val()
+          saldo=$('#vr_saldo').val()
+          cuota_regular=$('#valor_fn').val()
+          nro_ctas_reg=$('#cant_fn').val()
+          capital_fn=calcularvp(cuota_regular,tasa,nro_ctas_reg)
+          ncuotas=$('#cant_ce').val()
+          capital_ce=saldo-capital_fn
+          console.log(capital_ce)
+          console.log(tasa)
+          console.log(periodo)
+          cuota_ce=calcular_cuotas(capital_ce,tasa*periodo,ncuotas)
+          $('#valor_ce').val(cuota_ce)
+          fecha_ini_fn=$('#fecha_ini_fn').val()
+          fecha_fin=sumar_meses(new Date(fecha_ini_fn),periodo)
+          $('#fecha_ini_ce').datetimepicker('date', fecha_fin)
+          
+      }
+    })
+    function calcular_cuotas(capital,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(capital/nCuotas)
+        }
+        else{
+            up=capital*tasa
+            down=1-(Math.pow(1+(parseFloat(tasa)),-1*nCuotas))
+            cuota=Math.ceil(up/down)
+            return cuota
+        }
+    }
+    function calcularvp(cuota,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(cuota*nCuotas)
+        }
+        up=(1-Math.pow(1+(parseFloat(tasa)),-1*nCuotas))*cuota
+        down=tasa
+        capital=up/down
+        console.log(up)
+        console.log(down)
+        return Math.ceil(capital)      
+    }
+    function sumar_meses(fecha_ini,meses_sumar){
+        /* var dia_inicial=fecha_ini.getDate();
+        var mes_inicial=fecha_ini.getMonth();
+        var año=fecha_ini.getFullYear();
+        var fecha_fin=fecha_ini;
+        mes_final=mes_inicial
+        for (var i=0;i<=meses_sumar;i++){
+            if (mes_final==12){
+                mes_final=0
+            };
+            if (mes_final==0){
+                año+=1
+            };
+            mes_final+=1
+        }
+        
+        fecha_fin.setFullYear(año)
+        fecha_fin.setMonth(mes_final-1)
+        fecha_fin.setDate(dia_inicial+1) */
+        var fecha_fin = fecha_ini
+        fecha_fin.setMonth(fecha_fin.getMonth()+meses_sumar)
+        fecha_fin.setDate(fecha_fin.getDate()+1)
+        return fecha_fin
+    }
+    function borrar_formapago(){
+        $('#valor_fn').val(null)
+        $('#fecha_ini_fn').val(null)
+        $('#cant_fn').val(null)
+        $('#valor_ce').val(null)
+        $('#fecha_ini_ce').val(null)
+        $('#cant_ce').val(null)
+        $('#periodo_ce').val(null)
+    }
+</script>
+{%if alerta%}
+<script>
+    $('#alerta-general').modal('show')
+    document.getElementById('mensaje-alerta').innerHTML='{{mensaje}}';
+    document.getElementById('titulo-alerta').innerHTML='{{titulo_alerta}}';
+    // Simulate an HTTP redirect:
+    /* window.location.replace("{{redirect}}"); */
+</script>
+{%endif%}
+{%if request.user|has_group:"Asesores"%}
+<script>
+    $('#valor').prop('readonly',true)
+    $('#porc_cta_ini').attr('min','40')
+</script>
+{%endif%}
+<script type="text/javascript" language="javascript" src="{%static 'js/numero_letras.js'%}"></script>
+{%endblock%}

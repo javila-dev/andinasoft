@@ -1,0 +1,82 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+
+{%block title%}Periodo Presupuesto {{proyecto}}{%endblock%}
+{%block style%}
+
+{%endblock%}
+{%block content%}
+<form id='formPpto' method='post' action=''>{%csrf_token%}
+  <div class="modal fade" id="modalPeriodo" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="staticBackdropLabel">Periodo Presupuesto</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+              <div class='input-group'>
+                  <div class='input-group-prepend'>
+                      <span class='input-group-text'>Año</span>
+                  </div>
+                  <input class='form-control text-center' type='number' id='periodoaño' name='periodoaño' required='true'>
+              </div>
+              <br>
+              <div class='input-group text-center'>
+                  <div class='input-group-prepend'>
+                      <span class='input-group-text'>Mes</span>
+                  </div>
+                  <select class="custom-select text-center" id="periodomes" name="periodomes" required='true'>
+                      <option selected>Choose...</option>
+                      <option value="01">Enero</option>
+                      <option value="02">Febrero</option>
+                      <option value="03">Marzo</option>
+                      <option value="04">Abril</option>
+                      <option value="05">Mayo</option>
+                      <option value="06">Junio</option>
+                      <option value="07">Julio</option>
+                      <option value="08">Agosto</option>
+                      <option value="09">Septiembre</option>
+                      <option value="10">Octubre</option>
+                      <option value="11">Noviembre</option>
+                      <option value="12">Diciembre</option>
+                  </select>
+              </div>
+          </div>
+          <div class="modal-footer">
+            <input type='submit' class="btn btn-danger" name='btnEliminar' value='Eliminar'>
+            <input type='submit' class="btn btn-success" name='btnCargar' value='Adicionar'>
+            <button type="button" class="btn btn-primary" onclick="cargarPpto()">Ver</button>
+          </div>
+        </div>
+      </div>
+  </div>
+</form>
+<div class="modal fade" id="modal-cargando" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-body">
+        <h1 class='text-center'>Cargando Presupuesto <i class="fas fa-cog fa-spin"></i></h1>
+      </div>
+  </div>
+</div>
+{%include 'alert.html'%}
+{%block js%}
+<script>
+$('#modalPeriodo').modal('show')
+function cargarPpto(){
+    var mes = $('#periodomes').val()
+    var año = $('#periodoaño').val()
+    var periodo = año+mes
+    window.location.replace('/cartera/ver_presupuesto/{{proyecto}}/'+periodo)
+}
+$('#formPpto').on('submit',function(){
+  $('#modalPeriodo').modal('hide')
+  $('#modal-cargando').modal('show')
+})
+</script>
+{%endblock%}
+
+{%endblock%}

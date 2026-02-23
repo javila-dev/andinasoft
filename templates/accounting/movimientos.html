@@ -1,0 +1,767 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Accounting | Movimientos{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+    }
+    .dataTables_length {
+        padding-left: 8px;
+    }
+
+    .dataTables_filter {
+        padding-right: 8px;
+    }
+
+    .dataTables_info {
+        padding-left: 8px;
+    }
+    .dt-buttons{
+        padding-left: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+{%include 'datatable_buttons.html'%}
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Movimientos</h3>
+    <div class='container-fluid'>
+        {%crispy formmvto%}
+        <ul class="nav nav-pills justify-content-center"> 
+            <li class="nav-item">
+                <a class="nav-link active" id='pill-info' href="#contabilidad" data-toggle="tab">Contabilidad</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id='pill-tl' href="#bancos" data-toggle="tab">Bancos</a>
+            </li>
+        </ul>
+        <div class="tab-content card-body"> 
+            <div id="contabilidad" class="tab-pane active"> 
+                <div class='table-responsive'>
+                    <table id='tablaMvtosCont' class='display' style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Comprobante</th>
+                                <th>Fecha</th>
+                                <th>Descripcion</th>
+                                <th>Valor</th>
+                                <th>Estado</th>
+                                <th>Concilacion</th>
+                                <th>Soporte</th>
+                            </tr>
+                        </thead>
+                    </table>
+                    <button type='button' class='btn btn-primary btn-xl btn-circle shadow m-3 float-right'
+                        data-toggle="tooltip" data-placement="top" title="Cargar movimiento contable" id='btnAbrirCarga'>
+                        <i class="fas fa-upload"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="bancos" class="tab-pane">
+                <div class='table-responsive'>
+                    <table id='tablaMvtosBanco' class='display' style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Linea</th>
+                                <th>Fecha</th>
+                                <th>Descripcion</th>
+                                <th>Referencia</th>
+                                <th>Valor</th>
+                                <th>Estado</th>
+                                <th>Concilacion</th>
+                            </tr>
+                        </thead>
+                    </table>
+                    <button type='button' class='btn btn-primary btn-xl btn-circle shadow m-3 float-right'
+                        data-toggle="tooltip" data-placement="top" title="Cargar movimiento bancario" id='btnAbrirCargaBco'>
+                        <i class="fas fa-upload"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalCargaMvtoContable" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Cargar movimiento contable</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id='form-carga-contable' type='POST' enctype="multipart/form-data">{%csrf_token%}
+            <div class='input-group mb-3'>
+                <div class='input-group-prepend'>
+                    <span class='input-group-text'>Empresa</span>
+                </div>
+                <select id='empresa_carga' name='empresa_carga' class='custom-select' required>
+                    <option value='' selected>Selecciona...</option>
+                    {%for empresa in empresas%}
+                    <option value="{{empresa.pk}}">{{empresa.nombre.upper}}</option>
+                    {%endfor%}
+                </select>
+            </div>
+            <div class="custom-file mb-3">
+                <input type="file" class="custom-file-input" id="archivocarga" name='archivoCarga' 
+                accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                <label class="custom-file-label" for="archivocarga" data-browse="Buscar">Archivo a cargar</label>
+            </div>
+            <div class='input-group'>
+                <div class='input-group-prepend'>
+                    <span class='input-group-text'>Ultima fila</span>
+                </div>
+                <input type='number' class='form-control text-center' min="8" id='ultima_fila' name='ultima_fila' required>
+            </div>          
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-primary" id='btnCargarCont'>Cargar</button>
+        </div>
+        </form>
+      </div>
+    </div>
+</div>
+<div class="modal fade" id="modalCargaMvtoBco" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Cargar movimiento bancario</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id='form-carga-bco' type='POST' enctype="multipart/form-data">{%csrf_token%}
+            <div class='input-group mb-3'>
+                <div class='input-group-prepend'>
+                    <span class='input-group-text'>Empresa</span>
+                </div>
+                <select id='empresa_carga_bco' name='empresa_carga_bco' class='custom-select' required>
+                    <option value='' selected>Selecciona...</option>
+                    {%for empresa in empresas%}
+                    <option value="{{empresa.pk}}">{{empresa.nombre.upper}}</option>
+                    {%endfor%}
+                </select>
+            </div>
+            <div class="custom-file mb-3">
+                <input type="file" class="custom-file-input" id="archivoBco" name='archivoBco' 
+                accept="text/csv" required>
+                <label class="custom-file-label" for="archivoBco" data-browse="Buscar">Archivo a cargar</label>
+            </div>         
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-primary" id='btnCargarBanco'>Cargar</button>
+        </div>
+        </form>
+      </div>
+    </div>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuEvent' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;">
+    <a class="dropdown-item" id='Eliminar' href="#"><i class="fas fa-trash"></i>&nbsp; Eliminar</a>
+    <a class="dropdown-item" id='Cargar' href="#"><i class="fas fa-upload"></i>&nbsp; Soporte</a>
+    <a class="dropdown-item" id='Soporte' href="#"><i class="fas fa-eye"></i>&nbsp; Ver egreso</a>
+    <a class="dropdown-item" id='Completo' href="#"><i class="fas fa-eye"></i>&nbsp; Ver soportes</a>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuBco' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;">
+    <a class="dropdown-item" id='Eliminar' href="#">Eliminar</a>
+</div> 
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuPagos' aria-labelledby="dropdownMenuLink"
+    style="max-width: 150px;z-index:1100">
+    <a class="dropdown-item" id='factura' href="#"><i class="fas fa-eye"></i>&nbsp; Factura</a>
+  <a class="dropdown-item" id='causacion' href="#"><i class="fas fa-eye"></i>&nbsp; Causacion</a>
+  <a class="dropdown-item" id='pago' href="#"><i class="fas fa-eye"></i>&nbsp; Pago</a>
+</div>     
+<div class="modal fade" id="modalConfirElim" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Eliminar mvto contable</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            ¿Estas seguro que deseas eliminar esta linea?
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+            <button type="button" class="btn btn-primary" id='btnEliminarLinea' >Si</button>
+          </div>
+      </div>
+    </div>
+  </div>
+<div class="modal fade" id="modalConfirElimBco" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="exampleModalLabel">Eliminar mvto banco</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            ¿Estas seguro que deseas eliminar esta linea?
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+            <button type="button" class="btn btn-primary" id='btnEliminarLineaBco' >Si</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalClasifMvtoCOnt" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Clasificar Egreso</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class='text-justify'>¿En que aparte de la planilla de movimiento diario debe ubicarse este movimiento?</p>
+                <select class='custom-select' id='tipoMvtoCont'>
+                    <option value='' selected>Seleccionar...</option>
+                    <option value="PAGO">PAGO</option>
+                    <option value="TRANSFERENCIA">TRANSFERENCIAS</option>
+                    <option value="ANTICIPO">ANTICIPO</option>
+                    <option value="INTEREMPRESAS">INTEREMPRESAS</option>
+                </select>
+            </div>
+            <div class='modal-footer'>
+                <button type="button" class="btn btn-primary btn-circle" id='btnclasifEgreso' >
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+        </div>
+</div>
+</div>
+<div class="modal fade" id="modalCargaSoporteEgreso" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Cargar soporte egreso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id='form-carga-sop-egreso' type='POST' enctype="multipart/form-data">{%csrf_token%}
+            <div class="custom-file mb-3">
+                <input type="file" class="custom-file-input" id="id-soporte-egreso" name='soporte-egreso' 
+                accept="application/pdf" required>
+                <label class="custom-file-label" for="archivocarga" data-browse="Buscar">Archivo a cargar</label>
+            </div>        
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <button type="submit" class="btn btn-primary" id='btnCargarSopEgreso'>Cargar</button>
+        </div>
+        </form>
+      </div>
+    </div>
+</div>
+<div class="modal fade" id="modalPagosAsociados" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Pagos asociados</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class='table-responsive'>
+                <div class='table-responsive'>
+                    <table id='tablaCONBanco' class='display' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripcion</th>
+                                <th>Referencia</th>
+                                <th>Valor</th>
+                                <th>Tipo</th>
+                                <th>Pago</th>
+                                <th>Usuario</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+    $(document).ready(function(){
+        var params = `status=no,location=no,toolbar=no,menubar=no,
+                width=650,height=450,left=100,top=100`
+        var tablaCONBanco = $('#tablaCONBanco').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+                {'data':'tipo'},
+                {'data':'pagorelacionado'},
+                {'data':'usuario'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        
+                //CargaMvtoContable
+        var tablaMvtosCont = $('#tablaMvtosCont').DataTable({
+            'scrollY':        "70vh",
+            'scrollX':        true,
+            'scrollCollapse': true,
+            'paging':         false,
+            processing: true,
+            language:{
+                url:"/ajax_request/datatable_spanish"
+            },
+            dom: 'Bfrtip',
+            buttons: ['copy', 'excel', 'pdf'],
+            ajax:{
+                url:'/accounting/ajax/accountsmovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'comprobante'},
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'valor'},
+                {'data':'estado'},
+                {'data':'conciliacion'},
+                {'data':"soporte",
+                    "render":function(data){
+                        if (data != "" && data != null){
+                            return "Si"
+                        }
+                        else {
+                            return ""
+                        }
+                    }},
+            ],
+            order: [[ 1, "desc" ]],
+            columnDefs: [
+                { "targets":[0,2],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 1 }
+            ],
+        })
+        $('#tablaMvtosCont tbody').on('click','tr',function(){
+            tablaMvtosCont.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaCONBanco tbody').on('click','tr',function(){
+            tablaCONBanco.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            let line = tablaCONBanco.row(this).data()
+            let ruta_causacion = '/media/'+line.soporte_causacion
+            let ruta_pago = '/media/'+line.soporte_causacion
+            window.open(ruta_causacion,'Soporte causacion',params)
+            window.open(ruta_pago,'Soporte Pago',params)
+
+
+        })
+        $('#tablaMvtosCont tbody').on('contextmenu','tr',function(e){
+            tablaMvtosCont.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            let line = tablaMvtosCont.row(this).data()
+            if (line.soporte==""){
+                $('#Soporte').addClass('disabled')
+            }
+            else{
+                $('#Soporte').removeClass('disabled')
+            }
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuEvent').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        });
+        $('#tablaCONBanco tbody').on('contextmenu','tr',function(e){
+            tablaCONBanco.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            let line = tablaCONBanco.row(this).data()
+            if (line.soporte_causacion=="") $('#causacion').addClass('disabled')
+            else $('#causacion').removeClass('disabled')
+            if (line.soporte_factura=="") $('#factura').addClass('disabled')
+            else $('#factura').removeClass('disabled')
+            if (line.soporte_pago=="") $('#pago').addClass('disabled')
+            else $('#pago').removeClass('disabled')
+
+
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuPagos').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        });
+        
+        $('#empresa').on('change',function(){
+            var empresa = $(this).val()
+            tablaMvtosCont.ajax.url('/accounting/ajax/accountsmovements').load()
+            $('#cuenta').empty()
+            $('#cuenta').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#cuenta').append(option)
+                    }
+                }
+            })
+        })
+        $('#btn-searchmvt').on('click',function(){
+            var cuenta = $('#cuenta').val()
+            var desde = $('#id_fecha_desde').val()
+            var hasta = $('#id_fecha_hasta').val()
+            var url_cont = `/accounting/ajax/accountsmovements?cuenta=${cuenta}&desde=${desde}&hasta=${hasta}`
+            tablaMvtosCont.ajax.url(url_cont).load()
+            var url_bco = `/accounting/ajax/bancarymovements?cuenta=${cuenta}&desde=${desde}&hasta=${hasta}`
+            tablaMvtosBanco.ajax.url(url_bco).load()
+        })
+        $('#btnAbrirCarga').click(function(){
+            $('#modalCargaMvtoContable').modal('show')
+        })
+        $('#form-carga-contable').on('submit',function(e){
+            e.preventDefault();
+            $('#btnCargarCont').text('')
+            $('#btnCargarCont').append('<i class="fas fa-circle-notch fa-spin"></i>')
+            $('#btnCargarCont').prop('disabled',true)
+            formdata = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/load_account_movements',
+                data:formdata,
+                processData:false,
+                contentType:false,
+                success:function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').text(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    if (response.class!='alert-danger'){
+                        $('#modalCargaMvtoContable').modal('hide')
+                        $('#form-carga-contable').trigger('reset')
+                    }
+                    if (response.class=='alert-warning'){
+                        $('#form-carga-contable').trigger('reset')
+                        $('#alert-data').append(
+                            '.  Puedes ver el detalle de los comprobantes no cargados <a class="font-weight-bold" href="/docs_andinasoft/tmp/comprobantes_no_cargados.txt" download="Comprobantes no cargados.txt">aqui</a>'
+                        )
+                    }
+                    $('#btnCargarCont').text('Cargar')
+                    $('#btnCargarCont').prop('disabled',false)
+                }
+            })
+        })
+        $("#contextMenuEvent").click(function(e){
+            var line = tablaMvtosCont.row($('tr.selected')).data()
+            switch(e.target.id){
+                case "Eliminar":
+                    if (line.estado=='CONCILIADO'){
+                        $('#alert-title').text('Oh Oh!')
+                        $('#alert-data').text('No puedes eliminar una linea que ya fue conciliada o tiene un pago asociado por tesoreria')
+                        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    }
+                    else{
+                        $('#modalConfirElim').modal('show')
+                    }
+                break;     
+                case "Clasificar":
+                $('#modalClasifMvtoCOnt').modal('show')
+                break;
+                case "Soporte":
+                    let ruta = '/media/'+line.soporte
+                    window.open(ruta,'Soporte Egreso '+line.comprobante,params)
+                break;
+                case "Cargar":
+                    bsCustomFileInput.init();
+                    $('#modalCargaSoporteEgreso').modal('show')
+                break;
+                case "Completo":
+                    let cuenta = $('#cuenta').val()
+                    let url = `/accounting/ajax/bancarymovements?conciliacion=${line.conciliacion}&cuenta=${cuenta}`
+                    tablaCONBanco.ajax.url(url).load()
+                    $('#modalPagosAsociados').modal('show');
+                break;
+            }
+        });
+        $('#btnEliminarLinea').click(function(){
+            var line = tablaMvtosCont.row('.selected').data()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/delete_movements',
+                data:{
+                    'linea':line.pk
+                },
+                success: function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').text('Linea eliminada con exito')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    tablaMvtosCont.ajax.reload()
+                    $('#modalConfirElim').modal('hide')
+                }
+            })
+        })
+        //CargaMvtoBanco
+        var tablaMvtosBanco = $('#tablaMvtosBanco').DataTable({
+            'scrollY':        "70vh",
+            'scrollX':        true,
+            'scrollCollapse': true,
+            'paging':         false,
+            processing: true,
+            language:{
+                url:"/ajax_request/datatable_spanish"
+            },
+            dom: 'Bfrtip',
+            buttons: ['copy', 'excel', 'pdf'],
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+                {'data':'estado'},
+                {'data':'conciliacion'},
+            ],
+            order: [[ 1, "desc" ]],
+            columnDefs: [
+                { "targets":[2],"className":"dt-body-left"},
+                { "targets":[4],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 1 }
+            ],
+        })
+        $('#tablaMvtosBanco tbody').on('click','tr',function(){
+            tablaMvtosBanco.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaMvtosBanco tbody').on('contextmenu','tr',function(e){
+            tablaMvtosBanco.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuBco').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        
+        $('#btnAbrirCargaBco').click(function(){
+            $('#modalCargaMvtoBco').modal('show')
+        })
+        $('#form-carga-bco').on('submit',function(e){
+            e.preventDefault();
+            $('#btnCargarBanco').text('')
+            $('#btnCargarBanco').append('<i class="fas fa-circle-notch fa-spin"></i>')
+            $('#btnCargarBanco').prop('disabled',true)
+            formdata = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/load_bancary_movements',
+                data:formdata,
+                processData:false,
+                contentType:false,
+                success:function(response){
+                    
+                    if (response.class=='alert-warning'){
+                        if (confirm(response.msj)){
+                            formdata.append('confirm',true)
+                            $.ajax({
+                                type:'POST',
+                                url:'/accounting/ajax/load_bancary_movements',
+                                data:formdata,
+                                processData:false,
+                                contentType:false,
+                                success:function(response){
+                                    $('#alert-title').text(response.title)
+                                    $('#alert-data').text(response.msj)
+                                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                                    tablaMvtosBanco.ajax.reload()
+                                    $('#modalCargaMvtoBco').modal('hide')
+                                }
+                            })
+                        }
+                        $('#btnCargarBanco').text('Cargar')
+                        $('#btnCargarBanco').prop('disabled',false)
+                    }
+                    else if(response.class=='alert-success'){
+                        $('#alert-title').text(response.title)
+                        $('#alert-data').text(response.msj)
+                        $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                        tablaMvtosBanco.ajax.reload()
+                        $('#modalCargaMvtoBco').modal('hide')
+                        $('#btnCargarBanco').text('Cargar')
+                        $('#btnCargarBanco').prop('disabled',false)
+                    }
+                    
+                    else if (response.class=='alert-danger'){
+                        $('#alert-title').text(response.title)
+                        $('#alert-data').text(response.msj)
+                        $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                        $('#alert-data').append(
+                            '.  Puedes ver el detalle de los comprobantes no cargados <a class="font-weight-bold" href="/media/tmp/comprobantes_no_cargados_banco.txt" download="Comprobantes no cargados.txt">aqui</a>'
+                        )
+                        $('#btnCargarBanco').text('Cargar')
+                        $('#btnCargarBanco').prop('disabled',false)
+                    }
+                }
+            })
+        })
+        $("#contextMenuBco").click(function(e){
+            var line = tablaMvtosBanco.row('.selected').data()
+            switch(e.target.id){
+                case "Eliminar":
+                    if (line.estado=='CONCILIADO'){
+                        $('#alert-title').text('Oh Oh!')
+                        $('#alert-data').text('No puedes eliminar una linea que ya fue conciliada')
+                        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    }
+                    else{
+                        $('#modalConfirElimBco').modal('show')
+                    }
+                break;     
+            }
+        });
+        $('#btnEliminarLineaBco').click(function(){
+            var line = tablaMvtosBanco.row('.selected').data()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/delete_bancarymovements',
+                data:{
+                    'linea':line.pk
+                },
+                success: function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').text('Linea eliminada con exito')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    tablaMvtosBanco.ajax.reload()
+                    $('#modalConfirElimBco').modal('hide')
+                }
+            })
+        })
+        $('#btnclasifEgreso').click(function(){
+            var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+            let tipo = $('#tipoMvtoCont').val()
+            var line = tablaMvtosCont.row('.selected').data()
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/paymenttype',
+                data:{
+                    'tipo':tipo,
+                    'egreso':line.pk,
+                    'csrfmiddlewaretoken':csrf_token,
+                },
+                success:function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').text('El egreso fue clasificado como '+tipo)
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    tablaMvtosCont.ajax.reload()
+                    $('#modalClasifMvtoCOnt').modal('hide')
+                }
+            })
+        })
+        $('#form-carga-sop-egreso').submit(function(e){
+            e.preventDefault();
+            let row = tablaMvtosCont.row($('tr.selected')).data()
+            let formdata = new FormData(this)
+            formdata.append('comprobante',row.pk)
+
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/load_account_movements',
+                data:formdata,
+                processData:false,
+                contentType:false,
+                success:function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').text(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    
+                    $('#modalCargaSoporteEgreso').modal('hide')
+                    tablaMvtosCont.ajax.reload()
+                }
+            })
+
+        })
+        
+        //Generales
+        $(this).click(function(e){
+            if(e.button == 0){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                  $(".contextmenu").css("display", "none");
+            }
+        });
+        bsCustomFileInput.init();
+    })
+</script>
+{%endblock%}

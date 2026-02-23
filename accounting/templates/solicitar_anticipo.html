@@ -1,0 +1,1337 @@
+{%extends 'base.html'%}{%load static%}{%load crispy_forms_tags%}
+{%block title%}Tesoreria | Anticipos{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded pb-2'>
+    <div class="mx-auto" style="width: 160px;">
+        <lord-icon
+            src="https://cdn.lordicon.com/cjieiyzp.json"
+            trigger="loop"
+            delay="2000"
+            style="width:150px;height:150px">
+        </lord-icon>
+      </div>
+      <h3 class="text-center">Anticipos</h3>
+      <div class="container mt-3 text-center">
+        <button type="button" class="btn btn-info mx-auto"
+        data-toggle="modal" data-target="#newAdvanceModal">Nuevo</button>
+      </div>
+      <div class="table-responsive">
+        <table id="table_solicitudes" style="width: 100%;" class="table table-sm table-hover">
+            <thead>
+                <tr>
+                    <th style="width:10%">Fecha</th>
+                    <th style="width:12%">Solicita</th>
+                    <th style="width:45%">Descripcion</th>
+                    <th>Valor</th>
+                    <th style="width:12%">Aprueba</th>
+                    <th style="width:15%">Estado</th>
+                </tr>
+            </thead>
+        </table>
+      </div>    
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenu' 
+  style="max-width: 220px;">
+  <a class="dropdown-item" id='historial' href="#"><i class="fas fa-check-circle"></i>&nbsp;Historial</a>
+</div>   
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuLegal' 
+  style="max-width: 220px;">
+  <a class="dropdown-item" id='ver_soporte' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte</a>
+  <a class="dropdown-item" id='eliminar_leg' href="#"><i class="fas fa-trash"></i>&nbsp;Eliminar</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" id='change_support' href="#"><i class="fa fa-exchange"></i>&nbsp;Cambiar soporte</a>
+  <a class="dropdown-item" id='change_concept' href="#"><i class="fas fa-thumbtack"></i>&nbsp;Cambiar concepto</a>
+  <a class="dropdown-item" id='include_taxes' href="#"><i class="fas fa-percent"></i>&nbsp;IVA y Rte</a>
+  
+</div>  
+<div class="modal fade" id="newAdvanceModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+            <lord-icon
+                src="https://cdn.lordicon.com/ifqmqwui.json"
+                trigger="loop"
+                style="width:30px;height:30px;">
+            </lord-icon>
+          <h5 class="modal-title text-center" id="exampleModalLabel">
+            Solicitar nuevo anticipo</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+         {%crispy form_solicitar_ant%}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="detailAdvanceModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-center" id="exampleModalLabel">
+            ¿Que deseas hacer?</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-footer">
+         <button id='btn-no-approve' class="btn btn-outline-danger">No aprobar</button>
+         <button id='btn-approve' class="btn btn-success">Aprobar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalPagarAnticipo" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="modalAnticip">Registrar Anticipo</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            {%crispy form_anticipo%}
+        </div>
+        </div>
+    </div>
+</div>  
+<div class="modal fade" id="modalNuevaLegalizacion" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Registrar gasto</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+          {%crispy form_leg_anticipo%}
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalLegalizarAnticipo" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Legalizar Anticipo</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+          <div class='table-responsive'>
+            <table id="table_legalizacion" class="table table-sm table-hover"
+            style="width:100%;font-size:small">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Nit</th>
+                    <th>Nombre</th>
+                    <th>Concepto</th>
+                    <th>Descripcion</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tfoot>
+                  <tr>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th>TOTAL:</th>
+                    <th></th>
+                  </tr>
+                </tfoot>
+            </table> 
+          </div>
+          <div class="row justify-content-md-center">
+            <button class="btn btn-primary btn-circle" id="btn-add-leg"
+              data-toggle="tooltip" data-placement="top" title="Registrar gasto">
+              <i class="fas fa-plus"></i>
+            </button>
+            <button class="btn btn-success btn-circle ml-3" id="btn-finish-leg"
+                data-toggle="tooltip" data-placement="top" title="Terminar legalización">
+                <i class="fas fa-thumbs-up"></i>
+            </button>
+          </div>
+          <p class="lead">Reembolsos</p>
+          <div id="" class="row">
+            <div class="col">
+              <div class="input-group">
+                <div class="input-group-prepend">
+                  <label class="input-group-text" for="">A empleado</label>
+                </div>
+                <input readonly class="form-control money text-center" value="0" 
+                  type="text" name="reemb_empleado" id="id_reemb_empleado">
+              </div>
+            </div>
+            <div class="col">
+              <div class="input-group">
+                <div class="input-group-prepend">
+                  <label class="input-group-text" for="">A empresa</label>
+                </div>
+                <input readonly class="form-control money text-center" value="0"
+                  type="text" name="reemb_empresa" id="id_reemb_empresa">
+                  <div class="input-group-append">
+                    <button class="btn btn-danger" id="btn-approve-tesor">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+              </div>
+            </div>
+          </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-info btn-circle" id="btn-view-reemb-leg"
+            data-toggle="tooltip" data-placement="top" title="Ver recibo de reembolso">
+            <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-primary btn-circle" id="btn-download-leg"
+            data-toggle="tooltip" data-placement="top" title="Descargar legalización">
+          <i class="fa fa-cloud-download"></i>
+        </button>
+        <button class="btn btn-success btn-circle" id="btn-approve-leg"
+            data-toggle="tooltip" data-placement="top" title="Aprobar legalización (Contabilidad)">
+            <i class="fas fa-check"></i>
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalHistory" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Historial de acciones</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        <div id="body">
+          <div id="historyDiv"></div>
+      </div>
+      </div>
+  </div>
+</div> 
+</div>
+<div class="modal fade" id="modalConfirmTesor" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Recibir reembolso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        <div id="body">
+          <p class="lead" id="valor-a-recibir"></p>
+          <div class="input-group mb-3"> 
+            <div class="input-group-prepend"> 
+              <label class="input-group-text" for="id_cuenta_ant_reint">Cuenta</label> 
+            </div> 
+            <select name="cuenta_ant" class="select custom-select" required="" id="id_cuenta_ant_reint"> 
+              <option value="" selected=""></option>
+            </select>
+          </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-confirm-tesor" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+</div>
+<div class="modal fade" id="modalcreatepartner" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Crear tercero</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        {%crispy form_partners%}
+      </div>
+      <!-- <div class="modal-footer">
+        <button id="btn-create-partner" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div> -->
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalchangesupport" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Cambiar soporte</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        <form method="POST" enctype="multipart/form-data" id="form_change_support">{%csrf_token%}
+          <div class="custom-file">
+            <input type="file" name="nuevo_soporte" class="clearablefileinput custom-file-input" required="" id="id_nuevo_soporte">
+            <label class="custom-file-label" for="nuevo_soporte" data-browse="Buscar">Nuevo soporte</label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-change-support" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modalchangeconcept" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">Cambiar concepto</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+      </div>
+      <div class="modal-footer">
+        <button id="btn-change-concept" class="btn btn-circle btn-success">
+          <i class="fas fa-check"></i>
+        </button>
+      </div>
+      </div>
+  </div>
+</div> 
+<div class="modal fade" id="modaltaxes" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+      <div class="modal-header">
+          <h5 class="modal-title" id="modalAnticip">IVA y Retenciones</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+          </button>
+      </div>
+      <div class="modal-body">
+        {%crispy form_taxes%}
+      </div>
+      </div>
+  </div>
+</div> 
+</div>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src="{%static 'js/fstdropdown.js'%}"></script>
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+<script>
+    $(document).ready(function(){
+      bsCustomFileInput.init();
+      $('#modalchangeconcept').find('.modal-body').append(
+          $('#id_concepto').parent('div').clone()
+        )
+
+      $('.money').mask("#,##0", {reverse: true});  
+      $('.only-numbers').mask("##0", {reverse: true});  
+      var table_solicitudes = $("#table_solicitudes").DataTable({
+          paging:false,
+          processing:true,
+          scrollCollapse: true,
+          scrollY: '370px',
+          ordering: false,
+          language:{
+              url:'/ajax_request/datatable_spanish'
+          },
+          ajax:{
+              url:'/accounting/solicitaranticipos?datatable=1',
+              dataSrc:"data"
+          },
+          columns:[
+              {'data':'fecha'},
+              {'data':'usuario_solicita.username'},
+              {'data':'descripcion'},
+              {'data':'valor',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+              {'data':'usuario_aprueba.username'},
+              {'data':'estado'},
+          ],
+          columnDefs: [
+              {targets: [3],type: 'num-fmt'},
+              {targets:[2],"className":"dt-body-left"}, 
+              {targets:[3],"className":"dt-body-right"}, 
+          ],
+          order: [[ 0, "desc" ]]
+      })
+      var table_legalizacion = $("#table_legalizacion").DataTable({
+        processing:true,
+        language:{
+            url:'/ajax_request/datatable_spanish'
+        },
+        ajax:{
+            url:'/accounting/legalizaciones?todo=datatable',
+            dataSrc:"data"
+        },
+        info:false,
+        columns:[
+              {'data':'fecha_gasto'},
+              {'data':'tercero.idTercero'},
+              {'data':'nombre_tercero'},
+              {'data':'concepto.descripcion'},
+              {'data':'descripcion'},
+              {'data':'valor',
+              render: $.fn.dataTable.render.number( ',', '.', 0)},
+        ],
+        columnDefs: [
+            {targets: [5],type: 'num-fmt'},
+            {targets:[2,4],"className":"dt-body-left"}, 
+            {targets:[5],"className":"dt-body-right"}, 
+        ],
+        order: [[ 0, "desc" ]],
+        footerCallback: function (row, data, start, end, display) {
+            var api = this.api();
+  
+            // Remove the formatting to get integer data for summation
+            var intVal = function (i) {
+                return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
+            };
+  
+            // Total over all pages
+            total = api
+                .column(5)
+                .data()
+                .reduce(function (a, b) {
+                    return intVal(a) + intVal(b);
+                }, 0);
+  
+            fmt_total = new Intl.NumberFormat('en-EN').format(total)      
+            // Update footer
+            $(api.column(5).footer()).html('$' + fmt_total );
+        }
+    })
+      $('#id_cuenta_ant').on('change',function(){
+        let val = $(this).text()
+        
+        if (val.includes('Efectivo')){
+          $('#id_soporte_pago').prop('required',false)
+        }
+        else {
+          $('#id_soporte_pago').prop('required',true)
+        }
+      })
+      $("#table_solicitudes tbody").on('click','tr',function(){
+        let row = table_solicitudes.row(this).data()
+        $('#table_solicitudes tbody tr').removeClass('selected')
+        $(this).addClass('selected')
+
+        switch (row.estado) {
+          case "pendiente":
+            $('#detailAdvanceModal').modal('show')
+            $('#btn-approve').click(function(){
+              $(this).addClass('disabled')
+              .html('<i class="fas fa-spinner fa-pulse">')
+              $.ajax({
+                type:'POST',
+                url: '/accounting/solicitaranticipos',
+                data:{
+                  'csrfmiddlewaretoken':getCookie('csrftoken'),
+                  'id_solicitud':row.id_solicitud,
+                  'to_do':'approve'
+                },
+                success: (xhr) => {
+                  table_solicitudes.ajax.reload()
+                  $('#detailAdvanceModal').modal('hide')
+                  $('#alert-data').text('')
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').text(xhr.msj)
+                  $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                },
+                error: (xhr) => {
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').text('Ocurrió un error')
+                  $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                  console.log(xhr.responseText)
+                },
+                complete: (xhr) => {
+                  $('#btn-approve').removeClass('disabled')
+                  .html('Aprobar')
+                }
+              })
+            })
+            $('#btn-approve-leg').removeClass('disabled').prop('disabled',false)
+            $('#eliminar_leg').removeClass('disabled')
+            break;
+          case "aprobado":
+            $('#modalPagarAnticipo').modal('show')
+            $('#id_descripcion_ant').prop('readonly',true)
+            .val(row.descripcion)
+            $('#id_valor_anticip').prop('readonly',true)
+            .val(
+              new Intl.NumberFormat('en-EN').format(row.valor)
+            )
+            $('#id_id_tercero').val(row.data_user_solicita.id)
+            $('#id_nombre_tercero').val(row.data_user_solicita.name)
+            $('#btn-approve-leg').removeClass('disabled').prop('disabled',false)
+            $('#eliminar_leg').removeClass('disabled')
+            break;
+          case "pagado":
+            let url = `/accounting/legalizaciones?todo=datatable&id_anticipo=`+row.id_solicitud
+            table_legalizacion.ajax.url(url).load(function(json){
+              totalizar_legalizaciones()
+            })
+            total = $('#table_legalizacion tfoot th').last().text()
+            .replace(/[$,]/g,'') * 1
+            
+            $('#modalLegalizarAnticipo').modal('show')
+            $('#btn-approve-leg').addClass('disabled').prop('disabled',true)
+            $('#btn-finish-leg').removeClass('disabled').prop('disabled',false)
+            $('#eliminar_leg').removeClass('disabled')
+            $('#change_support').removeClass('disabled').prop('disabled',false)
+            $('#btn-approve-tesor').addClass('disabled').prop('disabled',true)
+            $('#btn-add-leg').removeClass('disabled').prop('disabled',false)
+            $('#btn-download-leg').addClass('disabled').prop('disabled',true)
+            break;
+          case "prelegalizado":
+            let url_preleg = `/accounting/legalizaciones?todo=datatable&id_anticipo=`+row.id_solicitud
+            table_legalizacion.ajax.url(url_preleg).load(function(json){
+              totalizar_legalizaciones()
+            })
+            total = $('#table_legalizacion tfoot th').last().text()
+            .replace(/[$,]/g,'') * 1
+            $('#btn-approve-leg').removeClass('disabled').prop('disabled',false)
+            $('#btn-finish-leg').addClass('disabled').prop('disabled',true)
+            $('#eliminar_leg').addClass('disabled')
+            $('#change_support').removeClass('disabled').prop('disabled',false)
+            $('#modalLegalizarAnticipo').modal('show')
+            $('#btn-approve-tesor').removeClass('disabled').prop('disabled',false)
+            $('#btn-add-leg').addClass('disabled').prop('disabled',true)
+            $('#btn-download-leg').addClass('disabled').prop('disabled',true)
+            break;
+          case "legalizado":
+            let url_leg = `/accounting/legalizaciones?todo=datatable&id_anticipo=`+row.id_solicitud
+            table_legalizacion.ajax.url(url_leg).load(function(json){
+              totalizar_legalizaciones()
+            })
+            total = $('#table_legalizacion tfoot th').last().text()
+            .replace(/[$,]/g,'') * 1
+            $('#btn-approve-leg').addClass('disabled').prop('disabled',true)
+            $('#btn-finish-leg').addClass('disabled').prop('disabled',true)
+            $('#eliminar_leg').addClass('disabled')
+            $('#change_support').addClass('disabled').prop('disabled',true)
+            $('#btn-add-leg').addClass('disabled').prop('disabled',true)
+            $('#modalLegalizarAnticipo').modal('show')
+            $('#btn-download-leg').removeClass('disabled').prop('disabled',false)
+            break;
+        }
+      })
+      $('#btn-approve-tesor').click(function(e){
+        let row = table_solicitudes.row('.selected').data()
+        $('#modalLegalizarAnticipo').modal('hide')
+        $('#valor-a-recibir').text('Confirma que recibes $' + $('#id_reemb_empresa').val())
+        let empresa = row.empresa.Nit
+          $('#id_cuenta_ant_reint').empty()
+          $('#id_cuenta_ant_reint').append('<option value="">Selecciona...</option>')
+          $.ajax({
+              type:'GET',
+              url:'/accounting/ajax/companies_accounts',
+              data:{
+                  'empresa':empresa
+              },
+              success:function(response){
+                  var data = JSON.parse(response['cuentas'])
+                  for (let i in data){
+                      var pk_cuenta = data[i]['pk']
+                      var cuenta = data[i]['fields']['cuentabanco']
+                      var option = '<option value='+pk_cuenta+'>'+
+                                  cuenta+'</option>'
+                      $('#id_cuenta_ant_reint').append(option)
+                  }
+                  $('#modalConfirmTesor').modal('show')
+              }
+          })
+      })
+      $('#table_solicitudes tbody').on('contextmenu','tr',function(e){
+        table_solicitudes.$('tr.selected').removeClass('selected');
+        let line = table_solicitudes.row(this).data()
+        $(this).addClass('selected')
+        var width = $(document).width()
+        var position = e.pageX
+        if (position>=width*3/4){
+            position -= 220
+        }
+
+        $('#contextMenu').css({
+            'display':'block',
+            'left':position,
+            'top':e.pageY,
+        })
+        return false;
+    })
+      $('#table_legalizacion tbody').on('contextmenu','tr',function(e){
+        table_legalizacion.$('tr.selected').removeClass('selected');
+        let line = table_legalizacion.row(this).data()
+        $(this).addClass('selected')
+        var width = $(document).width()
+        var position = e.pageX
+        if (position>=width*3/4){
+            position -= 220
+        }
+        $('#contextMenuLegal').css({
+            'display':'block',
+            'left':position,
+            'top':e.pageY,
+            'z-index':1060
+        })
+        return false;
+      })
+      $('#id_empresa_ant').on('change',function(){
+          var empresa = $(this).val()
+          $('#id_cuenta_ant').empty()
+          $('#id_cuenta_ant').append('<option value="">Selecciona...</option>')
+          $.ajax({
+              type:'GET',
+              url:'/accounting/ajax/companies_accounts',
+              data:{
+                  'empresa':empresa
+              },
+              success:function(response){
+                  var data = JSON.parse(response['cuentas'])
+                  for (let i in data){
+                      var pk_cuenta = data[i]['pk']
+                      var cuenta = data[i]['fields']['cuentabanco']
+                      var option = '<option value='+pk_cuenta+'>'+
+                                  cuenta+'</option>'
+                      $('#id_cuenta_ant').append(option)
+                  }
+              }
+          })
+          $('#id_tipo_anticipo').empty()
+          $('#id_tipo_anticipo').append(
+              '<option value="">Selecciona...</option>'
+          )
+
+          $.ajax({
+              type:'GET',
+              url:'/accounting/ajax/getinfointerfaz',
+              data:{
+                  'tipo':'ANTICIPO',
+                  'empresa':empresa
+              },
+              success:function(response){
+                  let data = JSON.parse(response['data'])
+                  for (let i in data){
+                      descrip = data[i]['fields']['descripcion']
+                      pk = data[i]['pk']
+                      $('#id_tipo_anticipo').append(
+                          '<option value='+pk+'>'+descrip+'</option>'
+                      )
+                  }
+              }
+          })
+      })
+      $('#form-solicitar-anticipo').submit(function(e){
+        $('#submit-id-btn-solicitar').addClass('disabled')
+        .val('Cargando...')
+      })
+      $('#formAnticipos').submit(function(e){
+        e.preventDefault();
+        let data = new FormData(this);
+        $('#submit-id-registrar').addClass('disabled').val('Cargando...')
+        let row = table_solicitudes.row($('#table_solicitudes tbody tr.selected')).data()
+        data.append('to_do','payadvance')
+        data.append('id_solicitud',row.id_solicitud)
+        data.append('oficina',row.oficina)
+        $.ajax({
+          type:'POST',
+          url:'/accounting/solicitaranticipos',
+          data:data,
+          contentType:false,
+          processData:false,
+          success: (xhr) => {
+            table_solicitudes.ajax.reload()
+            $('#modalPagarAnticipo').modal('hide')
+            $('#alert-data').text('')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text(xhr.msj)
+            $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+            $('#formAnticipos').trigger('reset')
+          },
+          error: (xhr) => {
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Ocurrió un error')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            console.log(xhr.responseText)
+          },
+          complete: (xhr) => {
+            $('#submit-id-registrar').removeClass('disabled').val('Registrar')
+          }
+        })
+      })
+      $('#form-legalizar-anticipo').submit(function(e){
+        e.preventDefault();
+        let data = new FormData(this);
+        $('#submit-id-registrar-leg').addClass('disabled').val('Cargando...')
+        let row = table_solicitudes.row($('#table_solicitudes tbody tr.selected')).data()
+        data.append('to_do','legalice')
+        data.append('id_solicitud',row.id_solicitud)
+        $.ajax({
+          type:'POST',
+          url:'/accounting/legalizaciones',
+          data:data,
+          contentType: false,
+          processData: false,
+          success: (xhr) => {
+            table_legalizacion.ajax.reload(function(json){
+              totalizar_legalizaciones()
+            })
+            $('#modalNuevaLegalizacion').modal('hide')
+            $('#modalLegalizarAnticipo').modal('show')
+            
+          },
+          error: (xhr) => {
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Ocurrió un error')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            console.log(xhr.responseText)
+          },
+          complete: (xhr) => {
+            $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+          }
+        })
+      })
+      $('#form-partners').submit(function(e){
+        e.preventDefault();
+        $('#btn-create-partner').addClass('disabled')
+        .html('<i class="fas fa-spinner fa-pulse">')
+        let data = new FormData(this)
+        data.append('todo','create')
+        $.ajax({
+          type:'POST',
+          url:'/accounting/partners',
+          data:data,
+          contentType: false,
+          processData: false,
+          success: (xhr) => {
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text(xhr.msj)
+            $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+            if (xhr.status_response == 'success') {
+              $("#modalcreatepartner").modal('hide')
+              $("#id_nit_tercero").append(`<option value="${xhr.partner.idTercero}">${xhr.partner.full_name}</option>`)
+              document.querySelector("#id_nit_tercero").fstdropdown.rebind()
+            }            
+          },
+          error: (xhr) => {
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Ocurrió un error')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            console.log(xhr.responseText)
+          },
+          complete: (xhr) => {
+            $('#btn-create-partner').removeClass('disabled')
+            .html('<i class="fas fa-check">')
+          }
+        });
+      })
+      $("#contextMenu").click(function(e){  
+        var line = table_solicitudes.row('.selected').data()
+        let params = `status=no,location=no,toolbar=no,menubar=no,
+                width=650,height=450,left=100,top=100`
+        switch(e.target.id){
+            case "historial":
+              $('#table_solicitudes tbody').css(
+                'cursor','wait'
+              )
+                $('#historyDiv').empty()
+                $.ajax({
+                  type:'GET',
+                  url:'/accounting/solicitaranticipos',
+                  data:{
+                    'history':true,
+                    'anticipo':line.id_solicitud,
+                  },
+                  success: (xhr) => {
+                    $('#historyDiv').append(
+                      xhr.body
+                    )
+                    $('#modalHistory').modal('show')
+                  },
+                  complete: (xhr) => {
+                    $('#table_solicitudes tbody').css(
+                      'cursor','pointer'
+                    )
+                  }
+                })
+                break;     
+        }
+      })
+      $("#contextMenuLegal").click(function(e){  
+        var line = table_legalizacion.row('.selected').data()
+        let params = `status=no,location=no,toolbar=no,menubar=no,
+                width=650,height=450,left=100,top=100`
+        switch(e.target.id){
+            case "ver_soporte":
+              var ruta = '/media/'+line.soporte
+              window.open(ruta,'Soporte legalizacion anticipo',params)
+              break;     
+            case "change_concept":
+              $('#modalchangeconcept').modal('show')
+              break;
+              
+            case "include_taxes":
+              if(line.cuenta_iva.id == null)  $('#id_tipo_iva').val("")
+              else  $('#id_tipo_iva').val(line.cuenta_iva.id)
+
+              if(line.cuenta_rte.id == null)  $('#id_tipo_rte').val("")
+              else  $('#id_tipo_rte').val(line.cuenta_rte.id)
+              
+              $('#id_valor_iva').val(new Intl.NumberFormat('en-EN').format(line.valor_iva))
+
+              $('#id_valor_rte').val(new Intl.NumberFormat('en-EN').format(line.valor_rte))
+
+              if(line.rte_asumida){
+                $('#id_rte_asumida').prop('checked',true)
+                rte_asumida = 0
+              }
+              else{
+                $('#id_rte_asumida').prop('checked',false)
+                rte_asumida = 1
+              }
+
+              subtotal = line.valor - line.valor_iva + (line.valor_rte * rte_asumida)
+              $('#id_subtotal').val(new Intl.NumberFormat('en-EN').format(subtotal))
+              totalizar_taxes();
+              
+              $('#modaltaxes').modal('show')
+              break;
+
+            case 'eliminar_leg':
+            if (line.anticipo.estado =='prelegalizado'){
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').text('No puedes eliminar un registro de una legalización terminada.')
+              $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              return;
+            }
+            let option = confirm('Estas segur@ de eliminar este gasto? Si lo eliminas no se podrá recuperar.')
+            if (option == true){
+              $('#table_legalizacion tbody').css(
+                'cursor','wait'
+              )
+              $.ajax({
+                  type:'POST',
+                  url:'/accounting/legalizaciones',
+                  data:{
+                    'csrfmiddlewaretoken':getCookie('csrftoken'),
+                    'history':true,
+                    'leg':line.id_legalizacion,
+                    'to_do':'delete'
+                  },
+                  success: (xhr) => {
+                    table_legalizacion.ajax.reload(function(json){
+                      totalizar_legalizaciones()
+                    })
+                    $('#alert-data').text('')
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text(xhr.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(xhr.bg)
+                    
+                  },
+                  error: (xhr) => {
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text('Ocurrió un error')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    console.log(xhr.responseText)
+                  },
+                  complete: (xhr) => {
+                    $('#table_legalizacion tbody').css(
+                      'cursor','pointer'
+                    )
+                  }
+                })
+            }
+            
+              
+                break;
+            case "change_support":
+              $('#modalchangesupport').modal('show')
+        }
+      })
+      $('#btn-change-support').click(function(e){
+        let row = table_legalizacion.row('.selected').data()
+        let new_support = $('#id_nuevo_soporte').val()
+        if (new_support == ""){
+          $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Debes cargar un archivo PDF.')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+        $(this).addClass('disabled')
+            .html('<i class="fas fa-spinner fa-pulse">')
+        
+        let data = new FormData($('#form_change_support')[0])
+        data.append('to_do','change_support_leg')
+        data.append('legalizacion',row.id_legalizacion)
+
+
+        $.ajax({
+            type:'POST',
+            url:'/accounting/legalizaciones',
+            data:data,
+            contentType: false,
+            processData: false,
+            success: (xhr) => {
+                $('#alert-data').text('')
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').html(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                table_legalizacion.ajax.reload()
+                $('#modalchangesupport').modal('hide')
+            },
+            complete: (xhr) => {
+                $('#btn-change-support').html('<i class="fas fa-check"></i>')
+                .removeClass('disabled')
+            },
+        })
+      })
+      $('#btn-add-leg').click(function(e){
+        let row = table_solicitudes.row('.selected').data()
+        $('#modalLegalizarAnticipo').modal('hide')
+        $('#modalNuevaLegalizacion').modal('show')
+        /* $.ajax({
+          type:'GET',
+          url:'/accounting/conceptos',
+          data:{
+            'empresa':row.empresa.Nit
+          },
+          success: (xhr) => {
+            $('#id_concepto').empty()
+            .append(
+              '<option value="">Selecciona...</option>'
+            )
+            for (i in xhr.data){
+              $('#id_concepto').append(
+              `<option value="${xhr.data[i].pk}">${xhr.data[i].descripcion}</option>`
+            )
+            }
+          }
+        }) */
+      })
+      $('#btn-finish-leg').click(function(){
+          let row = table_solicitudes.row('.selected').data()
+          $(this).addClass('disabled')
+            .html('<i class="fas fa-spinner fa-pulse">')
+          $.ajax({
+            type:'POST',
+            url:'/accounting/legalizaciones',
+            data:{
+              'csrfmiddlewaretoken':getCookie('csrftoken'),
+              'to_do':'finish_leg',
+              'anticipo':row.id_solicitud
+            },
+            success: (xhr) => {
+              $('#alert-data').text('')
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').html(xhr.msj)
+              $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+              $('#btn-finish-leg').html('<i class="fas fa-thumbs-up"></i>')
+              .removeClass('disabled')
+              table_solicitudes.ajax.reload()
+              $('#modalLegalizarAnticipo').modal('hide')
+            }
+          })
+
+      })
+
+      $('#btn-download-leg').click(function(e){
+        $(this).addClass('disabled')
+        .html('<i class="fas fa-spinner fa-pulse">')
+        let row = table_solicitudes.row('.selected').data()
+        $.ajax({
+          type:'GET',
+          url:'/accounting/legalizaciones',
+          data:{
+            'anticipo':row.id_solicitud,
+            'todo':'print_leg',
+          },
+          success: function(xhr){
+            $('#alert-data').text('')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').html(xhr.msj)
+            $('#general-right-alert').toggleClass('show').toggleClass(xhr.bg)
+          },
+          complete: function(data){
+            $('#btn-download-leg').html('<i class="fa fa-cloud-download"></i>')
+              .removeClass('disabled')
+          }
+        })
+      })
+
+      $('#btn-approve-leg').click(function(e){
+        let row = table_solicitudes.row('.selected').data()
+
+        let verif_tesor = $('#id_reemb_empresa').val().replace(/[$,]/g,'') * 1
+        if (verif_tesor > 0 && !row.has_reembolsos){
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('Hay un reembolso a empresa pendiente por verificar en tesoreria.')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+          return;
+        }
+        
+        $(this).addClass('disabled')
+        .html('<i class="fas fa-spinner fa-pulse">')
+        
+          $.ajax({
+            type:'POST',
+            url:'/accounting/legalizaciones',
+            data:{
+              'csrfmiddlewaretoken':getCookie('csrftoken'),
+              'to_do':'approve_contabilidad',
+              'anticipo':row.id_solicitud
+            },
+            success: (xhr) => {
+              $('#alert-data').text('')
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').html(xhr.msj)
+              $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+              $('#btn-approve-leg').html('<i class="fas fa-check"></i>')
+              .removeClass('disabled')
+              table_solicitudes.ajax.reload()
+              $('#modalLegalizarAnticipo').modal('hide')
+            }
+          })
+
+        
+
+        
+      })
+      $("#btn-confirm-tesor").click(function(e){
+        $(this).addClass('disabled').html(
+          '<i class="fas fa-spinner fa-pulse">'
+        )
+        let row = table_solicitudes.row('.selected').data()
+        let anticipo = row.id_solicitud
+        let cuenta = $('#id_cuenta_ant_reint').val()
+        let valor = $('#id_reemb_empresa').val().replace(/[$,]/g,'') *1
+
+        if (cuenta==""){
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('Debes escoger una cuenta antes de aprobar')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+         return ;
+        }
+        $.ajax({
+          type:'POST',
+          url:'/accounting/legalizaciones',
+          data:{
+            'csrfmiddlewaretoken':getCookie('csrftoken'),
+            'anticipo':anticipo,
+            'cuenta':cuenta,
+            'valor': valor,
+            'to_do':'approve_tesoreria'
+          },
+          success: (xhr) => {
+            table_solicitudes.ajax.reload()
+            $('#alert-data').text('')
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').html(xhr.msj)
+              $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+              $('#modalConfirmTesor').modal('hide')
+              $('#btn-approve-tesor').removeClass('btn-danger').addClass('btn-success')
+              .html('<i class="fas fa-check"></i>').prop('disabled',true)
+          },
+          error: (xhr) => {
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').text('Ocurrió un error')
+              $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              console.log(xhr.responseText)
+            },
+            complete: (xhr) => {
+              $('#btn-confirm-tesor').removeClass('disabled')
+              .html('<i class="fas fa-check"></i>')
+            }
+        })
+      })
+      $("#btn-open-add-partner").click(function(e){
+        /* $("#modalNuevaLegalizacion").modal('hide') */
+        $('#modalLegalizarAnticipo').modal('hide')
+        $("#modalcreatepartner").modal('show')
+      })
+      $('#btn-change-concept').click(function(e){
+        let row = table_legalizacion.row('.selected').data()
+        let new_concept = $('#modalchangeconcept').find('select').val()
+        if (new_concept == ""){
+          $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Debes seleccionar un concepto')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+        $(this).addClass('disabled')
+            .html('<i class="fas fa-spinner fa-pulse">')
+
+        $.ajax({
+            type:'POST',
+            url:'/accounting/legalizaciones',
+            data:{
+              'to_do':'change_concept',
+              'id_leg': row.id_legalizacion,
+              'new_concept': new_concept,
+              'csrfmiddlewaretoken':getCookie('csrftoken')
+            },
+            success: (xhr) => {
+                $('#alert-data').text('')
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').html(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                table_legalizacion.ajax.reload()
+                $('#modalchangeconcept').modal('hide')
+            },
+            complete: (xhr) => {
+                $('#btn-change-concept').html('<i class="fas fa-check"></i>')
+                .removeClass('disabled')
+            },
+        })
+      })
+      
+      $('#form-taxes .calculate').on('change keyup', function(){
+        
+        totalizar_taxes('subtotal')
+
+        
+      })
+      $('#form-taxes').submit(function(e){
+        e.preventDefault();
+        let row = table_legalizacion.row('.selected').data();
+        let valor_calculado = $('#id_total_calculado').val().replace(/[$,]/g,'') * 1
+        if (valor_calculado != row.valor){
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('El total calculado es diferente al valor realmente pagado.')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+          return false;
+        }
+        
+        let data = new FormData(this)
+        
+        $('#submit-id-btn-registar-taxes').prop('disabled',true)
+
+        data.append('id_leg',row.id_legalizacion)
+        data.append('to_do','add_taxes')
+        $.ajax({
+          type:'POST',
+          url:'/accounting/legalizaciones',
+          data:data,
+          contentType:false,
+          processData:false,
+          success:function(data){
+            table_legalizacion.ajax.reload()
+            $('#modaltaxes').modal('hide')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Impuestos agregados al detalle del gasto')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+          },
+          complete:function(data){
+            $('#submit-id-btn-registar-taxes').prop('disabled',false)
+          }
+
+        })
+      })
+
+      $('#btn-view-reemb-leg').click(function(){
+        
+        let row = table_solicitudes.row('.selected').data()
+        if (row.has_reembolsos){
+          let button = $(this)
+          button.addClass('disabled').html(
+            '<i class="fas fa-spinner fa-pulse">'
+          )
+          $.ajax({
+            type:'GET',
+            url:'/accounting/ajax/printotherincomes',
+            data:{
+              'pk':row.recibo_reembolso,
+            },
+            success: (response) => {
+              var ruta = response['ruta']
+              let params = `status=no,location=no,toolbar=no,menubar=no,
+              width=650,height=450,left=100,top=100`;
+              window.open(ruta,'Recibo de ingreso',params)
+            },
+            complete: (xhr) => {
+              button.html('<i class="fas fa-eye"></i>')
+              .removeClass('disabled')
+            }
+          })
+        }
+        else{
+          $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('El anticipo no tiene reembolsos recibidos')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+      })
+      
+      $('#modalNuevaLegalizacion').on('hidden.bs.modal',function(e){
+        $('#modalLegalizarAnticipo').modal('show')
+        $('#form-legalizar-anticipo').trigger('reset')
+
+      })
+      $('#modalConfirmTesor').on('hidden.bs.modal',function(e){
+        $('#modalLegalizarAnticipo').modal('show')
+      })
+      $("#modalcreatepartner").on('hidden.bs.modal',function(e){
+        $("#modalNuevaLegalizacion").modal('show')
+      })
+
+
+      function totalizar_taxes(to_change) {
+          subtotal = $('#id_subtotal').val().replace(/[$,]/g,'') * 1
+          iva = $('#id_valor_iva').val().replace(/[$,]/g,'') * 1
+          if (iva!=0){
+            $('#id_tipo_iva').prop('required',true)
+          }
+          else{
+            $('#id_tipo_iva').prop('required',false)
+          }
+          rte = $('#id_valor_rte').val().replace(/[$,]/g,'') * 1
+          if (rte!=0){
+            $('#id_tipo_rte').prop('required',true)
+          }
+          else{
+            $('#id_tipo_rte').prop('required',false)
+          }
+          rte_asumida = $('#id_rte_asumida').prop('checked')
+          if (rte_asumida == true){
+            rte = 0
+          }
+
+          total = new Intl.NumberFormat('en-EN').format(subtotal + iva - rte)
+
+          $('#id_total_calculado').val(total)
+      }
+
+
+      function totalizar_legalizaciones(){
+        let row = table_solicitudes.row('.selected').data()
+        total = $('#table_legalizacion tfoot th').last().text()
+        .replace(/[$,]/g,'') * 1
+
+        saldo = row.valor - total
+
+        if (saldo > 0) {
+              $('#id_reemb_empresa').val(
+                new Intl.NumberFormat('en-EN').format(saldo)
+              )
+              
+              $('#id_reemb_empleado').val(0)
+              if (row.has_reembolsos) {
+                $('#btn-approve-tesor').removeClass('btn-danger').addClass('btn-success')
+              .html('<i class="fas fa-check"></i>').prop('disabled',true)
+              }
+              else{
+                $('#btn-approve-tesor').removeClass('btn-sucess').addClass('btn-danger')
+              .html('<i class="fas fa-times"></i>').prop('disabled',false)
+              }
+              
+            }
+            else {
+              $('#id_reemb_empresa').val(0)
+              $('#id_reemb_empleado').val(
+                new Intl.NumberFormat('en-EN').format(saldo * -1)
+              )
+              $('#btn-approve-tesor').removeClass('btn-danger').addClass('btn-success')
+              .html('<i class="fas fa-check"></i>').prop('disabled',true)
+            }
+      }
+      
+      $('#id_pais').on('change',function(){
+      let pais = $(this).val()
+      $('#id_estado').empty()
+      .append(`<option value="">Selecciona...</option>`)
+      $('#id_ciudad').empty()
+        .append(`<option value="">Selecciona...</option>`)
+      $.ajax({
+      type:'get',
+      url:'/ajax_request/datacountries',
+      data:{
+        'tipo':'estados',
+        'pais':pais
+      },
+      success: function (response) {
+        var estados = JSON.parse(response['estados'])
+        for (estado in estados){
+          let fields = estados[estado].fields
+          let pk = estados[estado].pk
+          $('#id_estado').append(
+            `<option value="${pk}">${fields.state_name}</option>`
+          )
+        }
+      }
+    })
+  })
+      $('#id_estado').on('change',function(){
+        let estado = $(this).val()
+        $('#id_ciudad').empty()
+        .append(`<option value="">Selecciona...</option>`)
+        $.ajax({
+        type:'get',
+        url:'/ajax_request/datacountries',
+        data:{
+          'tipo':'ciudades',
+          'estado':estado
+        },
+        success: function (response) {
+          var ciudades = JSON.parse(response['ciudades'])
+          for (ciudad in ciudades){
+            let fields = ciudades[ciudad].fields
+            let pk = ciudades[ciudad].pk
+            $('#id_ciudad').append(
+              `<option value="${pk}">${fields.city_name}</option>`
+            )
+          }
+        }
+      })
+    })
+      $(this).click(function(e){
+        if(e.button == 0){
+            $(".contextmenu").css("display", "none");
+        }
+      });
+      $(this).keydown(function(e){
+          if(e.keyCode == 27){
+              $(".contextmenu").css("display", "none");
+          }
+      });
+    
+    })
+</script>
+{%endblock%}
+{%block style%}
+<link rel="stylesheet" href="{%static 'css/fstdropdown.css'%}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+    th, td{
+        text-align: center;
+    }
+
+    tbody {
+        cursor: pointer;
+    }
+    td {
+      font-size: x-small;
+    }
+    .fs-small{
+      font-size: small;
+    }
+</style>
+{%endblock%}

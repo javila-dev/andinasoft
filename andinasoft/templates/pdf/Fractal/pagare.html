@@ -1,0 +1,222 @@
+{%load static%}{%load extras%}
+<html>
+    <body>
+        <div id="footer_content">
+            <p style="margin-bottom: 0px;margin-right: 10rem;text-align: right;">
+                &nbsp;</p>
+            <img style="margin-top: 0px" src="{%static 'img/pie-de-pagina-fractal.png'%}" width="820">
+        </div>
+        <div id="header_content">
+            <table>
+                <tr>
+                    <th style="align:left">
+                        <img src="{%static 'img/fractal450x.png'%}" width="200">
+                    </th>
+                    <th></th>
+                    <th style="align:right">
+                        <img src="{%static 'img/casas-de-verano450x.png'%}" width="180">
+                    </th>
+                </tr>
+            </table>
+        </div>
+
+        <div>
+            <h1 style="text-align: center;">
+                <b>PAGARÉ N° 
+                    <span style="color:#7B50FF;font-size:15px;"> No.&nbsp;{{ctr.pk}}</span></b>
+            </h1>
+            <h2>
+                FECHA DE VENCIMIENTO DE LA OBLIGACIÓN: ________/________/_________<br>
+                VALOR: $ _____________________________________________________________<br>
+                TASA DE INTERES: ____________________________________________________<br>
+                DEUDOR: YO, <u><b>{{ctr.titulares.0.nombrecompleto.upper}}</b>&nbsp;</u>
+            </h2>
+            <p>
+                Me obligo a pagar, incondicionalmente, solidariamente e indivisiblemente, por medio de
+                este PAGARÉ a la orden de la sociedad <b>ANDINA CONCEPTOS INMOBILIARIOS SAS</b>, identificado
+                con <b>NIT: 900.993.044-9</b>, en adelante <b>EL ACREEDOR</b>, o a quien represente sus derechos, o a la
+                persona natural o jurídica a quien el mencionado acreedor ceda o endose sus derechos sobre este
+                pagaré, la suma cierta de
+                _________________________________________________________________________,
+                ($_________________________________), pesos moneda legal colombiana; en la forma y
+                términos aquí establecidos:<br>
+                1. <b>EL DEUDOR</b> efectuarán los pagos mensuales mediante:<br>
+                a) Tarjeta de crédito.<br>
+                b) Transferencia automática de su cuenta de cheques, ahorros o corriente.<br>
+                c) Pago directo en efectivo directo al <b>ACREEDOR</b> o cualquier apoderado o endosatario de
+                este, en lugar designado en el presente pagaré, o en cualquier otro lugar que por escrito
+                señale <b>EL ACREEDOR</b>.<br>
+                Cualquier pago que se efectúe en cualquier otra forma diferente a la prevista en el presente
+                documento se hará bajo riesgo exclusivo de <b>EL DEUDOR</b>, y releva a <b>EL ACREEDOR</b> de
+                cualquier obligación o responsabilidad con respecto a dicho pago efectuado fuera de lo
+                establecido, y <b>EL DEUDOR</b> seguirán siendo responsable de dicho pago conforme a lo
+                establecido en este pagaré.<br>
+                2. Qué sobre la suma de dinero reconoceré y pagaré, por concepto de intereses de
+                plazo, a la tasa que fije <b>EL ACREEDOR</b>, o quien represente sus derechos, siempre y cuando
+                no sea superior a la establecida por la <b>SUPERINTENCIA FINANCIERA DE COLOMBIA</b>; Los
+                intereses ordinarios se calcularán sobre saldos insolutos del capital en la fecha de pago de
+                cada mensualidad. El saldo insoluto del capital será determinado teniendo en cuenta los pagos
+                efectuados por <b>EL DEUDOR</b>.<br>
+                3. En el evento que alguna suma pactada no fuese pagada en su fecha de vencimiento, causará
+                intereses moratorios a la más alta tasa legal colombiana, desde la fecha de su vencimiento,
+                hasta la de su total y completo pago.<br>
+                4. Cada pago se aplicará primero a los intereses moratorios y cargos por cobranza, si los hubiere,
+                y después a los ordinarios, y por último a capital.<br>
+                5. <b>EL ACREEDOR</b>, podrá declarar vencidos la totalidad de los plazos de esta obligación, o de las
+                cuotas que constituyan el saldo de lo debido, y exigir su pago anticipado ya sea judicial o
+                extrajudicialmente, cuando <b>EL DEUDOR</b> entren en mora o en incumplimiento de las
+                obligaciones derivadas del presente pagaré. Ninguna prorroga, renovación o cesión de este
+                pagaré, o de las condiciones establecidas en el mismo por parte de <b>EL ACREEDOR</b>, relevará a
+                <b>EL DEUDOR</b> de las obligaciones contraídas por el presente pagaré.<br>
+                6. Si por causa de mora este pagaré se entregara a cualquier agencia de cobranza
+                independiente, <b>EL DEUDOR</b> pagará los honorarios del mismo en que incurra por
+                demandar las obligaciones del presente pagaré, debidamente comprobados.<br>
+                7. En caso de que haya lugar al recaudo judicial o extrajudicial de la obligación contenida en el
+                presente pagaré, será a cargo de <b>EL DEUDOR</b>, las costas judiciales y/o los honorarios
+                que se causen por tal razón.<br>
+                8. <b>EL DEUDOR</b> tendrán derecho a pagar por adelantado el total o parte del capital
+                adeudado, en cualquier momento sin sanción alguna, con la consecuente reducción de
+                intereses ordinarios.<br>
+                9. Cualquier referencia que se haga de <b>EL ACREEDOR</b> en el presente, incluirá a cualquier
+                cesionario o endosatario de <b>EL ACREEDOR</b> , que podrá ejercer todos los derechos y recursos
+                de este.<br>
+                10. Las obligaciones contenidas en este pagaré se consideran solidarias cuando se han suscrito
+                por dos o más personas, incluyendo <b>EL DEUDOR</b> solidarios.<br>
+                11. Ninguna transferencia, renovación, prórroga o cesión, de este pagaré, o de cualquier interés
+                establecido en el mismo, relevará a <b>EL DEUDOR</b> de las obligaciones adquiridas en el
+                presente pagaré.<br>
+                12. El presente pagaré se rige por las leyes colombianas y presta merito ejecutivo.<br><br>
+
+                En Constancia de aceptación de este pagaré firman <b>EL DEUDOR</b> a los ___________ días del
+                mes de ___________ del año_______, en la ciudad de __________________.
+            </p>
+            <p style="font-size:12px">
+                <br><br><br><br>
+                ____________________________________________<br>
+                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                <b>CC: </b>{{ctr.titulares.0.pk}}
+            </p>
+
+            <p>Endoso al Portador (Endosatario):</p><br>
+                <table>
+                    <tr>
+                        <td style="border-bottom: solid 0.6px black"></td>
+                    </tr>
+                </table><br>
+                <table>
+                    <tr>
+                        <td style="border-bottom: solid 0.6px black;"></td>
+                    </tr>
+                </table><br>
+                <table>
+                    <tr>
+                        <td style="border-bottom: solid 0.6px black;"></td>
+                    </tr>
+                </table><br>
+                <p>Endosante:</p><br>
+                <table>
+                    <tr>
+                        <td style="border-bottom: solid 0.6px black"></td>
+                    </tr>
+                </table><br>
+                <table>
+                    <tr>
+                        <td style="border-bottom: solid 0.6px black;"></td>
+                    </tr>
+                </table><br>
+                <table>
+                    <tr>
+                        <td style="border-bottom: solid 0.6px black;"></td>
+                    </tr>
+                </table>         
+            <pdf:nextpage/>
+            <h1>
+                Señores:<br>
+                ANDINA CONCEPTOS INMOBILIARIOS S.A.S.<br>
+                NIT. 900.993.044-9<br>
+                Ciudad<br><br>
+                <b>Referencia: Autorización para llenar espacio en blanco del Pagaré N° 
+                    <span style="color:#7B50FF;font-size:15px;"> No.&nbsp;{{ctr.pk}}</span></b>
+            </h1>
+            <p>
+                YO, <b>{{ctr.titulares.0.nombrecompleto.upper}}</b>, 
+                mayor de edad, identificado como aparece al pie de mi correspondiente firma, actuando
+                en nombre propio y en calidad de <b>EL DEUDOR</b>, por medio del presente escrito
+                manifiesto: que facultamos a <b>EL ACREEDOR, ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</b>,
+                identificada con el <b>NIT: 900.993.044-9</b>, o a quien represente sus derechos, o a la persona natural o
+                jurídica a quien el mencionado acreedor ceda o endose sus derechos sobre este pagaré, de manera
+                permanente e irrevocable para que, en caso de incumplimiento en el pago oportuno de alguna de las
+                obligaciones que hemos adquirido con EL ACREEDOR, derivadas de los negocios comerciales y
+                contractuales; proceda a llenar los espacios en blanco del pagaré de la referencia, que he suscrito
+                en su favor y que se anexa, con el fin de convertir este, en un documento que presta merito ejecutivo
+                de conformidad con el Artículo 622 del Código de Comercio.<br><br>
+                El espacio correspondiente al numeral primero se diligenciará por una suma igual a la que resulte
+                pendiente de pago de todas las obligaciones contraídas con el acreedor, por concepto de capital,
+                intereses de plazo, gastos, multas y/o sanciones, según la contabilidad de <b>EL ACREEDOR</b> a la
+                fecha en que sea llenado el pagaré.<br><br>
+                El espacio correspondiente a la fecha en que se debe hacer el pago, se diligenciará con la fecha
+                respectiva al día en que sea llenado el pagaré.<br><br>
+                En constancia de lo anterior se firma la presente autorización, 
+                el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u>.
+            </p>
+            <p style="font-size:12px">
+                <br><br><br><br>
+                ____________________________________________<br>
+                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                <b>CC: </b>{{ctr.titulares.0.pk}}
+            </p>
+</div>
+
+        <head>
+            <style>
+                @page {
+                    size: legal;
+                    @frame content_frame {
+                        /* Content Frame */
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 3.4cm;
+                        height: 28.7cm;
+                    }
+                    @frame footer_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: footer_content;
+                        left: 0cm;
+                        width: 24cm;
+                        top: 32.6cm;
+                        height: 3.6cm;
+                    }
+                    @frame header_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: header_content;
+                        left: 0.5cm;
+                        width: 20cm;
+                        top: 0.5cm;
+                        height: 3cm;
+                    }
+                }
+            
+                @font-face {
+                    font-family: Outfit;
+                    src: url("{%static 'fonts/Outfit/Outfit-Light.ttf'%}");
+                }
+            
+                /* Bold */
+                @font-face {
+                    font-family: Outfit;
+                    src: url("{%static 'fonts/Outfit/Outfit-Bold.ttf'%}");
+                    font-weight: bold;
+                }
+            
+                body {
+                    font-family: Outfit;
+                }
+                p,li {
+                    font-size: 11.5px;
+                    line-height: normal;
+                    text-align: justify;
+                }
+            </style>
+        </head>
+    </body>
+</html>

@@ -1,0 +1,213 @@
+{%load crispy_forms_tags%}
+<div class='container-fluid'>
+    <form method="post">{%csrf_token%}
+        <div class="row pt-3" style="margin-left:1rem;margin-right:0px">
+            <div class='col-md-5'>
+                <h5>Cliente: <small class="text-muted" id='nombre_titular'> </small></h5>
+            </div>
+            <div class='col-md-3'>
+                <h6>Fecha Actualizacion: <small class="text-muted" id="fecha_act"> </small></h6>
+            </div>
+            <div class='col-md-1 offset-3'>
+                <input class="btn btn-primary float-right" type="submit" value="Actualizar"
+                    name='actualizar_info_titular'>
+            </div>
+        </div>
+        <hr />
+        <p class='lead' style="margin-left:1rem;">Informacion Basica</p>
+        <div class="row" style="margin-left:0px;margin-right:0px;margin-top:1rem;">
+            <div class='col-xs-12 col-md-2'>{{form_info_titular.idTercero|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.nombres|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-4'>{{form_info_titular.apellidos|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.fecha_nac|as_crispy_field}}</div>
+        </div>
+        <div class="row" style="margin-left:0px;margin-right:0px;">
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.celular1|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-2'>{{form_info_titular.telefono1|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-2'>{{form_info_titular.telefono2|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-5'>{{form_info_titular.email|as_crispy_field}}</div>
+        </div>
+        <div class="row" style="margin-left:0px;margin-right:0px;">
+            <div class='col-xs-12 col-md-5'>{{form_info_titular.domicilio|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-4'>{{form_info_titular.oficina|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.ciudad|as_crispy_field}}</div>
+        </div>
+        <hr />
+        <p class='lead' style="margin-left:1rem;">Informacion Complementaria</p>
+        <div class="row" style="margin-left:0px;margin-right:0px;">
+            <div class='col-xs-12 col-md-4'>{{form_info_titular.ocupacion|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-2'>{{form_info_titular.hijos|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.nivel_educativo|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.nivel_ingresos|as_crispy_field}}</div>
+        </div>
+        <div class="row" style="margin-left:0px;margin-right:0px;">
+            <div class='col-xs-12 col-md-3'>{{form_info_titular.vehiculo|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-7'>{{form_info_titular.pasatiempos|as_crispy_field}}</div>
+            <div class='col-xs-12 col-md-2'>{{form_info_titular.estado_civil|as_crispy_field}}</div>
+        </div>
+        <div id='block-conyuge'>
+            <hr />
+            <p class='lead' style="margin-left:1rem;">Informacion Conyuge</p>
+            <div class="row" style="margin-left:0px;margin-right:0px;">
+                <div class='col-xs-12 col-md-2'>{{form_info_titular.id_conyuge|as_crispy_field}}</div>
+                <div class='col-xs-12 col-md-3'>{{form_info_titular.nombre_cony|as_crispy_field}}</div>
+                <div class='col-xs-12 col-md-3'>{{form_info_titular.apellido_cony|as_crispy_field}}</div>
+                <div class='col-xs-12 col-md-2'>{{form_info_titular.fechanac_cony|as_crispy_field}}</div>
+                <div class='col-xs-12 col-md-2'>{{form_info_titular.celular_cony|as_crispy_field}}</div>
+            </div>
+        </div>
+    </form>
+</div>
+{{form_info_titular.media}}
+<script>
+    $("#block-conyuge").css("display", "none")
+    $(document).ready(function () {
+        $("#estado_civil").click(function () {
+            if ($("#estado_civil").val() == 'SOLTERO') {
+                $("#block-conyuge").css("display", "none")
+            } else {
+                $("#block-conyuge").css("display", "block")
+            }
+        })
+    })
+</script>
+<script>
+    $(document).ready(function () {
+        $("#titular1").click(function () {
+            $('#titulares-tab').tab('show')
+            document.getElementById('nombre_titular').innerHTML = "{{info_titular1.nombrecompleto}}"
+            document.getElementById('fecha_act').innerHTML = "{{info_titular1.fecha_actualizacion}}"
+            $("#cc_titular").val('{{info_titular1.idTercero}}');
+            $("#nombres_titular").val('{{info_titular1.nombres}}');
+            $("#apellidos_titular").val('{{info_titular1.apellidos}}');
+            $("#celular_titular").val('{{info_titular1.celular1}}');
+            $("#fecha_nac_titular").val('{{info_titular1.fecha_nac|date:"Y-m-d"}}');
+            $('#id_ciudad').val('{{info_titular1.ciudad}}')
+            $("#telefono1_titular").val('{{info_titular1.telefono1}}');
+            $("#telefono2_titular").val('{{info_titular1.telefono2}}');
+            $("#email_titular").val('{{info_titular1.email}}');
+            $("#domicilio_titular").val('{{info_titular1.domicilio}}');
+            $("#oficina_titular").val('{{info_titular1.oficina}}');
+            $("#ciudad_titular").val('{{info_titular1.ciudad}}');
+            $("#ocupacion_titular").val('{{info_titular1.ocupacion}}');
+            $("#hijos_titular").val('{{info_titular1.hijos}}');
+            $("#nivel_educativo_titular").val('{{info_titular1.nivel_educativo}}');
+            $("#nivel_ingresos_titular").val('{{info_titular1.nivel_ingresos}}');
+            $("#vehiculo_titular").val('{{info_titular1.vehiculo}}');
+            $("#pasatiempos_titular").val('{{info_titular1.pasatiempos}}');
+            $("#estado_civil").val('{{info_titular1.estado_civil}}');
+            if ($("#estado_civil").val() == 'SOLTERO') {
+                $("#block-conyuge").css("display", "none")
+            } else {
+                $("#block-conyuge").css("display", "block")
+                $("#id_conyuge").val('{{info_titular1.id_conyuge}}');
+                $("#nombre_cony").val('{{info_titular1.nombre_cony}}');
+                $("#apellido_cony").val('{{info_titular1.apellido_cony}}');
+                $("#fechanac_cony").val('{{info_titular1.fechanac_cony|date:"Y-m-d"}}');
+                $("#celular_cony").val('{{info_titular1.celular_cony}}');
+            }
+        })
+        $("#titular2").click(function () {
+            $('#titulares-tab').tab('show')
+            document.getElementById('nombre_titular').innerHTML = "{{info_titular2.nombrecompleto}}"
+            document.getElementById('fecha_act').innerHTML = "{{info_titular2.fecha_actualizacion}}"
+            $("#cc_titular").val('{{info_titular2.idTercero}}');
+            $("#nombres_titular").val('{{info_titular2.nombres}}');
+            $("#apellidos_titular").val('{{info_titular2.apellidos}}');
+            $("#celular_titular").val('{{info_titular2.celular1}}');
+            $("#fecha_nac_titular").val('{{info_titular2.fecha_nac|date:"Y-m-d"}}');
+            $("#telefono1_titular").val('{{info_titular2.telefono1}}');
+            $("#telefono2_titular").val('{{info_titular2.telefono2}}');
+            $('#id_ciudad').val('{{info_titular2.ciudad}}')
+            $("#email_titular").val('{{info_titular2.email}}');
+            $("#domicilio_titular").val('{{info_titular2.domicilio}}');
+            $("#oficina_titular").val('{{info_titular2.oficina}}');
+            $("#ciudad_titular").val('{{info_titular2.ciudad}}');
+            $("#ocupacion_titular").val('{{info_titular2.ocupacion}}');
+            $("#hijos_titular").val('{{info_titular2.hijos}}');
+            $("#nivel_educativo_titular").val('{{info_titular2.nivel_educativo}}');
+            $("#nivel_ingresos_titular").val('{{info_titular2.nivel_ingresos}}');
+            $("#vehiculo_titular").val('{{info_titular2.vehiculo}}');
+            $("#pasatiempos_titular").val('{{info_titular2.pasatiempos}}');
+            $("#estado_civil").val('{{info_titular2.estado_civil}}');
+            if ($("#estado_civil").val() == 'SOLTERO') {
+                $("#block-conyuge").css("display", "none")
+            } else {
+                $("#block-conyuge").css("display", "block")
+                $("#id_conyuge").val('{{info_titular2.id_conyuge}}');
+                $("#nombre_cony").val('{{info_titular2.nombre_cony}}');
+                $("#apellido_cony").val('{{info_titular2.apellido_cony}}');
+                $("#fechanac_cony").val('{{info_titular2.fechanac_cony|date:"Y-m-d"}}');
+                $("#celular_cony").val('{{info_titular2.celular_cony}}');
+            }
+        })
+        $("#titular3").click(function () {
+            $('#titulares-tab').tab('show')
+            document.getElementById('nombre_titular').innerHTML = "{{info_titular3.nombrecompleto}}"
+            document.getElementById('fecha_act').innerHTML = "{{info_titular3.fecha_actualizacion}}"
+            $("#cc_titular").val('{{info_titular3.idTercero}}');
+            $("#nombres_titular").val('{{info_titular3.nombres}}');
+            $("#apellidos_titular").val('{{info_titular3.apellidos}}');
+            $("#celular_titular").val('{{info_titular3.celular1}}');
+            $("#fecha_nac_titular").val('{{info_titular3.fecha_nac|date:"Y-m-d"}}');
+            $("#telefono1_titular").val('{{info_titular3.telefono1}}');
+            $("#telefono2_titular").val('{{info_titular3.telefono2}}');
+            $('#id_ciudad').val('{{info_titular3.ciudad}}')
+            $("#email_titular").val('{{info_titular3.email}}');
+            $("#domicilio_titular").val('{{info_titular3.domicilio}}');
+            $("#oficina_titular").val('{{info_titular3.oficina}}');
+            $("#ciudad_titular").val('{{info_titular3.ciudad}}');
+            $("#ocupacion_titular").val('{{info_titular3.ocupacion}}');
+            $("#hijos_titular").val('{{info_titular3.hijos}}');
+            $("#nivel_educativo_titular").val('{{info_titular3.nivel_educativo}}');
+            $("#nivel_ingresos_titular").val('{{info_titular3.nivel_ingresos}}');
+            $("#vehiculo_titular").val('{{info_titular3.vehiculo}}');
+            $("#pasatiempos_titular").val('{{info_titular3.pasatiempos}}');
+            $("#estado_civil").val('{{info_titular3.estado_civil}}');
+            if ($("#estado_civil").val() == 'SOLTERO') {
+                $("#block-conyuge").css("display", "none")
+            } else {
+                $("#block-conyuge").css("display", "block")
+                $("#id_conyuge").val('{{info_titular3.id_conyuge}}');
+                $("#nombre_cony").val('{{info_titular3.nombre_cony}}');
+                $("#apellido_cony").val('{{info_titular3.apellido_cony}}');
+                $("#fechanac_cony").val('{{info_titular3.fechanac_cony|date:"Y-m-d"}}');
+                $("#celular_cony").val('{{info_titular3.celular_cony}}');
+            }
+        })
+        $("#titular4").click(function () {
+            $('#titulares-tab').tab('show')
+            document.getElementById('nombre_titular').innerHTML = "{{info_titular4.nombrecompleto}}"
+            document.getElementById('fecha_act').innerHTML = "{{info_titular4.fecha_actualizacion}}"
+            $("#cc_titular").val('{{info_titular4.idTercero}}');
+            $("#nombres_titular").val('{{info_titular4.nombres}}');
+            $("#apellidos_titular").val('{{info_titular4.apellidos}}');
+            $("#celular_titular").val('{{info_titular4.celular1}}');
+            $("#fecha_nac_titular").val('{{info_titular4.fecha_nac|date:"Y-m-d"}}');
+            $("#telefono1_titular").val('{{info_titular4.telefono1}}');
+            $("#telefono2_titular").val('{{info_titular4.telefono2}}');
+            $('#id_ciudad').val('{{info_titular4.ciudad}}')
+            $("#email_titular").val('{{info_titular4.email}}');
+            $("#domicilio_titular").val('{{info_titular4.domicilio}}');
+            $("#oficina_titular").val('{{info_titular4.oficina}}');
+            $("#ciudad_titular").val('{{info_titular4.ciudad}}');
+            $("#ocupacion_titular").val('{{info_titular4.ocupacion}}');
+            $("#hijos_titular").val('{{info_titular4.hijos}}');
+            $("#nivel_educativo_titular").val('{{info_titular4.nivel_educativo}}');
+            $("#nivel_ingresos_titular").val('{{info_titular4.nivel_ingresos}}');
+            $("#vehiculo_titular").val('{{info_titular4.vehiculo}}');
+            $("#pasatiempos_titular").val('{{info_titular4.pasatiempos}}');
+            $("#estado_civil").val('{{info_titular4.estado_civil}}');
+            if ($("#estado_civil").val() == 'SOLTERO') {
+                $("#block-conyuge").css("display", "none")
+            } else {
+                $("#block-conyuge").css("display", "block")
+                $("#id_conyuge").val('{{info_titular4.id_conyuge}}');
+                $("#nombre_cony").val('{{info_titular4.nombre_cony}}');
+                $("#apellido_cony").val('{{info_titular4.apellido_cony}}');
+                $("#fechanac_cony").val('{{info_titular4.fechanac_cony|date:"Y-m-d"}}');
+                $("#celular_cony").val('{{info_titular4.celular_cony}}');
+            }
+        })
+    })
+</script>

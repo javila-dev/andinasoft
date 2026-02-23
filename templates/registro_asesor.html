@@ -1,0 +1,68 @@
+{% extends 'simple_base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Registrar Asesor{%endblock%}
+{%block style%}
+<style>
+    .form-signin{
+        background: rgb(31,52,46);
+        background: linear-gradient(0deg, rgba(31,52,46,1) 0%, rgba(51,84,75,1) 88%);
+    }
+    .bg-levelcurves{
+        background-image: url("{%static 'img/bg-andina.jpg'%}");
+        font-family: 'Ubuntu', sans-serif;;
+    }
+    .btn-andina{
+        background-color: #33544b;
+        border-color: #33544b;
+    }
+    .btn-andina:hover{
+        background-color: #2c3f3a;
+        border-color: #2c3f3a;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='row vh-100 mx-0'>
+    {%include 'manage/form_errors.html'%}
+    <div class='col-md-5 px-0 d-none d-sm-block d-sm-none d-md-block form-signin'>
+        <table style="height: 100%;width: 100%;">
+            <tbody>
+                <td class='align-middle'>
+                    <img src="https://somosandina.co/wp-content/uploads/2021/02/footer-logo.png" class='img-fluid pb-1 mx-auto d-block' width="230" height="170"><br><br><br><br>
+                    <h1 class='display-4 text-center text-white'>!Bienvenido al equipo!</h1>
+                </td>
+            </tbody>
+        </table>
+    </div>
+    <div class='col-md-7 px-0 bg-levelcurves'>
+        <div class='row mx-0 justify-content-center align-items-center h-100'>
+            <div class='col'>
+                <div class='mx-auto my-3 bg-white shadow rounded-3' style="width: 500px;">
+                    <h3 class='text-center text-white py-2' style='background: rgba(51,84,75,1);'>Registrar Asesor</h3>
+                    <div class='px-4 pb-3 mx-auto'>
+                        {%crispy form%}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $(document).ready(function(){
+        $('#label_id_politica_datos').append(
+            'He leido y acepto la <a href="https://www.somosandina.co/politica-tratamiento-datos" target="_blank">politica de datos</a> personales'
+        )
+        $(function(){
+            $('#id_num_cta').keypress(function(e) {
+                if(isNaN(this.value + String.fromCharCode(e.charCode))) 
+                return false;
+            })
+            .on("cut copy paste",function(e){
+                e.preventDefault();
+            });
+
+            });
+    })
+</script>
+{%endblock%}

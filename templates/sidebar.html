@@ -1,0 +1,240 @@
+{%load static%}
+<button id='sidebarCollapse' class='btn btn-primary collapsebutton float-right'>
+    <i id='btnsidebar' class="fas fa-arrow-left"></i>
+</button>
+<nav id="sidebar">
+    <div class="sidebar-header">
+        <div class='flex'>
+            <h3>
+                <a id='brandicon' class="text-center" href="/welcome"><img class='pb-1' src="{%static 'img/tierra.png'%}" alt="" width="35" height="40"></i></a>
+                <a id='brandname' class='text-center' href='/welcome'>AndinaSoft</a>
+            </h3>
+        </div>
+        <div class='container-fluid'>
+            {%if user.is_authenticated%}
+            <a href='#' data-toggle="modal" data-target='#avatarModal'>
+                <img id='imgUser' src="/media/{{user.profiles.avatar.image}}" alt='Imagen usuario' class='rounded-circle mx-auto d-block userimg'>
+            </a>
+            <p class='text-center'>{{request.user.first_name}}</p>            
+            <p class='position-absolute' style='left:220px;top:170px'>
+                <a href='/admin' target="_blank" data-toggle="tooltip" data-placement="top" title="Sitio administrativo"><i class="fas fa-cog"></i></a></p>
+            <p class='position-absolute' style='left:15px!important;top:167px'>
+                <a href='/accounts/logout' data-toggle="tooltip" data-placement="top" title="Cerrar sesion"><i class="fas fa-door-open"></i></a></p>
+            {%else%}
+            <a href='/accounts/login'>
+                <img id='imgUser'  src="/media/avatars/nouser.png" alt='Imagen usuario' class='rounded-circle mx-auto d-block userimg'>
+                <p class='text-center'>Iniciar sesion</p>
+            </a>
+            {%endif%}
+        </div>
+    </div>
+    <div class='sidebarItems'>
+        <ul class="list-unstyled components">
+            <p class='mb-0'>Areas</p>
+            <li class="active">
+                <a href="#tercerosSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-lg fa-user-plus"></i>&nbsp;Terceros</a></a>
+                <ul class="collapse list-unstyled" id="tercerosSubmenu">
+                    <li>
+                        <a href="/reg_asesor">Asesor</a>
+                    </li>
+                    <li>
+                        <a href="/reg_cliente">Cliente</a>
+                    </li>
+                    <li>
+                        <a  href="/operaciones/buscar_cliente">Buscar Cliente</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/gestion_asesores">Gestion de Asesores</a>
+                    </li>
+                </ul>
+            </li>
+            <li>
+                <a href="#comercialSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-lg fa-money-bill-wave"></i>&nbsp;Comercial</a>
+                <ul class="collapse list-unstyled" id="comercialSubmenu">
+                    <li>
+                        <a href="/simulador">Simulador</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/inventario_ccial">Nueva venta</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/ventas_sin_aprobar">Ventas sin Aprobar</a>
+                    </li>
+                    <li>
+                        <a href="/crm/principal">CRM</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/lista_asesores">Asesores activos</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/gtt">GTT</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/detalle_comisiones">Detalle Comisiones</a>
+                    </li>
+                </ul>
+            </li>
+            <li>
+                <a href="#operacionesSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-lg fa-project-diagram"></i>&nbsp;Operaciones</a>
+                <ul class="collapse list-unstyled" id="operacionesSubmenu">
+                    <li>
+                        <a href="/projectselector/nueva_adjudicacion">Reservas</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/lista_adj">Adjudicaciones</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/desistidos">Desistidos</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/promesas">Estados promesas</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/comisiones">Comisiones</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/descuentos">Descuentos condicionados</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/inv_admin">Inventario Administrativo</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/parametros">Parametros</a>
+                    </li>
+                </ul>
+            </li>
+            <li>
+                <a href="#proyectosSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-hammer"></i>&nbsp;Proyectos</a>
+                <ul class="collapse list-unstyled" id="proyectosSubmenu">
+                    <li>
+                        <a href="/buildingcontrol/suppliers">Proveedores</a>
+                        <a href="/buildingcontrol/productsandservices">Productos y servicios</a>
+                        <a href="/buildingcontrol/requirements">Requisiciones</a>
+                        <a href="/buildingcontrol/newcontract">Nueva orden</a>
+                        <a href="/buildingcontrol/unaprovedcontracts">Ordenes sin aprobar</a>
+                        <a href="/buildingcontrol/aprovedcontracts">Ordenes aprobadas</a>
+                        <a href="/buildingcontrol/allcontractprogress">Actas de recibido</a>
+                        <a href="/buildingcontrol/allotrosi">Adicionales</a>
+                        <a href="/buildingcontrol/payments">Pagos</a>
+                        <a href="/buildingcontrol/logbook">Bitacora</a>
+                    </li>
+                </ul>
+            </li>   
+            <li>
+                <a href="#tesoreriaSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-lg fa-hand-holding-usd"></i>&nbsp;Tesoreria</a>
+                <ul class="collapse list-unstyled" id="tesoreriaSubmenu">
+                    <li>
+                        <a href="/projectselector/nuevo_recaudo">Nuevo Recaudo</a>
+                    </li>
+                    <li>
+                        <a href="/tesoreria/lista_recaudos">Listado recaudos</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/recaudos_nr">Recaudos No Radicados</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/cajasefectivo">Caja efectivo</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/solicitaranticipos">Anticipos</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/principal">Movimiento diario</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/upload-movements">Cargar movimientos</a>
+                    </li>
+                    <li>
+                        <a href="/tesoreria/interfaces_tesoreria">Interfaces</a>
+                    </li>
+                </ul>
+            </li>   
+            <li>
+                <a href="#carteraSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-search-dollar"></i>&nbsp;Cartera</a>
+                <ul class="collapse list-unstyled" id="carteraSubmenu">
+                    <li>
+                        <a href="/projectselector/ver_ppto">Presupuesto</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/edades_cartera">Edades de cartera</a>
+                    </li>
+                    <li>
+                        <a href="/finance/requirereceipts">Solicitar recibo</a>
+                    </li>
+                    <li>
+                        <a href="/cartera/reporteov">Reporte OV</a>
+                    </li>
+                </ul>
+            </li>   
+            <li>
+                <a href="#contabilidadSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-coins"></i>&nbsp;Contabilidad</a>
+                <ul class="collapse list-unstyled" id="contabilidadSubmenu">
+                    <li>
+                        <a href="/projectselector/interfaces">Interfaces</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/principal">Movimiento diario</a>
+                    </li>
+                    <li>
+                        <a href="/contabilidad/informes/gastos">Informe de Gastos</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/archivocontable">Archivo Historico</a>
+                    </li>
+                </ul>
+            </li>
+            <li>
+                <a href="#recepcionSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-inbox"></i>&nbsp;Recepcion</a>
+                <ul class="collapse list-unstyled" id="recepcionSubmenu">
+                    <li>
+                        <a href="/accounting/radicarfactura">Radicar Factura</a>
+                    </li>
+                    <li>
+                        <a href="/accounting/listafacturas">Listado Facturas</a>
+                    </li>
+                    <li>
+                        <a href="/correspondencia/facturas/todas">Radicados Anteriores</a>
+                    </li>
+                </ul>
+            </li>
+            <li>
+                <a href="#servicioclienteSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-mail-bulk"></i>&nbsp;Servicio al Cliente</a>
+                <ul class="collapse list-unstyled" id="servicioclienteSubmenu">
+                    <li>
+                        <a href="/projectselector/pqrs">PQRS</a>
+                    </li>
+                </ul>
+            </li>    
+            <li>
+                <a href="/projectselector/informe_mes"><i class="fas fa-chart-line"></i>&nbsp;Informes</a>
+            </li>
+            <li>
+                <a href="#graficasSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
+                    <i class="fas fa-poll"></i>&nbsp;Graficos</a>
+                <ul class="collapse list-unstyled" id="graficasSubmenu">
+                    <li>
+                        <a href="/projectselector/graph_rcdo_mes">Recaudos mes</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/graph_rcdo_year">Recaudo anual</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/graph_ventas">Ventas</a>
+                    </li>
+                    <li>
+                        <a href="/projectselector/graph_cartera_year">Cartera</a>
+                    </li>
+                </ul>
+            </li> 
+        </ul>
+    </div>
+</nav>

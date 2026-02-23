@@ -1,0 +1,166 @@
+{%load static%}{%load extras%}
+<html>
+    <body>
+        <div id="footer_content">
+                <table style="color:#AD8C52;font-size:9px">
+                    <tr>
+                        <td style="text-align:center;border-right: #AD8C52 solid 0.5px;padding-right: 5px;">
+                            <b>Medellín</b><br>
+                            Parque empresarial Calle 11 Of 508<br>
+                            Teléfono: (4) 444 62 91
+                        </td>
+                        <td style="text-align:center">
+                            <b>Montería</b><br>
+                            Cra 8A # 63-09<br>
+                            Teléfono: (4) 444 62 91
+                        </td>
+                        <td style="text-align: right;width:60%">
+                            <span style="font-size: 20px">¡Vive en modo Club!</span><br>
+                           <span style="color:grey"><b>www.alttum.com</b></span>
+                        </td>
+                    </tr>
+                </table>
+        </div>
+        <div id="header_content">
+            <table>
+                <tr>
+                    <th style="align:left">
+                        <img src="{%static 'img/logo-alttum-collection.png'%}" width="200">
+                    </th>
+                    <th></th>
+                    <th style="text-align:right;font-size: 15px;color: gray;">
+                        Formulario de aceptación de<br>Términos y Condiciones
+                    </th>
+                </tr>
+            </table>
+        </div>
+
+        <div>
+            <p class="header">
+                <b>Membresía en alianza con:</b> <u> FRACTAL CASAS DE VERANO </u><br>
+                <b>Nombre/Razón social:</b> <u>{{ctr.titulares.0.nombrecompleto}}</u>
+                <b>Identificación/NIT:</b> <u>{{ctr.titulares.0.pk}}</u><br>
+                <b>Telefono:</b> <u>{{ctr.titulares.0.telefono1|default:"Sin informacion"}}</u>
+                <b>Email:</b><u>{{ctr.titulares.0.email|default:"Sin información"|default_if_none:"Sin información"}}</u><br>
+                <b>Dir. Residencia:</b> <u>{{ctr.titulares.0.domicilio}}</u>
+                <b>Ciudad/Municipio:</b><u>{{ctr.titulares.0.city.city_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                    {{ctr.titulares.0.estado.state_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                    {{ctr.titulares.0.pais.country_name|default:"Sin informacion"|default_if_none:"Sin información"}},
+                </u><br>
+                
+            </p>
+            <p>
+                <b>TÉRMINOS Y CONDICIONES MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA.</b><br> 
+            El programa de <b>MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA</b> se encuentra regido por los siguientes TÉRMINOS Y CONDICIONES:
+            <b>1. TARJETA DE MEMBRESÍA:</b> Documento de naturaleza virtual, cuyo uso es personal e intransferible respecto al titular del beneficio, dicha tarjeta es propiedad 
+            de ALTTUM COLLECTION, pero su uso y custodia es responsabilidad directa del beneficiario tarjetahabiente. La TARJETA DE MEMBRESÍA identifica al titular como 
+            beneficiario del programa de MEMBRESÍA ALTTUM COLLECTION, y le otorga la posibilidad de redimir beneficios permanentes establecidas por la cadena de ALTTUM 
+            COLLECTION. La TARJETA DE MEMBRESÍA se entenderá vigente mientras el tarjetahabiente sea cliente activo de ALTTUM COLLECTION CLUB ALIANZA y en todo 
+            caso hasta la fecha de vencimiento plasmada en la tarjeta. Para el uso de la TARJETA DE MEMBRESÍA en modalidad virtual es estrictamente necesario que el 
+            tarjetahabiente cuente con un dispositivo móvil, cuyos requerimientos permitan descargar y ejecutar la última versión de la APP ALTTUM COLLECTION en sistema 
+            operativo ANDROID o IOS; además de ello, el tarjetahabiente debe tener acceso a internet al momento de la redención de los beneficios de forma gratuita obtiene 
+            acceso al programa ALTTUM COLLECTION CLUB ALIANZA mediante la APP ALTTUM COLLECTION. <b>2. DISTRIBUIDOR:</b> persona natural o jurídica que ha suscrito 
+            un convenio con ALTTUM COLLECTION y en dicha razón se encuentra autorizado para distribuir el plan de MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA de 
+            manera directa y bajo su propio nombre, entregando estos beneficios a sus clientes por el periodo de un año el cual podrá ser renovado anualmente. Este beneficio 
+            funciona como valor agregado complementando la oferta de su portafolio empresarial. <b>3. OFERTAS DEL PROGRAMA DE MEMBRESÍA ALTTUM COLLECTION CLUB 
+            ALIANZA:</b> Son aquellos descuentos, ofertas y beneficios que cada ESTABLECIMIENTO efectúa mediante la aplicación móvil ALTTUM COLLECTION dirigidas a ser 
+            disfrutadas por los tarjetahabientes activos de ALTTUM COLLECTION CLUB ALIANZA. dichas ofertas se presentan en dos clases: <b>I) OFERTA PERMANENTE:</b> es aquella 
+            oferta vigente que el tarjetahabiente podrá redimir sin restricción de número de usos, presentando su TARJETA DE MEMBRESÍA virtual en el ESTABLECIMIENTO. 
+            Entiéndase por vigente las ofertas que se encuentren debidamente publicadas al momento de su redención en la aplicación móvil de ALTTUM COLLECTION. <b>II) 
+            OFERTA PUNTUAL(CUPONES):</b> es aquella que el tarjetahabiente de ALTTUM COLLECTION CLUB ALIANZA podrá redimir en una sola oportunidad mediante la 
+            presentación de cupones virtuales redimibles por la aplicación móvil de ALTTUM COLLECTION, dichas ofertas se entienden vigentes si se encuentran respaldadas 
+            por un cupón virtual contenido en la aplicación móvil ALTTUM COLLECTION. Para la redención de una OFERTA PUNTUAL(CUPONES) es estrictamente necesario que 
+            el tarjetahabiente cuente con un dispositivo móvil cuyos requerimientos permitan descargar y ejecutar la última versión de la APP ALTTUM COLLECTION en sistema 
+            operativo ANDROID o IOS; además de ello, el tarjetahabiente debe tener acceso a internet al momento de la utilización de la redención del CUPÓN. <b>4. TRATAMIENTO 
+            DE DATOS:</b> EL tarjetahabiente de la MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA, acepta y autoriza con la suscripción del presente documento, a ALTTUM 
+            COLLECTION. para que efectué el tratamiento de los datos personales, los cuales forman parte de la base de datos del prestador del programa de beneficios, con 
+            la finalidad de usarlos, de forma enunciativa, mas no limitativa, para identificar, comunicar, ubicar, contactar y enviar la información o bienes al tarjetahabiente de 
+            ALTTUM COLLECTION <b>5. ACTIVACIÓN:</b> El tarjetahabiente deberá activar su membresía con el pago de la cuota de administración equivalente a 1 Smlmv, recibiendo 
+            por medio de este el ingreso al programa de MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA por duración de 1 año. Al momento de la firma de términos y 
+            condiciones de la Membresía Alttum Collection club alianza, el tarjetahabiente tendrá hasta 3 meses para realizar la redención de este obsequio, si pasado 
+            este tiempo no activa su Membresía se da por entendido que rechaza dicho regalo. <b>6. RENOVACIÓN:</b> tarjetahabiente deberá renovar su membresía cada 12 
+            meses pagando su administración equivalente a 1 Smlmv. El tarjetahabiente deberá renovar su membresía de manera consecutiva cada año, en caso de 
+            que no sea renovada dentro del plazo establecido este obsequio quedara automáticamente cancelado, perdiendo así el ingreso y disfrute de todos sus 
+            beneficios de la membresía Alttum Collection Club alianza. <b>7. CESIÓN:</b> Los derechos del contrato de MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA, podrán 
+            ser cedidos por EL TITULAR DEL BENEFICIO, sin ningún costo a los beneficiarios suscritos en su membresía. En caso de cesión a persona distinta a Los beneficiarios, 
+            deberá pagar este, la suma equivalente al 5% del valor comercial de la membresía club, que se tenga al momento de la solicitud de cesión. <b>PARÁGRAFO:</b> Con la venta 
+            del lote por parte de EL TITULAR DEL BENEFICIO, no se transfiere al comprador la MEMBRESÍA ALTTUM COLLECTION CLUB ALIANZA. En este caso, deberá el nuevo 
+            propietario comprar una membresía, si desea disfrutar de los beneficios de esta. <b>8. BENEFICIARIOS:</b> El tarjetahabiente tendrá derecho a registrar en aplicación 
+            móvil ALTTUM COLLECTION una cantidad máxima de <b>TRES (3)</b> beneficiarios, los cuales deberán aceptar también los términos y condiciones del programa 
+            de beneficios ALTTUM COLLECTION CLUB. Estos beneficiarios podrán gozar de los beneficios de pertenecer a la MEMBRESÍA ALTTUM COLLECTION. <b>9. USUARIOS 
+            INVITADOS:</b> Los usuarios invitados por los tarjetahabientes que no este registrados como beneficiarios, deberán pagar tarifa plena de cada servicio de los hoteles 
+            pertenecientes a la línea ALTTUM COLLECTION.<br><br>
+            Con la presente suscripción del presente documento el tarjetahabiente del programa de membresía Alttum Collection Club Alianza manifiesta que leyó, conoció y 
+            acepto los términos y condiciones anteriormente descritos.
+            <br><br>
+                Se firma el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+            </p><br>
+            <p style="font-size:12px">
+                <b>El Titular</b><br><br><br><br><br>
+                ____________________________________________<br>
+                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                <b>CC: </b>{{ctr.titulares.0.pk}}
+            </p>
+</div>
+
+        <head>
+            <style>
+                @page {
+                    size: a4;
+                    @frame content_frame {
+                        /* Content Frame */
+                        left: 1cm;
+                        width: 18.5cm;
+                        top: 3.4cm;
+                        height: 25.7cm;
+                    }
+                    @frame footer_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: footer_content;
+                        left: 0.5cm;
+                        width: 20cm;
+                        top: 27.8cm;
+                        height: 3.6cm;
+                    }
+                    @frame header_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: header_content;
+                        left: 0.5cm;
+                        width: 19cm;
+                        top: 0.5cm;
+                        height: 3cm;
+                    }
+                }
+            
+                @font-face {
+                    font-family: sourcesans;
+                    src: url("{%static 'fonts/source-sans/SourceSansPro-Light.otf'%}");
+                }
+            
+                /* Bold */
+                @font-face {
+                    font-family: sourcesans;
+                    src: url("{%static 'fonts/source-sans/SourceSansPro-Bold.otf'%}");
+                    font-weight: bold;
+                }
+                body {
+                    font-family: sourcesans;
+                }
+                p{
+                    font-size: 12px;
+                    line-height: normal;
+                    text-align: justify;
+                    color: darkgray !important;
+                }
+                p b{
+                    color: gray !important; 
+                }
+                p.header b{
+                    font-size: 15px!important;
+                    color: gray !important;
+                    line-height: 1rem;
+                }
+            </style>
+        </head>
+    </body>
+</html>

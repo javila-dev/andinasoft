@@ -1,0 +1,83 @@
+{%extends 'base.html'%}
+{%block title%}Descuentos condicionados {{proyecto}}{%endblock%}
+
+{%block content%}
+
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Descuentos Condicionados {{proyecto}}</strong></h4>
+    <br/>
+    <table id='tabla-descuentos' class='striped hover row-border' style='width:100%;'>
+        <thead>
+            <tr>
+                <th class='text-center'>Adjudicacion</th>
+                <th class='text-center'>Cliente</th>
+                <th class='text-center'>Valor Contrato</th>
+                <th class='text-center'>Base Comision</th>
+                <th class='text-center'>Valor Pagado</th>
+                <th class='text-center'>Valor Condicion</th>
+                <th class='text-center'>Fecha Condicion</th>
+                <th class='text-center'>Valor Descuento</th>
+                <th class='text-center'>Aplica</th>
+            </tr>
+        </thead>
+        <tbody>
+            {%for descuento in descuentos%}
+            <tr>
+                <td class='text-center'>{{descuento.pk}}</td>
+                <td>{{descuento.cliente.upper}}</td>
+                <td class='text-center'>${{descuento.valorcontrato}}</td>
+                <td class='text-center'>${{descuento.basecomision}}</td>
+                <td class='text-center'>${{descuento.pagado}}</td>
+                <td class='text-center'>${{descuento.vrcondicion}}</td>
+                <td class='text-center'>{{descuento.fechacond|date:'d/m/Y'}}</td>
+                <td class='text-center'>${{descuento.vrdcto}}</td>
+                <td class='text-center'>{{descuento.aplica}}</td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalDescuentos" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Opciones descuentos</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class='lead'>¿Deseas aplicar el descuento a este negocio?</p>
+          
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+          <a href='#' id='redirect' class='btn btn-primary'>Si</a>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+    $(document).ready(function() {
+    var tabladescuentos = $('#tabla-descuentos').DataTable({
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+        "pageLength": 25,
+    });
+    $('#tabla-descuentos tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tabladescuentos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+            var pos = tabladescuentos.row(this).index();
+            var row = tabladescuentos.row(pos).data();
+            $('#modalDescuentos').modal('show')
+            var adj=row[0]
+            $('#redirect').attr('href','/operaciones/reestructuraciones/{{proyecto}}/'+adj)
+        } );
+    });
+</script>
+{%endblock%}

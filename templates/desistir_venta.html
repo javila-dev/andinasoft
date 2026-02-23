@@ -1,0 +1,55 @@
+<!-- Modal -->
+<div class="modal fade" id="modal-desistimiento" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form method="post" action=''>{%csrf_token%}
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">¿Estas seguro que deseas desistir el {{adj}}?</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          
+          <div class="input-group mb-3">
+            <div class="input-group-prepend">
+              <span class="input-group-text" id="prefixId">Nota de desistimiento</span>
+            </div>
+            <input type="text" name="nota_desist" required id="id_nota_desist"
+              class="form-control text-center" placeholder="N-???-???" aria-describedby="prefixId">
+          </div>
+          <div class="input-group mb-3">
+            <div class="input-group-prepend">
+              <span class="input-group-text" id="prefixId">Capital devuelto</span>
+            </div>
+            <input type="text" name="cap_devuelto" required id="id_cap_devuelto" value="0"
+              class="form-control text-center money" placeholder="" aria-describedby="prefixId">
+          </div>
+          <div class="input-group mb-3">
+            <div class="input-group-prepend">
+              <span class="input-group-text" id="prefixId">Intereses devueltos</span>
+            </div>
+            <input type="text" name="int_devueltos" required id="id_int_devuelto" value="0"
+              class="form-control text-center money" placeholder="" aria-describedby="prefixId">
+          </div>
+          <div class="input-group mb-3">
+            <div class="input-group-prepend">
+              <label class="input-group-text" for="inputGroupSelect01">Nuevo estado de lote</label>
+            </div>
+            <select class="custom-select" name="nuevoestadolote" required>
+              <option value="" selected>Seleccionar...</option>
+              <option value="Libre">Libre</option>
+              <option value="Sin liberar">Sin liberar</option>
+              <option value="Eliminado">Eliminado</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <input class='btn btn-primary' type='submit' name='btnDesistir' value='Desistir'>
+        </div>
+      </div>
+    </div>
+    </form>
+  </div>

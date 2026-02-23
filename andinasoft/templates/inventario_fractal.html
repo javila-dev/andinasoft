@@ -1,0 +1,1003 @@
+{%extends 'base_fomantic.html'%}
+{%load static%}
+{%block title%}Nueva venta{%endblock%}
+{%block content%}
+
+    <div class="ui stackable five steps">
+      <a class="active step" id="step-propiedad">
+          <i class="home violet icon"></i>
+        <div class="content">
+          <div class="title">Propiedad</div>
+          <div class="description">Selecciona la propiedad</div>
+        </div>
+      </a>
+      <a class="step" id="step-inversionista">
+        <i class="house user violet icon"></i>
+        <div class="content">
+          <div class="title">Inversionista</div>
+          <div class="description">Selecciona el inversionsta</div>
+        </div>
+      </a>
+      <a class="step" id="step-valor">
+        <i class="hand holding usd violet icon"></i>
+        <div class="content">
+          <div class="title">Valor</div>
+          <div class="description">Valor de la inversión</div>
+        </div>
+      </a>
+      <a class="step" id="step-formapago">
+        <i class="credit card violet icon"></i>
+        <div class="content">
+          <div class="title">Forma de pago</div>
+          <div class="description">Especifíca un plan de pagos</div>
+        </div>
+      </a>
+      <!-- <a class="step" id="step-documentos">
+        <i class="file pdf outline violet icon"></i>
+        <div class="content">
+          <div class="title">Documentos</div>
+          <div class="description">Descarga la documentación</div>
+        </div>
+      </a> -->
+    </div>
+    
+      <div class="ui padded segment" style="margin-top: 1rem;">
+        <form method="POST" id="form-venta" enctype="multipart/form-data">{%csrf_token%}
+          <div class="ui tab basic segment active" data-tab="propiedad">
+            <table class="ui selectable table" id="table-propiedades">
+              <thead>
+                <tr>
+                  <th>Propiedad</th>
+                  <th>Fractales disponibles</th>
+                  <th>Valor por fractal</th>
+                  <th>Progreso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {%for propiedad in lotes%}
+                {%if propiedad.fractales_disponibles > 0%}<tr>
+                  <td style="text-align: center;">{{propiedad.matricula}}</td>
+                  <td style="text-align: center;">{{propiedad.fractales_disponibles}}</td>
+                  <td style="text-align: center;">${{propiedad.valor_fractal}}</td>
+                  <td>
+                    <div class="ui violet progress" style="margin-bottom: 0;" data-percent="{{propiedad.porcentaje_vendido}}" id="example1">
+                      <div class="bar">
+                        <div class="progress"></div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>{%endif%}
+                {%endfor%}
+              </tbody>
+            </table>
+            <button type="button" class="ui right floated icon right labeled violet button next disabled"
+              data-to-tab="inversionista">
+              <i class="angle double right icon"></i>
+              Siguiente
+            </button>
+            <!-- <button type="button" class="ui left floated icon labeled button">
+              <i class="angle double left icon"></i>
+              Anterior
+            </button> -->
+          </div>
+          <div class="ui tab basic segment" data-tab="inversionista">
+            <div class="ui basic center aligned segment">
+              <div class="ui fluid search" id="search_id_inversionista">
+                <div class="ui icon input" style="min-width:40%">
+                  <input class="prompt" type="text" id="id_inversionista" 
+                    style="text-align: center;" placeholder="Buscar un inversionista...">
+                  <i class="search icon"></i>
+                </div>
+                <div class="results"></div>
+                <a class="ui violet button" type="button" style="margin-left: 1rem;" href="/reg_cliente" target="_blank">
+                  <i class="plus icon"></i>
+                  Nuevo</a>
+              </div>
+              <div class="ui basic center aligned segment">
+                <div class="ui right labeled input" id="div_inversionista">
+                  <input required readonly type="text" id="id_nit_inversionista" name='inversionista' placeholder="Inversionista" spellcheck="false" data-ms-editor="true">
+                  <div class="ui basic label">                  
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button type="button" class="ui right floated icon right labeled violet button next disabled"
+              data-to-tab="valor">
+              <i class="angle double right icon"></i>
+              Siguiente
+            </button>
+            <button type="button" class="ui left floated icon labeled button previous"
+            data-to-tab="propiedad">
+              <i class="angle double left icon"></i>
+              Anterior
+            </button>
+          </div>
+          <div class="ui tab basic segment" data-tab="valor">
+            <div class="ui basic center aligned segment">
+              <div class="ui labeled input">
+                <div class="ui label">
+                  Cantidad de fracciones
+                </div>
+                <input type="number" min="1" id="id_numero_fracciones" name="numero_fracciones"
+                  spellcheck="false" data-ms-editor="true">
+              </div>
+              <div class="ui labeled input">
+                <div class="ui label">
+                  Valor inversión
+                </div>
+                <input type="text" min="1" id="id_valor_inversion" name="valor_inversion"
+                  spellcheck="false" data-ms-editor="true" class="money">
+              </div>
+            </div>
+            
+            <button type="button" class="ui right floated icon right labeled violet button next"
+              data-to-tab="formapago">
+              <i class="angle double right icon"></i>
+              Siguiente
+            </button>
+            <button type="button" class="ui left floated icon labeled button previous"
+            data-to-tab="inversionista">
+              <i class="angle double left icon"></i>
+              Anterior
+            </button>
+          </div>
+          <div class="ui tab basic segment" data-tab="formapago">
+            <div class="ui basic segment">
+              <div class="ui two column center aligned relaxed stackable grid">
+                <div class="column">
+                  <div class="ui segment">
+                    <div class="ui labeled input">
+                      <div class="ui label">
+                        Cuota Inicial (40%)
+                      </div>
+                      <input type="text" readonly id="id_valor_ci" name="valor_ci"
+                        spellcheck="false" data-ms-editor="true" class="money">
+                    </div>
+                    <div class="ui basic segment">
+                      <button type="button" class="ui circular green icon button" id="btn-add-ci">
+                        <i class="plus icon"></i>
+                      </button>
+                      <button type="button" class="ui circular red icon button" id="btn-remove-ci">
+                        <i class="minus icon"></i>
+                      </button>
+                    </div>
+                    <div class="ui grid" id="ci_form">
+                      <div class="four wide column" style="">
+                        ¿Cuantas cuotas?
+                      </div>
+                      <div class="six wide column">
+                        ¿Desde cuando?
+                      </div>
+                      <div class="six wide column">
+                        ¿De que valor?
+                      </div>
+                      <div class="row ci-row">
+                        <div class="four wide column">
+                          <div class="ui input" style="width: 120%;">
+                            <input type="number" min="1" name="nro_cuota_ci" style="text-align: center;" onchange="pendiente_ci()">
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui calendar" id="id_fecha_cta_ci_1">
+                            <div class="ui input left icon" style="width: 110%">
+                              <i class="calendar icon"></i>
+                              <input type="text" name="fecha_cta_ci" placeholder="Desde" required 
+                                readonly style="cursor: pointer;text-align: center;">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui input">
+                            <input type="text" name="valor_cuota_ci" class="money" style="width: 100%;text-align: center;" onkeyup="pendiente_ci()">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ui labeled input" style="margin-top: 1.5rem;">
+                      <div class="ui label">
+                        Pendiente
+                      </div>
+                      <input type="text" readonly id="id_restante_ci" name="restante_ci"
+                        spellcheck="false" data-ms-editor="true" class="money">
+                    </div>
+                  </div>
+                </div>
+                <div class="column">
+                  <div class="ui segment disabled" id="saldo_segment">
+                    <div class="ui labeled input">
+                      <div class="ui label">
+                        Saldo (60%)
+                      </div>
+                      <input type="text" readonly id="id_valor_saldo" name="valor_saldo"
+                        spellcheck="false" data-ms-editor="true" class="money">
+                    </div>
+                    <div class="ui basic segment">
+                      <div class="ui labeled input">
+                        <div class="ui label">Tipo de plan</div>
+                        <select id="id_tipo_saldo" class="ui selection dropdown" name="tipo_saldo">
+                          <option value="regular" selected>Regular</option>
+                          <option value="extra">Extraordinario</option>
+                        </select> 
+                      </div>
+                      
+                    </div>
+                    <div class="ui grid" id="saldo_form">
+                      <p>Cuotas regulares</p>
+                      <div class="row saldo-row" style="padding-top: 0;">
+                        <div class="four wide column">
+                          <div class="ui input " style="width: 120%;">
+                            <input type="number" min="1" id="id_nro_cuota_saldo" name="nro_cuota_saldo" class="fp regular" style="text-align: center;">
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui calendar" id="id_fecha_cta_saldo">
+                            <div class="ui input left icon" style="width: 110%">
+                              <i class="calendar icon"></i>
+                              <input class="fp regular" type="text" id="id_fecha_saldo" name="fecha_cta_saldo" placeholder="Desde" required 
+                                readonly style="cursor: pointer;text-align: center;">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui input">
+                            <input type="text" class="fp regular" id="id_valor_cuota_saldo" readonly name="valor_cuota_saldo" class="money" style="width: 100%;text-align: center;">
+                          </div>
+                        </div>
+                      </div>
+
+                      <p>Cuotas extra</p>
+                      <div class="row extra-row" style="padding-top: 0;">
+                        <div class="sixteen wide column" style="margin-bottom: 1rem;">
+                            <select id="id_periodo_extra" class="ui selection disabled dropdown extra" name="periodo_extra" style="width: 120%">
+                              <option value="" selected>Selecciona...</option>
+                              <option value="1" >Mensual</option>
+                              <option value="2" >Bimestral</option>
+                              <option value="3">Trimestral</option>
+                              <!-- <option value="6">Semestral</option> -->
+                              <!-- <option value="12">Anual</option> -->
+                            </select> 
+                        </div>
+                        <div class="four wide column">
+                          <div class="ui disabled input" style="width: 120%;">
+                            <input type="number" min="1" id="id_nro_cuota_extra" name="nro_cuota_extra" class="fp extra" style="text-align: center;">
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui disabled calendar" id="id_fecha_cta_extra">
+                            <div class="ui input left icon" style="width: 110%">
+                              <i class="calendar icon"></i>
+                              <input class="fp" type="text" name="fecha_cta_extra" placeholder="Desde" required 
+                                readonly style="cursor: pointer;text-align: center;">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui disabled input">
+                            <input type="text" class="fp extra" id="id_valor_cuota_extra" readonly name="valor_cuota_extra" class="money" style="width: 100%;text-align: center;">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ui left corner labeled input" style="width: 100%; margin-top:1rem;">
+                <div class="ui left corner label">
+                    <i class="asterisk icon"></i>
+                </div>
+                <textarea name="observaciones" spellcheck="false" data-ms-editor="true" style="width: 100%" placeholder="Observaciones (solo incluir observaciones sobre la forma de pago)"></textarea>
+              </div>
+            </div>
+
+            <button type="button" class="ui right floated icon labeled violet button disabled"
+              id="btn-registrar-contrato">
+              <i class="save outline icon"></i>
+              Guardar
+            </button>
+            <button type="button" class="ui left floated icon labeled button previous"
+              data-to-tab="valor">
+              <i class="angle double left icon"></i>
+              Anterior
+            </button>
+          </div>
+          <!-- <div class="ui tab basic segment" data-tab="documentos">
+            <div class="ui two column relaxed center aligned grid" style="margin-bottom: 1rem;">
+                <div class="column">
+                  <button type="button" class="ui labeled icon basic button" class="download-docs"
+                    data-download="contrato">
+                    <i class="arrow alternate circle down icon"></i>
+                    Descargar CONTRATO
+                  </button>
+                </div>
+                <div class="column">
+                  <div class="ui file action input">
+                    <input type="file" id="id_contrato_upload" name="contrato_upload">
+                    <label for="actionfileinput" class="ui violet button">
+                      <i class="cloud upload alternate icon"></i>
+                          Cargar documento firmado
+                    </label>
+                  </div>
+                </div>
+
+                <div class="column">
+                  <button type="button" class="ui labeled icon basic button" class="download-docs"
+                    data-download="verificacion">
+                    <i class="arrow alternate circle down icon"></i>
+                    Descargar VERIFICACION
+                  </button>
+                </div>
+                <div class="column">
+                  <div class="ui file action input">
+                    <input type="file" id="id_verificacion_upload" name="verificacion_upload">
+                    <label for="actionfileinput" class="ui violet button">
+                      <i class="cloud upload alternate icon"></i>
+                          Cargar documento firmado
+                    </label>
+                  </div>
+                </div>
+
+                <div class="column">
+                  <button type="button" class="ui labeled icon basic button" class="download-docs"
+                    data-download="sagrilaft">
+                    <i class="arrow alternate circle down icon"></i>
+                    Descargar SAGRILAFT
+                  </button>
+                </div>
+                <div class="column">
+                  <div class="ui file action input">
+                    <input type="file" id="id_sagrilaft_upload" name="sagrilaft_upload">
+                    <label for="actionfileinput" class="ui violet button">
+                      <i class="cloud upload alternate icon"></i>
+                          Cargar documento firmado
+                    </label>
+                  </div>
+                </div>
+            </div>
+
+            <button type="button" class="ui left floated icon labeled button previous"
+              data-to-tab="formapago">
+              <i class="angle double left icon"></i>
+              Anterior
+            </button>
+            <button type="button" class="ui right floated icon labeled violet button disabled"
+              id="btn-registrar-contrato">
+              <i class="save outline icon"></i>
+              Guardar
+            </button>
+          </div> -->
+        </form>
+      </div>
+{%endblock%}
+{%block script%}
+<script>
+  const param_meses_ci = 3
+  const param_meses_saldo = 10
+  const param_fechas_manuales = false  
+  const param_tasa = 0
+  const proyecto = 'Fractal'
+</script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src='{%static "js/utilsfomantic.js"%}'></script>
+<script src="https://momentjs.com/downloads/moment.min.js"></script>
+<script>
+  $(document).ready(function() {
+    $('.ui.dropdown').dropdown()
+    $('.progress').progress();
+    $('.money').mask("#,##0", {reverse: true});  
+    $('#id_nro_cuota_saldo').prop('max',param_meses_saldo)
+    $('.ui.calendar').calendar({
+            type: 'date',
+            firstDayOfWeek: 1,
+            text: calendar_spanish(),
+            formatter:{
+              date: 'YYYY-MM-DD',
+            },
+            minDate: new Date(),
+          });
+    $('.next').click(function(){
+      let tab = $(this).data('to-tab');
+      
+      if (tab == 'inversionista'){$('#step-propiedad').addClass('completed')}
+      else if (tab == 'valor') {$('#step-inversionista').addClass('completed active')}
+      else if (tab == 'formapago') {
+        let valor_lista = $('#table-propiedades tr.green')[0].childNodes[5].childNodes[0].nodeValue.replace(/[$.]/g,'') * 1
+        let valor_real = $('#id_valor_inversion').val().replace(/[$,]/g,'') * 1
+        if (valor_real > valor_lista + 2000000 || valor_real < valor_lista - 2000000){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'El valor de venta está fuera del rango permitido',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return;
+        }
+        else{
+          let ci = Math.round(valor_real * 0.4)
+          let saldo = valor_real - ci
+          $('#id_valor_ci').val(
+            new Intl.NumberFormat('en','EN').format(ci)
+          )
+          $('#id_restante_ci').val(
+            new Intl.NumberFormat('en','EN').format(ci)
+          )
+          $('#id_valor_saldo').val(
+            new Intl.NumberFormat('en','EN').format(saldo)
+          )
+          $('#id_restante_saldo').val(
+            new Intl.NumberFormat('en','EN').format(saldo)
+          )
+          $('#step-valor').addClass('completed active')}
+        }
+        
+      else if (tab == 'documentos') {$('#step-formapago').addClass('completed active')}
+      $.tab('change tab', tab)
+    })
+    $('.previous').click(function(){
+      let tab = $(this).data('to-tab');
+      $.tab('change tab', tab)
+      if (tab == 'formapago') {$('#step-formapago').removeClass('completed active')}
+      else if (tab == 'inversionista'){$('#step-inversionista').removeClass('completed active')}
+      else if (tab == 'valor') {$('#step-valor').removeClass('completed active')}
+      else if (tab == 'propiedad') {$('#step-propiedad').removeClass('completed')}
+    })
+    $('#search_id_inversionista').search({
+          // change search endpoint to a custom endpoint by manipulating apiSettings
+          preserveHTML : false,
+          apiSettings: {
+            url: '/ajax_request/dataclients?client={query}'
+          },
+          fields: {
+            results : 'results',
+            id: 'idTercero',
+            title   : 'idTercero',  
+            description : 'nombrecompleto'
+
+          },
+          minCharacters : 3,
+          onSelect: function(result,response){
+            $('#id_nit_inversionista').val(result.idTercero)
+            $('#div_inversionista').find('.label').text(result.nombrecompleto)
+            $('#id_inversionista').val('')
+            let next_button = $(this).parents('.tab.segment').find('button.next')
+            next_button.removeClass('disabled')
+          }
+        })
+    $('#table-propiedades tbody').on('click','tr', function(){
+      $('#table-propiedades tr.green').removeClass('green')
+      $(this).addClass('green');
+      let next_button = $(this).parents('.tab.segment').find('button.next')
+      next_button.removeClass('disabled')
+      let valor = $(this)[0].childNodes[5].childNodes[0].nodeValue
+      $('#id_numero_fracciones').val(1)
+      $('#id_valor_inversion').val(valor.replace('$','').replace(/[.]/g,','))
+      
+    
+    
+    })
+    $('#id_numero_fracciones').change(function(){
+      let numero_fracciones = $(this).val() * 1
+      let valor_inversion = $('#table-propiedades tr.green')[0].childNodes[5].childNodes[0].nodeValue
+      let disponible = $('#table-propiedades tr.green')[0].childNodes[3].childNodes[0].nodeValue * 1
+      valor_inversion = valor_inversion.replace(/[$.]/g,'') * 1
+
+      if (numero_fracciones == '' || numero_fracciones <= 0 ){
+          $.toast({
+          class: 'error',
+          showIcon: false,
+          message: 'La cantidad de fracciones debe ser minimo 1',
+          displayTime: 'auto',
+          closeIcon: true,
+        })
+        $(this).val(1)
+        numero_fracciones = 1
+      }
+
+      else if (numero_fracciones > disponible ){
+          $.toast({
+          class: 'error',
+          showIcon: false,
+          message: 'La cantidad de fracciones debe ser máximo '+disponible,
+          displayTime: 'auto',
+          closeIcon: true,
+        })
+        $(this).val(disponible) //
+        
+        numero_fracciones = disponible
+      }
+
+      let nuevo_valor = numero_fracciones * valor_inversion
+
+      let ci = Math.round(nuevo_valor * 0.4)
+      let saldo = nuevo_valor - ci
+
+      $('#id_valor_ci').val(
+        new Intl.NumberFormat('en-EN').format(ci)
+      )
+
+     /*  $('#id_restante_ci').val(
+        new Intl.NumberFormat('en-EN').format(ci)
+      ) */
+
+      $('#id_valor_saldo').val(
+        new Intl.NumberFormat('en-EN').format(saldo)
+      )
+
+      $('#id_numero_fracciones').prop('max',disponible)
+
+      $('#id_valor_inversion').val(
+        new Intl.NumberFormat('en','EN').format(nuevo_valor)
+      )
+
+      pendiente_ci();
+      
+    });
+    $('#btn-add-ci').click(function(){
+      let last_ci_row = $('.ci-row').last()
+      let errors = 0
+      let nro_ci_row = $('.ci-row').length;
+
+      if (nro_ci_row == 7){
+        $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'No se pueden agregar mas de 7 lineas de pago.',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return;
+      }
+
+      last_ci_row.find('input').each(function(index,element){
+        if ($(element).val() == ''){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'Debes diligenciar todos los campos antes de agregar otra línea',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          errors += 1
+          return false;
+          }
+        })
+      if (errors>0) return;
+      
+      let cantidad_ci =  last_ci_row.find('input[name="nro_cuota_ci"]').val() * 1
+      let previous_date = $('#id_fecha_cta_ci_'+nro_ci_row).calendar('get date')
+      new_date = new Date(previous_date.getFullYear(), previous_date.getMonth() + cantidad_ci, previous_date.getDate())
+      max_date = new Date(new_date.getFullYear(), new_date.getMonth(), 31)
+
+      let first_ci = $('#id_fecha_cta_ci_1').calendar('get date')
+      months = moment(new_date).diff(first_ci,'months')
+      if (months > param_meses_ci) {
+        $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `El número de meses para pago de la Cuota Inicial está superando el permitido (Actual: ${months}, Parametro: ${param_meses_ci})`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return;
+      }
+
+      let cirow = `
+      <div class="row ci-row">
+        <div class="four wide column">
+          <div class="ui input" style="width: 120%;">
+            <input type="number" min="1" name="nro_cuota_ci" style="text-align: center;" onchange="pendiente_ci()";>
+          </div>
+        </div>
+        <div class="six wide column">
+          <div class="ui calendar" id="id_fecha_cta_ci_${nro_ci_row+1}">
+            <div class="ui input left icon" style="width: 110%">
+              <i class="calendar icon"></i>
+              <input type="text" name="fecha_cta_ci" placeholder="Desde" required 
+                readonly style="cursor: pointer;text-align: center;">
+            </div>
+          </div>
+        </div>
+        <div class="six wide column">
+          <div class="ui input">
+            <input type="text" name="valor_cuota_ci" class="money" style="width: 100%;text-align: center" onkeyup="pendiente_ci()"">
+          </div>
+        </div>
+      </div>
+      `
+      $('#ci_form').append(cirow)
+
+      $(`#id_fecha_cta_ci_${nro_ci_row+1}`).calendar({
+          type: 'date',
+          firstDayOfWeek: 1,
+          text: calendar_spanish(),
+          formatter:{
+            date: 'YYYY-MM-DD',
+          },
+          maxDate: max_date,
+        }).calendar(
+          'set date', new_date
+        )
+      $('.money').mask("#,##0", {reverse: true});  
+
+    })
+    $('#btn-remove-ci').click(function(){
+      nro_ci_row = $('.ci-row').length;
+      if (nro_ci_row == 1) {
+        $('.ci-row input').val('')
+        pendiente_ci();
+        return false;
+      }
+      $('.ci-row').last().remove()
+      pendiente_ci();
+
+    })
+    $('#id_nro_cuota_saldo').on('change keyup', function(){
+      let capital = $('#id_valor_saldo').val().replace(/[$,]/g, '')*1
+      let cuotas = $(this).val()
+      
+      if (cuotas > param_meses_saldo){
+        $.toast({
+          class: 'error',
+          showIcon: false,
+          message: `El numero de meses para pago del está superando el permitido (Actual: ${cuotas}, Parametro: ${param_meses_saldo})`,
+          displayTime: 'auto',
+          closeIcon: true,
+        })
+        $(this).val(param_meses_saldo)
+        cuotas = param_meses_saldo
+      }
+      
+      let tipo = $('#id_tipo_saldo').val()
+      if (tipo == 'extra'){
+        $('#id_periodo_extra').val('')
+        $('#id_nro_cuota_extra').val('')
+        $('input[name="fecha_cta_extra"]').val('')
+        $('#id_valor_cuota_extra').val('')
+        return false; 
+      } 
+
+      let val_cta = calcular_cuotas(capital, param_tasa, cuotas)
+
+      $('#id_valor_cuota_saldo').val(
+        new Intl.NumberFormat('en','EN').format(val_cta)
+      )
+
+    })
+    $('#id_valor_cuota_saldo').on('change keyup ',function(){
+        $('#id_periodo_extra').val('')
+        $('#id_nro_cuota_extra').val('')
+        $('input[name="fecha_cta_extra"]').val('')
+        $('#id_valor_cuota_extra').val('')
+        
+    })
+    $('#id_tipo_saldo').change(function(){
+      let tipo = $(this).val()
+      $('#saldo_form input').val('')
+      $('#id_periodo_extra').parent('.ui.dropdown').dropdown('clear')
+      if (tipo == 'extra'){
+        $('.extra-row .ui.input').removeClass('disabled')
+        $('.extra-row .ui.dropdown').removeClass('disabled')
+        $('.extra-row .ui.calendar').removeClass('disabled')
+        $('#id_valor_cuota_saldo').prop('readonly', false)
+        $('#id_valor_cuota_saldo').mask("#,##0", {reverse: true});  
+      }
+      else {
+        $('.extra-row .ui.input').addClass('disabled')
+        $('.extra-row .ui.calendar').addClass('disabled')
+        $('.extra-row .ui.dropdown').addClass('disabled')
+        $('#id_valor_cuota_saldo').prop('readonly', true)
+      }
+    })
+    $('.extra').on('change keyup', function(){
+      calcular_extra()
+    })
+    $('#id_periodo_extra').change(function(){
+      $('#id_nro_cuota_extra').val('')
+      $('input[name="fecha_cta_extra"]').val('')
+      $('#id_valor_cuota_extra').val('')
+    })
+    $('#id_nro_cuota_extra').change(function(){
+      let fecha_ini_reg = $('#id_fecha_cta_saldo').calendar('get date')
+      let nro_ctas = $(this).val() * 1
+      let periodicidad = $('#id_periodo_extra').val() * 1
+
+      let max_nctas = Math.floor(param_meses_saldo/periodicidad)
+
+      if (nro_ctas > max_nctas){
+        $.toast({
+          class: 'error',
+          showIcon: false,
+          message: `El numero de cuotas extraordinarias debe estar dentro del plazo maximo para el saldo (${param_meses_saldo} meses)`,
+          displayTime: 'auto',
+          closeIcon: true,
+        })
+        $(this).val(max_nctas)
+        nro_ctas = max_nctas 
+        calcular_extra()
+      }
+
+      new_month = fecha_ini_reg.getMonth() + (param_meses_saldo - periodicidad*nro_ctas)
+      let date_max_ini_extra = new Date(fecha_ini_reg.getFullYear(),new_month,30)
+
+      $('#id_fecha_cta_extra').calendar({
+            type: 'date',
+            firstDayOfWeek: 1,
+            text: calendar_spanish(),
+            formatter:{
+              date: 'YYYY-MM-DD',
+            },
+            maxDate: date_max_ini_extra,
+            minDate: fecha_ini_reg,
+          })
+        
+    })
+    $('.fp').on('change keyup', function(){
+      let tipo = $('#id_tipo_saldo').val()
+      let periodo_extra = $('#id_periodo_extra').val() * 1
+      let nro_ctas_extra = $('#id_nro_cuota_extra').val() * 1
+      let fecha_ctas_extra = $('input[name="fecha_cta_extra"]').val()
+      let valor_ctas_extra = $('#id_valor_cuota_extra').val()
+
+      
+      let ctas_reg = $('#id_nro_cuota_saldo').val() * 1
+      let vr_ctas_reg = $('#id_valor_cuota_saldo').val().replace(/[$,]/g, '') *1
+      let fecha_cta_reg = $('#id_fecha_saldo').val()
+      
+      let next_button = $('#btn-registrar-contrato')
+            
+      if (tipo == 'regular'){
+        if (ctas_reg != '' && vr_ctas_reg != '' && fecha_cta_reg != ''){
+          next_button.removeClass('disabled')
+        }
+        else {
+          next_button.addClass('disabled')
+        }
+      }
+
+      else if (tipo == 'extra'){
+        if (ctas_reg != '' && vr_ctas_reg != '' && fecha_cta_reg != '' &&
+            periodo_extra != '' && nro_ctas_extra != '' &&  fecha_ctas_extra != '' &&
+            valor_ctas_extra != ''){
+          next_button.removeClass('disabled')
+        }
+        else {
+          next_button.addClass('disabled')
+        }
+      }
+
+
+
+
+    })
+    $('input[type="file"]').change(function(){
+      let completed = true
+      $('input[type="file"]').each(function(number,element){
+        if ($(element).val() == '' ) {
+          completed = false
+        }
+        else if (!$(element).val().endsWith('.pdf')){
+          $(element).val(null)
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `El archivo seleccionado no es un PDF`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          completed = false
+        }
+      })
+      if (completed) {
+        $('#btn-registrar-contrato').removeClass('disabled')
+      }
+    })
+    $('#btn-registrar-contrato').click(function(e){
+      $.modal({
+          title: 'Confirmar',
+          class: 'basic mini',
+          closeIcon: true,
+          content: '¿Estás segur@ de registrar esta venta?',
+          actions: [{
+            text: 'Si',
+            class: 'green approve'
+          },{
+            text: 'No',
+            class: 'red'
+          },
+        ],
+        onApprove: function(){
+          $('#form-venta').trigger('submit')  
+          return;
+        }
+      }).modal('show');
+      
+    })
+    $('#form-venta').submit(function(e){
+        segment = $(this).parent('.ui.segment');
+        segment.addClass('loading');
+        e.preventDefault();
+        let propiedad = $('#table-propiedades tr.green')[0].childNodes[1].childNodes[0].nodeValue
+        let valor_lista_fraccion = $('#table-propiedades tr.green')[0].childNodes[5].childNodes[0].nodeValue
+
+        let data = new FormData(this)
+        data.append('proyecto',proyecto)
+        data.append('inmueble',propiedad)
+        data.append('tasa',param_tasa)
+        data.append('valor_lista',valor_lista_fraccion)
+        
+        $.ajax({
+          url: '/andinasoftajx/ventafraccion',
+          type:'POST',
+          data: data,
+          contentType: false,
+          processData: false,
+          success: function(response){
+            window.location.replace('/comercial/ventas_sin_aprobar/Fractal')
+          },
+          error: function(){
+            segment.removeClass('loading');
+          }
+        })
+      })
+  
+  })
+
+  function pendiente_ci(){
+    $('#btn-registrar-contrato').addClass('disabled')
+    let total = 0
+    let valor_ci = $('#id_valor_ci').val().replace(/[$,]/g,'') * 1
+    $('.ci-row').each(function(index,element){
+      let cantidad = $(element).find('input[name="nro_cuota_ci"]').val()
+      let fecha = $(element).find('input[name="fecha_cta_ci"]').val()
+      let valor = $(element).find('input[name="valor_cuota_ci"]').val().replace(/[$,]/g,'')*1
+      total += cantidad * valor
+      if (total > valor_ci){
+        $(element).find('input[name="valor_cuota_ci"]').val('')
+        total -= cantidad * valor
+        $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'El valor de las cuotas supera el valor de la cuota inicial',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+        return
+      }
+      errorfechas = false
+      if(fecha == '' && (cantidad != '' && valor != '') ){
+        errorfechas = true
+      }
+
+    })
+    if (errorfechas) {
+      $.toast({
+          class: 'error',
+          showIcon: false,
+          message: 'Debes agregar una fecha para poder continuar',
+          displayTime: 'auto',
+          closeIcon: true,
+        })
+        return;
+    }
+    let pendiente = valor_ci - total
+
+    
+    if (pendiente == 0){
+      let last_ci_row = $('.ci-row').last()
+      let nro_ci_row = $('.ci-row').length;
+      let last_ci = $('#id_fecha_cta_ci_'+nro_ci_row).calendar('get date')
+      let first_ci = $('#id_fecha_cta_ci_1').calendar('get date')
+      let cantidad_ci = last_ci_row.find('input[name="nro_cuota_ci"]').val() * 1
+
+      new_date = new Date(last_ci.getFullYear(), last_ci.getMonth() + cantidad_ci, 1)
+      
+      max_date = new Date(first_ci.getFullYear(), first_ci.getMonth() +param_meses_ci + 1, 31)
+      
+      if (new_date > max_date){
+        $.toast({
+          class: 'error',
+          showIcon: false,
+          message: 'La fecha de la ultima cuota de la CI excede el parametro de plazo maximo de pago.',
+          displayTime: 'auto',
+          closeIcon: true,
+        })
+        return;
+      }
+      
+      $('#saldo_segment').removeClass('disabled')
+      $('#saldo_segment input.fp').val('')
+      $('#id_fecha_cta_saldo').calendar({
+        type: 'date',
+        firstDayOfWeek: 1,
+        text: calendar_spanish(),
+        formatter:{
+          date: 'YYYY-MM-DD',
+        },
+        minDate: new_date,
+        maxDate: max_date,
+      })
+    }
+    else {
+      $('#id_periodo_extra').val('')
+      $('#id_tipo_saldo').parent('.ui.dropdown').dropdown('set value','regular')
+      $('#id_periodo_extra').parent('.ui.dropdown').dropdown('clear')
+      $('#saldo_segment').addClass('disabled')
+      $('#saldo_segment input.fp').val('')
+      $('#saldo_segment').parents('.tab.segment').find('button.next').addClass('disabled')
+    }
+
+    $('#id_restante_ci').val(
+      new Intl.NumberFormat('en','EN').format(pendiente)
+    )
+  }
+  function calcular_extra(){
+
+    let saldo = $('#id_valor_saldo').val().replace(/[$,]/g, '') *1
+    
+    let periodo_extra = $('#id_periodo_extra').val() * 1
+    let nro_ctas_extra = $('#id_nro_cuota_extra').val() * 1
+    
+    let ctas_reg = $('#id_nro_cuota_saldo').val() * 1
+    let vr_ctas_reg = $('#id_valor_cuota_saldo').val().replace(/[$,]/g, '') *1
+
+    let vp_reg = calcularvp(vr_ctas_reg, param_tasa, ctas_reg)
+    let vp_extra = saldo - vp_reg
+
+    let value = ''
+    
+    if (vp_extra <= 0 ){
+      $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'El valor de las cuotas regulares es mayor al saldo por pagar.',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          value = ''
+        return;
+    }
+
+    if (periodo_extra > 0 && nro_ctas_extra> 0) {
+      let cta = calcular_cuotas(vp_extra, param_tasa*periodo_extra,  nro_ctas_extra)
+      value = new Intl.NumberFormat('en','EN').format(cta)
+    }
+    
+    $('#id_valor_cuota_extra').val(value)
+  }
+  function calcular_cuotas(capital,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(capital/nCuotas)
+        }
+        else{
+            up=capital*tasa
+            down=1-(1+tasa)**(-1*nCuotas)
+            cuota=up/down
+            return Math.ceil(cuota)
+        }
+    }
+  function calcularvp(cuota,tasa,nCuotas){
+    if (tasa == 0){
+      return cuota * nCuotas
+    }
+      up=(1-(1+tasa)**(-1*nCuotas))*cuota
+      down=tasa
+      capital=up/down
+      return Math.ceil(capital)      
+    }
+</script>
+{%endblock%}
+{%block style%}
+<style>
+  #content{
+    margin-top: 2rem;
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+  th {
+    text-align: center!important;
+  }
+  .ui.labeled input {
+    text-align: center;
+  }
+</style>
+{%endblock%}

@@ -1,0 +1,183 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Interfaces Bancarias {{proyecto}}{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Interfaces Bancarias
+            {{proyecto}}</strong></h4>
+    <div class='row px-md-5 mx-md-5 pb-3 border-gray border rounded'>
+        <div class='col-12'>
+            <p class='lead border-bottom border-gray pt-3'><strong>Comisiones</strong></p>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalComisiones">Generar
+                        Interfaz</a></p>
+            </div>
+        </div>
+        <div class='col-12'>
+            <p class='lead border-bottom border-gray pt-3'><strong>GTT</strong></p>
+        </div>
+        <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal' data-target="#modalEgresos">Generar
+                        Interfaz</a></p>
+            </div>
+        </div>
+        <!-- <div class='col-xs-12 col-lg-6'>
+            <div class="bg-light rounded shadow"
+                style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+                <p class='lead text-center'><a href='#' data-toggle='modal'
+                        data-target="#modalParamComisiones">Parametrizar</a></p>
+            </div>
+        </div> -->
+    </div>
+</div>
+<div class="modal fade" id="modalComisiones" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Interfaz bancaria Comisiones</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form id="form-interfazComisionesBanco" method="post"> {%csrf_token%}
+                <div class="modal-body">
+                    <div class="container">
+                        <div class="input-group pb-3">
+                                <div class="input-group-prepend"> 
+                                    <label class="input-group-text" for="id_empresa">Proyecto</label> 
+                                </div> 
+                                <select name="proyecto" class="select form-control custom-select" required id="id_proyecto">
+                                    <option selected value="">Seleccionar...</option>
+                                    {%for proyecto in proyectos%}
+                                    <option value="{{proyecto.proyecto}}">{{proyecto.proyecto}}</option>
+                                    {%endfor%}
+                                </select>
+                            </div>
+                        <div class="pb-3">
+                            <input type='text' id='fecha_desde' name='fecha_desde' placeholder="Fecha Desde">
+                        </div>
+                        <div class="pb-3">
+                            <input type='text' id='fecha_hasta' name='fecha_hasta' placeholder="Fecha Hasta">
+                        </div>
+                        <div class="pb-3">
+                            <div class="input-group">
+                                <div class="input-group-prepend"> 
+                                    <label class="input-group-text" for="id_empresa">Empresa</label> 
+                                </div> 
+                                <select name="empresa" class="select form-control custom-select" required id="id_empresa">
+                                    <option selected>Seleccionar</option>
+                                    <option value="Promotora Sandville">Promotora Sandville</option>
+                                    <option value="Status Comercializadora">Status Comercializadora</option>
+                                    <option value="Quadrata Constructores">Quadrata Constructores</option>
+                                    <option value="Promotora Westville">Promotora Westville</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="input-group">
+                                <div class="input-group-prepend"> 
+                                    <label class="input-group-text" for="id_cuenta">Cuenta</label> 
+                                </div> 
+                                <select name="cuenta" class="select form-control custom-select" required id="id_cuenta">
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <input type="submit" name="generar" value="Generar"
+                        class="btn btn-primary btn btn-primary" id="submit-id-generar" />
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalEgresos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Interfaz Egreso</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {%crispy form-int-egr%}
+        </div>
+      </div>
+    </div>
+  </div>
+{%include 'alert.html'%}
+<script>
+    $(document).ready(function () {
+        $('#id_cuentas_egr').prop('multiple',true)
+        $('#form-interfazComisionesBanco').on('submit',function(){
+            $('#submit-id-generar').attr('disabled',true)
+        });
+        $('#modalComisiones').on('hidden.bs.modal',function(){
+            $('#submit-id-generar').attr('disabled',false)
+        })
+        $('#fecha_desde').datepicker({
+            uiLibrary: 'bootstrap4',
+            locale: 'es-es',
+            format: 'yyyy-mm-dd'
+        });
+        $('#fecha_hasta').datepicker({
+            uiLibrary: 'bootstrap4',
+            locale: 'es-es',
+            format: 'yyyy-mm-dd'
+        });
+        $('#id_empresa_egr').on('change',function(){
+            let empresa = $(this).val()
+            $('#id_cuentas_egr').empty()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuentas_egr').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa').on('change', function () {
+            var empresa = $(this).val()
+            $.ajax({
+                type: 'GET',
+                url: '/tesoreria/interfaces_tesoreria',
+                data: {
+                    'data_request': 'cuentas_por_empresa',
+                    'empresa': empresa
+                },
+                success: function (response) {
+                    var cuentas = JSON.parse(response['data'])
+                    $('#id_cuenta').children().remove()
+                    $.each(cuentas, function (index, item) {
+                        cuenta = item['fields']['cuentabanco']
+                        var option = "<option value='" + cuenta + "'>" + cuenta +
+                            "</option>"
+                        $('#id_cuenta').append(option)
+                    })
+                }
+            })
+        })
+        
+    })
+</script>
+{%endblock%}

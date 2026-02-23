@@ -1,0 +1,190 @@
+{%extends 'base.html'%}
+{%load static%}
+{%load l10n%}
+{%load crispy_forms_tags%}
+{%block title%}Proyectos | Pagos de obra{%endblock%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        text-align: center;
+        font-size: small;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+    .dtsb-searchBuilder{
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-white rounded shadow-lg'>
+    <h3 class='text-white text-center section-title'>Pagos de obra</h3>
+    <div class='mt-2 table-responsive'>
+        <table id='tablaPagos' class='display' style="width:100%">
+            <thead>
+                <tr>
+                    <th>Id pago</th>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th>Orden</th>
+                    <th>Proyecto</th>
+                    <th>Valor</th>
+                    <th>Item</th>
+                    <th>Proyecto gasto</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan='5' style="text-align:right">Total:</th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="modalClasifPagos" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Calsificar pago</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <form method='POST' id='form-clasif'>{%csrf_token%}
+                <input id='idpago' name='idpago' hidden> 
+                <select class="custom-select" id="proyecto" name='proyecto' required>
+                    <option selected value=''>Proyecto que asume el gasto...</option>
+                    {%for proyecto in proyectos%}
+                    <option value="{{proyecto.pk}}">{{proyecto.pk}}</option>
+                    {%endfor%}
+                </select>
+                <select class="custom-select mt-2" id="items" name='item' required>
+                    <option selected value=''>Item para informe...</option>
+                    {%for item in items%}
+                    <option value="{{item.pk}}">{{item.temas}}</option>
+                    {%endfor%}
+                </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type='submit' class='btn btn-primary' name='btnModificar' value='Guardar'>
+        </div>
+        </form>
+      </div>
+    </div>
+  </div>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>
+<script src = '{%static "js/searchBuilder_Spanish.js"%}'></script>
+<script>
+    $(document).ready(function(){
+        var tablaPagos =$('#tablaPagos').DataTable({
+            "lengthMenu": [[ 25, 50, -1], [ 25, 50, "Todos"]],
+            "order": [[ 1, "desc" ],[0,'desc']],
+            columnDefs: [
+                { type: 'date-uk', targets: 1 },
+                { targets: 2, className: 'dt-body-left'}
+            ],
+            'ajax':{
+                'url':'/buildingcontrol/ajax/paymentsdata',
+                "dataSrc": "data"
+            },
+                "columns": [
+                { "data": "pk" },
+                { "data": "fecha" },
+                { "data": "proveedor" },
+                { "data": "orden" },
+                { "data": "proyecto" },
+                { "data" : "valor"},
+                { "data" : "item"},
+                { "data" : "proy_asum"}
+            ],
+            dom: 'Qlfrtip',
+            "language": {
+                "url": "/ajax_request/datatable_spanish"
+            },
+            searchBuilder:{
+                conditions:searchBuilderspanish()
+            },
+            "footerCallback": function ( row, data, start, end, display ) {
+                var api = this.api(), data;
+                // Remove the formatting to get integer data for summation
+                var intVal = function ( i ) {
+                    return typeof i === 'string' ?
+                        i.replace(/[\$,]/g, '')*1 :
+                        typeof i === 'number' ?
+                            i : 0;
+                };
+                // Total over all pages
+                total = api
+                    .column( 5 )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+     
+                // Total over this page
+                pageTotal = api
+                    .column( 5, { page: 'current'} )
+                    .data()
+                    .reduce( function (a, b) {
+                        return intVal(a) + intVal(b);
+                    }, 0 );
+     
+                // Update footer
+                pageTotal = new Intl.NumberFormat().format(pageTotal)
+                total = new Intl.NumberFormat().format(total)
+                $( api.column( 5 ).footer() ).html(
+                    '$'+pageTotal +' ( $'+ total +' total)'
+                );
+            }
+        })
+
+        $('#tablaPagos tbody').on('click','tr',function(){
+            var row = tablaPagos.row(this).data()
+            $('#modalClasifPagos').modal('show')
+            $('#idpago').val(row.pk)
+            tablaPagos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#modalClasifPagos').on('hide.bs.modal',function(e){
+            tablaPagos.$('tr.selected').removeClass('selected');
+            $('#form-clasif').trigger('reset')
+        })
+        $('#form-clasif').on('submit',function(e){
+            e.preventDefault();
+            var formdata = new FormData(this)
+            $.ajax({
+                type:'POST',
+                url:'/buildingcontrol/payments',
+                data:formdata,
+                processData: false,
+                contentType: false,
+                success:function(response){
+                    tablaPagos.ajax.reload()
+                    $('#modalClasifPagos').modal('hide')
+                }
+            })
+
+        })
+    })
+</script>
+{%endblock%}

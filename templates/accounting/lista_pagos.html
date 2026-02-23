@@ -1,0 +1,771 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Accounting | Pagos efectuados{%endblock%}
+{%block style%}
+<style>
+    th {
+        font-size: smaller;
+        text-align: center;
+    }
+
+    td {
+        font-size: x-small;
+        text-align: center;
+    }
+
+    .dt-buttons {
+        padding-left: 8px;
+    }
+
+    #tablaPagos_filter {
+        padding-right: 8px;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+{%include 'datatable_buttons.html'%}
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Pagos Efectuados
+    </h3>
+    <div class='d-inline-flex my-2'>
+        <div class='input-group ml-3'>
+            <div class='input-group-prepend'>
+                <span class='input-group-text'>Oficina</span>
+            </div>
+            <select id='oficina' class='custom-select'>
+                <option value=''>Seleccionar...</option>
+                <option value='MEDELLIN'>MEDELLIN</option>
+                <option value='MONTERIA'>MONTERIA</option>
+                <option value='TODAS'>TODAS</option>
+            </select>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs justify-content-center" id="tabtiposegresos" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pagos-tab" data-toggle="tab" data-target="#pagostb" type="button"
+                role="tab" aria-controls="home" aria-selected="true">Pagos</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="transf-tab" data-toggle="tab" data-target="#transftab" type="button" role="tab"
+                aria-controls="profile" aria-selected="false">Transferencias</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="anticipo-tab" data-toggle="tab" data-target="#anticipotab" type="button"
+                role="tab" aria-controls="contact" aria-selected="false">Anticipos</button>
+        </li>
+    </ul>
+
+
+    <div class="tab-content" id="myTabContent">
+        <div class="tab-pane fade show active" id="pagostb" role="tabpanel" aria-labelledby="home-tab">
+            <div class='table-responsive'>
+                <table id='tablaPagos' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Tercero</th>
+                            <th>Factura</th>
+                            <th>Fecha Factura</th>
+                            <th>Empresa</th>
+                            <th>Cuenta</th>
+                            <th>Causacion</th>
+                            <th>Usuario</th>
+                            <th>Oficina</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="transftab" role="tabpanel" aria-labelledby="profile-tab">
+            <div class='table-responsive'>
+                <table id='tablaTransf' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Empresa sale</th>
+                            <th>Cuenta sale</th>
+                            <th>Empresa entra</th>
+                            <th>Cuenta sale</th>
+                            <th>Usuario</th>
+                            <th>Oficina</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="anticipotab" role="tabpanel" aria-labelledby="contact-tab">
+            <div class='table-responsive'>
+                <table id='tablaAnt' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Empresa</th>
+                            <th>Tercero</th>
+                            <th>Descripcion</th>
+                            <th>Cuenta</th>
+                            <th>Usuario</th>
+                            <th>Oficina</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenu' aria-labelledby="dropdownMenuLink"
+    style="max-width: 220px;">
+    <a class="dropdown-item" id='ver' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Soporte pago</a>
+    <a class="dropdown-item" id='ver_causacion' href="#"><i class="far fa-eye text-muted"></i>&nbsp;Causacion</a>
+    <a class="dropdown-item" id='ver_rad' href="#"><i class="far fa-eye text-muted"></i>&nbsp;Soporte Factura</a>
+    <a class="dropdown-item" id='ver_asoc' href="#"><i class="far fa-eye text-muted"></i>&nbsp;Ver asociaciones</a>
+    <a class="dropdown-item" id='impr_egreso' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Imprimir
+        egreso</a>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuAnt' aria-labelledby="dropdownMenuLink"
+    style="max-width: 220px;">
+    <a class="dropdown-item" id='ver_ant' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Soporte pago</a>
+    <a class="dropdown-item" id='impr_ant' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Imprimir</a>
+    <a class="dropdown-item" id='asoc_mvto' href="#"><i class="fas fa-link text-muted"></i>&nbsp;Asociar Mvto</a>
+    <a class="dropdown-item" id='ver_asoc_ant' href="#"><i class="far fa-eye text-muted"></i>&nbsp;Ver asociaciones</a>
+</div>
+<div class="modal fade" id="modalInterfaz" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Modal title</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                ...
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary">Understood</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalAsociaciones" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Asociaciones</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class='table-responsive'>
+                        <p class="lead text-center mb-2">Movimientos Banco</p>
+                        <table id='tablaCONBanco_mvtos' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Linea</th>
+                                    <th>Fecha</th>
+                                    <th>Descripcion</th>
+                                    <th>Referencia</th>
+                                    <th>Valor</th>
+                                    <th>Tipo</th>
+                                    <th>Pago</th>
+                                    <th>Usuario</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                    <div class='table-responsive'>
+                        <p class="lead text-center mb-2 mt-2">Movimientos SIIGO</p>
+                        <table id='tablaMvtosCont' class='display' style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Comprobante</th>
+                                    <th>Fecha</th>
+                                    <th>Descripcion</th>
+                                    <th>Valor</th>
+                                    <th>Estado</th>
+                                    <th>Concilacion</th>
+                                    <th>Soporte</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalLink" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Asociaciones</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class='table-responsive'>
+                    <table id='tablaCONBanco' class='display' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Descripcion</th>
+                                <th>Referencia</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                    </table>
+                    <div class="input-group mt-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">Total</span>
+                        </div>
+                        <input type="text" readonly class="form-control text-center" id='total-pago-banco'>
+                    </div>
+                </div>
+                
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="btnasociarMvtoant">Asociar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+
+<script>
+    $(document).ready(function () {
+        var params = `status=no,location=no,toolbar=no,menubar=no,
+                width=650,height=450,left=100,top=100`
+        var tablaPagos = $('#tablaPagos').DataTable({
+            processing: true,
+            serverSide: true,
+            language: {
+                url: '/ajax_request/datatable_spanish',
+            },
+            ajax: {
+                url: '/accounting/ajax/listapagos',
+                dataSrc: "data"
+            },
+            columns: [{
+                    'data': 'fecha_pago'
+                },
+                {
+                    'data': 'tercero'
+                },
+                {
+                    'data': 'factura'
+                },
+                {
+                    'data': 'fecha_fact'
+                },
+                {
+                    'data': 'empresa'
+                },
+                {
+                    'data': 'cuenta'
+                },
+                {
+                    'data': 'causacion'
+                },
+                {
+                    'data': 'usuario'
+                },
+                {
+                    'data': 'oficina'
+                },
+                {
+                    'data': 'valor'
+                },
+            ],
+            columnDefs: [{
+                    targets: [7],
+                    type: 'num-fmt'
+                },
+                {
+                    targets: [0, 3],
+                    type: 'date-uk'
+                },
+                {
+                    targets: [1, 4],
+                    "className": "dt-body-left"
+                },
+                {
+                    targets: [9],
+                    "className": "dt-body-right"
+                },
+            ],
+            order: [
+                [0, "desc"]
+            ],
+            dom: 'Bfrtip',
+            buttons: ['pageLength','copy', 'excel', 'pdf'],
+            lengthMenu: [
+                [ 10, 50, 100, -1],
+                [ '10 filas', '50 filas', '100 filas', 'Todos' ]
+            ],
+            deferRender: true,
+        });
+        var tablaTransf = $('#tablaTransf').DataTable({
+            processing: true,
+            serverSide: true,
+            language: {
+                url: '/ajax_request/datatable_spanish',
+            },
+            ajax: {
+                url: '/accounting/ajax/transferlist',
+                dataSrc: "data"
+            },
+            columns: [{
+                    'data': 'fecha'
+                },
+                {
+                    'data': 'emp_sale'
+                },
+                {
+                    'data': 'cta_sale'
+                },
+                {
+                    'data': 'emp_entra'
+                },
+                {
+                    'data': 'cta_entra'
+                },
+                {
+                    'data': 'usuario'
+                },
+                {
+                    'data': 'oficina'
+                },
+                {
+                    'data': 'valor'
+                },
+            ],
+            columnDefs: [{
+                    targets: [7],
+                    type: 'num-fmt'
+                },
+                {
+                    targets: [0],
+                    type: 'date-uk'
+                },
+                {
+                    targets: [1, 3],
+                    "className": "dt-body-left"
+                },
+                {
+                    targets: [7],
+                    "className": "dt-body-right"
+                },
+            ],
+            order: [
+                [0, "desc"]
+            ],
+            dom: 'Bfrtip',
+            buttons: ['copy', 'excel', 'pdf'],
+            deferRender: true,
+        });
+        var tablaAnt = $('#tablaAnt').DataTable({
+            processing: true,
+            serverSide: true,
+            language: {
+                url: '/ajax_request/datatable_spanish',
+            },
+            ajax: {
+                url: '/accounting/ajax/anticiposlista',
+                dataSrc: "data"
+            },
+            columns: [{
+                    'data': 'fecha'
+                },
+                {
+                    'data': 'empresa'
+                },
+                {
+                    'data': 'tercero'
+                },
+                {
+                    'data': 'descripcion'
+                },
+                {
+                    'data': 'cuenta'
+                },
+                {
+                    'data': 'usuario'
+                },
+                {
+                    'data': 'oficina'
+                },
+                {
+                    'data': 'valor'
+                },
+            ],
+            columnDefs: [{
+                    targets: [7],
+                    type: 'num-fmt'
+                },
+                {
+                    targets: [0],
+                    type: 'date-uk'
+                },
+                {
+                    targets: [1, 2, 3],
+                    "className": "dt-body-left"
+                },
+                {
+                    targets: [7],
+                    "className": "dt-body-right"
+                },
+            ],
+            order: [
+                [0, "desc"]
+            ],
+            dom: 'Bfrtip',
+            buttons: ['pageLength','copy', 'excel', 'pdf'],
+            lengthMenu: [
+                [ 10, 50, 100, -1],
+                [ '10 filas', '50 filas', '100 filas', 'Todos' ]
+            ],
+            deferRender: true,
+        });
+        var tablaMvtosCont = $('#tablaMvtosCont').DataTable({
+            'scrollY':        "30vh",
+            'scrollX':        true,
+            'scrollCollapse': true,
+            'paging':         false,
+            processing: true,
+            language:{
+                url:"/ajax_request/datatable_spanish"
+            },
+            dom: 'Bfrtip',
+            buttons: ['copy', 'excel', 'pdf'],
+            ajax:{
+                url:'/accounting/ajax/accountsmovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'comprobante'},
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'valor'},
+                {'data':'estado'},
+                {'data':'conciliacion'},
+                {'data':"soporte",
+                    "render":function(data){
+                        if (data != "" && data != null){
+                            return "Si"
+                        }
+                        else {
+                            return ""
+                        }
+                    }},
+            ],
+            order: [[ 1, "desc" ]],
+            columnDefs: [
+                { "targets":[0,2],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 1 }
+            ],
+        })
+        var tablaCONBanco_mvtos = $('#tablaCONBanco_mvtos').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+                {'data':'tipo'},
+                {'data':'pagorelacionado'},
+                {'data':'usuario'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 1 }
+            ],
+        })
+        var tablaCONBanco = $('#tablaCONBanco').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+
+        $('#tablaPagos tbody').on('contextmenu', 'tr', function (e) {
+            tablaPagos.$('tr.selected').removeClass('selected');
+            let line = tablaPagos.row(this).data()
+            if (line.cuenta.includes('Efectivo')) {
+                $('#impr_egreso').removeClass('disabled')
+            } else {
+                $('#impr_egreso').addClass('disabled')
+            }
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position >= width * 3 / 4) {
+                position -= 220
+            }
+            $('#contextMenu').css({
+                'display': 'block',
+                'left': position,
+                'top': e.pageY,
+            })
+            return false;
+        })
+        $('#tablaAnt tbody').on('contextmenu', 'tr', function (e) {
+            tablaAnt.$('tr.selected').removeClass('selected');
+            let line = tablaAnt.row(this).data()
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position >= width * 3 / 4) {
+                position -= 220
+            }
+            $('#contextMenuAnt').css({
+                'display': 'block',
+                'left': position,
+                'top': e.pageY,
+            })
+            return false;
+        })
+        $('#tablaMvtosCont tbody').on('click','tr',function(e){
+            var line = tablaMvtosCont.row(this).data()
+            let ruta = '/media/'+line.soporte
+            window.open(ruta,'Soporte Egreso '+line.comprobante,params)
+        });
+        $('#tablaPagos tbody').on('click', 'tr', function (e) {
+            tablaPagos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        });
+        $('#oficina').on('change', function () {
+            var oficina = $(this).val()
+            var url = '/accounting/ajax/listapagos?oficina=' + oficina
+            tablaPagos.ajax.url(url).load()
+            var url = '/accounting/ajax/transferlist?oficina=' + oficina
+            tablaTransf.ajax.url(url).load()
+            var url = '/accounting/ajax/anticiposlista?oficina=' + oficina
+            tablaAnt.ajax.url(url).load()
+        })
+        $("#contextMenuAnt").click(function (e) {
+            var line = tablaAnt.row('.selected').data()
+            let params = `status=no,location=no,toolbar=no,menubar=no,
+                    width=650,height=450,left=100,top=100`
+            switch (e.target.id) {
+                case "ver_ant":
+                    var ruta = '/media/' + line.soporte
+                    window.open(ruta, 'Soporte pago ' + ruta.pk, params)
+                    break;
+                case "impr_ant":
+                    $.ajax({
+                        type: 'GET',
+                        url: '/accounting/ajax/printegreso',
+                        data: {
+                            'anticipo': true,
+                            'idpago': line.pk
+                        },
+                        success: function (response) {
+                            var ruta = response['ruta']
+                            window.open(ruta, 'Egreso', params)
+                        }
+                    })
+                    break;
+                case "asoc_mvto":
+                    let is_linked = line.islinked
+                    if (is_linked){
+                        $('#alert-title').text('Oh Oh!')
+                        $('#alert-data').text('Este pago ya está asociado a movimientos bancarios')
+                        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                        return
+                    }
+                    let cuenta = line.pkcuenta
+                    let fecha = line.fecha_nofmt
+                    var url_bco = '/accounting/ajax/bancarymovements?tipo=sin_pago&cuenta='+cuenta+'&fecha='+fecha
+                    tablaCONBanco.ajax.url(url_bco).load()
+                    $('#modalLink').modal('show')
+                    break;
+                case "ver_asoc_ant":
+                    
+                    url_bco = '/accounting/ajax/bancarymovements?ant_asociado='+line.pk
+                    tablaCONBanco_mvtos.ajax.url(url_bco).load()
+                    var url_cont = '/accounting/ajax/accountsmovements?id_ant_asociado='+line.pk
+                    tablaMvtosCont.ajax.url(url_cont).load()
+                    $('#modalAsociaciones').modal('show');
+                    break
+            }
+        });
+        $("#contextMenu").click(function (e) {
+            var line = tablaPagos.row('.selected').data()
+            let params = `status=no,location=no,toolbar=no,menubar=no,
+                    width=650,height=450,left=100,top=100`
+            switch (e.target.id) {
+                case "ver":
+                    var ruta = '/media/' + line.soporte
+                    window.open(ruta, 'Soporte pago ' + ruta.pk, params)
+                    break;
+                case "ver_rad":
+                    var ruta = '/media/' + line.soporte_radicado
+                    window.open(ruta, 'Soporte radicado ' + ruta.pk, params)
+                    break;
+                case "ver_causacion":
+                    var ruta = '/media/' + line.soporte_causacion
+                    window.open(ruta, 'Soporte radicado ' + ruta.pk, params)
+                break;
+                case "ver_asoc":
+                    
+                    url_bco = '/accounting/ajax/bancarymovements?pago_asociado='+line.pk
+                    tablaCONBanco_mvtos.ajax.url(url_bco).load()
+                    var url_cont = '/accounting/ajax/accountsmovements?id_pago_asociado='+line.pk
+                    tablaMvtosCont.ajax.url(url_cont).load()
+                    $('#modalAsociaciones').modal('show');
+                    break
+                case "impr_egreso":
+                    $.ajax({
+                        type: 'GET',
+                        url: '/accounting/ajax/printegreso',
+                        data: {
+                            'idpago': line.pk
+                        },
+                        success: function (response) {
+                            var ruta = response['ruta']
+                            window.open(ruta, 'Egreso', params)
+                        }
+                    })
+                    break;
+            }
+        });
+        $('.modal').on('hide.bs.modal', function () {
+            tablaPagos.$('tr.selected').removeClass('selected');
+        })
+        $(this).click(function (e) {
+            if (e.button == 0) {
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function (e) {
+            if (e.keyCode == 27) {
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $('#tablaCONBanco tbody').on('click','tr',function(){
+            $(this).toggleClass('selected')
+            totalizarMovimiento()
+        })
+
+        $('#btnasociarMvtoant').click(function(){
+            let line = tablaAnt.row($('tr.selected')).data()
+            let cuenta = line.cuentapk
+            let valor = line.valor.replace(/[\$,]/g,'') * 1
+            let valor_conciliado = totalizarMovimiento()
+            if (cuenta != "9" && cuenta != "16" && cuenta != "25"){
+                if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    return
+                }
+            }
+            else{
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('Este pago fué realizado en efectivo, no se puede asociar a un movimiento bancario')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            let button = $(this)
+            button.html('<i class="fas fa-spinner fa-pulse"></i>').addClass('disabled')
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/registraranticipo',
+                data:{
+                    'csrfmiddlewaretoken':getCookie('csrftoken'),
+                    'lineas_banco':lineas_banco,
+                    'anticipo':line.pk,
+                    'todo':'onlylink'
+                },
+                success:function(response){
+                    tablaAnt.ajax.reload()
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').text('El pago del anticipo fue asociado con la(s) linea(s) seleccionadas.')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    $('#modalLink').modal('hide')
+                },
+                complete: function(response){
+                    button.html('Asociar').removeClass('disabled')
+                }
+            })
+        })
+        function totalizarMovimiento(tabla="#tablaCONBanco tr.selected",total_input="#total-pago-banco"){
+            let total = 0
+            $(tabla).each(function(index, element){
+                let valor = $(element).find('.dt-body-right').text()
+                valor = valor.replace(/[\$,]/g,'') * 1
+                total += valor
+            })
+            fmt_total = new Intl.NumberFormat('en-EN').format(total)
+            $(total_input).val(fmt_total)
+
+            return total
+        }
+    })
+</script>
+{%endblock%}

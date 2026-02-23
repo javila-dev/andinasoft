@@ -1,0 +1,979 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%load l10n%}
+{%block title%}CRM | Leads{%endblock%}
+{%block style%}
+<style>
+    th{
+        text-align: center;
+        font-size: small;
+    }
+    td{
+        font-size: small;
+        text-align: center;
+    }
+    .dataTables_length{
+        padding-left: 8px;
+    }
+    .dataTables_filter{
+        padding-right: 8px;
+    }
+    .dataTables_info{
+        padding-left: 8px;
+    }
+    tr.group, tr.group:hover {
+        background-color: #ddd !important;
+    }
+    .list-group-item{
+        font-size: smaller;
+    }
+</style>
+{%endblock%}
+{%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
+{%block content%}
+<div class='principal-container bg-white shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>Leads</h3>
+    <div class='row mx-0'>
+        <div class='col-md-3 overflow-auto mb-2' style='max-height: 85vh'>
+            <div id='listaAsesores' class="list-group">
+                {%if show_todos%}
+                <a href="#" class="list-group-item list-group-item-action active" aria-current="true">TODOS</a>
+                {%endif%}
+                {%for asesor in asesores%}
+                <a href="#" class="list-group-item list-group-item-action">{{asesor.nombre.upper}}</a>
+                {%endfor%}
+            </div>
+        </div>
+        <div class='col-md-9'>
+            <nav>
+                <div class="nav nav-pills justify-content-center" id="nav-tab" role="tablist">
+                    <a class="nav-link active" id="nav-home-tab" data-toggle="tab" href="#nav-home" role="tab" aria-controls="nav-home" aria-selected="true">Activos</a>
+                    <a class="nav-link" id="nav-profile-tab" data-toggle="tab" href="#nav-profile" role="tab" aria-controls="nav-profile" aria-selected="false">In show</a>
+                    <a class="nav-link" id="nav-contact-tab" data-toggle="tab" href="#nav-contact" role="tab" aria-controls="nav-contact" aria-selected="false">Archivado</a>
+                </div>
+            </nav>
+            <div class="tab-content" id="nav-tabContent">
+                <div class="tab-pane fade show active" id="nav-home" role="tabpanel" aria-labelledby="nav-home-tab">
+                    <div class='table-responsive mt-2'>
+                        <table id='tablaLeads' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Nombre</th>
+                                    <th>Telefono(s)</th>
+                                    <th>Direccion</th>
+                                    <th>Estado civil</th>
+                                    <th>Captado</th>
+                                    <th>Tipo</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="nav-profile" role="tabpanel" aria-labelledby="nav-profile-tab">
+                    <select class="custom-select col-md-4 mt-3" id='operacionSearch'>
+                        <option value='' selected>Escoge una operacion</option>
+                        {%for op in operaciones%}
+                        <option value="{{op.pk}}">{{op.proyecto}} - {{op.descripcion}}</option>
+                        {%endfor%}
+                    </select>
+                    <div class='table-responsive mt-3'>
+                        <table id='tablaLeadsAsist' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Nombre</th>
+                                    <th>Telefono(s)</th>
+                                    <th>Estado civil</th>
+                                    <th>Cupos</th>
+                                    <th>Tipo</th>
+                                    <th>Cita</th>
+                                    <th>Captado</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="nav-contact" role="tabpanel" aria-labelledby="nav-contact-tab">
+                    <div class='table-responsive mt-2'>
+                        <table id='tablaLeadsArchiv' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Nombre</th>
+                                    <th>Telefono(s)</th>
+                                    <th>Direccion</th>
+                                    <th>Estado civil</th>
+                                    <th>Captado</th>
+                                    <th>Tipo</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>
+              </div>
+        </div>
+    </div>
+    <div class='fixed-bottom'>
+        <button type='button' id='nuevoLead' class='btn btn-primary shadow btn btn-xl btn-circle float-right mr-4 mb-3' style="z-index: 1300;"
+        >
+    <i class="fas fa-plus"></i></button>
+    </div>
+</div>
+<div class="modal fade" id="modalLead" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <ul class="nav nav-pills justify-content-center"> 
+                <li class="nav-item">
+                    <a class="nav-link active" id='pill-info' href="#info" data-toggle="tab">Info</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id='pill-tl' href="#timeline" data-toggle="tab">Timeline</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id='pill-evento' href="#eventos" data-toggle="tab">Evento</a>
+                </li>
+            </ul>
+            <div class="tab-content card-body"> 
+                <div id="info" class="tab-pane active"> 
+                    {%crispy form%}
+                </div>
+                <div id="timeline" class="tab-pane"> 
+                    <div id="div-history" class="overflow-auto" style='max-height:400px'></div>
+                    <button class="btn btn-success shadow btn-circle float-right mt-2" id="btnHistory" type="button">
+                        <i class="fas fa-plus" aria-hidden="true"></i></button>
+                </div>
+                <div id="eventos" class="tab-pane"> 
+                    <select class="custom-select" id='operacion' name='operacion'>
+                        {%for op in operaciones%}
+                        <option value="{{op.pk}}">{{op.proyecto}} - {{op.descripcion}}</option>
+                        {%endfor%}
+                    </select>
+                    <div class='row mt-4'>
+                        <div class='col-md-4'>
+                            <div id='listaEventos' class="list-group">
+                            </div>
+                        </div>
+                        <div class='col-md-8'>
+                            <div class='container bg-light mx-0 p-3 pb-5' id='div-cita'>
+                                <p class='lead'> ¿Cuantos asistentes deseas agendar para esta cita?</p>
+                                <input type='number' class='form-control text-center mx-auto' 
+                                id='asistentes' min='1' max='6' name='asistentes' style='max-width:100px'>
+                                <button type='button' class='btn btn-primary float-right btn-circle mt-2 shadow' 
+                                    id='btnAgendar'><i class="fas fa-check"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalAgendar" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Confirmar cita</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <form method='POST'>{%csrf_token%}
+                <div class='form-group row'>
+                    <label for="lead_cita" class="col-auto col-form-label font-weight-bold">Asistente: </label>
+                    <div class="col-auto ml-0">
+                        <input readonly type='text' class="form-control-plaintext" id='nombre_lead' name='nombre_lead' required>
+                    </div>
+                </div>
+                <div class='form-group row'>
+                    <label for="lead_cita" class="col-auto col-form-label font-weight-bold">Cupos: </label>
+                    <div class="col-auto ml-0">
+                        <input readonly type='text' class="form-control-plaintext" id='num_asistentes' name='num_asistentes' required>
+                    </div>
+                </div>
+                <div class='form-group row'>
+                    <label for="lead_cita" class="col-auto col-form-label font-weight-bold">Fecha y hora: </label>
+                    <div class="col-auto ml-0">
+                        <input readonly type='text' class="form-control-plaintext" id='evento_cita' name='evento_cita' required>
+                    </div>
+                </div>
+                <div class='form-group row'>
+                    <label for="lead_cita" class="col-sm-3 col-form-label font-weight-bold">Operacion: </label>
+                    <div class="col-sm-9 ml-0">
+                        <input readonly type='text' class="form-control-plaintext" id='operacion_evento' name='operacion_evento' required>
+                    </div>
+                </div>
+                <input type='text' name='id_lead_cita' id='id_lead_cita'hidden>
+                <input type='text' name='id_operacion_cita' id='id_operacion_cita' hidden>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <input type='submit' class='btn btn-primary' id='confirmarCita' name='btnConfirmarCita' value='Confirmar'>
+        </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalNuevaObs" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Agregar comentario</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <form method='POST' id='form-Obs'>{%csrf_token%}
+        <div class="modal-body">
+            <textarea type='text' rows='4' class='form-control' name='nuevaObs' id='nuevaObs' required></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type='submit' name='btnAgregarObs' id='btnAgregarObs' class='btn btn-primary' value='Agregar'>
+        </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalConfirmarArchivo" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Archivar Lead</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <p class='lead'>¿Estas seguro que deseas archivar este lead?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+          <button type="button" id='btnArchivar' class="btn btn-primary">Si</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenu' aria-labelledby="dropdownMenuLink"
+  style="max-width: 320px;">
+    <a class="dropdown-item" id='pi/pa' href="#">Poco interesado/Poco adecuado</a>
+    <a class="dropdown-item" id='mi/pa' href="#">Muy interesado/Poco adecuado</a>
+    <a class="dropdown-item" id="pi/ma" href="#">Poco interesado/Muy adecuado</a>
+    <a class="dropdown-item" id="mi/ma" href="#">Muy interesado/Muy adecuado</a>
+  </div>    
+  <div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuArchiv' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;">
+    <a class="dropdown-item" id='reactivarLead' href="#">Reactivar</a>
+  </div>   
+  <div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuInShow' aria-labelledby="dropdownMenuLink"
+  style="max-width: 190px;">
+    <a class="dropdown-item" id='asistioEvento' href="#">Asistio</a>
+    <a class="dropdown-item" id='NoasistioEvento' href="#">No Asistio</a>
+    <div class="dropdown-divider"></div>
+    <a class="dropdown-item" id='Retirar' href="#">Eliminar cita</a>
+  </div>   
+  <input id='estadoleadAct' hidden>
+  <script>
+    $(document).ready(function() {
+        if ('{{form_error}}'){
+            $('#modalLead').modal('show')
+            $('#modalLead').find('.modal-title').text('Crear Lead')
+            $('#pill-tl').prop('disabled',true).addClass('disabled')
+            $('#pill-evento').prop('disabled',true).addClass('disabled')
+            $('#pill-info').click()
+            $('#modalLead').on('hidden.bs.modal',function(e){
+                $('input').removeClass('is-invalid')
+                $('.invalid-feedback').remove()
+                var inputs = $('input.reseteable')
+                inputs.removeAttr('value')
+            })
+        }
+    })
+  </script>
+<script>
+$(document).ready(function() {
+    var groupColumn = 6;
+    $('.contextmenu').hide()
+    //Tablas
+    var tablaLeads = $('#tablaLeads').DataTable({
+        scrollY : "70vh",
+        scrollX : true,
+        scrollCollapse : true,
+        paging : false,  
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+        },
+        'ajax':{
+            'url':'/crm/ajax/leads?estado=Activo&asesor=""',
+            "dataSrc": "data"
+        },
+            "columns": [
+            { "data": "pk" },
+            { "data": "nombre" },
+            { "data": "celular" },
+            { "data": "direccion" },
+            { "data": "estado_civil" },
+            { "data": "fecha_reg" },
+            { "data" : "tipo"}
+        ],
+        "columnDefs": [
+            { "visible": false, "targets": groupColumn },
+            { "targets":1,"className":"dt-body-left"}
+        ],
+        "order": [[ groupColumn, 'asc' ],[0,'desc']],
+        "displayLength": 25,
+        "drawCallback": function ( settings ) {
+            var api = this.api();
+            var rows = api.rows( {page:'current'} ).nodes();
+            var last=null;
+            api.column(groupColumn, {page:'current'} ).data().each( function ( group, i ) {
+                if ( last !== group ) {
+                    $(rows).eq( i ).before(
+                        '<tr class="group"><td colspan="7" class="text-left"><strong>Tipo de Lead: </strong>'+group+'</td></tr>'
+                    );
+                    last = group;
+                }
+            } );
+        }
+    } );
+    $('#tablaLeads tbody').on('click','tr',function(){
+        var row = tablaLeads.row(this).data()
+        var lead_id = row.pk
+        var lead_name = row.nombre
+        $('#estadoleadAct').val(row.estado)
+        $('#modalLead').modal('show',{type:'activos'})
+        $('#modalLead').find('.modal-title').text('Lead: '+lead_name)
+        $('#id_lead').val(lead_id)
+        $('#id_nombre').val(row.nombre)
+        $('#id_celular').val(row.celular)
+        $('#id_telefono').val(row.telefono)
+        $('#id_email').val(row.email)
+        $('#id_direccion').val(row.direccion)
+        $('#id_estado_civil').val(row.estado_civil)
+        $('#id_fecha_nacimiento').val(row.fecha_nacimiento)
+        $('#id_gestor_capta').val(row.gestor_asignado)
+        $('#id_fecha_capta').val(row.fecha_reg)
+        $.ajax({
+            type:'GET',
+            url:'/crm/ajax/get_comments',
+            data: {
+                'lead':lead_id
+            },
+            success: function(response){
+                var data = response['data']
+                $('#div-history').empty()
+                var ul = $('<ul>').addClass('list-unstyled')
+                for (i=0;i<data.length;i++){
+                    item = data[i]
+                    let fecha = new Date(item.fecha)
+                    fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                    var li = '<li class="media border-bottom border-gray pt-2">'+
+                        '<img src="'+item.avatar+'" width="45" height="45" class="mr-3 rounded-circle" alt="...">'+
+                        '<div class="media-body">'+
+                          '<h6 class="mt-0 mb-1">'+item.usuario+'<small> el '+fecha+'</small></h6>'+
+                          '<p>'+item.observacion+'</p>'+
+                        '</div>'+
+                      '</li>'
+                    ul.append(li)
+                }
+                $('#div-history').append(ul)
+
+            }
+        })
+    })
+    $('#tablaLeads tbody').on( 'click', 'tr.group', function () {
+        var currentOrder = tablaLeads.order()[0];
+        if ( currentOrder[0] === groupColumn && currentOrder[1] === 'asc' ) {
+            tablaLeads.order( [ groupColumn, 'desc' ] ).draw();
+        }
+        else {
+            tablaLeads.order( [ groupColumn, 'asc' ] ).draw();
+        }
+    } );
+    $('#tablaLeads tbody').on('contextmenu','tr',function(e){
+        var row = tablaLeads.row(this).data()
+        var width = $(document).width()
+        var position = e.pageX
+        if (position>=width*3/4){
+            position -= 320
+        }
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablaLeads.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        if (row != undefined){
+            $('#contextMenu').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+        }
+        return false;
+    })
+    //-------------------------------
+    var tablaLeadsAsist = $('#tablaLeadsAsist').DataTable({
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+        },
+        'ajax':{
+            'url':'/crm/ajax/eventleads?asesor=TODOS',
+            "dataSrc": "data"
+        },
+            "columns": [
+            { "data": "pk" },
+            { "data": "nombre" },
+            { "data": "celular" },
+            { "data": "estado_civil" },
+            { "data": "cupos" },
+            { "data": "tipo" },
+            { "data" : "cita"},
+            {'data':'fecha_reg'},
+            {'data':'asistencia'}
+        ],
+        "columnDefs": [
+            { "visible": false, "targets": groupColumn },
+            { "targets":1,"className":"dt-body-left"}
+        ],
+        "order": [[ groupColumn, 'asc' ]],
+        "displayLength": 25,
+        "drawCallback": function ( settings ) {
+            var api = this.api();
+            var rows = api.rows( {page:'current'} ).nodes();
+            var last=null;
+            api.column(groupColumn, {page:'current'} ).data().each( function ( group, i ) {
+                if ( last !== group ) {
+                    $(rows).eq( i ).before(
+                        '<tr class="group"><td colspan="8" class="text-left"><strong>Cita: </strong>'+group+'</td></tr>'
+                    );
+                    last = group;
+                }
+            } );
+        }
+    } );
+    $('#tablaLeadsAsist tbody').on( 'click', 'tr.group', function () {
+        var currentOrder = tablaLeadsAsist.order()[0];
+        if ( currentOrder[0] === groupColumn && currentOrder[1] === 'asc' ) {
+            tablaLeadsAsist.order( [ groupColumn, 'desc' ] ).draw();
+        }
+        else {
+            tablaLeadsAsist.order( [ groupColumn, 'asc' ] ).draw();
+        }
+    } );
+    $('#tablaLeadsAsist tbody').on('click','tr',function(){
+        var row = tablaLeadsAsist.row(this).data()
+        var lead_id = row.pk
+        var lead_name = row.nombre
+        $('#estadoleadAct').val(row.estado)
+        $('#modalLead').modal('show',{type:'inshow'})
+        $('#modalLead').find('.modal-title').text('Lead: '+lead_name)
+        $('#id_lead').val(lead_id)
+        $('#id_nombre').val(row.nombre)
+        $('#id_celular').val(row.celular)
+        $('#id_telefono').val(row.telefono)
+        $('#id_email').val(row.email)
+        $('#id_direccion').val(row.direccion)
+        $('#id_estado_civil').val(row.estado_civil)
+        $('#id_fecha_nacimiento').val(row.fecha_nacimiento)
+        $('#id_gestor_capta').val(row.gestor_asignado)
+        $('#id_fecha_capta').val(row.fecha_reg)
+        
+        $.ajax({
+            type:'GET',
+            url:'/crm/ajax/get_comments',
+            data: {
+                'lead':lead_id
+            },
+            success: function(response){
+                var data = response['data']
+                $('#div-history').empty()
+                var ul = $('<ul>').addClass('list-unstyled')
+                for (i=0;i<data.length;i++){
+                    item = data[i]
+                    let fecha = new Date(item.fecha)
+                    fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                    var li = '<li class="media border-bottom border-gray pt-2">'+
+                        '<img src="'+item.avatar+'" width="45" height="45" class="mr-3 rounded-circle" alt="...">'+
+                        '<div class="media-body">'+
+                          '<h6 class="mt-0 mb-1">'+item.usuario+'<small> el '+fecha+'</small></h6>'+
+                          '<p>'+item.observacion+'</p>'+
+                        '</div>'+
+                      '</li>'
+                    ul.append(li)
+                }
+                $('#div-history').append(ul)
+            }
+        })
+    })
+    $('#tablaLeadsAsist tbody').on('contextmenu','tr',function(e){
+        var row = tablaLeadsAsist.row(this).data()
+        if (row.asistencia == 'Pendiente'){
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 190
+            }
+            if ( $(this).hasClass('selected') ) {
+                $(this).removeClass('selected');
+            }
+            else {
+                tablaLeadsAsist.$('tr.selected').removeClass('selected');
+                $(this).addClass('selected');
+            }
+            if (row != undefined){
+                $('#contextMenuInShow').css({
+                    'display':'block',
+                    'left':position,
+                    'top':e.pageY,
+                })
+            }
+        }
+        return false;
+    })
+    //-------------------------------
+    var tablaLeadsArchiv = $('#tablaLeadsArchiv').DataTable({
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/9dcbecd42ad/i18n/Spanish.json"
+        },
+        'ajax':{
+            'url':'/crm/ajax/leads?estado=Archivado&asesor=TODOS',
+            "dataSrc": "data"
+        },
+            "columns": [
+            { "data": "pk" },
+            { "data": "nombre" },
+            { "data": "celular" },
+            { "data": "direccion" },
+            { "data": "estado_civil" },
+            { "data": "fecha_reg" },
+            { "data" : "tipo"}
+        ],
+        "columnDefs": [
+            { "visible": false, "targets": groupColumn },
+            { "targets":1,"className":"dt-body-left"}
+        ],
+        "order": [[ groupColumn, 'asc' ]],
+        "displayLength": 25,
+        "drawCallback": function ( settings ) {
+            var api = this.api();
+            var rows = api.rows( {page:'current'} ).nodes();
+            var last=null;
+            api.column(groupColumn, {page:'current'} ).data().each( function ( group, i ) {
+                if ( last !== group ) {
+                    $(rows).eq( i ).before(
+                        '<tr class="group"><td colspan="7" class="text-left"><strong>Tipo de Lead: </strong>'+group+'</td></tr>'
+                    );
+                    last = group;
+                }
+            } );
+        }
+    } );
+    $('#tablaLeadsArchiv tbody').on('click','tr',function(){
+        var row = tablaLeadsArchiv.row(this).data()
+        var lead_id = row.pk
+        var lead_name = row.nombre
+        $('#estadoleadAct').val(row.estado)
+        $('#modalLead').modal('show',{type:'archivados'})
+        $('#modalLead').find('.modal-title').text('Lead: '+lead_name)
+        $('#id_lead').val(lead_id)
+        $('#id_nombre').val(row.nombre)
+        $('#id_celular').val(row.celular)
+        $('#id_telefono').val(row.telefono)
+        $('#id_email').val(row.email)
+        $('#id_direccion').val(row.direccion)
+        $('#id_estado_civil').val(row.estado_civil)
+        $('#id_fecha_nacimiento').val(row.fecha_nacimiento)
+        $('#id_gestor_capta').val(row.gestor_asignado)
+        $('#id_fecha_capta').val(row.fecha_reg)
+        
+        $.ajax({
+            type:'GET',
+            url:'/crm/ajax/get_comments',
+            data: {
+                'lead':lead_id
+            },
+            success: function(response){
+                var data = response['data']
+                $('#div-history').empty()
+                var ul = $('<ul>').addClass('list-unstyled')
+                for (i=0;i<data.length;i++){
+                    item = data[i]
+                    let fecha = new Date(item.fecha)
+                    fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                    var li = '<li class="media border-bottom border-gray pt-2">'+
+                        '<img src="'+item.avatar+'" width="45" height="45" class="mr-3 rounded-circle" alt="...">'+
+                        '<div class="media-body">'+
+                          '<h6 class="mt-0 mb-1">'+item.usuario+'<small> el '+fecha+'</small></h6>'+
+                          '<p>'+item.observacion+'</p>'+
+                        '</div>'+
+                      '</li>'
+                    ul.append(li)
+                }
+                $('#div-history').append(ul)
+            }
+        })
+    })
+    $('#tablaLeadsArchiv tbody').on( 'click', 'tr.group', function () {
+        var currentOrder = tablaLeadsArchiv.order()[0];
+        if ( currentOrder[0] === groupColumn && currentOrder[1] === 'asc' ) {
+            tablaLeadsArchiv.order( [ groupColumn, 'desc' ] ).draw();
+        }
+        else {
+            tablaLeadsArchiv.order( [ groupColumn, 'asc' ] ).draw();
+        }
+    } );
+    $('#tablaLeadsArchiv tbody').on('contextmenu','tr',function(e){
+        var row = tablaLeadsArchiv.row(this).data()
+        var width = $(document).width()
+        var position = e.pageX
+        if (position>=width*3/4){
+            position -= 150
+        }
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablaLeadsArchiv.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        if (row != undefined){
+            $('#contextMenuArchiv').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+        }
+        return false;
+    })
+    //Buttons
+    $('#btnAgendar').click(function(){
+        var asistentes = $('#asistentes').val()
+        var number_asist = parseInt(asistentes)
+        if (asistentes==''){
+            $('#alert-title').text('Error')
+            $('#alert-data').text('Debes ingresar un numero de asistentes para confirmar la cita')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+        else if (number_asist<1||number_asist>6){
+            $('#alert-title').text('Error')
+            $('#alert-data').text('El numero de asistentes debe estar entre 1 y 6')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+            return;
+        }
+        $('#modalLead').modal('hide')
+        $('#modalAgendar').delay(300).modal('show')
+        $('#nombre_lead').val($('#id_nombre').val())
+        $('#id_lead_cita').val($('#id_lead').val())
+        $('#operacion_evento').val($('#operacion option:selected').text())
+        $('#id_operacion_cita').val($('#operacion').val())
+        var evento = $('#listaEventos a.list-group-item.active').text()
+        $('#evento_cita').val(evento)
+        $('#num_asistentes').val($('#asistentes').val())
+    })
+    $('#btnHistory').click(function(){
+        $('#modalLead').modal('hide')
+        $('#modalNuevaObs').delay(300).modal('show')
+    })
+    $('#btnConfArchivo').click(function(){
+        $('#modalLead').modal('hide')
+        $('#modalConfirmarArchivo').modal('show')
+    })
+    $('#btnArchivar').click(function(e){
+        let lead = $('#id_lead').val()
+        var cambiar_estado = cambiarEstadoLead(lead,'Archivado')
+        tablaLeads.ajax.reload()
+        tablaLeadsArchiv.ajax.reload()
+        $('#nav-contact-tab').click()
+        $('#modalConfirmarArchivo').modal('hide')
+    })
+    $('#nuevoLead').click(function(){
+        var asesor = ($('#listaAsesores a.active').text())
+        if (asesor=='TODOS'){
+            $('#alert-title').text('Error')
+            $('#alert-data').text('Debes seleccionar un asesor para crear un lead nuevo')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')      
+        }
+        else{
+            $('#modalLead').modal('show',{type:'new'})
+        }
+    })
+    //Modals
+    $('#modalAgendar').on('hidden.bs.modal',function(){
+        $('#modalLead').modal('show',{type:'activos'})
+    })
+    $('#modalLead').on('show.bs.modal',function(e){
+        var trigger = $(e.relatedTarget)
+        var type = trigger[0].type
+        $('#pill-info').click()
+        $('#div-cita').css('display','none')
+        $('#listaEventos').empty()
+        $('#asistentes').val(null)
+        $('#operacion').val(null)
+        $('#pill-info').click()
+        if (type =='new') {
+            $('#form-lead').trigger('reset')
+            $(this).find('.modal-title').text('Crear Lead')
+            $('#div-history').empty()
+            $('#id_lead').val('Nuevo')
+            $('#pill-tl').prop('disabled',true).addClass('disabled')
+            $('#pill-evento').prop('disabled',true).addClass('disabled')
+            var asesor = ($('#listaAsesores a.active').text())
+            $('#id_gestor_capta').val(asesor)
+            $('#div_id_tipo_lead').show()
+            $('#btnConfArchivo').hide()
+            $('#submit-id-btngrabar').show()
+        }
+        else if (type == 'archivados'){
+            $('#btnConfArchivo').hide()
+            $('#submit-id-btngrabar').hide()
+            $('#pill-evento').addClass('disabled').prop('disabled',true)
+            $('#div_id_tipo_lead').hide()
+            $('#btnHistory').hide()
+        }
+        else if (type == 'activos'){
+            $('#btnHistory').show()
+            $('#submit-id-btngrabar').hide()
+            $('#btnConfArchivo').show()
+            $('#div_id_tipo_lead').hide()
+            $('#pill-tl').prop('disabled',false).removeClass('disabled active')
+            $('#pill-evento').prop('disabled',false).removeClass('disabled active')
+        }
+        else if (type == 'inshow'){
+            $('#btnHistory').show()
+            $('#submit-id-btngrabar').hide()
+            $('#btnConfArchivo').show()
+            $('#div_id_tipo_lead').hide()
+            $('#btnConfArchivo').hide()
+            $('#pill-evento').prop('disabled',true).addClass('disabled')
+        }
+    })
+    $('#modalNuevaObs').on('hidden.bs.modal',function(e){
+        var tipo = $('#estadoleadAct').val()
+        if (tipo=='Activo') tipo_lead = 'activos'
+        else if (tipo=='Asistio') tipo_lead = 'inshow'
+        else if (tipo=='Archivado') tipo_lead = 'archivados'
+        else tipo_lead = ''
+        $('#form-Obs').trigger('reset')
+        $('#modalLead').modal('show',{type:tipo_lead})
+        $('#pill-tl').click()
+        $('#btnAgregarObs').removeClass('disabled')
+    })
+    //Otros
+    $('#listaAsesores a.list-group-item').on('click',function(){
+        var asesor = $(this).text()
+        var op = $('#operacionSearch').val()
+        tablaLeads.ajax.url('/crm/ajax/leads?estado=Activo&asesor='+asesor).load()
+        tablaLeadsAsist.ajax.url('/crm/ajax/eventleads?operacion='+op+'&asesor='+asesor).load()
+        tablaLeadsArchiv.ajax.url('/crm/ajax/leads?estado=Archivado&asesor='+asesor).load()
+        if (! $(this).hasClass('active')){
+            $('a.list-group-item.active').removeClass('active')
+            $(this).addClass('active')
+        }
+    })
+    $('#operacion').on('change',function(){
+        var operacion = $(this).val()
+        $('#listaEventos').empty()
+        $('#asistentes').val(null)
+        $('#div-cita').css('display','none')
+        $.ajax({
+            type:'GET',
+            url:'/crm/ajax/events',
+            data:{
+                'operacion':operacion
+            },
+            success: function(response){
+                var data = JSON.parse(response['eventos'])
+                for (i=0;i<data.length;i++){
+                    var item = data[i]['fields']
+                    var evento = $('<a href="#" class="list-group-item list-group-item-action" onclick=selectEvento($(this))>')
+                    evento.text(item.fecha_evento+" - "+item.hora_evento)
+                    $('#listaEventos').append(evento)
+                }
+            }
+        })
+        
+    })
+    $('#operacionSearch').on('change',function(){
+        var asesor = $('#listaAsesores a.list-group-item.active').text()
+        var op =$(this).val()
+        tablaLeadsAsist.ajax.url('/crm/ajax/eventleads?operacion='+op+'&asesor='+asesor).load()
+    })
+    $('#form-Obs').on('submit',function(e){
+        e.preventDefault();
+        var formData = new FormData(this)
+        var id_lead = $('#id_lead').val()
+        $.ajax({
+            type: 'POST',
+            url : '/crm/ajax/new_obs/'+id_lead,
+            data : formData,
+            processData : false,
+            contentType : false,
+            success: function(response){
+                var data = response['response']
+                var item = response['data']
+                let fecha = new Date(item.fecha)
+                fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                if (data){
+                    $('#modalNuevaObs').modal('hide')
+                    var li = '<li class="media border-bottom border-gray pt-2">'+
+                        '<img src="'+item.avatar+'" width="45" height="45" class="mr-3 rounded-circle" alt="...">'+
+                        '<div class="media-body">'+
+                          '<h6 class="mt-0 mb-1">'+item.usuario+'<small> el '+fecha+'</small></h6>'+
+                          '<p>'+item.obs+'</p>'+
+                        '</div>'+
+                      '</li>'
+                      $(li).insertBefore($('li.media').first())
+                }
+            }
+        })
+
+    })
+    $('#nav-home-tab').on('click',function(){
+        tablaLeads.ajax.reload()
+    })
+    //ContextMenu - click derecho
+    $(this).click(function(e){
+        if(e.button == 0){
+              $(".contextmenu").css("display", "none");
+        }
+        tablaLeads.$('tr.selected').removeClass('selected');
+        tablaLeadsArchiv.$('tr.selected').removeClass('selected');
+        tablaLeadsAsist.$('tr.selected').removeClass('selected');
+    });
+    $(this).keydown(function(e){
+        if(e.keyCode == 27){
+              $(".contextmenu").css("display", "none");
+        }
+        tablaLeads.$('tr.selected').removeClass('selected');
+        tablaLeadsArchiv.$('tr.selected').removeClass('selected');
+        tablaLeadsAsist.$('tr.selected').removeClass('selected');
+    });
+    $("#contextMenu").click(function(e){
+        var row = tablaLeads.row('.selected').data()
+        // El switch utiliza los IDs de los <li> del menú
+        switch(e.target.id){
+              case "pi/pa":
+                cambiarTipoLead(row.pk,'Poco interesado/Poco adecuado',tablaLeads);
+                    break;      
+              case "mi/pa":
+                cambiarTipoLead(row.pk,'Muy interesado/Poco adecuado',tablaLeads);
+                    break;
+              case "pi/ma":
+                cambiarTipoLead(row.pk,'Poco interesado/Muy adecuado',tablaLeads);
+                    break;
+              case "mi/ma":
+                cambiarTipoLead(row.pk,'Muy interesado/Muy adecuado',tablaLeads);
+                    break;
+        }
+        tablaLeads.$('tr.selected').removeClass('selected');
+  });
+    $("#contextMenuArchiv").click(function(e){
+        var row = tablaLeadsArchiv.row('.selected').data()
+        // El switch utiliza los IDs de los <li> del menú
+        switch(e.target.id){
+            case "reactivarLead":
+                cambiarEstadoLead(row.pk,'Activo');
+                tablaLeadsArchiv.ajax.reload()
+                tablaLeads.ajax.reload()
+                $('#nav-home-tab').delay(400).click()
+                break;     
+        }
+        tablaLeads.$('tr.selected').removeClass('selected');
+    });
+    $("#contextMenuInShow").click(function(e){
+        var row = tablaLeadsAsist.row('.selected').data()
+        // El switch utiliza los IDs de los <li> del menú
+        switch(e.target.id){
+            case "asistioEvento":
+                estadoEvento(row.pk,'Asistio',row.cita)
+                    break;      
+            case "NoasistioEvento":
+                estadoEvento(row.pk,'No Asistio',row.cita)
+                    break;
+            case "Retirar":
+                estadoEvento(row.pk,'Eliminar',row.cita)
+                    break;
+        }
+        tablaLeadsAsist.$('tr.selected').removeClass('selected');
+        tablaLeadsAsist.ajax.reload()
+        tablaLeadsArchiv.ajax.reload()
+
+  });
+});
+function selectEvento(element){
+    if (! element.hasClass('active')){
+        $('#listaEventos a.list-group-item.active').removeClass('active')
+        element.addClass('active')
+    }
+    else{
+        element.addClass('active')
+    }
+    $('#asistentes').val(null)
+    $('#div-cita').css('display','block')
+}
+function cambiarTipoLead(lead_id,tipo,table){
+    var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+    $.ajax({
+        type:'POST',
+        url:'/crm/ajax/changeleadtype',
+        data:{
+            'csrfmiddlewaretoken':csrf_token,
+            'id_lead':lead_id,
+            'tipo':tipo
+        },
+        success: function(response){
+            table.ajax.reload()
+        }
+    })
+}
+function cambiarEstadoLead(lead_id,estado){
+    var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+    $.ajax({
+        type:'POST',
+        url:'/crm/ajax/storelead',
+        data:{
+            'csrfmiddlewaretoken':csrf_token,
+            'id_lead':lead_id,
+            'estado':estado,
+        },
+        success: function(response){
+            var done = response['success']
+        }
+    })
+}
+function estadoEvento(lead_id,estado,evento){
+    var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+    var operacion = $('#operacionSearch').val()
+    $.ajax({
+        type:'POST',
+        url:'/crm/ajax/changeAsist',
+        data:{
+            'csrfmiddlewaretoken':csrf_token,
+            'id_lead':lead_id,
+            'estado':estado,
+            'evento':evento,
+            'operacion':operacion,
+            
+        },
+        success:function(response){
+
+        }
+    })
+}
+</script>
+<script src='{%static "js/preventDbClick.js"%}'></script>
+{%endblock%}

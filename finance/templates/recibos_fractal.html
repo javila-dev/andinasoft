@@ -1,0 +1,366 @@
+{%extends 'base_fomantic.html'%}
+{%load static%}{%load crispy_forms_tags%}
+{%block title%}Recibos{%endblock%}
+{%block content%}
+<h2 class="ui center aligned icon violet header" style="margin-bottom: 2rem;">
+    <i class="folder open circular icon"></i>
+    <div class="content">
+      Solicitar recibos
+      <div class="sub header">Aquí encontrarás las ventas adjudicadas y verificadas por el area de operaciones.</div>
+    </div><br>
+    <button class='ui violet circular large icon button' id='btnNewreq'>
+      <i class="plus icon"></i></button>
+      <button class='ui violet circular large icon button' id="btn-new-dlocal">
+        <i class="linkify icon"></i>
+      </button>
+  </h2>
+  <div class="ui basic segment" id="lista-ventas-segment">
+    <table class="ui selectable table" style="width: 100%;" id="tablaSolicitudes">
+      <thead>
+        <tr>
+          <th rowspan="2">Id</th>
+          <th rowspan="2">Proyecto</th>
+          <th rowspan="2">Oficina</th>
+          <th rowspan="2">Adj</th>
+          <th rowspan="2">Cliente</th>
+          <th rowspan="2">Fecha pago</th>
+          <th rowspan="2">Valor</th>
+          <th colspan="2">Solicitud</th>
+          <th rowspan="2">Recibo</th>
+        </tr>
+        <tr>
+            <th>Fecha</th>
+            <th>Usuario</th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+
+  <div class="ui mini modal" id="modalSolicRec">
+    <div class="header">Nueva solicitud</div>
+    <div class="content">
+      <form class="ui form" id='form-nueva-solicitud' method="POST" enctype="multipart/form-data">
+        {%csrf_token%}
+        <div class="field">
+          <label>Fecha</label>
+          <div class="ui calendar">
+            <div class="ui input left icon" >
+              <i class="calendar icon"></i>
+              <input type="text" id="id_fecha_recibo" name="fecha_pago" placeholder="Desde" required 
+                readonly style="cursor: pointer;text-align: center;">
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Cliente</label>
+          <select name="cliente" id="id_cliente" class="ui search dropdown">
+            <option value="">Selecciona un cliente...</option>
+            {%for venta in ventas%}<option value="{{venta.pk}}">{{venta.pk}} - {{venta.Nombre}}</option>{%endfor%}
+          </select>
+        </div>
+        <div class="field">
+          <label>Valor</label>
+          <input type="text" class="money" name="valor" style="text-align: center;"> 
+        </div>
+        <div class="field">
+          <div class="ui file input">
+            <input name="soporte" id="id_soporte" type="file">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="actions">
+      <div class="ui approve green button">Solicitar</div>
+      <div class="ui cancel button">Cancelar</div>
+    </div>
+  </div>
+  <div class="ui tiny modal" id="modal-new-payment">
+    <div class="header">Generar link de pago</div>
+    <div class="content">
+      <div class="ui labeled input" style="width: 50%;">
+        <div class="ui label">Numero contrato</div>
+        <input type="number" id="id_contrato_dlocal" style="text-align: center;"
+        spellcheck="false" data-ms-editor="true" required>
+      </div>
+      <div class="ui labeled input" style="width: 50%; margin-top: 1.2rem;">
+        <div class="ui label">Valor</div>
+        <input type="text" id="id_valor_dlocal" style="text-align: center;"
+        spellcheck="false" data-ms-editor="true" class="money" required>
+      </div>
+      <div class="ui labeled action input" style="width: 100%; margin-top: 1.2rem;">
+        <div class="ui label">URL</div>
+        <input type="text" id="id_url_dlocal" style="text-align: center;"
+        spellcheck="false" data-ms-editor="true" readonly>
+        <button class="ui button green" id="btn-copy-url">
+          <i class="copy outline icon"></i>
+        </button>
+      </div>
+    </div>
+      
+    <div class="actions">
+      <button class="ui cancel button">Cerrar</button>
+      <button class="ui button green" id="btn-solicitar-dlocal">Registrar</button>
+    </div>
+  </div>
+
+
+{%endblock%}
+{%block contextmenu%}
+<div class="ui popup bottom left " id='contextMenu' style="position: absolute; 
+padding:0px; left: 0px;top:0px;max-width: 15rem;">
+<div class='ui basic vertical menu'>
+    <a class="item" id='validar'>
+      Validar
+      <i class="comment dots violet icon"></i>
+    </a>
+    <a class="item" id='descargar'>
+      Descargar
+      <i class="mail bulk violet icon"></i>
+    </a>
+    <a class="item" id='soporte'>
+      Soporte
+      <i class="file pdf outline violet icon"></i>
+    </a>
+</div>
+</div>
+{%endblock%}
+{%block script%}
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/css/dataTables.semanticui.min.css"></script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src='{%static "js/utilsfomantic.js"%}'></script>
+<script>
+  const param_meses_ci = 3
+  const param_meses_saldo = 10
+  const param_fechas_manuales = false  
+  const param_tasa = 0
+  const proyecto = 'Fractal'
+</script>
+<script>
+    $(document).ready(function(){
+      $('.money').mask("#,##0", {reverse: true});  
+      $(this).click(function(e){
+            if(e.button == 0){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $('.ui.calendar').calendar({
+              type: 'date',
+              firstDayOfWeek: 1,
+              text: calendar_spanish(),
+              formatter:{
+                date: 'YYYY-MM-DD',
+              },
+              maxDate: new Date(),
+            });
+          $('.ui.dropdown').dropdown({
+            ignoreDiacritics: true,
+          })
+      var tabla_solicitudes = $('#tablaSolicitudes').DataTable({
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:`/finance/requirereceipts?proyecto=${proyecto}&todo=pendientes`,
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'id'},
+                {'data':'proyecto.proyecto'},
+                {'data':'adj_info.oficina'},
+                {'data':'cliente'},
+                {'data':'titular.nombrecompleto'},
+                {'data':'fecha_pago'},
+                {'data':'valor',render: $.fn.dataTable.render.number( ',', '.', 0)},
+                {'data':'fecha'},
+                {'data':'usuario_solicita.username'},
+                {'data':'recibo_asociado'},
+            ],
+            order:[[0,'desc']]
+        })
+      $('#tablaSolicitudes tbody').on('contextmenu','tr',function(e){
+            tabla_solicitudes.$('tr.active').removeClass('active');
+            $(this).addClass('active')
+            side = 'left'
+            position = 'bottom'
+            side_to_remove='right'
+            position_to_remove = 'top'
+            
+            var width = $(document).width()
+            var height = window.innerHeight
+            var positionX = e.pageX-20
+            let positionY = e.pageY
+
+            if (positionX>=width*3/4){
+                positionX -= 173
+                side = 'right'
+                side_to_remove='left'
+            }
+            if (positionY >= height*3/4){
+              positionY -= 183
+              position = 'top'
+              position_to_remove='bottom'
+            }
+            positionY += 15
+            $('#contextMenu').css({
+                'left':positionX+'px',
+                'top':positionY+'px',
+            }).addClass('transition visible')
+            .removeClass(side_to_remove)
+            .removeClass(position_to_remove)
+            .addClass(side)
+            .addClass(position)
+            return false;
+        })
+      $("#contextMenu").click(function(e){
+          var line = tabla_solicitudes.row('.active').data()
+          let params = `status=no,location=no,toolbar=no,menubar=no,
+                  width=650,height=450,left=100,top=100`
+          switch(e.target.id){
+              case "descargar":
+                  window.location.href = `/finance/printreceipts?proyecto=${line.proyecto.proyecto}&recibo=${line.recibo_asociado}`
+                  break;     s
+              case "soporte":
+                  var ruta = '/media/'+line.soporte
+                  window.open(ruta,'Soporte solicitud recibo Id '+line.id,params)
+                  break;         
+              case "eliminar":
+                  $.ajax({
+                      type:'POST',
+                      url:'/finance/requirereceipts',
+                      data:{
+                          'csrfmiddlewaretoken':getCookie('csrftoken'),
+                          'todo':'delete',
+                          'id_rec':line.id,
+                      },
+                      success:function(response){
+                          if (response.status == 200){
+                              tabla_solicitudes.ajax.reload()
+                              alert('Solicitud de recibo eliminada')
+                          }
+                          else if (response.status == 403){
+                              alert('No tienes permisos')
+                          }
+                          
+                      },
+                      error: function(response){
+                          alert('Error no controlado por la aplicacion')
+                          console.log(response.responseJSON)
+                      } 
+                  })
+                  break;  
+              case "validar":
+              $('#alert-title').text('Listo!')
+                  $('#alert-data').text('')
+                  $('#alert-title').text('Andinasoft dice:')
+                  $('#alert-data').append('Estamos cargando el formulario <i class="fas fa-cog fa-spin"></i>')
+                  $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+                  let form = `<form id="formvalidrec" style="display: none" method ="POST" action="/nuevo_recaudo/${line.proyecto.proyecto}/${line.cliente}">
+                  <input name="abonocapital" value="${line.abono_capital}"/>
+                  <input name="fecha_pago" value="${line.fecha_pago}"/>
+                  <input name="condonacion_mora" value="${line.condonacion}"/>
+                  <input name="valor" value="${line.valor}"/>
+                  <input name="concepto" value="PAGO RECIBIDO DE CLIENTE"/>
+                  <input name="numsolicitud" value="${line.id}"/>
+                  <input name="validar-recaudo" value="true"/>
+                  <input name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}"/>
+                  <input type='submit'/>
+                  </form>
+                  `
+                  $('body').append(form)
+                  $('#formvalidrec').submit();
+
+              } 
+        });
+      $('#form-nueva-solicitud').submit(function(){
+        $(this).addClass('loading')
+        $(this).find('button').addClass('loading');
+      })
+      $('#btnNewreq').click(function(e) {
+        $('#modalSolicRec').modal({
+          onApprove: function(){
+            $('#form-nueva-solicitud').submit()
+            return false;
+          }
+        }).modal('show');
+      })
+      $('#btn-solicitar-dlocal').click(function(){
+        
+        let valor = $('#id_valor_dlocal').val().replace(/[$,]/g,'') * 1
+        let contrato = $('#id_contrato_dlocal').val()
+        
+        if (valor == "" || contrato == "" ){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `Debes completar todos los campos`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return false;
+        }
+        $(this).addClass('disabled loading');
+
+        $.ajax({
+          url:'/ajax_request/dlocalpayment',
+          type:'GET',
+          data: {
+            'amount':valor,
+            'contrato':contrato
+          },
+          success: function(response){
+            $('#id_url_dlocal').val(response.url)
+          },
+          error: function(){
+            $.toast({
+              class: 'error',
+              showIcon: false,
+              message: `Ocurrió un error al solicitar la url, contacta al administrador del sitio`,
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+          },
+          complete: function(){
+            $('#btn-solicitar-dlocal').removeClass('disabled loading')
+          }
+        })
+      })
+      $('#btn-new-dlocal').click(function(){
+        $('#id_valor_dlocal').val('')
+        $('#id_url_dlocal').val('')
+        $('#modal-new-payment').modal('show')
+      })
+      $('#btn-copy-url').click(function(){
+        let text = $('#id_url_dlocal').val()
+        navigator.clipboard.writeText(text)
+        
+      })
+    })
+</script>
+
+{%endblock%}
+{%block style%}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.semanticui.min.css">
+<style>
+    th {
+        text-align: center!important;
+        font-size: x-small;
+    }
+    tfoot th {
+        text-align: right!important;
+        font-size: x-small;
+    }
+    .ui.labeled input {
+      text-align: center;
+    }
+    td {
+      font-size: x-small;
+    }
+</style>
+{%endblock%}

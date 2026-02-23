@@ -1,0 +1,45 @@
+{%extends 'base.html'%}
+{%block title%}Inventario comercial {{proyecto}}{%endblock%}
+{%block content %}
+<div class="container">
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <h3 class='text-center section-title text-white text-center' style='padding-bottom:1rem;'>Lotes Disponibles</h3>
+    <br/>
+    <div class='table-responsive'>
+        <table id="tabla-lotesdisponibles" class='table table-sm table-striped table-bordered'>
+            <thead class='thead thead-light'>
+                <tr>
+                    <th class='text-center'>Inmueble</th>
+                    <th class='text-center'>Manzana</th>
+                    <th class='text-center'>Lote</th>
+                    <th class='text-center'>Area</th>
+                    <th class='text-center'>Esquinero</th>
+                    <th class='text-center'>Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for lote in lotes%}
+                <tr>
+                    <td class='text-center'><a href='/venta/{{proyecto}}/{{lote.0}}'>{{lote.0}}</a></td>
+                    <td class='text-center'>{{lote.1}}</td>
+                    <td class='text-center'>{{lote.2}}</td>
+                    <td class='text-center'>{{lote.3}}</td>
+                    <td class='text-center'>{{lote.4}}</td>
+                    <td class='text-center'>${{lote.5}}</td>
+                    
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>
+</div>
+<script>
+    $(document).ready(function() {
+    $('#tabla-lotesdisponibles').DataTable({
+        "pageLength": 50,
+        'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+  });
+} );
+</script>
+{%endblock %}

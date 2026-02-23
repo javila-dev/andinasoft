@@ -1,0 +1,58 @@
+{%extends 'base.html'%}
+{%block title%}AndinaSoft{%endblock%}
+{%block content%}
+{%if user.is_authenticated%}
+<div class='row h-100'>
+    <div class='col-md-6 col-lg-8 col-xl-9'>
+        <table style="height: 100%;width: 100%;">
+            <tbody>
+                <td class='align-middle'>
+                    <h1 class="display-4 text-center" style="color:#3b5e5e">Hola {{user.first_name}} <i class="far fa-grin-beam"></i></h1>
+                </td>
+            </tbody>
+        </table>
+    </div>
+    <div class='col-md-6 col-lg-4 col-xl-3 ml-auto'>
+        <div class='container-fluid bg-white rounded shadow p-3 overflow-auto' style="max-height: 33vh;">
+            <h5 class='text-center mb-2'>
+                <img src='/media/icons/torta-de-cumpleanos.png' class='mr-2' width='30' height='30'>Cumpleaños</h5>
+            <table style='width: 100%;'>
+                {%for birth in birthdays%}
+                <tr>
+                    <td style='width: 65%;'><small><strong>{{birth.user.first_name|add:" "|add:birth.user.last_name}}</strong></small>
+                    </td>
+                    <td style='width: 35%;text-align: right;'><small>{{birth.fecha_nacimiento|date:"j F"}}</small></td>
+                </tr>
+                {%endfor%}
+            </table>
+        </div>
+        <div class='container-fluid bg-white rounded shadow px-3 pt-3 pb-1  mt-3 overflow-auto' style="max-height: 70vh;">
+            <h5 class='text-center mb-2'>
+                <img src='/media/icons/recordatorio.png' class='mr-2' width='30' height='30'>Recordatorios</h5>
+            {%for grupo in recordatorios%}
+            <p class='my-1'>{{grupo.name}}</p>
+            <table style="width: 100%;">
+                <tbody>
+                    {%for reminder in grupo.reminders%}
+                    <tr>
+                        <td>
+                            <small><strong>{{reminder.title}}</strong></small>
+                        </td>
+                        <td style='text-align: right;'>
+                            <small>{{reminder.value}}</small>
+                        </td>
+                    </tr>
+                    {%endfor%}
+                </tbody>
+            </table>
+            {%endfor%}
+            <p class='mt-auto text-center mb-0 pt-2'>{{hoy|date:"l, j F Y "}}
+        </div>
+    </div>
+</div>
+{%endif%}
+<script>
+    $('main').addClass('h-100')
+   
+</script>
+{%endblock%}

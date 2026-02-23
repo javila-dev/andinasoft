@@ -1,0 +1,59 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+
+{%block title%}Selecciona un Proyecto{%endblock%}
+
+{%block content%}
+<div class="modal fade" id="select-proyecto" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Seleccionar Proyecto</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class="row">
+                <div class="col-4">
+                    <a href="/{{redireccion}}/Tesoro Escondido"><img src="{%static 'img/logo-Tesoro-Escondido.png'%}" class="img-fluid" alt="Responsive image"></a>
+                </div>
+                <div class="col-4">
+                    <a href="/{{redireccion}}/Vegas de Venecia"><img src="{%static 'img/logo-camisas-vegas-de-venecia.png'%}" class="img-fluid" alt="Responsive image"></a>
+                </div>
+                <div class="col-4">
+                  <a href="/{{redireccion}}/Carmelo Reservado"><img src="{%static 'img/logo_carmelo_reservado.png'%}" class="img-fluid" alt="Responsive image"></a>
+              </div>
+            </div>
+            <div class="row">
+                <div class="col-4">
+                    <a href="/{{redireccion}}/Sandville Beach"><img src="{%static 'img/sandville beach.png'%}" class="img-fluid" alt="Responsive image"></a>
+                </div>
+                <div class="col-4">
+                    <a href="/{{redireccion}}/Perla del Mar"><img src="{%static 'img/logo-perla.png'%}" class="img-fluid" alt="Responsive image"></a>
+                </div>
+                <div class="col-4">
+                  <a href="/{{redireccion}}/Fractal"><img src="{%static 'img/fractal-logo.jpg'%}" class="img-fluid" alt="Responsive image"></a>
+              </div>
+            </div>
+            <div class="row justify-content-center">
+              <div class="col-4">
+                <a href="/{{redireccion}}/Casas de Verano"><img src="{%static 'img/casas-de-verano450x.png'%}" class="img-fluid" alt="Responsive image"></a>
+            </div>
+              
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+      $('#select-proyecto').modal('show')
+      $('#select-proyecto').on('hide.bs.modal',function(e){
+        window.location.href='/welcome'
+      })
+  </script>
+{%endblock%}

@@ -1,0 +1,31 @@
+{%load static%}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error</title>
+    <link rel="stylesheet" href="{% static 'css/403.css'%}">
+    <script src="{% static 'js/403.js'%}"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>4<div class="lock">
+            <div class="top"></div>
+            <div class="bottom"></div>
+          </div>3</h1><p>Acceso denegado, no tienes los permisos suficientes</p>
+          
+      <div class="box-1">
+        <div class="btn btn-one" id='btn'>
+          <span>Regresar</span>
+        </div>
+      </div>
+      </div>
+      <script>
+          var btn = document.getElementById('btn')
+          btn.onclick = function(){
+              window.history.back()
+          }
+      </script>
+</body>
+</html>

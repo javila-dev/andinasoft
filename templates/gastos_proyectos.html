@@ -1,0 +1,242 @@
+{%extends 'base.html'%}
+{%load static%}
+{%block title%}Gastos Informes{%endblock%}
+{%block content%}
+<div class='container'>
+    <div class="bg-white rounded shadow"
+        style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+        <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Gastos Informe</strong></h4>
+        <br>
+        <form enctype="multipart/form-data" action="" method="POST" name='formCargaGastos' id='formCargaGastos'>{% csrf_token %}
+            <div class="card" id='SeleccionProyectoCard'>
+                <div class="row no-gutters">
+                    <div class="col-md-2">
+                        <img src="https://www.andinasoft.com.co/public_images/1-mano.png" class="card-img mx-auto d-block"
+                            alt="..." style="width: 60%;">
+                    </div>
+                    <div class="col-md-10">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 col-xs-12">
+                                    <h6 class="card-title">Selecciona el mes y el año a cargar</h6>
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <label class="input-group-text" for="añoCarga">Periodo</label>
+                                        </div>
+                                        <input type='number' id='añoCarga' class='form-control text-center' placeholder="Año" aria-label="Año" >
+                                        <select class='custom-select text-center' id='mesCarga' name='mesCarga'>
+                                            <option selected value='Todos' class='text-center'>Mes...</option>
+                                            <option value='01' class='text-center'>Enero</option>
+                                            <option value="02">Febrero</option>
+                                            <option value="03">Marzo</option>
+                                            <option value="04">Abril</option>
+                                            <option value="05">Mayo</option>
+                                            <option value="06">Junio</option>
+                                            <option value="07">Julio</option>
+                                            <option value="08">Agosto</option>
+                                            <option value="09">Septiembre</option>
+                                            <option value="10">Octubre</option>
+                                            <option value="11">Noviembre</option>
+                                            <option value="12">Diciembre</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-xs-12">
+                                    <h6 class="card-title">Selecciona la empresa a cargar</h6>
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <label class="input-group-text" for="Empresa">Empresa</label>
+                                        </div>
+                                        <select class="custom-select" id="Empresa" name='Empresa'>
+                                            <option selected>Choose...</option>
+                                            <option value="Andina Conceptos Inmobiliarios">Andina Conceptos Inmobiliarios</option>
+                                            <option value="Status Comercializadora">Status Comercializadora</option>
+                                            <option value="Quadrata Constructores">Quadrata Constructores</option>
+                                            <option value="Promotora Westville">Promotora Westville</option>
+                                            <option value="Terranova Desarrolladora Turistica">Terranova Desarrolladora Turistica
+                                            </option>
+                                        </select>
+                                    </div>  
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <br>
+            <div class="card" id='SeleccionArchivoCard'>
+                <div class="row no-gutters">
+                    <div class="col-md-2">
+                        <img src="https://www.andinasoft.com.co/public_images/2-mano.png" class=" img-fluid mx-auto d-block"
+                            alt="..." style="width: 60%;">
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card-body">
+                            <h6 class="card-title">Escoge el archivo .xlsx a subir</h6>
+                            <div class="input-group">
+                                <div class="custom-file">
+                                    <input type="file" class="custom-file-input" id="archivocarga" name='archivocarga'
+                                        lang="es">
+                                    <label class="custom-file-label" for="archivocarga"
+                                        aria-describedby="archivocarga">Selecciona el archivo</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <br>
+            <div class="card" id='ClasificarGastoCard'>
+                <div class="row no-gutters">
+                    <div class="col-md-2">
+                        <img src="https://www.andinasoft.com.co/public_images/3-mano.png" class="card-img mx-auto d-block"
+                            alt="..." style="width: 60%;">
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card-body">
+                            <h6 class="card-title">Registra la ultima fila del archivo (no incluyas la linea de total) para
+                                clasificar los gastos cargados de acuerdo a las asociaciones actuales</h6>
+                            <div class="input-group" style="padding: 0rem;">
+                                <div class="input-group-prepend">
+                                    <span class="input-group-text" id="basic-addon1">Ultima Fila</span>
+                                </div>
+                                <input type="number" class="form-control text-center" id='ultimafila' name='ultimafila'
+                                    min="8">
+                                <div class="input-group-append">
+                                    <button class='btn btn-outline-secondary' id='btnClasificarGasto'
+                                        type='submit'>Ok</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <br>
+            <div class="card" id='RevisarGastoCard'>
+                <div class="row no-gutters">
+                    <div class="col-md-2">
+                        <img src="https://www.andinasoft.com.co/public_images/4-mano.png" class="img-fluid mx-auto d-block"
+                            alt="..." style="max-width: 60%;height: auto;">
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card-body ">
+                            <a id='entradaRevision'><p class='lead text-center' id='textoRevision' style="margin-top:1rem;margin-bottom:0rem;">Aún no estamos listos</p></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{%include 'alert.html'%}
+<script>
+    $(document).ready(function () {
+        IniciarProceso();
+        $('#Empresa').on('change', function () {
+            IniciarProceso();
+            var empresa = $('#Empresa').val()
+            if (empresa != 'Choose...') {
+                $('#SeleccionProyectoCard').addClass('border-success')
+                $('#SeleccionArchivoCard').removeClass('bg-light')
+                $('#archivocarga').prop('disabled',false)
+                $('#btncargararchivo').prop('disabled',false)
+            } else {
+                $('#SeleccionProyectoCard').removeClass('border-success')
+                $('#SeleccionArchivoCard').addClass('bg-light')
+                $('#archivocarga').prop('disabled',true)
+                $('#btncargararchivo').prop('disabled',true)
+                $('#ultimafila').val(null)
+            }
+        });
+        $('#archivocarga').on('change', function () {
+            var nombreArchivo = $('#archivocarga').val()
+            if (!nombreArchivo.endsWith('.xlsx')) {
+                $('#alerta-general').modal('show')
+                document.getElementById('mensaje-alerta').innerHTML =
+                    'El formato del archivo debe ser .xlsx';
+                document.getElementById('titulo-alerta').innerHTML = 'Error';
+                $('#SeleccionArchivoCard').removeClass('border-success')
+                $('#ClasificarGastoCard').addClass('bg-ligth')
+                $('#ultimafila').prop('disabled',true)
+                $('#btnClasificarGasto').prop('disabled',true)
+            } else {
+                bsCustomFileInput.init()
+                $('#SeleccionArchivoCard').addClass('border-success')
+                $('#ClasificarGastoCard').removeClass('bg-light')
+                $('#ultimafila').prop('disabled',false)
+                $('#btnClasificarGasto').prop('disabled',false)
+            }
+        });
+        $('#ultimafila').on('change',function(){
+            var ultimafila = $('#ultimafila').val()
+            if (ultimafila!=""){
+                $('#ClasificarGastoCard').addClass('border-success')
+            }
+            else{
+                $('#ClasificarGastoCard').removeClass('border-success')
+                $('#RevisarGastoCard').addClass('bg-light')
+                $('#RevisarGastoCard').removeClass('border-success')
+                $('#textoRevision').text('Aún no estamos listos')
+            }
+        });
+        $('#formCargaGastos').on("submit",function(e){
+            e.preventDefault();
+            var csrftoken = getCookie('csrftoken');
+            var formData = new FormData(document.getElementById('formCargaGastos'));
+            formData.append('csrfmiddlewaretoken', csrftoken)
+            $('#textoRevision').text('')
+            $('#textoRevision').append('Cargando el archivo y clasificando los gastos <i class="fas fa-cog fa-spin"></i>')
+            $.ajax({
+                type:'POST',
+                url:'/contabilidad/informes/gastos/cargar',
+                data:formData,
+                cache: false,
+                contentType: false,
+	            processData: false,
+                success: function(response){
+                    var passed = response["instance"]
+                    var errores = response['errores']
+                    if (passed){
+                        var mes = $('#mesCarga').val()
+                        var año = $('#añoCarga').val()
+                        var empresa = $('#Empresa').val()
+                        var parametros = '/contabilidad/gastos/detalle/'+empresa+'/'+año+'/'+mes
+                        $('#RevisarGastoCard').removeClass('bg-light')
+                        $('#textoRevision').text('')
+                        $('#textoRevision').append('¡Todo listo <i class="fas fa-grin-stars"></i>, puedes revisar los gastos cargados <a href="'+parametros+'">Aquí</a>!')
+                        $('#RevisarGastoCard').addClass('border-success')
+                        if (errores){
+                            window.location.href='http://www.andinasoft.com.co/docs_andinasoft/tmp/comprobantes_no_cargados.txt'
+                        } 
+                    }
+                    else{
+                        var error = response['error_log']
+                        $('#RevisarGastoCard').addClass('bg-light')
+                        $('#RevisarGastoCard').addClass('border-danger')
+                        $('#RevisarGastoCard').removeClass('border-success')
+                        $('#textoRevision').text('')
+                        $('#textoRevision').append('Oh Oh, ocurrió un <a href="http://www.andinasoft.com.co/docs_andinasoft/tmp/console_error.txt">error</a>. Intentalo nuevamente <i class="far fa-sad-tear"></i>')
+                    }
+                }
+            });
+        });
+        function IniciarProceso(){
+            $('#SeleccionArchivoCard').addClass('bg-light')
+            $('#ClasificarGastoCard').addClass('bg-light')
+            $('#RevisarGastoCard').addClass('bg-light')
+            $('#SeleccionArchivoCard').removeClass('border-success')
+            $('#ClasificarGastoCard').removeClass('border-success')
+            $('#RevisarGastoCard').removeClass('border-success')
+            $('#archivocarga').prop('disabled',true)
+            $('#btnClasificarGasto').prop('disabled',true)
+            $('#ultimafila').prop('disabled',true)
+            $('#btnClasificarGasto').prop('disabled',true)
+            $('#btncargararchivo').prop('disabled',true)
+            $('#ultimafila').val(null)
+            $('#textoRevision').text('Aún no estamos listos')
+        };
+        
+    });
+</script>
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+{%endblock%}

@@ -1,0 +1,1079 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Cartera | Solicitar recibos{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: smaller;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+        cursor: pointer;
+    }
+    #modalSolicRec .select2-container{
+        width:100% !important;
+    }
+    /* Estilo para solicitudes que requieren revisión manual */
+    tr.requiere-revision {
+        background-color: #fff3cd !important;
+        border-left: 4px solid #ff9800;
+    }
+    tr.requiere-revision:hover {
+        background-color: #ffe69c !important;
+    }
+    .badge-revision {
+        background-color: #ff9800;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: bold;
+    }
+    /* Tooltip personalizado */
+    .revision-tooltip {
+        position: relative;
+        display: inline-block;
+        cursor: help;
+    }
+    .revision-tooltip .tooltiptext {
+        visibility: hidden;
+        width: 280px;
+        background-color: #333;
+        color: #fff;
+        text-align: left;
+        border-radius: 6px;
+        padding: 12px;
+        position: fixed;
+        z-index: 9999;
+        opacity: 0;
+        transition: opacity 0.3s;
+        font-size: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        pointer-events: none;
+        white-space: normal;
+        word-wrap: break-word;
+    }
+    .revision-tooltip:hover .tooltiptext {
+        visibility: visible;
+        opacity: 1;
+    }
+    /* Modal movimientos bancarios */
+    #modalMovimientosBanco .table-responsive {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    #modalMovimientosBanco table {
+        font-size: 12px;
+    }
+    #modalMovimientosBanco th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 10;
+    }
+    .movimiento-asociado {
+        background-color: #d4edda !important;
+        border-left: 4px solid #28a745 !important;
+    }
+    .movimiento-asociado td {
+        font-weight: 600;
+    }
+    /* Cards de estadísticas */
+    .stats-card {
+        border-radius: 6px;
+        padding: 12px 15px;
+        text-align: center;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+    }
+    .stats-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .stats-card.active {
+        box-shadow: 0 0 0 3px rgba(255,255,255,0.5);
+        transform: scale(1.02);
+    }
+    .stats-card .stats-number {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin: 5px 0;
+    }
+    .stats-card .stats-money {
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin: 2px 0;
+        opacity: 0.9;
+    }
+    .stats-card .stats-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .stats-card.total {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+    }
+    .stats-card.realizados {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+    }
+    .stats-card.revision {
+        background: linear-gradient(135deg, #ff9800 0%, #ff6f00 100%);
+        color: white;
+    }
+    .stats-card.sin-realizar {
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        color: white;
+    }
+    .stats-card .stats-icon {
+        font-size: 1.3rem;
+        opacity: 0.8;
+        margin-bottom: 3px;
+    }
+    #stats-loading {
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
+<script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script>
+    $(document).ready(function(){
+        bsCustomFileInput.init();
+        $('.money').mask("#,##0", {reverse: true});  
+        $('#id_cliente').select2({
+            width: '100%',
+            dropdownParent: $('#modalSolicRec')
+        });
+        const $modal = $('#modalSolicRec');
+        const $modalForm = $('#modalSolicRec form');
+        const $clienteSelect = $('#id_cliente');
+        const $proyectoSelect = $('#id_proyecto_solic');
+        const $modalTitle = $('#staticBackdropLabel');
+        const $submitBtn = $('#submit-id-btnsubmit');
+        const $supportWrapper = $('#current-support-wrapper');
+        const $supportLink = $('#current-support-link');
+        const userAuthToken = '{{request.user.auth_token.key}}';
+        const defaultModalTitle = $modalTitle.text();
+        const defaultSubmitText = $submitBtn.text();
+        const MAX_RANGE_DAYS = 45;
+        let filtroEstadisticas = null; // 'realizados', 'revision', 'sin_realizar', o null para todos
+
+        const resetClientesSelect = () => {
+            $clienteSelect.empty().append('<option value="">Selecciona...</option>');
+            $clienteSelect.val('').trigger('change');
+        };
+
+        const resetSolicitudForm = () => {
+            if ($modalForm.length){
+                $modalForm[0].reset();
+            }
+            resetClientesSelect();
+            $('#id_solicitud_id').val('');
+            $('#id_soporte').prop('required', true).val('').trigger('change');
+            $modalTitle.text(defaultModalTitle);
+            $submitBtn.text(defaultSubmitText);
+            $supportWrapper.addClass('d-none');
+            $supportLink.attr('href','#').text('');
+        };
+
+        const formatMoneyValue = (value) => {
+            if (value === null || value === undefined || value === ''){
+                return '';
+            }
+            const numericValue = parseInt(value,10);
+            if (isNaN(numericValue)){
+                return '';
+            }
+            return numericValue.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        };
+
+        const loadClientes = (projectId, selectedValue = null) => {
+            const deferred = $.Deferred();
+            if (!projectId){
+                resetClientesSelect();
+                deferred.resolve();
+                return deferred.promise();
+            }
+            $clienteSelect.empty().append('<option value="">Cargando...</option>');
+            $.ajax({
+                type:'GET',
+                url:'/ajax_request/activeclients',
+                data:{
+                    'proyecto':projectId
+                },
+                success: (xhr) => {
+                    resetClientesSelect();
+                    let clients = xhr.data || [];
+                    clients.forEach((client) => {
+                        const option = `
+                            <option value="${client.IdAdjudicacion}">${client.IdAdjudicacion} - ${client.Nombre}</option>
+                        `;
+                        $clienteSelect.append(option);
+                    });
+                    if (selectedValue !== null && selectedValue !== undefined && selectedValue !== ''){
+                        const selected = selectedValue.toString();
+                        if (!$clienteSelect.find(`option[value="${selected}"]`).length){
+                            $clienteSelect.append(`<option value="${selected}">${selected}</option>`);
+                        }
+                        $clienteSelect.val(selected).trigger('change');
+                    }
+                    deferred.resolve();
+                },
+                error: () => {
+                    resetClientesSelect();
+                    deferred.reject();
+                }
+            });
+            return deferred.promise();
+        };
+
+        const openEditModal = (line) => {
+            $modalTitle.text('Editar solicitud');
+            $submitBtn.text('Actualizar');
+            $('#id_solicitud_id').val(line.id);
+            $proyectoSelect.val(line.proyecto.proyecto);
+            loadClientes(line.proyecto.proyecto, line.cliente);
+            $('#id_fecha_pago').val(line.fecha_pago);
+            $('#id_valor').val(formatMoneyValue(line.valor));
+            $('#id_abono_capital').prop('checked', !!line.abono_capital);
+            $('#id_condona_mora').prop('checked', !!line.condonacion);
+            $('#id_not_duplicated').prop('checked', false);
+            $('#id_soporte').prop('required', false).val('').trigger('change');
+            if (line.soporte){
+                const soporteUrl = `/media/${line.soporte}`;
+                $supportLink.attr('href',soporteUrl).text('Ver soporte actual');
+                $supportWrapper.removeClass('d-none');
+            } else {
+                $supportWrapper.addClass('d-none');
+                $supportLink.attr('href','#').text('');
+            }
+            $modal.modal('show');
+        };
+
+        const isRangeValid = () => {
+            const desdeVal = $('#filtro-desde').val();
+            const hastaVal = $('#filtro-hasta').val();
+            if (desdeVal && hastaVal){
+                const desde = new Date(desdeVal);
+                const hasta = new Date(hastaVal);
+                const diffDays = (hasta - desde)/(1000*60*60*24);
+                if (diffDays > MAX_RANGE_DAYS){
+                    alert(`El rango máximo permitido es de ${MAX_RANGE_DAYS} días.`);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        const buildReceiptsUrl = () => {
+            let url = `/finance/requirereceipts?proyecto=${$('#oficina').val()}&todo=pendientes`
+            const desde = $('#filtro-desde').val()
+            const hasta = $('#filtro-hasta').val()
+            if (desde) url += `&fecha_desde=${desde}`
+            if (hasta) url += `&fecha_hasta=${hasta}`
+            if (filtroEstadisticas) url += `&estado=${filtroEstadisticas}`
+            return url
+        }
+
+        $('#btnNewreq').on('click',function(){
+            resetSolicitudForm();
+        });
+
+        const desmarcarRevisionManual = (line) => {
+            if (!line || !(line.requiere_revision_manual === true || line.requiere_revision_manual === 1)) {
+                return;
+            }
+            if (!confirm('¿Quieres desmarcar la revisión manual y limpiar el motivo?')) {
+                return;
+            }
+            const headers = {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            };
+            if (userAuthToken) {
+                headers.Authorization = `Token ${userAuthToken}`;
+            }
+            $.ajax({
+                type: 'PATCH',
+                url: `/finance/api/receipt-request/${line.id}/status`,
+                headers: headers,
+                data: JSON.stringify({
+                    requiere_revision_manual: false
+                }),
+                success: function() {
+                    tabla_solicitudes.ajax.reload(null, false);
+                    alert('La solicitud fue desmarcada para revisión manual.');
+                },
+                error: function(xhr) {
+                    let msg = 'No se pudo desmarcar la revisión manual. Intenta nuevamente.';
+                    if (xhr.responseJSON && xhr.responseJSON.detail) {
+                        msg = xhr.responseJSON.detail;
+                    }
+                    alert(msg);
+                }
+            });
+        };
+
+        const revisarConAI = () => {
+            const proyecto = $('#oficina').val();
+            const desde = $('#filtro-desde').val();
+            const hasta = $('#filtro-hasta').val();
+
+            if (!confirm('¿Deseas revisar todas las solicitudes pendientes con Inteligencia Artificial?\n\nEsto puede tomar varios minutos. Puedes refrescar la página para ver los resultados.')) {
+                return;
+            }
+
+            const $btn = $('#btn-revisar-ai');
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-1" role="status"></span>Iniciando...');
+
+            // Preparar datos para enviar al webhook
+            const payload = {
+                proyecto: proyecto,
+                fecha_desde: desde || null,
+                fecha_hasta: hasta || null,
+                estado_filtro: filtroEstadisticas || null
+            };
+
+            $.ajax({
+                type: 'POST',
+                url: 'https://n8n.2asoft.tech/webhook/review-incomes-ai',
+                contentType: 'application/json',
+                data: JSON.stringify(payload),
+                timeout: 10000, // Solo 10 segundos - suficiente para confirmar que inició
+                success: function(response) {
+                    console.log('Proceso AI iniciado:', response);
+
+                    $btn.prop('disabled', false).html('<i class="fas fa-robot"></i> Revisar con AI');
+
+                    // Mostrar mensaje de proceso iniciado
+                    $('#alert-data').text('');
+                    $('#alert-title').text('Revisión AI Iniciada');
+                    $('#alert-data').html(`
+                        <i class="fas fa-check-circle"></i> El proceso de revisión ha iniciado y se está ejecutando en segundo plano.
+                        <br><small class="mt-2 d-block">
+                            <strong>Nota:</strong> Esto puede tomar varios minutos dependiendo de la cantidad de solicitudes.
+                            Refresca la página para ver los resultados actualizados.
+                        </small>
+                    `);
+                    $('#general-right-alert').removeClass('alert-success alert-danger alert-info alert-warning')
+                        .addClass('show alert-info');
+
+                    // Auto-cerrar después de 15 segundos
+                    setTimeout(() => {
+                        $('#general-right-alert').removeClass('show');
+                    }, 15000);
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error al iniciar revisión AI:', xhr, status, error);
+
+                    $btn.prop('disabled', false).html('<i class="fas fa-robot"></i> Revisar con AI');
+
+                    $('#alert-data').text('');
+                    $('#alert-title').text('Error al Iniciar Revisión');
+
+                    let errorMsg = 'No se pudo iniciar el proceso de revisión con IA.';
+
+                    if (status === 'timeout') {
+                        // Si hay timeout, asumir que el proceso inició pero no respondió a tiempo
+                        errorMsg = 'El proceso de revisión ha iniciado pero está tomando tiempo en responder. Refresca la página en unos minutos para ver los resultados.';
+                        $('#alert-data').html(`<i class="fas fa-info-circle"></i> ${errorMsg}`);
+                        $('#general-right-alert').removeClass('alert-success alert-danger alert-info alert-warning')
+                            .addClass('show alert-info');
+                    } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMsg = xhr.responseJSON.message;
+                        $('#alert-data').html(`<i class="fas fa-times-circle"></i> ${errorMsg}`);
+                        $('#general-right-alert').removeClass('alert-success alert-danger alert-info alert-warning')
+                            .addClass('show alert-danger');
+                    } else if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMsg = xhr.responseJSON.error;
+                        $('#alert-data').html(`<i class="fas fa-times-circle"></i> ${errorMsg}`);
+                        $('#general-right-alert').removeClass('alert-success alert-danger alert-info alert-warning')
+                            .addClass('show alert-danger');
+                    } else if (status === 'error' && xhr.status === 0) {
+                        errorMsg = 'No se pudo conectar con el servicio de IA. Verifica tu conexión e intenta nuevamente.';
+                        $('#alert-data').html(`<i class="fas fa-times-circle"></i> ${errorMsg}`);
+                        $('#general-right-alert').removeClass('alert-success alert-danger alert-info alert-warning')
+                            .addClass('show alert-danger');
+                    } else {
+                        $('#alert-data').html(`<i class="fas fa-times-circle"></i> ${errorMsg}`);
+                        $('#general-right-alert').removeClass('alert-success alert-danger alert-info alert-warning')
+                            .addClass('show alert-danger');
+                    }
+
+                    // Auto-cerrar después de 15 segundos
+                    setTimeout(() => {
+                        $('#general-right-alert').removeClass('show');
+                    }, 15000);
+                }
+            });
+        };
+
+        // Handler del botón Revisar con AI
+        $('#btn-revisar-ai').on('click', function() {
+            revisarConAI();
+        });
+
+        var tabla_solicitudes = $('#tablaSolicitudes').DataTable({
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:buildReceiptsUrl(),
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'id'},
+                {'data':'proyecto.proyecto'},
+                {'data':'adj_info.oficina'},
+                {'data':'cliente'},
+                {'data':'titular.nombrecompleto'},
+                {'data':'fecha_pago'},
+                {'data':'valor',render: $.fn.dataTable.render.number( ',', '.', 0)},
+                {'data':'fecha'},
+                {'data':'usuario_solicita.username'},
+                {'data':'recibo_asociado'},
+                {
+                    'data':'requiere_revision_manual',
+                    'render': function(data, type, row) {
+                        if (data === true || data === 1) {
+                            const motivo = row.motivo_revision || 'Sin motivo especificado';
+                            const escapedMotivo = $('<div>').text(motivo).html(); // Escape HTML
+                            return `<span class="revision-tooltip">
+                                        <span class="badge-revision">
+                                            <i class="fas fa-exclamation-triangle"></i> REVISIÓN
+                                        </span>
+                                        <span class="tooltiptext">
+                                            <strong>Motivo de revisión:</strong><br>${escapedMotivo}
+                                        </span>
+                                    </span>`;
+                        }
+                        return '';
+                    }
+                }
+            ],
+            order:[[0,'desc']],
+            rowCallback: function(row, data) {
+                // Aplicar clase especial a las filas que requieren revisión manual
+                if (data.requiere_revision_manual === true || data.requiere_revision_manual === 1) {
+                    $(row).addClass('requiere-revision');
+                }
+            }
+        })
+        // Helper para formatear montos
+        const formatMoney = (value) => {
+            if (!value || value === 0) return '$0';
+            return '$' + parseFloat(value).toLocaleString('es-CO', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+        };
+
+        const cargarEstadisticas = () => {
+            const proyecto = $('#oficina').val();
+            const desde = $('#filtro-desde').val();
+            const hasta = $('#filtro-hasta').val();
+
+            $('#stats-loading').removeClass('d-none');
+            $('#stats-cards').addClass('d-none');
+
+            $.ajax({
+                type: 'GET',
+                url: '/finance/api/receipt-stats',
+                data: {
+                    proyecto: proyecto,
+                    fecha_desde: desde,
+                    fecha_hasta: hasta
+                },
+                success: function(response) {
+                    // Actualizar cantidades
+                    $('#stats-total').text(response.total || 0);
+                    $('#stats-realizados').text(response.realizados || 0);
+                    $('#stats-revision').text(response.revision_manual || 0);
+                    $('#stats-sin-realizar').text(response.sin_realizar || 0);
+
+                    // Actualizar montos
+                    $('#stats-total-money').text(formatMoney(response.total_general));
+                    $('#stats-realizados-money').text(formatMoney(response.total_realizados));
+                    $('#stats-revision-money').text(formatMoney(response.total_revision));
+                    $('#stats-sin-realizar-money').text(formatMoney(response.total_sin_realizar));
+
+                    $('#stats-loading').addClass('d-none');
+                    $('#stats-cards').removeClass('d-none');
+                },
+                error: function(xhr) {
+                    console.error('Error al cargar estadísticas:', xhr);
+                    $('#stats-loading').addClass('d-none');
+                    $('#stats-cards').removeClass('d-none');
+                    // Mostrar 0 en caso de error
+                    $('#stats-total').text('0');
+                    $('#stats-realizados').text('0');
+                    $('#stats-revision').text('0');
+                    $('#stats-sin-realizar').text('0');
+                    $('#stats-total-money').text('$0');
+                    $('#stats-realizados-money').text('$0');
+                    $('#stats-revision-money').text('$0');
+                    $('#stats-sin-realizar-money').text('$0');
+                }
+            });
+        };
+
+        const aplicarFiltros = () => {
+            if (!isRangeValid()) return;
+            const $btn = $('#btn-filtro-fecha');
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span>Aplicando...');
+
+            // Limpiar filtro de estadísticas cuando cambian los filtros de fecha/proyecto
+            filtroEstadisticas = null;
+            $('.stats-card').removeClass('active');
+
+            // Cargar estadísticas y tabla en paralelo
+            cargarEstadisticas();
+
+            tabla_solicitudes.ajax.url(buildReceiptsUrl()).load(function(){
+                $btn.prop('disabled', false).text('Aplicar');
+            });
+        };
+
+        $('#oficina').change(function(){
+            aplicarFiltros();
+        })
+        $('#btn-filtro-fecha').click(function(){
+            aplicarFiltros();
+        })
+        $('#tablaSolicitudes tbody').on('contextmenu','tr',function(e){
+            tabla_solicitudes.$('tr.selected').removeClass('selected');
+            let line = tabla_solicitudes.row(this).data()
+            if (line.recibo_asociado != null){
+                $('#descargar').removeClass('disabled')
+                $('#validar').addClass('disabled')
+                $('#eliminar').addClass('disabled')
+                $('#editar').addClass('disabled')
+            }
+            else{
+                $('#validar').removeClass('disabled')
+                $('#descargar').addClass('disabled')
+                $('#eliminar').removeClass('disabled')
+                $('#editar').removeClass('disabled')
+            }
+            if (line.requiere_revision_manual === true || line.requiere_revision_manual === 1) {
+                $('#quitar-revision').removeClass('disabled')
+            } else {
+                $('#quitar-revision').addClass('disabled')
+            }
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 220
+            }
+            $('#contextMenu').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $("#contextMenu").click(function(e){
+            const $action = $(e.target).closest('a');
+            if (!$action.length || $action.hasClass('disabled')){
+                return;
+            }
+            e.preventDefault();
+            var line = tabla_solicitudes.row('.selected').data()
+            let params = `status=no,location=no,toolbar=no,menubar=no,
+                    width=650,height=450,left=100,top=100`
+            switch($action.attr('id')){
+                case "descargar":
+                    window.location.href = `/finance/printreceipts?proyecto=${line.proyecto.proyecto}&recibo=${line.recibo_asociado}`
+                    break;     
+                case "soporte":
+                    var ruta = '/media/'+line.soporte
+                    window.open(ruta,'Soporte solicitud recibo Id '+line.id,params)
+                    break;         
+                case "eliminar":
+                    $.ajax({
+                        type:'POST',
+                        url:'/finance/requirereceipts',
+                        data:{
+                            'csrfmiddlewaretoken':getCookie('csrftoken'),
+                            'todo':'delete',
+                            'id_rec':line.id,
+                        },
+                        success:function(response){
+                            if (response.status == 200){
+                                tabla_solicitudes.ajax.reload()
+                                alert('Solicitud de recibo eliminada')
+                            }
+                            else if (response.status == 403){
+                                alert('No tienes permisos')
+                            }
+                            
+                        },
+                        error: function(response){
+                            alert('Error no controlado por la aplicacion')
+                            console.log(response.responseJSON)
+                        }
+                    })
+                    break;  
+                case "editar":
+                    openEditModal(line);
+                    break;
+                case "validar":
+                $('#alert-title').text('Listo!')
+                    $('#alert-data').text('')
+                    $('#alert-title').text('Andinasoft dice:')
+                    $('#alert-data').append('Estamos cargando el formulario <i class="fas fa-cog fa-spin"></i>')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+                    let form = `<form id="formvalidrec" style="display: none" method ="POST" action="/nuevo_recaudo/${line.proyecto.proyecto}/${line.cliente}">
+                    <input name="abonocapital" value="${line.abono_capital}"/>
+                    <input name="fecha_pago" value="${line.fecha_pago}"/>
+                    <input name="condonacion_mora" value="${line.condonacion}"/>
+                    <input name="valor" value="${line.valor}"/>
+                    <input name="concepto" value="PAGO RECIBIDO DE CLIENTE"/>
+                    <input name="numsolicitud" value="${line.id}"/>
+                    <input name="validar-recaudo" value="true"/>
+                    <input name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}"/>
+                    <input type='submit'/>
+                    </form>
+                    `
+                    $('body').append(form)
+                    $('#formvalidrec').submit();
+                    break;
+                case "ver-movimientos":
+                    abrirModalMovimientosBancarios(line);
+                    break;
+                case "quitar-revision":
+                    desmarcarRevisionManual(line);
+                    break;
+                }
+        });
+        $('#modalSolicRec').on('hidden.bs.modal',function(){
+            resetSolicitudForm();
+        })
+        $('#id_proyecto_solic').change(function(){
+            let val = $(this).val()
+            loadClientes(val)
+        })
+        const validarClienteSeleccionado = () => {
+            const cliente = $('#id_cliente').val();
+            if (!cliente){
+                alert('Debes seleccionar un cliente antes de continuar.');
+                return false;
+            }
+            return true;
+        };
+
+        $('#id_valor').change(function(){
+            $('form input').prop('disabled',true)
+            $('#alert-data').text('')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').append('Estamos haciendo alguinas verificaciones <i class="fas fa-cog fa-spin"></i>')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+            let valor = $(this).val()
+            let fecha = $('#id_fecha_pago').val()
+            let cliente = $('#id_cliente').val()
+            let proyecto = $('#id_proyecto_solic').val()
+            
+            setTimeout(() => {
+                $.ajax({
+                    type:'GET',
+                    url:'/finance/requirereceipts',
+                    data:{
+                        todo:'verificar',
+                        proyecto: proyecto,
+                        fecha: fecha,
+                        valor: valor,
+                        cliente: cliente
+                    },
+                    success: (xhr) => {
+                            $('#general-right-alert').toggleClass('show')
+                            $('#alert-data').text('')
+                            $('#alert-title').text('Andinasoft dice:')
+                            $('#alert-data').append(xhr.msj)
+                            $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                    },
+                    error: (xhr) => {
+                        $('#general-right-alert').toggleClass('show')
+                        $('#alert-data').text('')
+                        $('#alert-title').text('Andinasoft dice:')
+                        $('#alert-data').append('Ocurrió un error, notifica al administrador.')
+                        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    },
+                    complete: (xhr) => {
+                        $('form input').prop('disabled',false)
+                    }
+                })
+            },2500 )
+        })
+        $('#modalSolicRec form').on('submit',function(e){
+            if (!validarClienteSeleccionado()){
+                e.preventDefault();
+            }
+        });
+
+        $(this).click(function(e){
+            if(e.button == 0){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+
+        // Posicionar tooltip dinámicamente a la izquierda del badge
+        $(document).on('mouseenter', '.revision-tooltip', function(e) {
+            const $tooltip = $(this).find('.tooltiptext');
+            const $badge = $(this).find('.badge-revision');
+            const badgeRect = $badge[0].getBoundingClientRect();
+
+            // Posicionar a la izquierda del badge
+            const tooltipLeft = badgeRect.left - 290; // 280px width + 10px margin
+            const tooltipTop = badgeRect.top - 10;
+
+            // Si se sale por la izquierda, posicionar a la derecha
+            if (tooltipLeft < 10) {
+                $tooltip.css({
+                    'left': (badgeRect.right + 10) + 'px',
+                    'top': tooltipTop + 'px'
+                });
+            } else {
+                $tooltip.css({
+                    'left': tooltipLeft + 'px',
+                    'top': tooltipTop + 'px'
+                });
+            }
+        });
+
+        // Función para abrir modal de movimientos bancarios
+        const abrirModalMovimientosBancarios = (line) => {
+            // Mostrar información de la solicitud
+            $('#info-solicitud-id').text(line.id);
+            $('#info-cliente').text(`${line.cliente} - ${line.titular.nombrecompleto}`);
+            $('#info-valor').text(formatMoneyValue(line.valor));
+            $('#info-fecha-pago').text(line.fecha_pago);
+            $('#info-recibo-asociado').text(line.recibo_asociado || 'Sin recibo asociado');
+
+            // Resetear estados
+            $('#movimientos-loading').removeClass('d-none');
+            $('#movimientos-error').addClass('d-none');
+            $('#movimientos-content').addClass('d-none');
+            $('#tbody-movimientos').empty();
+
+            // Abrir modal
+            $('#modalMovimientosBanco').modal('show');
+
+            // Cargar movimientos del API usando el nuevo endpoint
+            const requestData = {
+                'proyecto': line.proyecto.proyecto,
+                'fecha_pago': line.fecha_pago
+            };
+
+            // Si hay recibo asociado, agregarlo a la petición
+            if (line.recibo_asociado) {
+                requestData.recibo_asociado = line.recibo_asociado;
+            }
+
+            $.ajax({
+                type: 'GET',
+                url: '/accounting/api/bank-movements/for-receipt',
+                headers: {
+                    'Authorization': 'Token {{request.user.auth_token.key}}'
+                },
+                data: requestData,
+                success: function(response) {
+                    $('#movimientos-loading').addClass('d-none');
+
+                    if (response.movimientos && response.movimientos.length > 0) {
+                        $('#movimientos-content').removeClass('d-none');
+                        renderMovimientos(response.movimientos, response.movimiento_asociado_id);
+                        $('#movimientos-count').text(`Total: ${response.movimientos.length} movimiento(s) encontrado(s) en cuenta ${response.cuenta_numero || response.cuenta}`);
+                    } else {
+                        $('#movimientos-error').removeClass('d-none');
+                        const msg = response.detail || 'No se encontraron movimientos bancarios en el rango de fechas especificado.';
+                        $('#movimientos-error-msg').text(msg);
+                    }
+                },
+                error: function(xhr) {
+                    $('#movimientos-loading').addClass('d-none');
+                    $('#movimientos-error').removeClass('d-none');
+                    let errorMsg = 'Error al cargar los movimientos bancarios. Por favor intente nuevamente.';
+                    if (xhr.responseJSON && xhr.responseJSON.detail) {
+                        errorMsg = xhr.responseJSON.detail;
+                    }
+                    $('#movimientos-error-msg').text(errorMsg);
+                    console.error('Error:', xhr);
+                }
+            });
+        };
+
+        // Función para renderizar movimientos en la tabla
+        const renderMovimientos = (movimientos, movimientoAsociadoId) => {
+            const $tbody = $('#tbody-movimientos');
+            $tbody.empty();
+
+            movimientos.forEach(mvto => {
+                const isAsociado = movimientoAsociadoId && mvto.id_mvto === movimientoAsociadoId;
+                const rowClass = isAsociado ? 'movimiento-asociado' : '';
+
+                const usadoBadge = mvto.usado_agente
+                    ? '<span class="badge badge-warning">Sí</span>'
+                    : '<span class="badge badge-success">No</span>';
+
+                const row = `
+                    <tr class="${rowClass}">
+                        <td>${mvto.id_mvto}</td>
+                        <td>${mvto.fecha}</td>
+                        <td class="text-right">$${formatMoneyValue(mvto.valor)}</td>
+                        <td class="text-left small">${mvto.referencia || '-'}</td>
+                        <td class="text-left small">${mvto.descripcion || '-'}</td>
+                        <td>${usadoBadge}</td>
+                        <td>${mvto.recibo_asociado_agente || '-'}</td>
+                        <td>${mvto.proyecto_asociado_agente || '-'}</td>
+                    </tr>
+                `;
+                $tbody.append(row);
+            });
+        };
+
+        // Click en cards de estadísticas para filtrar
+        $('.stats-card').on('click', function() {
+            const tipoFiltro = $(this).data('filtro');
+
+            // Si el filtro ya está activo, desactivarlo
+            if (filtroEstadisticas === tipoFiltro) {
+                filtroEstadisticas = null;
+                $('.stats-card').removeClass('active');
+            } else {
+                // Activar nuevo filtro
+                filtroEstadisticas = tipoFiltro;
+                $('.stats-card').removeClass('active');
+                $(this).addClass('active');
+            }
+
+            // Recargar la tabla con el filtro
+            tabla_solicitudes.ajax.url(buildReceiptsUrl()).load();
+        });
+
+        // Cargar estadísticas al inicio
+        cargarEstadisticas();
+    })
+</script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Solicitud de recibos de caja
+        </h3>
+        <div class='form-inline flex-wrap align-items-center my-2'>
+            <div class='form-group mb-2 mr-3'>
+                <label>Proyecto</label>
+                <select id='oficina' class='custom-select ml-2'>
+                    <option value='todos'>Todos</option>
+                    {%for proyecto in proyectos%}<option value='{{proyecto.pk}}'>{{proyecto.pk}}</option>{%endfor%}
+                </select> 
+            </div>
+            <div class='form-group mb-2 mr-3'>
+                <label>Desde</label>
+                <input type='date' id='filtro-desde' class='form-control ml-2' value='{{fecha_desde_default}}'>
+            </div>
+            <div class='form-group mb-2 mr-3'>
+                <label>Hasta</label>
+                <input type='date' id='filtro-hasta' class='form-control ml-2' value='{{fecha_hasta_default}}'>
+            </div>
+            <button class='btn btn-primary mb-2' id='btn-filtro-fecha'>Aplicar</button>
+            <button class='btn btn-info ml-3 mb-2' id='btn-revisar-ai'>
+                <i class="fas fa-robot"></i> Revisar con AI
+            </button>
+        </div>
+
+        <!-- Estadísticas Cards -->
+        <div id="stats-loading" class="d-none">
+            <i class="fas fa-spinner fa-spin"></i> Cargando estadísticas...
+        </div>
+        <div id="stats-cards" class="row mx-0 mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="stats-card total">
+                    <div class="stats-icon">
+                        <i class="fas fa-list-alt"></i>
+                    </div>
+                    <div class="stats-number" id="stats-total">0</div>
+                    <div class="stats-money" id="stats-total-money">$0</div>
+                    <div class="stats-label">Total Solicitudes</div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="stats-card realizados" data-filtro="realizados">
+                    <div class="stats-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stats-number" id="stats-realizados">0</div>
+                    <div class="stats-money" id="stats-realizados-money">$0</div>
+                    <div class="stats-label">Realizados</div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="stats-card revision" data-filtro="revision">
+                    <div class="stats-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="stats-number" id="stats-revision">0</div>
+                    <div class="stats-money" id="stats-revision-money">$0</div>
+                    <div class="stats-label">Revisión Manual</div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="stats-card sin-realizar" data-filtro="sin_realizar">
+                    <div class="stats-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stats-number" id="stats-sin-realizar">0</div>
+                    <div class="stats-money" id="stats-sin-realizar-money">$0</div>
+                    <div class="stats-label">Sin Realizar</div>
+                </div>
+            </div>
+        </div>
+
+        <div class='row justify-content-around mx-0 pt-3 pb-4'>
+            <div class='col-md-12 bg-white shadow rounded py-3'>
+                <div class='table-responsive'>
+                    <table id='tablaSolicitudes' class='display' style='width:100%'>
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Id</th>
+                                <th rowspan="2">Proyecto</th>
+                                <th rowspan="2">Oficina</th>
+                                <th rowspan="2">Adj</th>
+                                <th rowspan="2">Cliente</th>
+                                <th rowspan="2">Fecha pago</th>
+                                <th rowspan="2">Valor</th>
+                                <th colspan="2">Solicitud</th>
+                                <th rowspan="2">Recibo</th>
+                                <th rowspan="2">Estado</th>
+                            </tr>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Usuario</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>
+</div>
+<div class='row position-absolute position-fixed' style='bottom:15px;right:15px'>
+    <button class='btn btn-xl btn-circle btn-success  mx-3 shadow' id='btnNewreq'
+            data-toggle="modal" data-target='#modalSolicRec'><i class="fas fa-plus"></i>
+    </button>
+
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenu' aria-labelledby="dropdownMenuLink"
+  style="max-width: 220px;">
+  <a class="dropdown-item" id='validar' href="#"><i class="fas fa-check-circle"></i>&nbsp;Validar</a>
+    <a class="dropdown-item disabled" id='editar' href="#"><i class="far fa-edit"></i>&nbsp;Editar</a>
+    <a class="dropdown-item disabled" id='descargar' href="#"><i class="far fa-save"></i>&nbsp;Descargar</a>
+    <a class="dropdown-item" id='soporte' href="#"><i class="far fa-file-pdf"></i>&nbsp;Ver soporte</a>
+    <a class="dropdown-item" id='ver-movimientos' href="#"><i class="fas fa-money-bill-wave"></i>&nbsp;Banco Asoc.</a>
+    <a class="dropdown-item disabled" id='quitar-revision' href="#"><i class="fas fa-flag-checkered"></i>&nbsp;Quitar rev. manual</a>
+    {%if request.user.is_superuser%}<a class="dropdown-item" id='eliminar' href="#"><i class="fas fa-trash-alt"></i>&nbsp;Eliminar</a>{%endif%}
+</div>   
+<!-- Modal -->
+<div class="modal fade" id="modalSolicRec" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Nueva solicitud</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {% crispy form %}
+          <div class="alert alert-info d-none mt-3 mb-0 py-2 px-3 small" id="current-support-wrapper">
+            <i class="far fa-file-pdf mr-1"></i>
+            <a href="#" id="current-support-link" target="_blank" rel="noopener">Ver soporte actual</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Modal Movimientos Bancarios -->
+<div class="modal fade" id="modalMovimientosBanco" tabindex="-1" aria-labelledby="modalMovimientosBancoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalMovimientosBancoLabel">Movimientos Bancarios</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info mb-3">
+                    <strong>Solicitud:</strong> <span id="info-solicitud-id"></span><br>
+                    <strong>Cliente:</strong> <span id="info-cliente"></span><br>
+                    <strong>Valor:</strong> $<span id="info-valor"></span><br>
+                    <strong>Fecha de pago:</strong> <span id="info-fecha-pago"></span><br>
+                    <strong>Recibo asociado:</strong> <span id="info-recibo-asociado"></span>
+                </div>
+
+                <div id="movimientos-loading" class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                    <p class="mt-2">Cargando movimientos bancarios...</p>
+                </div>
+
+                <div id="movimientos-error" class="alert alert-danger d-none" role="alert">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="movimientos-error-msg"></span>
+                </div>
+
+                <div id="movimientos-content" class="d-none">
+                    <p class="text-muted small">
+                        <i class="fas fa-info-circle"></i>
+                        Mostrando movimientos con valores positivos en rango de ±1 día de la fecha de pago.
+                        El movimiento asociado (si existe) aparece resaltado en verde.
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-hover" id="tabla-movimientos-banco">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Fecha</th>
+                                    <th>Valor</th>
+                                    <th>Referencia</th>
+                                    <th>Descripción</th>
+                                    <th>Usado</th>
+                                    <th>Recibo</th>
+                                    <th>Proyecto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-movimientos">
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-muted small text-center mt-2" id="movimientos-count"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{%endblock%}

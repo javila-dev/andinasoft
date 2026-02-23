@@ -1,0 +1,341 @@
+{% extends "signin.html" %}
+{% load i18n %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block content %}
+<div class="bg-light rounded shadow-lg" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px;margin:auto;">
+    <form class="'form-signin" style="max-width: 500px;">
+        <img src="https://somosandina.co/wp-content/uploads/2019/04/hamburger-menu.png"
+             class="img-fluid pb-1 mx-auto d-block rounded-circle" 
+             style="color: rgba(51,84,75,1);" width="250" height="250">
+        <h3 class="mb-4">Simulador de credito</h3>
+        <div class="input-group mb-3">
+            <div class="input-group-prepend">
+            <span class="input-group-text">Valor del inmueble</span>
+            </div>
+            <input type="text" name="inm_value" id="id_inm_value" class="form-control text-center money" placeholder="">
+        </div>
+         <div class="row mb-3 sim-detail">
+             <div class="col-md-4">
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                    <span class="input-group-text">% CI</span>
+                    </div>
+                    <input type="number" step="1" name="porc_ci" id="id_porc_ci" class="form-control text-center" placeholder="">
+                </div>
+             </div>
+             <div class="col-md-8">
+                <input type="text" name="ci_value" id="id_ci_value" class="form-control text-center money" placeholder="">
+             </div>
+         </div>
+         <div class="row mb-3 sim-detail">
+            <div class="col-md-6">
+               <div class="input-group">
+                   <div class="input-group-prepend">
+                   <span class="input-group-text">% Descuento</span>
+                   </div>
+                   <input type="number" step="1" name="porc_dcto" id="id_porc_dcto" class="form-control text-center" placeholder="">
+               </div>
+            </div>
+            <div class="col-md-6">
+               <input type="text" name="dcto_value" id="id_dcto_value" class="form-control text-center money" placeholder="">
+            </div>
+        </div>
+         <div class="row mb-3 sim-detail">
+            <div class="col-md-4">
+               <div class="input-group">
+                   <div class="input-group-prepend">
+                   <span class="input-group-text">% FN</span>
+                   </div>
+                   <input type="number" step="1" readonly name="porc_fn" id="id_porc_fn" class="form-control text-center" placeholder="">
+               </div>
+            </div>
+            <div class="col-md-8">
+               <input type="text" name="fn_value" readonly id="id_fn_value" class="form-control text-center money" placeholder="">
+            </div>
+        </div>
+        <div class="row sim-detail">
+            <div class="col-md-4">
+                <div class="input-group mb-3">
+                    <div class="input-group-prepend">
+                      <label class="input-group-text" for="inputGroupSelect01">Tasa</label>
+                    </div>
+                    <select class="custom-select" id="id_tasa">
+                      <option selected value="">...</option>
+                      <option value="0.8">0.8%</option>
+                      <option value="0.99">0.99%</option>
+                      <option value="1.5">1.5%</option>
+                    </select>
+                  </div>
+            </div>
+            <div class="col-md-8">
+                <div class="input-group mb-3">
+                    <div class="input-group-prepend">
+                      <label class="input-group-text" for="inputGroupSelect01">Tipo de plan</label>
+                    </div>
+                    <select class="custom-select" id="id_tipo" name="plan_type">
+                      <option selected value="">Selecciona...</option>
+                      <option value="N">Normal</option>
+                      <option value="E">Extraordinario</option>
+                    </select>
+                  </div>
+            </div>
+        </div>
+        <p class="lead" >Cuotas regulares</p>
+        <div class="row mb-3 sim-detail">
+            <div class="col-md-5">
+                <label>¿Cuantas?</label>
+                <input type="number" min="1" step="1" readonly name="cant_reg" id="id_cant_reg" class="form-control text-center" placeholder="">
+            </div>
+            <div class="col-md-7">
+                <label>Valor</label>
+                <input type="text" name="fn_cta_value" readonly id="id_fn_cta_value" class="form-control text-center money" placeholder="">
+            </div>
+        </div>
+        <p class="lead" >Cuotas Extra</p>
+        <div class="row mb-3 sim-detail">
+            <div class="col-md-5">
+                <label>Cada cuanto?</label>
+                <select class="custom-select disabled" disabled id="id_period_extra">
+                    <option selected value="">Selecciona...</option>
+                    <option value="1">Mensual</option>
+                    <option value="3">Trimestral</option>
+                    <option value="6">Semestral</option>
+                    <option value="12">Anual</option>
+                  </select>
+            </div>
+            <div class="col-md-3">
+                <label>¿Cuantas?</label>
+                <input type="number" min="1" step="1" readonly name="cant_extra" id="id_cant_extra" class="form-control text-center" placeholder="">
+            </div>
+            <div class="col-md-4">
+                <label>Valor</label>
+                <input type="text" name="extra_cta_value" readonly id="id_extra_cta_value" class="form-control text-center money" placeholder="">
+            </div>
+        </div>
+        <!-- <button type="button" class="btn btn-primary btn-lg btn-block">Simular</button> -->
+    </form>
+</div>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script>
+    $(document).ready(function(){
+        $('.money').mask("#,##0", {reverse: true});  
+        $('form').on('submit',function(e){
+            e.preventDefault();
+        })   
+        $('#id_inm_value').on('change',function(){
+            $('.sim-detail input,select').val('')
+        })
+        $('#id_ci_value').on('change',function(){
+            let ci_val = $(this).val().replace(/[\$,]/g,'') * 1
+            let inmueble = $('#id_inm_value').val().replace(/[\$,]/g,'') * 1
+            let fin_val = inmueble - ci_val
+            $('#id_fn_value').val(
+                new Intl.NumberFormat('en-EN').format(fin_val)
+            )
+            let porc_ci = ci_val*100/inmueble
+            let porc_fn = 100 - porc_ci
+            $('#id_porc_ci').val( 
+                porc_ci.toFixed(0)
+            )
+            $('#id_porc_fn').val(
+                porc_fn.toFixed(0)
+            )
+
+            let tasa = $('#id_tasa').val() * 1 / 100
+            let tipo = $('#id_tipo').val()
+
+            if(tasa > 0 && tipo != ""){
+                if (tipo == 'N'){
+                    let cuotas = $('#id_cant_reg').val() * 1
+                    let cap = $('#id_fn_value').val().replace(/[\$,]/g,'') * 1
+                    
+                    let cuota = calcular_cuotas(cap,tasa,cuotas).toFixed(0)
+                    $('#id_fn_cta_value').val(
+                        new Intl.NumberFormat('en-EN').format(cuota)
+                    )
+                }
+                else if (tipo == 'E'){
+                    let n_cuotas_extra = $('#id_cant_extra').val() * 1
+                    let n_cuotas_fn = $('#id_cant_reg').val() * 1
+                    let val_cta_fn = $('#id_fn_cta_value').val().replace(/[\$,]/g,'') * 1
+                    let period = $('#id_period_extra').val() * 1
+                    let cap = $('#id_fn_value').val().replace(/[\$,]/g,'') * 1
+                    let cap_extra = cap - calcularvp(val_cta_fn,tasa,n_cuotas_fn)
+                    let cuota_extra  = calcular_cuotas(cap_extra,tasa*period,n_cuotas_extra)
+                    $('#id_extra_cta_value').val(
+                        new Intl.NumberFormat('en-EN').format(cuota.toFixed(0))
+                    )
+                }
+            }
+
+            
+
+
+
+        })
+        $('#id_porc_ci').on('change',function(){
+            $('#id_porc_dcto').val('')
+            $('#id_dcto_value').val('')
+            let porc_ci = $(this).val() * 1
+            let inmueble = $('#id_inm_value').val().replace(/[\$,]/g,'') * 1
+            
+            let ci_val = inmueble * porc_ci /100
+            $('#id_ci_value').val(
+                new Intl.NumberFormat('en-EN').format(ci_val)
+            )
+            let fin_val = inmueble - ci_val
+            $('#id_fn_value').val(
+                new Intl.NumberFormat('en-EN').format(fin_val)
+            )
+            
+            let porc_fn = 100 - porc_ci
+            $('#id_porc_ci').val( 
+                porc_ci.toFixed(0)
+            )
+            $('#id_porc_fn').val(
+                porc_fn.toFixed(0)
+            )
+            let tasa = $('#id_tasa').val() * 1 / 100
+            let tipo = $('#id_tipo').val()
+
+            if(tasa > 0 && tipo != ""){
+                if (tipo == 'N'){
+                    let cuotas = $('#id_cant_reg').val() * 1
+                    let cap = $('#id_fn_value').val().replace(/[\$,]/g,'') * 1
+                    
+                    let cuota = calcular_cuotas(cap,tasa,cuotas).toFixed(0)
+                    $('#id_fn_cta_value').val(
+                        new Intl.NumberFormat('en-EN').format(cuota)
+                    )
+                }
+                else if (tipo == 'E'){
+                    let n_cuotas_extra = $('#id_cant_extra').val() * 1
+                    let n_cuotas_fn = $('#id_cant_reg').val() * 1
+                    let val_cta_fn = $('#id_fn_cta_value').val().replace(/[\$,]/g,'') * 1
+                    let period = $('#id_period_extra').val() * 1
+                    let cap = $('#id_fn_value').val().replace(/[\$,]/g,'') * 1
+                    let cap_extra = cap - calcularvp(val_cta_fn,tasa,n_cuotas_fn)
+                    let cuota_extra  = calcular_cuotas(cap_extra,tasa*period,n_cuotas_extra)
+                    $('#id_extra_cta_value').val(
+                        new Intl.NumberFormat('en-EN').format(cuota.toFixed(0))
+                    )
+                }
+            }
+        })
+        $('#id_tasa').on('change',function(){
+            $('#id_cant_reg').val('')
+            $('#id_fn_cta_value').val('')
+            $('#id_period_extra').val('')
+            $('#id_cant_extra').val('')
+            $('#id_extra_cta_value').val('')
+        })
+        $('#id_tipo').on('change',function(){
+            let val = $(this).val()
+            $('#id_cant_reg').val('')
+            $('#id_fn_cta_value').val('')
+            $('#id_period_extra').val('')
+            $('#id_cant_extra').val('')
+            $('#id_extra_cta_value').val('')
+
+            if (val == 'N'){
+                $('#id_cant_reg').prop('readonly',false)
+                .on('change',function(){
+                    let cuotas = $(this).val() * 1
+                    let cap = $('#id_fn_value').val().replace(/[\$,]/g,'') * 1
+                    let tasa = $('#id_tasa').val() * 1 / 100
+                    let cuota = calcular_cuotas(cap,tasa,cuotas).toFixed(0)
+                    $('#id_fn_cta_value').val(
+                        new Intl.NumberFormat('en-EN').format(cuota)
+                    )
+                })
+                $('#id_fn_cta_value').prop('readonly',true)
+                $('#id_cant_extra').prop('readonly',true)
+                $('#id_period_extra').prop('disabled',true)
+            }
+            else if (val == 'E'){
+                $('#id_cant_reg').prop('readonly',false)
+                .on('change',function(){
+                    
+                })
+                $('#id_fn_cta_value').prop('readonly',false)
+                $('#id_cant_extra').prop('readonly',false)
+                .on('change',function(){
+                    let n_cuotas_extra = $(this).val() * 1
+                    let n_cuotas_fn = $('#id_cant_reg').val() * 1
+                    let val_cta_fn = $('#id_fn_cta_value').val().replace(/[\$,]/g,'') * 1
+                    let tasa = $('#id_tasa').val() * 1 / 100
+                    let period = $('#id_period_extra').val() * 1
+                    let cap = $('#id_fn_value').val().replace(/[\$,]/g,'') * 1
+                    let cap_extra = cap - calcularvp(val_cta_fn,tasa,n_cuotas_fn)
+                    let cuota_extra  = calcular_cuotas(cap_extra,tasa*period,n_cuotas_extra)
+                    $('#id_extra_cta_value').val(
+                        new Intl.NumberFormat('en-EN').format(cuota.toFixed(0))
+                    )
+                })
+                $('#id_period_extra').prop('disabled',false)
+            }
+            
+        })
+        $('#id_porc_dcto').on('change',function(){
+            let porc_dcto = $(this).val() * 1
+            let ci_val = $('#id_ci_value').val().replace(/[\$,]/g,'') * 1
+            let inmueble = $('#id_inm_value').val().replace(/[\$,]/g,'') * 1
+            let fn_val = inmueble - ci_val
+            let val_dcto = $('#id_inm_value').val()
+            .replace(/[\,$]/g,'') * 1 * porc_dcto / 100
+            let new_fn = fn_val - val_dcto
+            $('#id_dcto_value').val(
+                new Intl.NumberFormat('en-EN').format(val_dcto)
+            )
+            $('#id_fn_value').val(
+                new Intl.NumberFormat('en-EN').format(new_fn)
+            )
+            $('#id_cant_reg').val('')
+            $('#id_fn_cta_value').val('')
+            $('#id_period_extra').val('')
+            $('#id_cant_extra').val('')
+            $('#id_extra_cta_value').val('')
+        })
+        $('#id_dcto_value').on('change',function(){
+            let ci_val = $('#id_ci_value').val().replace(/[\$,]/g,'') * 1
+            let inmueble = $('#id_inm_value').val().replace(/[\$,]/g,'') * 1
+            let fn_val = inmueble - ci_val
+            let val_dcto = $(this).val()
+            .replace(/[\,$]/g,'') * 1 
+            let porc_dcto = (val_dcto * 100  / inmueble).toFixed(0)
+            let new_fn = fn_val - val_dcto
+            $('#id_porc_dcto').val(
+                porc_dcto
+            )
+            $('#id_fn_value').val(
+                new Intl.NumberFormat('en-EN').format(new_fn)
+            )
+            $('#id_cant_reg').val('')
+            $('#id_fn_cta_value').val('')
+            $('#id_period_extra').val('')
+            $('#id_cant_extra').val('')
+            $('#id_extra_cta_value').val('')
+        })
+    })
+    function calcular_cuotas(capital,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(capital/nCuotas)
+        }
+        else{
+            up=capital*tasa
+            down=1-(1+tasa)**(-1*nCuotas)
+            cuota=up/down
+            return Math.ceil(cuota)
+        }
+    }
+    function calcularvp(cuota,tasa,nCuotas){
+        up=(1-(1+tasa)**(-1*nCuotas))*cuota
+        down=tasa
+        capital=up/down
+        return Math.ceil(capital)      
+    }
+    
+</script>
+{% endblock %}

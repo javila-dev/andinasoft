@@ -1,0 +1,95 @@
+{%extends 'base.html'%}
+{%block title%}Correr fechas{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Correr fechas a cuotas pendientes</strong>
+    <small class='text-muted'>{{adj}}</small>
+    </h4>
+    <br>
+    <p class='lead'>Escoge la cuota a partir de la cual deseas mover la fecha de pago</p>
+    <br>
+    <div class='table-responsive'>
+        <table id='tablaCuotas' class='striped hover compact row-border'>
+            <thead>
+                <tr>
+                    <th class='text-center'>Id Cuota</th>
+                    <th class='text-center'>Fecha Cuota</th>
+                    <th class='text-center'>Tipo Cuota</th>
+                    <th class='text-center'>Nro Cuota</th>
+                    <th class='text-center'>Saldo Cuota</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for cuota in cuotas_pendientes%}
+                <tr>
+                    <td class='text-center'><a href="#" data-toggle='modal' data-target='#modalCorrerfecha' data-cuota='{{cuota.nrocta}}' data-fecha='{{cuota.fecha|date:"d/m/Y"}}'>{{cuota.idcta}}</a></td>
+                    <td class='text-center'>{{cuota.fecha|date:"d/m/Y"}}</td>
+                    <td class='text-center'>{{cuota.tipocta}}</td>
+                    <td class='text-center'>{{cuota.nrocta}}</td>
+                    <td class='text-center'>{{cuota.saldocuota}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+</div>     
+<div class="modal fade" id="modalCorrerfecha" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Mover fechas de pago</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form method='POST'>{%csrf_token%}
+                <div class="modal-body">
+                    <div class="input-group text-center">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text">Cuota desde</span>
+                        </div>
+                        <input type='text' id='cuotadesde' name='cuotadesde'class='text-center form-control' readonly required>
+                    </div>
+                    <br>
+                    <div class="input-group text-center">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text">Fecha actual</span>
+                        </div>
+                        <input type='text' id='fechacuota' name='fechacuota'class='text-center form-control' readonly required>
+                    </div>
+                    <br>
+                    <div class="input-group text-center">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text" style='padding-right: 55px;'>Mover</span>
+                        </div>
+                        <input type='number' min='1' class='text-center form-control' name='meses' placeholder='meses' required>
+                    </div>
+                </div>
+                <div class="modal-footer" id='footer'>
+                    <button type='submit' class='btn btn-primary' id='correrFecha'>Aceptar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    var tablaCuotas = $('#tablaCuotas').DataTable({
+        "pageLength": 25,
+        "order": [[ 1, "asc" ]],
+        'lengthMenu': [
+            [10, 25, 50, -1],
+            [10, 25, 50, 'All']
+        ],
+        columnDefs: [{ type: 'date-uk', targets: 1 }]
+    })
+    $('#modalCorrerfecha').on('show.bs.modal',function(event){
+        var button = $(event.relatedTarget)
+        var fecha = button.data('fecha')
+        var cuota = button.data('cuota')
+        $('#fechacuota').val(fecha)
+        $('#cuotadesde').val(cuota)
+    })
+</script>
+{%endblock%}

@@ -1,0 +1,887 @@
+{%load static%}
+<html>    
+    <body>
+        <div id="footer_content">
+            <table style="color:#34554c;font-size:9px">
+                <tr>
+                    <td style="text-align:center;border-right: darkslategrey solid 0.5px;padding-right: 5px;">
+                        <b>Medellín</b><br>
+                        Parque comercial Calle 11<br>
+                        Oficina 508<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align:center">
+                        <b>Montería</b><br>
+                        Cra 8A # 63-09<br>
+                        Teléfono: (4) 444 62 91
+                    </td>
+                    <td style="text-align: right;width:60%">
+                        VERSIÓN: 2<br>
+                        TODOS LOS CHEQUES, CONSIGNACIONES Y TRANSFERENCIAS DEBEN SER GIRADOS A NOMBRE DE<br>
+                        <strong>STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4</strong>
+                        </td>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table>
+                <tr>
+                    <th>
+        
+                    </th>
+                    <th style="width:80%;align:center">
+                        <img src="{%static 'img/conceptos_inmob_bugambilias.png'%}" width="180">
+                    </th>
+                    <th>
+                        <p style="color:lightcoral;font-size:15px;"><b>No.&nbsp;{{ctr.pk}}</b></p>
+                    </th>
+                </tr>
+            </table>
+            <table>
+                <tr>
+                    <th style="align:center">
+                        <img src="{%static 'img/Andina-Conceptos.png'%}">
+                    </th>
+                    <th style="width:70%;align:center">
+                        <p style="color:#345555;font-size: 15px">Contrato de Promesa De Compraventa de bien futuro, proyecto denominado 
+                            “EL TESORO ESCONDIDO, PARCELACIÓN BUGAMBILIAS TERRITORIO CAMPESTRE”</p>
+                    </th>
+                    <th style="align:center">
+                        <img src="{%static 'img/logo_bugambilias.png'%}">
+                    </th>
+                </tr>
+            </table>
+            <p style="text-align:justify;" class="cuerpo">Entre los suscritos a saber: por una parte, la sociedad denominada
+                <b>STATUS COMERCIALIZADORA S.A.S.</b>, con <b>NIT 901.018.375-1</b>, sociedad con domicilio en la ciudad de Medellín,
+                 inscrita en la Cámara de Comercio de Medellín, para Antioquia, con la matricula mercantil Nº 21-572509-12,, quien para los efectos del presente 
+                 contrato se denomina <b>LA PROMITENTE VENDEDORA</b>, y de la otra parte, EL (LOS) SEÑOR (ES):
+            </p>
+            <ol class="detalles">
+                {%for titular in ctr.titulares%}
+                <li style="text-align: justify;font-size:12px;margin-bottom:5px" class=".cuerpo">
+                    <b>Nombre:</b> <u>{{titular.nombrecompleto}}</u>&nbsp;&nbsp;
+                    <b>CC:</b> <u>{{titular.pk}}</u>&nbsp;&nbsp;
+                    <b>Telefono:</b> <u>{{titular.celular1}} {%if titular.telefono1%} - {{titular.telefono1}}{%endif%}</u>&nbsp;&nbsp;
+                    <b>Dir. Residencia:</b> <u>{{titular.domicilio}}</u>&nbsp;&nbsp;
+                    <b>Ciudad/Municipio: </b><u>{{titular.ciudad|default:"Sin informacion"|default_if_none:"Sin información"}}</u>&nbsp;&nbsp;
+                    <b>Email: </b><u>{{titular.email|default:"Sin información"|default_if_none:"Sin información"}}</u>&nbsp;&nbsp;
+                </li>
+                {%endfor%}
+            </ol>
+            <p class='cuerpo' style="text-align:justify">
+                Quien (es) para los efectos del presente contrato se denomina <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, y
+                ambos conjuntamente se denominarán LAS PARTES, hemos decidido celebrar el presente contrato de 
+                <b>PROMESA DE COMPRAVENTA DE BIEN FUTURO</b>, de acuerdo a los preceptos establecidos en
+                nuestra Legislación Civil colombiana y demás normas concordantes, previa las siguientes:<br><br>
+
+                <b>DECLARACIONES</b><br>
+
+                <b>PRIMERO: LA PROMITENTE VENDEDORA</b>adelanta un proyecto de parcelación de futuro desarrollo con construcción simultánea
+                y venta garantizada de parcelas, localizada en el Municipio de Sopetrán, Departamento de Antioquia, denominado <b>“EL TESORO ESCONDIDO”.</b><br>
+
+                <b>SEGUNDO:</b> Las características de los lotes, zonas públicas y zonas comunes que conforman el proyecto, se
+                encuentran descritas en el plano comercial y piezas promocionales del mismo, el cual, 
+                <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> declara(n) conocer.<br>
+
+                <b>TERCERO:</b> Las parcelas que conforman el proyecto de parcelación <b>EL TESORO ESCONDIDO,</b>
+                parcela <b>BUGAMBILIAS TERRITORIO CAMPESTRE</b> tienen en la actualidad la condición legal de bien 
+                futuro o cosa futura de acuerdo a los preceptos establecidos en el Artículo 1869 del Código Civil 
+                colombiano y así, las partes declaran conocerlo y aceptarlo, plenamente conscientes y capaces. <br>
+
+                De acuerdo a las anteriores declaraciones, se celebra el presente Contrato de Promesa de Compraventa de 
+                Bien Futuro, el cual se regirá por las siguientes cláusulas: 
+                
+                <b>CLÁUSULA PRIMERA. OBJETO DEL CONTRATO Y DESCRIPCIÓN DEL INMUEBLE:</b> El presente contrato tiene por objeto 
+                la compra por parte de <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>, de una parcela en el proyecto de parcelación denominado 
+                <b>EL TESORO ESCONDIDO</b>, parcelación <b>BUGAMBILIAS TERRITORIO CAMPESTRE</b>, localizado en el Municipio de Sopetrán Antioquia, 
+                Corregimiento San Nicolás, Vereda Juntas, Predio La Vieja, identificada con folio de matrícula inmobiliaria de mayor extensión 
+                Nº 029-17922 de la Oficina de Registro de Instrumentos Públicos de Sopetrán Antioquia, parcelación que tiene las siguientes especificaciones: 
+            </p>
+            <p class='cuerpo' style="text-align:justify">Parcelacion Nº <u>1</u>
+                denominada <u>BUGAMBILIAS TERRITORIO CAMPESTRE</u>
+                <p>Parcela N° <u> {%if fraccion%}{{inmueble.lotenumero|slice:":-1"}}{%else%}{{inmueble.lotenumero}}{%endif%} </u> Manzana <u> {{inmueble.manzananumero}} </u>  
+                (Área total parcela <u> {{inmueble.area_mz}} </u> metros cuadrados),{%if fraccion%} Fracción <u> {{inmueble.lotenumero|last}} </u> con un % sobre el total 
+                del area de la parcela del <u>50%</u>, es decir <u>{{inmueble.areaprivada}}</u> metros cuadrados, fraccion{%endif%} que cuenta con las siguientes medidas y linderos:</p>
+                
+                
+                <b>Por el norte</b> <u>{{inmueble.norte}}</u> metros con
+                <u>{{inmueble.colindante_norte}}</u>,
+                <b>Por el este</b> <u>{{inmueble.este}}</u> metros con
+                <u>{{inmueble.colidante_este}}</u>,
+                <b>Por el sur</b> <u>{{inmueble.sur}}</u> metros con
+                <u>{{inmueble.colindante_sur}}</u>,
+                <b>Por el oeste</b> <u>{{inmueble.oeste}}</u> metros con
+                <u>{{inmueble.colindante_oeste}}</u>.</p>
+            <p class='cuerpo' style="text-align:justify">   
+                Y, el cual aparece señalado en el plano oficial de dicha Parcelación que, es parte integrante de este contrato. 
+                No obstante, el área citada, esta venta se hace como cuerpo cierto. <br>
+                
+                <b>PARÁGRAFO PRIMERO</b>: La parcela prometida, se identificará con el número de matrícula inmobiliaria que 
+                le asigne la Oficina de Registro de Instrumentos de Instrumentos Públicos de Sopetrán Antioquia, para cada parcela, 
+                al momento de registrar la escritura pública de loteo y Reglamento de Propiedad Horizontal para el proyecto.<br>
+
+                <b>PARÁGRAFO SEGUNDO: </b>En caso de presentarse alguna variación en el diseño inicial urbanístico, el cual afecte la 
+                ubicación de la parcela adquirida en esta promesa de compraventa, <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, aceptan desde ya 
+                cualquier cambio de ubicación siempre y cuando la parcela esté dentro la misma parcelación, que esté en la misma etapa 
+                constructiva, que su orientación en la manzana correspondiente sea equivalente a la inicialmente escogida y que el área 
+                del terreno sea igual o mayor a la inicialmente pactada.<br>
+
+                <b>CLÁUSULA SEGUNDA. TRADICION:</b> El predio en donde se desarrolla el proyecto <b>BUGAMBILIA TERRITORIO
+                CAMPESTRE</b>, fue adquirido por la sociedad <b>STATUS COMERCIALIZADORA S.A.S</b>, con NIT 901.018.375-4, mediante
+                escritura pública número SETECIENTOS OCHENTA Y CINCO (785) de fecha 19 de abril de 2024, otorgada por la
+                Notaria Tercera del Círculo Notaria de Medellín, siendo registrada en el folio de matrícula inmobiliaria citado, número 029-
+                44137, de la Oficina de Registro de Instrumentos Públicos de Sopetrán, Antioquia. Acto seguido, dicho inmueble fue
+                subdividido, generando entre otros, el lote de mayor extensión denominado <b>LOTE 3. BUGAMBILIA TERRITORIO
+                CAMPESTRE</b>, identificado con folio de matrícula inmobiliaria <b>N° 146-45016</b>, con cédula catastral de mayor extensión N°
+                05761000200000001002500000000., el cual tiente un área de 752660.77 m2, el cual se encuentra comprendido dentro
+                de los siguientes linderos: Por el NORTE con predio Faja de cesión 2 del punto 1 al 32 con una distancia de 733.69
+                metros, por el ORIENTE con predio Faja de cesión 2 del punto 32 al 56 con una distancia de 876,91 metros y con el
+                predio Lote 1 del punto 56 al 100 con una distancia de 1996,85 metros, por el SUR con el predio Humberto Builes del
+                punto 102 al 100 con una distancia de 464.74 metros, por el OCCIDENTE con el predio Lote 4 del punto 102 al 1 con una
+                distancia de 1932,60 metros.
+                <br>
+
+                <b>CLÁUSULA TERCERA. LICENCIA DE URBANISMO:</b> Que, el proyecto <b>BUGAMBILIA
+                TERRITORIO CAMPESTRE</b>, localizado en el Municipio de Sopetrán, Departamento de Antioquia, fue aprobado por la
+                Secretaría de Planeación y Desarrollo Territorial del Municipio de Sopetrán, mediante resolución N° LP 009 del 27 de
+                diciembre de 2019, “Por medio del cual se concede una licencia de Parcelación de un inmueble Rural”. Revalidada por la
+                por resolución N°. 009b del 14 de octubre de 2023, y modificada por la Resolución N° 005 de fecha 07 de noviembre de
+                2024.
+            </p>
+            <p class='detalles' style="text-align:justify">
+                <b>CLÁUSULA CUARTA. VALOR DEL INMUEBLE Y FORMA DE PAGO:</b> El valor del lote objeto de este contrato, es la
+                suma de:
+                <u>{{ctr.general_info.valor_en_letras}}</u> ($<u>{{ctr.general_info.valor|floatformat:"-3g"}}</u>)
+            </p>
+            <table class='detalles'>
+                <tr>
+                    <td style="width:2%"></td>
+                    <td style="text-align:justify;vertical-align: top;">
+                        <b>1. CUOTA INICIAL:</b> la suma de $ <u><b>{{ctr.general_info.ci|floatformat:"-3g"}}</b> </u> a pagar así, 
+                        <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                    </td>
+                    <td style="width:5%"></td>
+                    <td style="text-align:justify;vertical-align: top;">
+                        <b>2. SALDO A PAGAR:</b> la suma de $ <u><b>{{ctr.general_info.saldo|floatformat:"-3g"}}</b></u> a pagar con
+                        plan <u>{{ctr.formapago}}</u>
+                        {%if ctr.formapago == 'Amortizacion'%} (El valor de las cuotas mensuales incluye los intereses
+                        corrientes) {%endif%}
+                        así,
+                        <u>{{ctr.general_info.fp_saldo}}</u>.<br>
+                    </td>
+                    <td style="width:2%"></td>
+                </tr>
+            </table>
+            {%if ctr.observaciones != ""%}
+            <p class='detalles' style="text-align:justify">
+                <b>OBSERVACIONES DE LA FORMA DE PAGO: </b><u>{{ctr.observaciones}}</u>.
+            </p>
+            {%endif%}
+            <p class='cuerpo' style="text-align:justify">
+                <b>PARÁGRAFO PRIMERO: </b>En caso de mora en el pago de cualquiera de las cuotas correspondientes a la cuota
+                inicial o a las cuotas mensuales
+                de amortización para el pago del saldo del LOTE, objeto de este contrato, por parte de <b>EL (LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>, pagará
+                (n) estos a <b>LA PROMITENTE VENDEDORA</b>, intereses moratorios a la tasa máxima legal vigente mensual y/o
+                fracción de mes vencido,
+                establecida por la Superintendencia Financiera de Colombia, sin perjuicio de los derechos, acciones y facultades
+                de <b>LA PROMITENTE
+                    VENDEDORA</b>, pues, en tal evento y en cualquier momento, durante la mora podrá exigir el pago del saldo
+                total adeudado con sus intereses,
+                además de hacer efectiva la cláusula de penal del presente contrato. PARÁGRAFO SEGUNDO: En los casos que haya
+                saldos pendientes, los
+                pagos que haga(n) <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> serán aplicados, en primer lugar, al pago de
+                intereses que tenga(n) pendientes
+                de cancelación por cualquier concepto; y el excedente se aplicará al capital. PARÁGRAFO TERCERO: Si dentro del
+                valor del LOTE objeto de
+                este contrato, <b>LA PROMITENTE VENDEDORA</b> le otorgó a <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> un
+                descuento financiero por valores
+                recibidos anticipadamente, dicho descuento finalmente se aplicará, previa verificación de los dineros recibidos
+                en las fechas pactadas, al
+                saldo por pagar. <b>PARÁGRAFO CUARTO: LA PROMITENTE VENDEDORA</b> solicitará a <b>EL(LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b> las
+                garantías reales o personales que juzgue convenientes para respaldar el pago de la obligación adquirida en el
+                presente contrato, como son
+                pagaré, o letra de cambio. <b>CLÁUSULA QUINTA. LA PROMITENTE VENDEDORA</b> se obliga al saneamiento por evicción
+                y a responder por
+                cualquier gravamen y acción que resultare contra el derecho que transferirá y, además, responderá por cualquier
+                vicio redhibitorio sobre el
+                LOTE de acuerdo al Código Civil. <b>CLÁUSULA SEXTA. FECHA DE ESCRITURACIÓN:</b> Las partes acuerdan que la fecha
+                de escrituración del bien
+                inmueble, objeto de este contrato, será el día <u> {{fecha_escritura.day}} </u> del mes de <u>
+                    {{fecha_escritura|date:"F"}} </u>
+                del año <u> {{fecha_escritura.year}} </u>, en la Notaría Quinta de Medellín,
+                a las 10:00 de la mañana., siempre y cuando se cumpla con las condiciones indicadas en la cláusula séptima de
+                este contrato.<b></b> PARÁGRAFO
+                PRIMERO: </b>Si la fecha estipulada para la celebración de la escritura pública de compraventa fuese un día no
+                hábil, se tendrá por cierto para su
+                celebración el día hábil siguiente. <b>PARÁGRAFO SEGUNDO: </b>Si, llegada la fecha para el otorgamiento de la
+                escritura pública de compraventa,
+                <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, presenta (n) un saldo por pagar al valor del lote, y este no ha
+                sido cancelado antes del
+                otorgamiento de la misma, podrá <b><b>LA PROMITENTE VENDEDORA</b></b>, escriturar el lote a <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b>, con una
+                Hipoteca Abierta sin límite de cuantía, a favor de la sociedad <b>STATUS COMERCIALIZADORA S.A.S.
+                    PARÁGRAFO TERCERO:</b> Si, el
+                lote objeto de este contrato se encuentra individualizado con folio de matrícula inmobiliaria, y cédula
+                catastral, antes de la fecha de
+                escrituración pactada en esta cláusula, <b>LA PROMITENTE VENDEDORA</b>, otorgará de manera inmediata a <b>EL
+                    (LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>, la escritura pública de compraventa. En caso de existir un saldo pendiente por pagar del
+                valor del lote, por parte de <b>EL
+                    (LOS) PROMITENTE(S) COMPRADOR(ES)</b>, se otorgará dicha escritura con una Hipoteca Abierta sin límite de
+                cuantía, a favor de la sociedad
+                <b>STATUS COMERCIALIZADORA S.A.S. PARÁGRAFO CUARTO:</b> A partir del otorgamiento de la escritura pública
+                de compraventa del
+                lote objeto de compra, por parte de <b>LA PROMITENTE VENDEDORA</b>, correrá(n) por cuenta de <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b>
+                todos los impuestos que se deriven del bien inmueble prometido en venta. <b>PARÁGRAFO QUINTO:</b> En caso que
+                <b>LA PROMITENTE VENDEDORA</b>
+                no escriture en la fecha estipulada, podrá prorrogar la fecha por un término hasta de {{prorroga_letras.lower}} ({{prorroga}}) días, sin que esto se
+                considere incumplimiento. <b>PARÁGRAFO SEXTO:</b> De igual manera, podrá prorrogarse la firma de la escritura
+                pública en eventos de caso
+                fortuito o fuerza mayor; y la fecha de la escrituración se prorrogará a partir del plazo inicialmente pactada en
+                la cláusula sexta, y su tiempo
+                será igual al tiempo del caso fortuito o fuerza mayor, sin que esto constituya causal de incumplimiento y/o
+                desistimiento. <b>CLÁUSULA
+                    SÉPTIMA. CONDICIONES DE ESCRITURACIÓN:</b> <b>LA PROMITENTE VENDEDORA</b> se obliga a celebrar la escritura
+                pública que solemniza la
+                venta del lote objeto de este contrato, en la fecha establecida en la cláusula sexta, si, se cumplen con las
+                siguientes condiciones: 1) Que,
+                <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b> haya (n) cancelado la totalidad de los valores correspondientes a la
+                cuota inicial y el saldo a
+                pagar establecido en la cláusula CUARTA del presente contrato, y presente(n) el respectivo certificado de paz y
+                salvo, expedido por el área
+                administrativa de <b>LA PROMITENTE VENDEDORA</b>. 2) Que, el LOTE, objeto de este contrato, se encuentre
+                completamente individualizado
+                con el fin de realizar el registro ante la oficina de instrumentos públicos de la jurisdicción correspondiente.
+                <b>PARÁGRAFO PRIMERO:</b> En caso
+                de no cumplirse la condición número uno (1), establecida en esta cláusula, queda a discreción de <b>LA
+                    PROMITENTE VENDEDORA</b>, realizar de
+                manera anticipada la escritura pública de compraventa, conforme a los parágrafos segundo y tercero de la
+                cláusula SEXTA de este contrato.
+                <b>PARÁGRAFO SEGUNDO:</b> El pago anticipado del valor total del contrato por parte de <b>EL (LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>, antes de
+                la fecha de escrituración, no dará lugar al otorgamiento de la escritura pública de compraventa del lote, de
+                manera anticipada por parte de
+                <b>LA PROMITENTE VENDEDORA</b>. <b>CLÁUSULA OCTAVA. ENTREGA MATERIAL:</b> La fecha cierta de entrega del lote,
+                se encontrará establecida
+                en la escritura pública de compraventa que suscriban las partes. No obstante, <b>LA PROMITENTE VENDEDORA</b>, se
+                reserva el derecho de hacer
+                la entrega material del lote objeto de este contrato, a título de mera tenencia, antes del otorgamiento de la
+                escritura pública de compraventa.
+                Para lo cual, se estima una fecha aproximada de entrega del lote, de <u>{{meses_entrega}}</u> meses, contados a
+                partir de la firma de este contrato. Para
+                lo cual, se establecerá un acuerdo de tenencia con <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.  
+                
+                <b>PARÁGRAFO PRIMERO:</b> Si <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b> no comparece(n) a recibir el LOTE, o presentándose se abstiene (n) de
+                recibirlo sin causa suficiente a
+                juicio de <b>LA PROMITENTE VENDEDORA</b>, este se entenderá entregado para todos, dejando constancia en acta de
+                entrega firmada por dos
+                (2) testigos. Así mismo, si <b>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</b> no comparece(n) a recibir el LOTE por
+                razones de caso fortuito o
+                fuerza mayor en la fecha señalada para la entrega, deberá(n) justificar por escrito el incumplimiento dentro de
+                tres (3) días hábiles siguientes
+                a la fecha de entrega. Una vez aceptada dicha justificación por parte de <b>LA PROMITENTE VENDEDORA</b>,
+                <b>EL(LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b> deberá(n) cumplir y, por ende, recibir el inmueble en la nueva fecha establecida por <b>LA
+                    PROMITENTE VENDEDORA</b>.
+                <b>PARÁGRAFO SEGUNDO: </b><b>LA PROMITENTE VENDEDORA</b> realizará la entrega material del LOTE, objeto de este
+                contrato, con su vegetación
+                natural y como se encuentre en el momento de la entrega de acuerdo con las variaciones climáticas. La entrega de
+                las obras comunes se
+                realizará por etapas, las cuales incluyen: cerramiento perimetral, portería, vías vehiculares y peatonales,
+                zonas verdes, etc. Estas entregas por
+                etapas se harán a la Junta Administradora para que sea esta la responsable del mantenimiento y conservación.
+                <b>PARÁGRAFO TERCERO:</b> De
+                acuerdo al avance de obra, permanecerá personal de obra en la urbanización, hasta tanto se integre el total de
+                las construcciones y se haga
+                entrega de las mismas. Además, <b>LA PROMITENTE VENDEDORA</b> se reserva el derecho de tener en la obra la casa
+                modelo y sala de ventas, de
+                acceder y permitir la entrada a particulares durante toda la gestión de ventas, tomando las medidas de seguridad
+                necesarias. 
+                <b>CLÁUSULA NOVENA:</b> Para la construcción de la vivienda en la parcela objeto de este contrato, EL(LOS) PROPIETARIO(S) final, 
+                deberá(n) cumplir con el estatuto urbano de la copropiedad, por lo que deberá(n) obtener el acta de aprobación del diseño de su casa, 
+                otorgado por el comité regulador del estatuto urbano de la Urbanización y los permisos municipales para la construcción de la vivienda; 
+                Una vez obtenidos estos permisos, se obliga a presentar un acta de inicio de obra a LA VENDEDORA. Si al momento de la firma del acta de 
+                inicio de obra, la parcela objeto de este contrato, no cuenta con las acometidas de acueducto, y con el punto de conexión de pozo séptico 
+                de recirculación, LA VENDEDORA contará con doscientos setenta (270) días para proveer al predio de las acometidas mencionadas. 
+                Las partes acuerdan que esta cláusula será incluida en la escritura pública de compraventa.  
+                <b>PARÁGRAFO PRIMERO:</b> Los tramites de conexión y abastecimiento del servicio de acueducto 
+                veredal, ante la correspondiente entidad prestadora del servicio serán por 
+                cuenta de EL(LOS) PROPIETARIO(S) final de la parcela objeto de este contrato. 
+                Una vez se haya realizado el trámite de escrituración y posterior registro ante 
+                la Oficina de Instrumentos Públicos correspondiente, que detente la titularidad 
+                del mismo. 
+                    <strong>CLÁUSULA</strong> <strong> DÉCIMA. RÉGIMEN DE COPROPIEDAD:</strong> El proyecto de
+                    urbanización “<strong>EL TESORO ESCONDIDO</strong>, parcelación <strong>BUGAMBILIAS TERRITORIO CAMPESTRE</strong>”, estará
+                    sometido con todos sus bienes de dominio particular y de dominio común al
+                    régimen de Propiedad Horizontal contenido en la Ley 675 de 2001 y demás
+                    normas complementarias, El Estatuto Urbano para la construcción de casas
+                    será obligatorio y formará parte del Reglamento de la Copropiedad, para lo
+                    cual, <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong> lo acatarán en
+                    todos sus términos y condiciones, obligándose desde ya, a dar cumplimento a
+                    todas las obligaciones que se estipulen en dicho reglamento, especialmente
+                    el pago oportuno de las cuotas de administración que le corresponda a
+                    partir de la fecha fijada, al igual que sus causahabientes a cualquier
+                    título. <strong>PARÁGRAFO PRIMERO:</strong> A partir de la entrega de la
+                    garita de vigilancia y el cerramiento perimetral por parte de
+                    <strong>
+                        LA PROMITENTE VENDEDORA, EL (LOS) PROMITENTE(S) COMPRADOR(ES)
+                    </strong>
+                    acepta(n) pagar la cuota mensual de administración correspondiente al
+                    porcentaje del área del lote objeto de este contrato, que le corresponde al
+                    lote, según el índice de propiedad. <strong> CLÁUSULA DÉCIMA PRIMERA: </strong>Las partes establecen que, en
+                    lo
+                    concerniente al LOTE o bien futuro prometido en venta, objeto de este
+                    contrato, se regirán por los Títulos VI, XII y XXIII del segundo libro del
+                    Código Civil colombiano y demás normas concordantes en materia civil. <strong>CLÁUSULA DÉCIMA
+                        SEGUNDA.</strong><strong> CLÁUSULA PENAL: </strong>
+                    Será causal de incumplimiento del contrato de promesa de compraventa de
+                    bien futuro, por parte de <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES),</strong> el desistimiento o
+                    determinación de no continuar con las obligaciones del contrato, el
+                    incumplimiento de cualquiera de las cláusulas en el convenidas, la mora por
+                    más noventa (90) días calendario en el pago de cualquiera de las cuotas
+                    correspondiente a la cuota inicial, o de las cuotas mensuales de
+                    amortización para el pago del saldo lote establecido en la cláusula cuarta
+                    del mismo, así como, la configuración de una de las causales previstas en
+                    cláusula décimo octava de este contrato, como lo es la aparición en listas
+                    restrictivas o la condena proveniente de delitos relacionados con lavados
+                    de activos y conexos. Incumplimiento que, dará derecho a <strong>LA PROMITENTE VENDEDORA</strong>, de
+                    declarar extra juicio, la
+                    terminación unilateral del contrato, sin necesidad de declaración judicial,
+                    y cobrará a <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES), </strong>a título
+                    de cláusula penal, el equivalente al treinta por ciento (30%) del valor
+                    total del contrato. Además, dispondrá del inmueble objeto de la promesa de
+                    venta. En caso de quedar un saldo a favor de <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES), </strong>luego de
+                    haber
+                    deducido el valor de la cláusula penal, serán devueltos por <strong>LA PROMITENTE VENDEDORA, </strong>sin
+                    que se generen intereses de
+                    ninguna naturaleza a favor de<strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong>.<strong>LA PROMITENTE
+                        VENDEDORA</strong> acordará con <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>, los plazos, fechas
+                    y
+                    montos para la devolución. En caso que no exista un acuerdo entre las
+                    partes, se fijará un plazo máximo de trescientos sesenta y cinco (365) días
+                    contados a partir de la fecha en que <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong> manifieste por
+                    escrito
+                    la solicitud de la devolución para llevar a cabo el desembolso de las
+                    sumas, anteriormente mencionadas, por parte de <strong>LA PROMITENTE VENDEDORA</strong>. Será causal de
+                    incumplimiento del
+                    contrato de promesa de compraventa de bien futuro, por parte de <strong>LA PROMITENTE VENDEDORA, </strong>el
+                    desistimiento injustificado o
+                    determinación de no continuar con las obligaciones del contrato, así como
+                    el incumplimiento de cualquiera de las cláusulas en el convenidas. Lo que,
+                    faculta a <strong>EL (LOS) PROMITENTE(S) COMPRADOR (ES), </strong>al cobro
+                    de la cláusula penal, equivalente al treinta por ciento (30%) del valor del
+                    presente contrato, y la restitución de los valores cancelados por parte de
+                    estos para la compra del lote. <strong>LA PROMITENTE VENDEDORA</strong>
+                    acordará con <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>, los
+                    plazos, fechas y montos para la devolución. En caso que no exista un
+                    acuerdo entre las partes, se fijará un plazo máximo de trescientos sesenta
+                    y cinco (365) días contados a partir de la fecha en que <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>
+                    manifieste por escrito
+                    la solicitud de la devolución para llevar a cabo el desembolso de las
+                    sumas, anteriormente mencionadas, por parte de <strong>LA PROMITENTE VENDEDORA</strong>.
+                    <strong>PARÁGRAFO:</strong> En
+                    caso que el incumplimiento de las obligaciones derivadas del presente
+                    contrato por parte de <strong>LA PROMITENTE VENDEDORA</strong> se genere
+                    por el acaecimiento de caso fortuito o fuerza mayor comprobable e imputable
+                    al presente contrato, se podrá exonerar del pago de la cláusula penal
+                    pactada.
+                    <strong>
+                        CLÁUSULA DÉCIMA TERCERA. LIBERTAD DE GRAVÁMENES Y OBLIGACIÓN DE
+                        SANEAMIENTO:
+                    </strong>
+                    <strong>LA PROMITENTE VENDEDORA</strong>
+                    garantiza que no ha enajenado a ninguna persona el LOTE prometido en venta
+                    y que tiene el dominio de posesión tranquila del inmueble, y declara que
+                    hará su entrega libre de registro por demanda civil, uso y habitación,
+                    arrendamiento por escritura pública, patrimonio de familia inembargable y
+                    condiciones suspensivas o resolutorias de dominio.<strong>PARÁGRAFO PRIMERO</strong>: Declara igualmente
+                    <strong>LA PROMITENTE VENDEDORA</strong>, que al momento de la escritura
+                    pública el LOTE prometido en venta, estará a paz y salvo por todo concepto,
+                    en especial libre de tasas, impuestos, valorizaciones, contribuciones
+                    municipales. En el evento que por algún motivo no se hubiere cancelado,
+                    éstos correrán por cuenta de 
+                    siempre que su liquidación sea anterior a la fecha de otorgamiento de la
+                    escritura pública, o entrega del inmueble que legalice el presente Contrato
+                    de Promesa de Compraventa. <strong>CLÁUSULA DÉCIMA CUARTA. GASTOS: </strong>Todos los gastos fiscales,
+                    notariales y legales que se ocasionen por la firma de la escritura pública
+                    de compraventa, donde se solemnice la transferencia del derecho de
+                    propiedad del LOTE, que aquí se promete en venta, 
+                    <!-- serán cancelados en partes iguales por <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong> y <strong>LA PROMITENTE VENDEDORA</strong>, los timbres y  -->
+                    , así como los timbres y                    
+                    gastos de Registro Público, correrán por cuenta de <strong>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</strong>.
+                    
+                    <strong>CLÁUSULA DÉCIMA QUINTA. CESIÓN</strong>: Los deberes y derechos de
+                    este contrato por parte de <strong>LA PROMITENTE VENDEDORA</strong> pueden
+                    ser cedidos a la(s) persona(s) natural(es) y/o jurídica(s) que estime
+                    conveniente; así mismo, lo podrá(n) hacer<strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES) </strong>si y solo si
+                    <strong>LA PROMITENTE VENDEDORA</strong> acepta al nuevo solicitante
+                    mediante el diligenciamiento de los requisitos exigidos por esta, estando
+                    el PROMITENTE COMPRADOR a PAZ Y SALVO por todo concepto al momento de solicitar la
+                        cesión, y cancelando
+                    la suma equivalente al 5% del valor presente contrato.
+                    <strong>CLÁUSULA DÉCIMA SEXTA</strong> <strong>:  AUTORIZACIÓN PARA EL TRATAMIENTO DE DATOS PERSONALES. </strong>
+                    Para efectos de protección de los datos personales y su tratamiento de acuerdo a lo 
+                    establecido en la Ley 1581 de 2012, y su decreto reglamentario 1377 de 2013, EL 
+                    <b>(LOS) PROMITENTE(S) COMPRADOR(ES)</b> autoriza (mos) de manera libre, expresa, 
+                    voluntaria, a <b>LA PROMITENTE VENDEDORA</b>, la sociedad <b>STATUS COMERCIALIZADORA S.A.S.</b>, 
+                    con NIT 901018375-4, para recolectar, manejar, almacenar, usar, 
+                    circular, actualizar, cruzar información propia, con el fin de facilitar la venta de 
+                    bienes y servicios de la empresa, adelantar acciones de cobro y de recuperación de 
+                    cartera a través de la empresa o de terceros que este encargue,  reportar a 
+                    centrales de riesgo cuando corresponda, y demás fines que estipule la empresa en 
+                    cumplimiento de la obligación contractual derivada de este contrato;  y en general 
+                    realizar toda acción tendiente al tratamiento de mis datos personales de acuerdo con 
+                    la política establecida para tal fin por la empresa como responsable y encargada de 
+                    la información.  El alcance de la autorización comprende además, la facultad que 
+                    tiene la empresa para que, a través de proveedor tecnológico, realice la toma de 
+                    firma electrónica y validación de quien firma a través de fotografía digital, de 
+                    todos los documentos necesarios para la vinculación contractual entre las partes, 
+                    como los son: contratos, formularios, pagaré, autorización para diligenciar espacios 
+                    en blanco, y demás documentos requeridos en razón a la vinculación contractual de 
+                    las partes; para que, envíe mensajes de correo electrónico, mensajes de texto, 
+                    mensajes de Whatsapp, correspondencia a mi dirección de residencia, o lugar de 
+                    trabajo, de contenidos institucionales, notificaciones, información del estado de 
+                    cuenta, saldos, recibos de pago, envió de cartas de cobro prejurídico y jurídico, y 
+                    demás fines que estipule la empresa en cumplimiento de la obligación contractual 
+                    derivada de este contrato. En ese sentido, declaro conocer que los datos personales 
+                    objeto del tratamiento, serán utilizados para las finalidades derivadas de la 
+                    relación contractual suscrita entre las partes. Igualmente conozco el derecho de 
+                    supresión de datos personales que me asiste, para lo cual, en caso de solicitarlo, 
+                    LA PROMITENTE VENDEDORA, procederá conforme a las políticas de tratamiento de datos 
+                    personales establecida por misma para tal fin. 
+                    <strong> CLÁUSULA DÉCIMA SÉPTIMA. REPORTE A CENTRALES DE RIESGO:</strong><strong>EL (LOS)
+                        PROMITENTE(S) COMPRADOR(ES)</strong> acepta(n) que <strong>LA PROMITENTE VENDEDORA </strong>puede hacer
+                    pública la información
+                    de este contrato y da su autorización expresa para que las centrales de
+                    riesgo o cualquier otra institución de crédito la mantenga en su historial
+                    de crédito. <strong>CLÁUSULA DÉCIMA OCTAVA. </strong>
+                    <strong>
+                        CLÁUSULA SAGRILAFT (SISTEMA DE AUTOCONTROL Y GESTIÓN DEL RIESGO
+                        INTEGRAL DE LAVADO DE ACTIVOS Y FINANCIACIÓN DE TERRORISMO):
+                    </strong>
+                    En cumplimiento del deber legal que le asiste a la sociedad <strong>STATUS COMERCIALIZADORA S.A.S.
+                    </strong><strong>, </strong>con
+                    NIT 901018375-4, sus filiales, sucursales o subordinados, en relación con
+                    la cooperación para la prevención del lavado de activos, la financiación
+                    del terrorismo y cualquier otro delito conexo contemplado en normas
+                    nacionales e internacionales, declaro (amos) como <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES) </strong>que,
+                    el patrimonio y
+                    las fuentes económicas que permiten la compra mediante el presente contrato
+                    de Promesa de Compraventa de bien futuro, del lote en el proyecto de
+                    urbanización “<strong>EL TESORO ESCONDIDO</strong>, parcelación <strong>BUGAMBILIAS TERRITORIO CAMPESTRE</strong>”, no son
+                    fruto de actividades ilícitas u otros delitos conexos, razón por la cual,
+                    acepto (amos) que, en el evento en que me (nos) encuentre (n) en la lista
+                    OFAC (Office of Foreign Assets Control) o la lista ONU (Lista del Consejo
+                    de Seguridad de la Organización de las Naciones Unidas) o de alguna otra de
+                    igual o similar naturaleza, de carácter nacional o internacional, o haya
+                    (mos) sido sentenciado (s) judicialmente por cualquier delito fuente o
+                    relacionado con el lavado de activos, financiación del terrorismo o la
+                    proliferación de armas de destrucción masiva, o haya sido extraditado, seré
+                    (mos) responsable (s) por los daños y perjuicios que dicho reporte o
+                    sentencia le ocasione a la sociedad <strong>STATUS COMERCIALIZADORA S.A.S.</strong><strong>,
+                    </strong>con
+                    NIT 901018375-4 sus filiales, sucursales o subordinados, sin perjuicio de
+                    la responsabilidad penal que me (nos) asiste y, faculto (amos) a la
+                    sociedad <strong>STATUS COMERCIALIZADORA S.A.S.</strong> <strong>,</strong> con NIT 901018375-4, sus
+                    filiales, sucursales o
+                    subordinados, para dar por terminado unilateralmente el contrato de promesa
+                    de compraventa de bien futuro en cualquier momento y sin previo aviso, por
+                    configurarse una causal objetiva de terminación del contrato, y hacer el
+                    reporte a los diferentes entes de control u autoridades competentes del
+                    hallazgo del mismo. <strong>PARÁGRAFO PRIMERO: </strong>En el evento en que
+                    se configure una de las causales previstas en el presente clausula como lo
+                    es la aparición en listas restrictivas o la condena proveniente de delitos
+                    relacionados con lavados de activos y conexos, autorizamos a la sociedad <strong>
+                    STATUS COMERCIALIZADORA S.A.S., </strong>con NIT 901018375-4,
+                    para que descuente el uno por ciento (1%), de la suma de dinero que, haya
+                    (mos) pagado, para la compra del lote, por concepto de gastos
+                    administrativos, que se generaron por la suscripción del contrato. Esto sin
+                    perjuicio de las estipulaciones por incumplimiento del contrato
+                    establecidas en la cláusula penal del presente contrato, y de los daños y
+                    perjuicios que dicho reporte o sentencia le ocasione a la <strong>VENDEDORA</strong>, y de la
+                    responsabilidad penal que me (nos)
+                    asistiera frente a esta sociedad. <strong>PARÁGRAFO SEGUNDO:</strong>
+                    Igualmente, declaramos y certificamos que no tenemos presencia en países
+                    considerados paraísos fiscales, países sancionados por la OFAC y países no
+                    cooperantes. <strong>CLÁUSULA DÉCIMA NOVENA</strong><strong>. DECLARACIÓN DE ORIGENES DE FONDO DE </strong>
+                    <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong><strong>:</strong>
+                    Quien suscribe el presente contrato de Promesa de Compraventa de bien
+                    futuro, del lote en el proyecto “ <strong>EL TESORO ESCONDIDO</strong>, parcelación <strong>BUGAMBILIAS TERRITORIO CAMPESTRE</strong>”<strong>,</strong>
+                    obrando en nombre propio, de manera voluntaria y dando certeza de que todo
+                    lo aquí consignado es cierto, realiza la siguiente declaración de
+                    utilización de fondos a <strong>STATUS COMERCIALIZADORA S.A.S.</strong>. con NIT 901018375-4,
+                    con el propósito de que se pueda dar cumplimiento a lo señalado al respecto
+                    en la Circular Básica Jurídica de la Superintendencia de Sociedades: 1. Que
+                    mi actividad, profesión y/u oficio las ejerzo dentro del marco regulatorio
+                    aplicable y que los recursos que poseo no provienen del desarrollo de las
+                    actividades contempladas en el Código Penal Colombiano (Ley 599 de 2000 o
+                    cualquier norma que lo adicione, complemente o modifique). 2. Que la
+                    información que he suministrado a través de este documento es veraz,
+                    verificable y que además asumo el compromiso de actualizarla anualmente
+                    conforme a los requerimientos realizados por STATUS COMERCIALIZADORA S.A.S.
+                    , con NIT 901018375-4. 3. Informaré inmediatamente cualquier
+                    circunstancia que modifique la presente declaración, una vez tenga
+                    conocimiento de la misma. 4. Cuando a ello haya lugar, autorizo a STATUS COMERCIALIZADORA S.A.S. 
+                    , con NIT 901018375-4, a dar inicio a la
+                    liquidación del (los) Contrato (s) que me vincule (n), en el caso de
+                    infracción de cualquiera de los numerales anteriores o en el eventual caso
+                    de que por aplicación de normas sancionadas con posterioridad a la firma de
+                    este documento se modifiquen las declaraciones por mi efectuadas, eximiendo
+                    por lo tanto a STATUS COMERCIALIZADORA S.A.S., con NIT 901018375-4,
+                    de toda responsabilidad que se derive por información errónea, falsa o
+                    inexacta que yo hubiere proporcionado en este documento, o de la violación
+                    del mismo. 6. Me comprometo y obligo a actualizar al menos una vez cada año
+                    los datos e información que fueren requeridos por STATUS COMERCIALIZADORA S.A.S. 
+                    7. No soy una persona expuesta políticamente según la
+                    legislación nacional y asumo el compromiso de informar cualquier
+                    modificación que se produzca al respecto, dentro de los treinta (30) días
+                    de ocurrencia de la novedad, mediante la presentación de una nueva
+                    declaración. <strong>CLÁUSULA </strong><strong>VIGÉCIMA</strong> <strong>.</strong> <strong>LA PROMITENTE
+                        VENDEDORA</strong>, autoriza y
+                    entrega toda la comercialización del proyecto denominado “<strong>EL TESORO ESCONDIDO</strong>, 
+                    parcelación <strong>BUGAMBILIAS TERRITORIO CAMPESTRE</strong>”, a la sociedad <strong>STATUS COMERCIALIZADORA S.A.S</strong>., con NIT 901018375-4,
+                    sociedad con domicilio en la ciudad de Medellín, inscrita con en la Cámara
+                    de Comercio de Medellín para Antioquia con la matrícula Nº 21-572509-12.
+                    quien comercializará y recaudará los dineros correspondientes de las ventas
+                    de los lotes de este proyecto. <strong>CLÁUSULA</strong> <strong> VIGÉCIMA PRIMERA. ARBITRAMENTO:</strong>
+                    Toda controversia o
+                    diferencia relativa a este contrato, se resolverá por un Tribunal de
+                    Arbitramento presentado ante el Centro de Conciliación y Arbitraje de la
+                    Cámara de Comercio de Medellín para Antioquía, el cual estará sujeto a sus
+                    reglamentos y al procedimiento allí contemplado. El Tribunal estará
+                    integrado por tres (3) árbitros designados por el Centro de Conciliación y
+                    Arbitraje de la Cámara de Comercio de Medellín para Antioquía, a solicitud
+                    de cualquiera de las partes, siendo la parte convocante la responsable del 100% costos en los que se incurra. <strong>CLÁUSULA VIGÉCIMA SEGUNDA.</strong> <strong>ACUERDOS
+                        ANTERIORES:</strong> Las partes manifiestan que no
+                    reconocen la validez de estipulaciones verbales relacionadas con el
+                    presente contrato o cualquier acuerdo escrito con anterioridad relacionado
+                    con el LOTE FUTURO, objeto de este contrato, ya que el presente contrato
+                    constituye el acuerdo completo y total entre las partes. De la misma
+                    manera, las partes acuerdan que cualquier reclamo, solicitud, queja,
+                    petición o información que afecte directamente el objeto de este contrato,
+                    debe ser comunicado únicamente por medio escrito, y será respondido dentro
+                    del término legal. <strong>CLÁUSULA</strong> <strong> VIGÉCIMA TERCERA</strong><strong>.
+                        DECLARACIÓNES:</strong>
+                    Declara(n) <strong>EL (LOS) PROMITENTE(S) COMPRADOR(ES)</strong>: 1) <strong> </strong>Que los recursos
+                    económicos utilizados para la compra del
+                    lote son de origen lícito. 2)<strong> </strong>que la dirección oficial de
+                    correspondencia es la anotada en el encabezamiento de este contrato, 3) que
+                    está(n) de acuerdo con el contenido en todas las cláusulas del presente
+                    contrato, por lo que firma(n) conforme(s). 4) Que es su obligación informar
+                    por escrito a <strong>LA PROMITENTE VENDEDORA</strong> cualquier cambio de
+                    dirección o teléfonos. 5) Que es su obligación pagar oportunamente
+                    cualquiera de las obligaciones pecuniarias enunciadas en este contrato, en
+                    las oficinas de <strong>LA PROMITENTE VENDEDORA</strong> o consignando los
+                    valores correspondientes en las cuentas bancarias de<strong>LA PROMITENTE VENDEDORA</strong>.
+                    <strong>CLÁUSULA VIGÉCIMA CUARTA</strong><strong>. DOMICILIO: </strong>Que,
+                    para todos los efectos de este contrato el domicilio es la ciudad de
+                    Medellín, departamento de Antioquía. </p><br>
+                    <p>
+                        {%if overridedate%}
+                        En señal de aceptación de lo aquí suscrito, firman LAS PARTES,{%if es_promesa%} 
+                        el día <u> {{new_date.day}} </u> de <u> {{new_date|date:"F"}} </u> de <u> {{new_date.year}} </u> .
+                        {%else%}
+                        el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+                        {%endif%}en la ciudad de <u>{{oficina}}</u>
+                        {%else%}
+                        En señal de aceptación de lo aquí suscrito, firman LAS PARTES,{%if es_promesa%} 
+                        el día <u> {{ctr.fechapromesa.day}} </u> de <u> {{ctr.fechapromesa|date:"F"}} </u> de <u> {{ctr.fechapromesa.year}} </u> .
+                        {%else%}
+                        el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+                        {%endif%}en la ciudad de <u>{{oficina}}</u>{%endif%}</p><br>
+                    <p class="detalles" style="text-align:center;font-size:12px">
+                        <b>LA PROMITENTE VENDEDORA</b><br><br><br><br>
+                        ____________________________________________________________<br>
+                        <b>STATUS COMERCIALIZADORA S.A.S.</b><br>
+                        NIT. 900.712.229-1
+                    </p>
+                    <br>
+                    <p class="detalles" style="text-align:center;font-size:12px">
+                        <b>EL (LOS) PROMITENTE (S) COMPRADOR (ES)</b><br><br><br>   
+                    <table>
+                        <tr>
+                            <td style="{%if ctr.titulares.1%}width:50%;{%endif%}text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.0.pk}}
+                            </td>
+                            {%if ctr.titulares.1%}
+                            <td style="width:50%;text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.1.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.1.pk}}
+                            </td>
+                            {%endif%}
+                        </tr>
+                        {%if ctr.titulares.2%}
+                        <tr style="padding-top:20px;">
+                            <td style="{%if ctr.titulares.3%}width:50%;{%endif%}text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.2.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.2.pk}}
+                            </td>
+                            {%if ctr.titulares.3%}
+                            <td style="width:50%;text-align:center;font-size:12px">
+                                ______________________________________<br>
+                                <b>NOMBRE: </b>{{ctr.titulares.3.nombrecompleto.upper}}<br>
+                                <b>CC: </b>{{ctr.titulares.3.pk}}
+                            </td>
+                            {%endif%}
+                        </tr>
+                        
+                        {%endif%}
+                    </table>
+        </div>
+        <pdf:nextpage />
+        <div>
+            <table>
+                <tr>
+                    <th>
+        
+                    </th>
+                    <th style="width:80%;align:center">
+                        <img src="{%static 'img/conceptos_inmob_bugambilias.png'%}" width="180">
+                    </th>
+                    <th>
+                        <p style="color:lightcoral;font-size:15px;"><b>No.&nbsp;{{ctr.pk}}</b></p>
+                    </th>
+                </tr>
+            </table>
+            <table>
+                <tr>
+                    <th style="align:center">
+                        <img src="{%static 'img/Andina-Conceptos.png'%}">
+                    </th>
+                    <th style="width:70%;align:center">
+                        <p style="color:#345555;font-size: 15px">FORMATO DE VERIFICACIÓN AL CONTRATO DE PROMESA DE COMPRAVENTA DE BIEN FUTURO, PROYECTO DE 
+                            PARCELACIÓN DENOMINADO “EL TESORO ESCONDIDO”<br>
+                            Nº <u><span style="color:lightcoral">{{ctr.pk}}</span></u> DE FECHA
+                            <u><span style="color:lightcoral">{{ctr.fecha_contrato}}</span></u></p>
+                    </th>
+                    <th style="align:center">
+                        <img src="{%static 'img/logo_bugambilias.png'%}">
+                    </th>
+                </tr>
+            </table>
+            <p class="detalles" style="text-align: justify;">
+                Por medio del presente formato de verificación, la sociedad <strong>STATUS COMERCIALIZADORA S.A.S.</strong>,
+                con <strong>NIT 901018375-4</strong>, deja constancia que, <strong>EL (LOS) PROMITENTE (S) COMPRADOR
+                    (ES)</strong>:<br>
+
+            </p>
+            <ol class="detalles">
+                {%for titular in ctr.titulares%}
+                <li style="text-align: justify;font-size:12px;margin-bottom:5px">
+                    <b>Nombre:</b> <u>{{titular.nombrecompleto}}</u>&nbsp;&nbsp;
+                    <b>CC:</b> <u>{{titular.pk}}</u>&nbsp;&nbsp;
+                </li>
+                {%endfor%}
+            </ol>
+            <p class="detalles">
+                Están de acuerdo con los términos y condiciones del contrato suscrito con la sociedad <b>STATUS COMERCIALIZADORA S.A.S.</b>, 
+                con <b>NIT 901018375-4</b>, para la compra del lote en el proyecto de parcelación<b>“EL TESORO ESCONDIDO”</b>, y que, 
+                el formato de verificación hace parte integral del contrato de promesa de bien futuro. A lo cual se indica:
+            </p>
+            <ol class="detalles" style="text-align: justify;">
+                <li>
+                    El inmueble adquirido es: 
+                    <p>Parcela N° <u> {%if fraccion%}{{inmueble.lotenumero|slice:":-1"}}{%else%}{{inmueble.lotenumero}}{%endif%} </u> Manzana <u> {{inmueble.manzananumero}} </u>  
+                    ubicado en la Parcelacion Nº <u>1</u> denominada <u>BUGAMBILIAS TERRITORIO CAMPESTRE</u> (Área total parcela <u> {{inmueble.area_mz}} </u> metros cuadrados),{%if fraccion%} 
+                    Fracción <u> {{inmueble.lotenumero|last}} </u> con un % sobre el total  del area de la parcela del <u>50%</u>, es decir 
+                    <u>{{inmueble.areaprivada}}</u> metros cuadrados, fraccion{%endif%} que cuenta con las siguientes medidas y linderos:</p>
+                    
+                <li>
+                    El valor del lote adquirido es de <u>{{ctr.general_info.valor_en_letras}}</u>
+                    ($<u>{{ctr.general_info.valor|floatformat:"-3g"}}</u>)
+                </li>
+                <li>
+                    La forma de pago del lote adquirido es:<br>
+                    a) <b>Cuota inicial:</b> $<u>{{ctr.general_info.ci|floatformat:"-3g"}} </u>, que serán cancelados así:
+                    <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                    b) <b>Saldo a pagar</b> $<u>{{ctr.general_info.saldo|floatformat:"-3g"}}</u>{%if ctr.general_info.saldo > 0 %}, que serán cancelados
+                    así: <u>{{ctr.general_info.fp_saldo}}</u>{%endif%}.
+                </li>
+                <li>Que, el pago de la cuota inicial, en caso de pagarlo en mensualidades, estas se pagan sin intereses
+                    corrientes.</li>
+                <li>Que, el pago del saldo, si se paga mediante financiación directa con la sociedad vendedora, el pago
+                    es mediante amortización y las cuotas mensuales incluyen el valor de los intereses corrientes.</li>
+                <li>Que, en caso de mora en el pago de cualquiera de las cuotas correspondientes a la cuota inicial o a
+                    las cuotas
+                    mensuales de amortización para el pago del saldo del LOTE, pagará (n) a <b>LA PROMITENTE
+                        VENDEDORA</b>, intereses
+                    moratorios a la tasa máxima legal vigente mensual y/o fracción de mes vencido, establecida por la
+                    Superintendencia
+                    Financiera de Colombia.</li>
+                <li>Que, con la suscripción del contrato de promesa de compraventa para la compra del lote en el
+                    proyecto <b>“EL TESORO ESCONDIDO”</b>, le fue entregado como obsequio, una membresía de uso denominada
+                    <b>ALTTUM COLLECTION CLUB ALIANZA</b>, para el uso y usufructo de los diferentes clubes que hagan parte de
+                    la red <b>ALTTUM COLLECTION CLUB ALIANZA</b>, la cual está sujeta a términos y condiciones de uso, a partir de su
+                    activación. Esta membresía no incluye pagos por concepto de administración de uso club. Estos deberán ser cancelados por
+                    parte de <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.</li>
+                
+
+                <li><b>LA PROMITENTE VENDEDORA</b>, se reserva el derecho de hacer la entrega material del lote objeto
+                    de este contrato, a título de mera tenencia, antes del otorgamiento de la escritura pública de compraventa. Para lo
+                    cual, se estima una fecha aproximada de entrega del lote, de <u>{{meses_entrega}}</u> meses, contados a partir de la
+                    firma de este contrato. Para lo cual, se establecerá un acuerdo de tenencia con <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>.
+                </li>
+                <li>El proyecto de parcelación utilizará energía solar en su totalidad. La red de alumbrado público
+                    de la Parcelación, estará a cargo de <b>LA PROMITENTE VENDEDORA</b>. Y la energía solar de
+                    cada inmueble estará a cargo en su totalidad de <b>EL(LOS) PROMITENTE(S)
+                    COMPRADOR(ES)</b>.</li>
+                <li>El proyecto de parcelación contará con red de acueducto, proveniente del acueducto veredal
+                    de la zona, para el suministro de agua veredal a cada inmueble.</li>
+                <li>Se entregará por cada parcela, un pozo séptico recirculación, el cuál será para el uso de dos
+                    (2) fracciones de parcela. <b>LA PROMITENTE VENDEDORA</b> indicará el punto de conexión del
+                    pozo séptico para que <b>EL(LOS) PROMITENTE(S) COMPRADOR(ES)</b>, realicen la conexión.</li>
+                <li>Las vías del proyecto de parcelación serán en afirmado.</li>
+
+                <li>Que autorizamos a la sociedad <b>STATUS COMERCIALIZADORA S.A.S.</b>, con <b>NIT
+                    901018375-4</b>, para consultar, actualizar y reportar nuestros datos personales o cualquier 
+                    otra información a las centrales de información de riesgos.
+                    La presente autorización faculta a <b>STATUS COMERCIALIZADORA S.A.S.</b>, para que pueda
+                    solicitar información a las centrales de riesgos sobre las relaciones comerciales que tenemos 
+                    con cualquier entidad financiera.
+                </li>
+                <li>
+                    Para efectos de protección de los datos personales y su tratamiento de acuerdo a lo
+                    establecido en la Ley 1581 de 2012, y su decreto reglamentario 1377 de 2013, <b>EL (LOS)
+                    PROMITENTE(S) COMPRADOR(ES)</b> autoriza (mos) de manera libre, expresa, voluntaria, a
+                    <b>LA PROMITENTE VENDEDORA</b>, la sociedad <b>STATUS COMERCIALIZADORA S.A.S.
+                    </b>, con NIT 901018375-4, para recolectar, manejar, almacenar, usar, circular,
+                    actualizar, cruzar información propia, con el fin de facilitar la venta de bienes y servicios de la
+                    empresa, adelantar acciones de cobro y de recuperación de cartera a través de la empresa o
+                    de terceros que este encargue, reportar a centrales de riesgo cuando corresponda, y demás
+                    fines que estipule la empresa en cumplimiento de la obligación contractual derivada de este
+                    contrato; y en general realizar toda acción tendiente al tratamiento de mis datos personales de
+                    acuerdo con la política establecida para tal fin por la empresa como responsable y encargada
+                    de la información. El alcance de la autorización comprende además, la facultad que tiene la
+                    empresa para que, a través de proveedor tecnológico, realice la toma de firma electrónica y
+                    validación de quien firma a través de fotografía digital, de todos los documentos necesarios
+                    para la vinculación contractual entre las partes, como los son: contratos, formularios, pagaré,
+                    autorización para diligenciar espacios en blanco, y demás documentos requeridos en razón a
+                    la vinculación contractual de las partes; para que, envíe mensajes de correo electrónico,
+                    mensajes de texto, mensajes de Whatsapp, correspondencia a mi dirección de residencia, o
+                    lugar de trabajo, de contenidos institucionales, notificaciones, información del estado de
+                    cuenta, saldos, recibos de pago, envió de cartas de cobro pre jurídico y jurídico, y demás fines
+                    que estipule la empresa en cumplimiento de la obligación contractual derivada de este
+                    contrato. En ese sentido, declaro conocer que los datos personales objeto del tratamiento,
+                    serán utilizados para las finalidades derivadas de la relación contractual suscrita entre las
+                    partes. Igualmente conozco el derecho de supresión de datos personales que me asiste, para
+                    lo cual, en caso de solicitarlo, LA PROMITENTE VENDEDORA, procederá conforme a las
+                    políticas de tratamiento de datos personales establecida por misma para tal fin.
+                </li>
+                <li>
+                    Declaramos que, el contenido de este documento es de mi (nuestro) conocimiento y corresponde a lo
+                    suscrito en
+                    el contrato de contrato de promesa de compraventa de bien futuro, proyecto de parcelación
+                    denominado <b>“EL TESORO ESCONDIDO”</b>.
+                </li>
+            </ol>
+            <p class="detalles">
+                En constancia, de aceptación y conocimiento de lo aquí establecido, es firmado el presente formato de
+                verificación
+                por <strong>EL (LOS) PROMITENTE (S) COMPRADOR (ES) </strong>, 
+                {%if overridedate%}
+                        {%if es_promesa%} 
+                        el día <u> {{new_date.day}} </u> de <u> {{new_date|date:"F"}} </u> de <u> {{new_date.year}} </u> .
+                        {%else%}
+                        el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+                        {%endif%}en la ciudad de <u>{{oficina}}</u>
+                        {%else%}
+                        {%if es_promesa%} 
+                        el día <u> {{ctr.fechapromesa.day}} </u> de <u> {{ctr.fechapromesa|date:"F"}} </u> de <u> {{ctr.fechapromesa.year}} </u> .
+                        {%else%}
+                        el día <u> {{ctr.fecha_contrato.day}} </u> de <u> {{ctr.fecha_contrato|date:"F"}} </u> de <u> {{ctr.fecha_contrato.year}} </u> .
+                        {%endif%}en la ciudad de <u>{{oficina}}</u>{%endif%}</p><br>
+            </p><br>
+            <p class="detalles" style="text-align:center;font-size:12px">
+                <b>EL (LOS) PROMITENTE (S) COMPRADOR (ES)</b><br><br><br>
+                <table>
+                    <tr>
+                        <td style="{%if ctr.titulares.1%}width:50%;{%endif%}text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.0.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.0.pk}}
+                        </td>
+                        {%if ctr.titulares.1%}
+                        <td style="width:50%;text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.1.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.1.pk}}
+                        </td>
+                        {%endif%}
+                    </tr>
+                    {%if ctr.titulares.2%}
+                    <tr style="padding-top:20px;">
+                        <td style="{%if ctr.titulares.3%}width:50%;{%endif%}text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.2.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.2.pk}}
+                        </td>
+                        {%if ctr.titulares.3%}
+                        <td style="width:50%;text-align:center;font-size:12px">
+                            ______________________________________<br>
+                            <b>NOMBRE: </b>{{ctr.titulares.3.nombrecompleto.upper}}<br>
+                            <b>CC: </b>{{ctr.titulares.3.pk}}
+                        </td>
+                        {%endif%}
+                    </tr>
+
+                    {%endif%}
+                </table>
+        </div>
+        <head>
+            <style>
+                @page {
+                    size: legal;
+                    @frame content_frame {
+                        /* Content Frame */
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 1cm;
+                        height: 31.7cm;
+                    }
+                    @frame footer_frame  {
+                        /* Static Frame */
+                        -pdf-frame-content: footer_content;
+                        left: 1cm;
+                        width: 19.5cm;
+                        top: 33.5cm;
+                        height: 1.5cm;
+                    }
+                }
+            
+                @font-face {
+                    font-family: Ubuntu;
+                    src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+                }
+            
+                /* Bold */
+                @font-face {
+                    font-family: Ubuntu;
+                    src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                    font-weight: bold;
+                }
+            
+                body {
+                    font-family: Ubuntu;
+                }
+            
+                .cuerpo {
+                    font-size: 11px;
+                    color: rgb(81, 81, 81);
+                    line-height: normal;
+                }
+                .detalles{
+                    font-size: 11px;
+                    color: rgb(81, 81, 81);
+                }
+            </style>
+        </head>
+    </body>
+</html>

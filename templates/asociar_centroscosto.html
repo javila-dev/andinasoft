@@ -1,0 +1,151 @@
+{%extends 'base.html'%}
+{%block title%}Asociar centros de costo{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow" style="padding-left:20px;padding-right:20px;padding-top:20px;padding-bottom:20px">
+    <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Centros de Costo </strong><small class="text-muted">{{empresa}}</small>
+    <button type="button" class='btn btn-primary float-right' data-toggle='modal' data-target="#modalNuevoCC">Agregar Nuevo</button>
+    </h4>
+    <br>
+    <div class='container'>
+        <table id='tablaCC' class="hover stripe row-border compact" style="width:100%">
+            <thead>
+                <tr>
+                    <th class='text-center'>Centro de Costo</th>
+                    <th class='text-center'>Proyecto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for centrocosto in centroscosto%}
+                <tr>
+                    <td class="text-center"><a href="#" data-toggle="modal" data-target="#modalAsociarCC" data-cc='{{centrocosto.idcentrocosto}}'>
+                            {{centrocosto.idcentrocosto}}</a></td>
+                    <td class="text-center">{{centrocosto.proyecto}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+    
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalAsociarCC" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Asociar Centros de Costo</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type='text' id='filatabla' hidden>
+                <input type="text" id="CentroCosto" hidden>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="Grupo">Proyecto</label>
+                    </div>
+                    <select class="custom-select" id="Proyecto" name='Proyecto'>
+                        {%for proyecto in proyectos%}
+                        <option value='{{proyecto.pk}}'>{{proyecto.pk}}</option>
+                        {%endfor%}
+                    </select>
+                </div>
+                
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button id="btnAsociar" type="button" class="btn btn-primary" onclick="AsociarCC()">Asociar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalNuevoCC" data-backdrop="static" data-keyboard="false" tabindex="-1"
+    aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="staticBackdropLabel">Agregar nuevo Centro de Costo</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form method="POST">{%csrf_token%}
+                <div class="modal-body">
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <label class="input-group-text" for="Grupo">Id Centro Costo</label>
+                        </div>
+                        <input type='text' class='form-control text-center' placeholder="0000 000" id='idCC' name='idCC' minlength="8" maxlength="8" required>
+                    </div>
+                    <br>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <label class="input-group-text" for="Grupo">Proyecto Asociado</label>
+                        </div>
+                        <select class="custom-select" id="ProyectoCC" name='ProyectoCC' required>
+                            {%for proyecto in proyectos%}
+                            <option value='{{proyecto.pk}}'>{{proyecto.pk}}</option>
+                            {%endfor%}
+                        </select>
+                    </div>
+                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <input id="btnAsociar" type="submit" class="btn btn-primary" value='Crear'>
+            </div>
+        </form>
+        </div>
+    </div>
+</div>
+<script>
+    var tablaCC = $('#tablaCC').DataTable({
+                        "pageLength": 25,
+                        'lengthMenu': [
+                            [10, 25, 50, -1],
+                            [10, 25, 50, 'All']
+                        ],
+                    })
+        $('#tablaCC tbody').on('click', 'tr', function () {
+            if ($(this).hasClass('selected')) {
+                $(this).removeClass('selected');
+            } else {
+                tablaCC.$('tr.selected').removeClass('selected');
+                $(this).addClass('selected');
+            }
+            var pos = tablaCC.row(this).index();
+            $('#filatabla').val(tablaCC.row(pos)[0])
+        });
+        $('#modalAsociarCC').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var cc = button.data('cc')
+            $('#CentroCosto').val(cc)
+            $('#btnAsociar').text('')
+            $('#btnAsociar').text('Asociar')
+        });
+        function AsociarCC(){
+        $('#btnAsociar').text('')
+        $('#btnAsociar').append('<i class="fas fa-circle-notch fa-spin"></i>')
+        var row = $('#filatabla').val()
+        var cc = $('#CentroCosto').val()
+        var proyecto = $('#Proyecto').val()
+        $.ajax({
+            url:'/contabilidad/informes/gastos/asociar_cc/{{empresa}}',
+            type:'GET',
+            data:{
+                'typecall':'ChangeCC',
+                'cc':cc,
+                'proyecto':proyecto,
+            },
+            success: function(response){
+                var pass = response['passed']
+                if (pass){
+                    tablaCC.cell(row,1).data(proyecto).draw()
+                    $('#modalAsociarCC').modal('hide')
+                }
+            }
+        });
+    }
+</script>
+{%endblock%}

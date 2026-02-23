@@ -1,0 +1,29 @@
+<div id='general-right-alert'class="alert alert-dismissible fade position-fixed" role="alert" 
+style='right: 10px;top:50px;max-width: 500px'>
+    <strong><p id='alert-title'></p></strong> <small><p id='alert-data'></p></small>
+    <button type="button" class="close" id='btnAlertaRight' onclick="cerrarAlerta()" aria-label="Close">
+      <span aria-hidden="true">&times;</span>
+    </button>
+</div>
+<script>
+  function cerrarAlerta(){
+    $('#general-right-alert').removeClass('show')
+    $('#general-right-alert').removeClass('alert-danger')
+    $('#general-right-alert').removeClass('alert-success')
+    $('#general-right-alert').removeClass('alert-info')
+    $('#general-right-alert').removeClass('alert-warning')
+    $('#general-right-alert').removeClass('alert-primary')
+    $('#general-right-alert').removeClass('alert-secondary')
+    $('#general-right-alert').removeClass('alert-dark')
+    $('#general-right-alert').removeClass('alert-light')
+    $('#general-right-alert').removeClass('alert-white')
+  }
+  $(document).ready(function(){
+    if('{{topalert.alert}}'){
+      cerrarAlerta()
+      $('#alert-title').text('{{topalert.title}}')
+      $('#alert-data').html('{{topalert.message|escapejs}}')
+      $('#general-right-alert').addClass('show').addClass('{{topalert.class}}')
+    }
+  });
+</script>

@@ -1,0 +1,83 @@
+<!-- Modal -->
+<div class="modal fade" id="modal-cesion" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form class='form' method="post" action=''>{%csrf_token%}
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Cesion de Titular</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="input-group mb-3">
+            <select class="form-control" name='Titular-Ceder' id="exampleFormControlSelect2">
+              <option value='Titular 1'>Titular 1</option>
+              <option value='Titular 2'>Titular 2</option>
+              <option value='Titular 3'>Titular 3</option>
+              <option value='Titular 4'>Titular 4</option>
+            </select>
+          </div>
+          <div class="input-group mb-3">
+            <div class="input-group-prepend">
+                <input type="text" class="form-control" id="nuevo-titular" name='nuevo-titular' readonly>
+            </div>
+              <input type="text" class="form-control" id="nombre-titular">
+            <div class="input-group-append">
+              <button class="btn btn-secondary" type='button' onclick="mostrar_clientes()"><i class="fas fa-search"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <div id='block-clientes'>
+          <div class='table-responsive'>
+            <table id='tabla-clientes' class="table table-striped table-bordered table-sm">
+                <thead class='thead thead-light'>
+                    <tr>
+                        <th class='text-center'>Identificacion</th>
+                        <th class='text-center'>Nombre</th>
+                    </tr>
+                </thead>
+                <tbody id='body-tabla-clientes'>
+                    {%for cliente in clientes%}
+                    <tr>
+                        <td class='text-center'>{{cliente.idTercero}}</td>
+                        <td>{{cliente.nombrecompleto}}</td>
+                    </tr>
+                    {%endfor%}
+                </tbody>
+            </table>
+        </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <input class='btn btn-primary' type='submit' name='btnCesion' value='Aplicar'>
+        </div>
+      </div>
+    </div>
+    </form>
+
+  </div>
+
+<script>
+  $(document).ready(function() {
+  $('#block-clientes').css('display','none')
+  $('#tabla-clientes').DataTable({
+      "pageLength": 10,
+      'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+      "autoWidth": false,
+      });
+      var oTable = $('#tabla-clientes').DataTable();
+      $('#tabla-clientes tbody').on( 'click', 'tr', function () {
+          var pos = oTable.row(this).index();
+          var row = oTable.row(pos).data();
+          $('#nuevo-titular').val(row[0])
+          $('#nombre-titular').val(row[1])
+          $('#block-clientes').css('display','none')
+      } );
+      } );    
+    function mostrar_clientes(){
+      $('#block-clientes').css('display','block')
+    }
+</script>

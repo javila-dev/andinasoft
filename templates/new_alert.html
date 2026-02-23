@@ -1,0 +1,28 @@
+<div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header">
+        <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel"></h4>
+        </div>
+        <div class="modal-body">
+            <p class='lead' id='mensaje-alerta'></p>
+        </div>
+        <div class="modal-footer">
+        {%if alerta.redirect%}
+            <a href='{{alerta.href}}' type="button" class="btn btn-primary" >Entendido</a>
+        {%else%}
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+        {%endif%}
+        </div>
+    </div>
+    </div>
+  </div>
+{%block js%}
+{%if alerta.show%}
+<script>
+    $('#alerta-general').modal('show')
+    $('#mensaje-alerta').text('{{alerta.message}}')
+    $('#titulo-alerta').text('{{alerta.title}}')
+</script>
+{%endif%}
+{%endblock%}

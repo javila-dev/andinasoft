@@ -1,0 +1,73 @@
+{%extends 'base.html'%}
+
+{%block title%}Parametros{%endblock%}
+
+{%block content%}
+<div class='row'>
+    <div class='col-6'>
+        <div class='bg-white rounded shadow' style='padding: 1rem;'>
+            <p class='lead border-bottom border-gray'>Ventas</p>
+            <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="formasOpcionManual">
+                <label class="custom-control-label" for="formasOpcionManual">Activar forma de pago manual en contrato</label>
+            </div>
+            <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="formasVerificacionManual">
+                <label class="custom-control-label" for="formasVerificacionManual">Activar forma de pago manual en verificacion</label>
+            </div>
+            <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="entregaVerificacionManual">
+                <label class="custom-control-label" for="entregaVerificacionManual">Activar fecha de entrega manual en verificacion</label>
+            </div>
+            <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="credicontadoMayor12Cuotas">
+                <label class="custom-control-label" for="credicontadoMayor12Cuotas">Activar credicontado a mas de 12 cuotas</label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    cargarParametros()
+    $('#formasOpcionManual').click(function(){
+        sendParameter('formasOpcionManual',$(this))
+    })
+    $('#formasVerificacionManual').on('change',function(){
+        sendParameter('formasVerificacionManual',$(this))
+    })
+    $('#entregaVerificacionManual').on('change',function(){
+        sendParameter('entregaVerificacionManual',$(this))
+    })
+    $('#credicontadoMayor12Cuotas').on('change',function(){
+        sendParameter('credicontadoMayor12Cuotas',$(this))
+    })
+    function sendParameter(param,idcheck){
+        var ischecked = idcheck.is(':checked')
+        $.ajax({
+            'type':'GET',
+            'url':'/operaciones/parametros/{{proyecto}}',
+            'data':{
+                'parametro':param,
+                'status':ischecked
+            },
+            success: function(response){
+                var passed = response['passed']
+                if (passed){
+                    alert(response['msj'])
+                }
+            }
+        })
+    }
+    function cargarParametros(){
+        var parametros = JSON.parse('{{parameters|escapejs}}')
+        for (i=0;i<parametros.length;i++){
+            var parametro = parametros[i]['fields']['descripcion']
+            var status = parametros[i]['fields']['estado']
+            if (status){
+                $('#'+parametro).prop('checked','true')
+            }
+        }
+    }
+</script>
+
+{%endblock%}

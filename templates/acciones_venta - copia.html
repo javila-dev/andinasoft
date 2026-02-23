@@ -1,0 +1,1222 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load l10n%}
+{%load extras%}
+{%block title%}Contrato de Venta {{contrato}}{%endblock%}
+
+{%block content%}
+{%load static%}
+<style>
+    th{
+        text-align: center;
+    }
+    .button-titulares {
+        margin-top: 1.95rem;
+        padding-left: 0rem;
+    }
+
+    .no-margin-right {
+        padding-right: 0rem;
+        margin-right: 0rem;
+    }
+
+    .onlytext-nueva-venta {
+        margin-top: 2.2rem;
+        padding-left: 0rem;
+        padding-right: 0rem;
+    }
+
+    .botones-centrados {
+
+        display: flex;
+        align-items: center;
+    }
+    #tablaAsesoresComis td{
+        font-size: small;
+    }
+    td{
+        cursor: pointer;
+    }
+</style>
+<div class="bg-white rounded shadow" style="padding-left:10px;padding-right:10px;padding-top:10px;padding-bottom:10px">
+    <div class='row'>
+        <div class='col-xs-12 col-lg-4'>
+            <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Acciones Contrato
+                    {{contrato}}</strong></h4>
+        </div>
+        <div class='ml-lg-auto px-3'>
+            <form id='form-documentos' method='post' action=''>{%csrf_token%}
+                <div class='btn-toolbar' role='toolbar'>
+                    <div class="btn-group" role="group" aria-label="Basic example">
+                        <div class="btn-group" role='group'>
+                            <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                Contrato
+                            </button>
+                            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                                <input type='submit' class="dropdown-item disabled" value='Opcion de Promesa' name='impContrato'>
+                                <button type="button" class="dropdown-item" data-toggle='modal'
+                                    data-target='#ModalPromesas'>Promesa</button>
+                            </div>
+                        </div>
+                        <input type='submit' class='btn btn-secondary' value='Pagaré' name='impPagare'>
+                        <input type='submit' class='btn btn-secondary' value='Verificacion' name='impVerificacion'>
+                        <button type='button' class='btn btn-secondary' data-toggle="modal"
+                            id='btnterminosalttum' data-target="#modal-terminos-alttum">Alttum</button>
+                        <button type='button' class='btn btn-secondary' id='btnsagrilaft'>Sagrilaft</button>
+                    </div>
+                    <div class="btn-group pl-sm-2" role="group" aria-label="Basic example">
+                        <button type='button' class='btn btn-secondary' name='impRecibo' data-toggle="modal"
+                            id='btnrecibo' data-target="#recaudo">Recibo</button>
+                            {%if user.is_superuser%}
+                        <button id='btnactfecha' type="button" class='btn btn-secondary' onclick='ActualizarFecha()'>Act
+                            Fecha</button>{%endif%}
+                    </div>
+                </div>
+                <!-- Modales Asociados -->
+                <div class="modal fade" id="ModalformaManual" data-backdrop="static" data-keyboard="false" tabindex="-1"
+                    role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">Digita la forma de
+                                    pago manual</h4>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <p class='text-justify'>Estas viendo esta ventana porque el parametro de formas de pago
+                                    manual esta activo, si no lo solicitaste por favor no
+                                    imprimas el contrato y solicita a la admnistracion que la forma de pago sea
+                                    automatica.
+                                    <strong>Esta forma de pago es solo para impresión, no se guarda ni afecta el plan de
+                                        pagos que será creado.
+                                        <span class='text-muted'>Cuando entregues el contrato por favor informa que las
+                                            formas de pago son manuales.</span>
+                                    </strong>
+                                </p>
+                                <div class="input-group">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text" style='padding-right: 3.2rem;'>Forma CI</span>
+                                    </div>
+                                    <textarea class="form-control" name="formaci" id='formaci' rows="3"></textarea>
+                                </div>
+                                <br>
+                                <div class="input-group">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text" style='padding-right: 1.7rem;'>Forma Saldo</span>
+                                    </div>
+                                    <textarea class="form-control" name="formasaldo" id='formasaldo'
+                                        rows="3"></textarea>
+                                </div>
+                                </a>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-primary" data-dismiss="modal">Continuar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <br />
+
+    <nav>
+        <div class="nav nav-tabs" id="nav-tab" role="tablist">
+            <a class="nav-item nav-link active" id="nav-infocontrato-tab" data-toggle="tab" href="#nav-infocontrato"
+                role="tab" aria-controls="nav-infocontrato" aria-selected="true">Informacion Contrato</a>
+            <a class="nav-item nav-link" id="nav-escala-tab" data-toggle="tab" href="#nav-escalacomis" role="tab"
+                aria-controls="nav-escala" aria-selected="false">Escala de comisiones</a>
+            <a class="nav-item nav-link" id="nav-recibos-tab" data-toggle="tab" href="#nav-recibos" role="tab"
+                aria-controls="nav-recibos" aria-selected="false">Recaudos</a>
+            <a class="nav-item nav-link" id="nav-documentos-tab" data-toggle="tab" href="#nav-documentos" role="tab"
+                aria-controls="nav-documentos" aria-selected="false">Documentos</a>
+        </div>
+    </nav>
+    <div class="tab-content" id="nav-tabContent">
+        <div class="tab-pane fade show active" id="nav-infocontrato" role="tabpanel"
+            aria-labelledby="nav-infocontrato-tab">{%include 'form_contrato_venta.html'%}</div>
+        <div class="tab-pane fade" id="nav-escala" role="tabpanel" aria-labelledby="nav-escala-tab">
+            {%include 'form_escala_comis.html'%}</div>
+        <div class="tab-pane fade" id="nav-escalacomis" role="tabpanel" aria-labelledby="nav-escalacomis-tab">
+            <form id='formEscala' class='g-3' method="POST">{%csrf_token%}
+                <div class='d-inline-flex gap-3 mt-3'>
+                  <div class=" input-group mb-3">
+                      <label for="cargo" class="input-group-text">Cargo</label>
+                      <select class="form-select form-control" name="cargo" id="id_cargo">
+                          <option selected>Selecciona...</option>
+                          {%for cargo in cargos_comisiones%}<option value="{{cargo.pk}}">{{cargo.nombrecargo}}</option>{%endfor%}
+                      </select>
+                  </div>
+                  <div class='ml-3'>
+                      <button type="button" class="btn btn-primary btn-circle" id="btnAgrCargoComis"> 
+                          <i class="fas fa-plus"></i>
+                      </button>
+                  </div>
+                </div>
+                <div class="table-responsive">
+                    <table id='tablaEscalaComis' class='table table-sm row-border' style="width: 100%;">
+                        <thead class='thead-dark'>
+                            <tr>
+                                <th style="width: 8%;"></th>
+                                <th style="width: 17%;">Id Asesor</th>
+                              <th style="width: 35%;">Asesor</th>
+                              <th style="width: 30%;">Cargo</th>
+                              <th style="width: 10%;">Comision</th>
+                            </tr>
+                        </thead>
+                      <tbody></tbody>
+                    </table>
+                </div>
+                <div class='d-flex'>
+                    <button type="submit" id='btnGrabarEscala' class="btn btn-primary ml-auto">Registrar</button>
+                </div>
+            </form>
+        </div>
+
+
+        <div class="tab-pane fade" id="nav-recibos" role="tabpanel" aria-labelledby="nav-recibos-tab">
+            <div class='container'>
+                <br />
+                <div class='table-responsive'>
+                    <table class='table table-sm table-striped'>
+                        <thead class='thead thead-light'>
+                            <tr>
+                                <th class='text-center'>Recibo</th>
+                                <th class='text-center'>Fecha</th>
+                                <th class='text-center'>Forma de Pago</th>
+                                <th class='text-center'>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {%for recibo in recibos_generados%}
+                            <tr>
+                                <td class='text-center'><a href="#" data-toggle="modal"
+                                        data-target="#ModalReciboDescarga"
+                                        data-recibo="{{recibo.recibo}}">{{recibo.recibo}}</td>
+                                <td class='text-center'>{{recibo.fecha}}</td>
+                                <td class='text-center'>{{recibo.formapago}}</td>
+                                <td class='text-center'> ${{recibo.valor}}</td>
+                            </tr>
+                            {%endfor%}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="tab-pane fade" id="nav-documentos" role="tabpanel" aria-labelledby="nav-escala-tab">
+            {%include 'docs_contratos.html'%}</div>
+    </div>
+    <!-- Modals -->
+    <div class="modal fade" id="recaudo" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+        aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <form method="post" action='' enctype="multipart/form-data">{%csrf_token%}
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="staticBackdropLabel">Adicionar un Recaudo</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        {{form_recaudo.Concepto|as_crispy_field}}
+                        {{form_recaudo.formapago|as_crispy_field}}
+                        {{form_recaudo.Valor|as_crispy_field}}
+                        {{form_recaudo.soporte|as_crispy_field}}
+                    </div>
+                    <div class="modal-footer">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                            <input type='submit' class="btn btn-primary" value='Guardar' name='impRecaudo'>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="modal fade" id="modal-terminos-alttum" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+        aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <form method="post" action=''>{%csrf_token%}
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="staticBackdropLabel">¿Cuantos beneficiarios tendrá este contrato?</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <input class="form-control text-center mx-auto" type="number" min="0" max="3" 
+                        placeholder="Nº beneficiarios" step="1" name="beneficiarios"
+                        style="width: 200px;">
+                    </div>
+                    <div class="modal-footer">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                            <input type='submit' class="btn btn-primary" value='Guardar' name='impTerminosAlttum'>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class='modal fade' id='ModalPromesas' tabindex="-1" data-backdrop="static" role="dialog" aria-hidden="true">
+        <form id='formOpcion' method='POST' action=''>{%csrf_token%}
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="titulopciones">Datos Promesa</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <input id='adjopcion' name='adjopcion' type="text" hidden>
+                        <div class="input-group">
+                            <div class='input-group-prepend'>
+                                <span class="input-group-text" style='padding-right: 5.7rem;'>Oficina</span>
+                            </div>
+                            <select class='custom-select' id='oficinaopcion' name='oficinaopcion' required>
+                                <option value="" selected>Selecciona...</option>
+                                <option value="Medellin">Medellin</option>
+                                <option value="Monteria">Monteria</option>
+                            </select>
+                        </div>
+                        <br>
+                        <div id='blockfechas'>
+                            <div class="input-group" id="div_id_fechaentrega" data-target-input="nearest">
+                                <div class='input-group-prepend'>
+                                    <span class="input-group-text">Fecha de Entrega&nbsp;</span>
+                                </div>
+                                <input type="text" name="fechaentrega"
+                                    class="datepicker form-control datetimepicker-input text-center"
+                                    id="id_fechaentrega" data-toggle="datetimepicker" data-target="#id_fechaentrega"
+                                    required>
+                                <div class="input-group-append" data-target="#id_fechaentrega"
+                                    data-toggle="datetimepicker">
+                                    <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <br>
+                            <div class="input-group" id="div_id_fechaescritura" data-target-input="nearest">
+                                <div class='input-group-prepend'>
+                                    <span class="input-group-text">Fecha de Escritura</span>
+                                </div>
+                                <input type="text" name="fechaescritura"
+                                    class="datepicker form-control datetimepicker-input text-center"
+                                    id="id_fechaescritura" data-toggle="datetimepicker" data-target="#id_fechaescritura"
+                                    required>
+                                <div class="input-group-append" data-target="#id_fechaescritura"
+                                    data-toggle="datetimepicker">
+                                    <div class="input-group-text"><i class="fa fa-calendar" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <br>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                        <input class='btn btn-primary' type="submit" name="impPromesa" value='Imprimir'>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="modal fade" id="alerta-general" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
+        aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+                </div>
+                <div class="modal-body">
+                    {%if link%}
+                    <a href="{{ruta_link}}" class='lead text-center'>
+                        <p class='lead' id='mensaje-alerta'></p>
+                    </a>
+                    {%else%}
+                    <p class='lead' id='mensaje-alerta'></p>
+                    {%endif%}
+                </div>
+                <div class="modal-footer">
+                    {%if redireccion%}
+                    <a href='{{redirect}}' type="button" class="btn btn-primary">Entendido</a>
+                    {%else%}
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+                    {%endif%}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="ModalReciboDescarga" data-backdrop="static" data-keyboard="false" tabindex="-1"
+        role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 id='titulo-alerta' class="modal-title" id="staticBackdropLabel">¡Todo salió perfecto!</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <a id='link_recibo' class='text-center'>
+                        <p class='lead'>Descarga el recibo aquí</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalAsesoresComis" aria-hidden="true" tabindex="-1">
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="exampleModalToggleLabel2"><i class="fas fa-user-tie me-3"></i>Asesores</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class='table-responsive'>
+                  <table id='tablaAsesoresComis' class='display' style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Cedula</th>
+                            <th>Nombre</th>
+                            <th>Tipo</th>
+                        </tr>
+                    </thead>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalSagrilaftClientes" aria-hidden="true" tabindex="-1">
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="exampleModalToggleLabel2"><i class="fas fa-user-tie me-3"></i>Fomulario(s) SAGRILAFT</h5>
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <div class="modal-body">
+            </div>
+          </div>
+        </div>
+    </div>
+
+</div>
+{{form.media}}
+<script>
+    $('#recaudo').on('show.bs.modal', function (event) {
+        var numrecibos = parseInt('{{recibos_generados|length}}')
+        if (numrecibos > 0) {
+            alert(
+                'Este contrato ya tiene un recibo creado, antes de registrar uno nuevo verifica la pestaña de RECAUDOS y si lo necesitas reimprimelo desde allí haciendo click en el numero del recibo')
+        }
+    })
+</script>
+<script>
+    $('#ModalReciboDescarga').on('show.bs.modal', function (event) {
+        var button = $(event.relatedTarget) // Button that triggered the modal
+        var recipient = button.data('recibo')
+        var modal = $(this)
+        $.ajax({
+            type: 'GET',
+            url: '/comercial/acciones_venta/{{proyecto}}/{{contrato}}',
+            data: {
+                'tipo': 'recibo',
+                'recibo': recipient
+            },
+            success: function (response) {
+                var instance = response['instance']
+                var link = instance
+                $('#link_recibo').attr('href', link)
+            }
+        })
+    })
+
+    function ActualizarFecha() {
+        $.ajax({
+            type: 'GET',
+            url: '/comercial/acciones_venta/{{proyecto}}/{{contrato}}',
+            data: {
+                'tipo': 'actualizar_fecha'
+            },
+            success: function (response) {
+                var instance = response['instance']
+                if (instance) {
+                    $('#alerta-general').modal('show')
+                    document.getElementById('mensaje-alerta').innerHTML =
+                        'El contrato fue actualizado a la fecha de hoy';
+                    document.getElementById('titulo-alerta').innerHTML = '¡Listo!';
+                } else {
+                    $('#alerta-general').modal('show')
+                    document.getElementById('mensaje-alerta').innerHTML =
+                        'Ocurrio un error al intentar cambiar la fecha del contrato';
+                    document.getElementById('titulo-alerta').innerHTML = 'Error';
+                }
+
+            }
+        })
+    }
+</script>
+<script type="text/javascript">
+    function deferDateTimePicker_id_fechaentrega() {
+        if (window.jQuery && $.fn.datetimepicker) {
+            $('#id_fechaentrega').datetimepicker({
+                "format": "YYYY-MM-DD",
+                "icons": {
+                    "time": "fa fa-clock-o"
+                },
+                "useCurrent": true,
+                "collapse": false,
+                "locale": "es-co",
+                'date':'{{f_entrega|date:"Y-m-d"}}'
+            });
+        } else {
+            setTimeout(function () {
+                deferDateTimePicker_id_fechaentrega()
+            }, 50);
+        }
+    }
+
+    function deferDateTimePicker_id_fechaescritura() {
+        if (window.jQuery && $.fn.datetimepicker) {
+            $('#id_fechaescritura').datetimepicker({
+                "format": "YYYY-MM-DD",
+                "icons": {
+                    "time": "fa fa-clock-o"
+                },
+                "useCurrent": true,
+                "collapse": false,
+                "locale": "es-co",
+                'date':'{{f_escritura|date:"Y-m-d"}}'
+            });
+        } else {
+            setTimeout(function () {
+                deferDateTimePicker_id_fechaescritura()
+            }, 50);
+        }
+    }
+    deferDateTimePicker_id_fechaentrega();
+    deferDateTimePicker_id_fechaescritura();
+</script>
+<script>
+    $('#nro-ctas-ci').val(7)
+    $(document).ready(function () {
+        $('#btnsagrilaft').click(function () {
+            $(this).addClass('disabled')
+            .html('<i class="fas fa-spinner fa-pulse"></i>')
+            .prop('disabled',true)
+            $('#modalSagrilaftClientes').find('.modal-body').empty()
+            $.ajax({
+                url:'/andinasoftajx/printdocuments/{{proyecto}}',
+                type: 'GET',
+                data:{
+                    'ctr':'{{contrato}}',
+                    'template':'sagrilaft'
+                },
+                success: function(xhr) {
+                    let li = '<ol>'
+                    for (i in xhr.data){
+                        li += `<li>
+                                <a href="${xhr.data[i].url}" target="_blank">${xhr.data[i].cliente}</a>
+                            </li>`
+                    }
+                    li += '</ol>';
+                    $('#modalSagrilaftClientes').find('.modal-body').append(li)
+                    
+                    $('#modalSagrilaftClientes').modal('show')
+                },
+                complete: function(xhr) {
+                    $('#btnsagrilaft').removeClass('disabled')
+                    .html('Sagrilaft')
+                    .prop('disabled',false)
+                }
+            })
+        })
+
+
+
+        $('#formOpcion').on('submit',function(e){
+            let fci = $('#formaci').clone()
+            fci = fci.prop('hidden',true)
+            let fs = $('#formasaldo').clone()
+            fs = fs.prop('hidden',true)
+            $(this).append(fci)
+            $(this).append(fs)
+            return true;
+        })
+        $('#titular1').val('{{datos_venta.id_t1}}')
+        document.getElementById('nombre-titular1').innerHTML = '{{datos_t1.nombrecompleto}}'
+        $('#titular2').val('{{datos_venta.id_t2}}')
+        document.getElementById('nombre-titular2').innerHTML = '{{datos_t2.nombrecompleto}}'
+        $('#titular3').val('{{datos_venta.id_t3}}')
+        document.getElementById('nombre-titular3').innerHTML = '{{datos_t3.nombrecompleto}}'
+        $('#titular4').val('{{datos_venta.id_t4}}')
+        document.getElementById('nombre-titular4').innerHTML = '{{datos_t4.nombrecompleto}}'
+        $('#inmueble').val('{{datos_venta.inmueble}}')
+        document.getElementById('valor-letras').innerHTML = '{{datos_inmueble.areaprivada}} mts2'
+
+
+        $('#valor').val('{{datos_venta.valor_venta|unlocalize}}')
+        var numero_en_letras = numeroALetras('{{datos_venta.valor_venta|unlocalize}}');
+        $('#valor_letras').val(numero_en_letras + 'M/CTE')
+        $('#vr_ci').val('{{datos_venta.cuota_inicial|unlocalize}}')
+        $('#formas_de_pago').val('{{datos_venta.forma_pago}}')
+        $('#forma_plan_pagos').val('{{datos_venta.forma_saldo}}')
+        $('#cant_fn').val('{{datos_venta.nro_cuotas_fn}}')
+        $('#fecha_ini_fn').val('{{datos_venta.inicio_fn|date:"Y-m-d"}}')
+        $('#valor_fn').val('{{datos_venta.valor_ctas_fn|unlocalize}}')
+        $('#cant_ce').val('{{datos_venta.nro_cuotas_ce}}')
+        $('#periodo_ce').val('{{datos_venta.period_ce}}')
+        $('#fecha_ini_ce').val('{{datos_venta.inicio_ce|date:"Y-m-d"}}')
+        $('#valor_ce').val('{{datos_venta.valor_ctas_ce|unlocalize}}')
+        $('#cant_ci_1').val('{{datos_venta.cant_ci1}}')
+        $('#fecha_ini_ci1').val('{{datos_venta.fecha_ci1|date:"Y-m-d"}}')
+        $('#valor_ci1').val('{{datos_venta.valor_ci1|unlocalize}}')
+        $('#cant_ci_2').val('{{datos_venta.cant_ci2}}')
+        $('#fecha_ini_ci2').val('{{datos_venta.fecha_ci2|date:"Y-m-d"}}')
+        $('#valor_ci2').val('{{datos_venta.valor_ci2|unlocalize}}')
+        $('#cant_ci_3').val('{{datos_venta.cant_ci3}}')
+        $('#fecha_ini_ci3').val('{{datos_venta.fecha_ci3|date:"Y-m-d"}}')
+        $('#valor_ci3').val('{{datos_venta.valor_ci3|unlocalize}}')
+        $('#cant_ci_4').val('{{datos_venta.cant_ci4}}')
+        $('#fecha_ini_ci4').val('{{datos_venta.fecha_ci4|date:"Y-m-d"}}')
+        $('#valor_ci4').val('{{datos_venta.valor_ci4|unlocalize}}')
+        $('#cant_ci_5').val('{{datos_venta.cant_ci5}}')
+        $('#fecha_ini_ci5').val('{{datos_venta.fecha_ci5|date:"Y-m-d"}}')
+        $('#valor_ci5').val('{{datos_venta.valor_ci5|unlocalize}}')
+        $('#cant_ci_6').val('{{datos_venta.cant_ci6}}')
+        $('#fecha_ini_ci6').val('{{datos_venta.fecha_ci6|date:"Y-m-d"}}')
+        $('#valor_ci6').val('{{datos_venta.valor_ci6|unlocalize}}')
+        $('#cant_ci_7').val('{{datos_venta.cant_ci7}}')
+        $('#fecha_ini_ci7').val('{{datos_venta.fecha_ci7|date:"Y-m-d"}}')
+        $('#valor_ci7').val('{{datos_venta.valor_ci7|unlocalize}}')
+        $('#observaciones').val('{{datos_venta.observaciones}}')
+
+        calcular_por_valor()
+        diferencia_ci()
+        $('#tasa-valor').val('{{tasa_pactada|unlocalize}}')
+        plan_pagos = $('#forma_plan_pagos').val()
+        if (plan_pagos == 'Regular') {
+            document.getElementById('valor_ce').readOnly = true
+            document.getElementById('fecha_ini_ce').disabled = true
+            document.getElementById('cant_ce').disabled = true
+            document.getElementById('valor_fn').readOnly = true
+            document.getElementById('periodo_ce').disabled = true
+
+        } else {
+            document.getElementById('valor_fn').readOnly = false
+            document.getElementById('valor_ce').readOnly = true
+            document.getElementById('fecha_ini_ce').disabled = false
+            document.getElementById('cant_ce').disabled = false
+            document.getElementById('periodo_ce').disabled = false
+        }
+        $('#cc_generador').val('{{generador.idgestor}}')
+        $('#porc_generador').val(parseFloat('{{generador.comision|unlocalize}}'))
+        document.getElementById('name-generador').innerHTML = '{{generador.nombre}}'
+        $('#cc_linea').val('{{linea.idgestor}}')
+        $('#porc_linea').val(parseFloat('{{linea.comision|unlocalize}}'))
+        document.getElementById('name-linea').innerHTML = '{{linea.nombre}}'
+        $('#cc_cerrador').val('{{cerrador.idgestor}}')
+        $('#porc_cerrador').val(parseFloat('{{cerrador.comision|unlocalize}}'))
+        document.getElementById('name-cerrador').innerHTML = '{{cerrador.nombre}}'
+        $('#cc_tlmk').val('{{gerenteventas.idgestor}}')
+        $('#porc_tlmk').val(parseFloat('{{gerenteventas.comision|unlocalize}}'))
+        document.getElementById('name-tlmk').innerHTML = '{{gerenteventas.nombre}}'
+        $('#cc_jefep').val('{{jefep.idgestor}}')
+        $('#porc_jefep').val(parseFloat('{{jefep.comision|unlocalize}}'))
+        document.getElementById('name-jefep').innerHTML = '{{jefep.nombre}}'
+        $('#cc_jefev').val('{{jefev.idgestor}}')
+        $('#porc_jefev').val(parseFloat('{{jefev.comision|unlocalize}}'))
+        document.getElementById('name-jefev').innerHTML = '{{jefev.nombre}}'
+
+    })
+</script>
+<script>
+    $(document).ready(function () {
+
+        $('#tabla-clientes').DataTable({
+            "pageLength": 10,
+            'lengthMenu': [
+                [10, 25, 50, -1],
+                [10, 25, 50, 'All']
+            ],
+            "autoWidth": false,
+        });
+        var oTable = $('#tabla-clientes').DataTable();
+        $('#modal-clientes').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget) // Button that triggered the modal
+            var recipient = button.data('whatever')
+            var modal = $(this)
+            $('#nro-titular').val(recipient)
+        });
+        $('#tabla-clientes tbody').on('click', 'tr', function () {
+            $(this).toggleClass('selected');
+            var pos = oTable.row(this).index();
+            var row = oTable.row(pos).data();
+            var destino = $('#nro-titular').val()
+            $('#' + destino).val(row[0])
+            document.getElementById('nombre-' + destino).innerHTML = row[1]
+            $('#modal-clientes').modal('hide')
+        });
+    });
+</script>
+<script>
+    $('#form-venta').submit(function (event) {
+        restante_ci = $('#restante_ci').val()
+        titular1 = $('#titular1').val()
+        plan = $('#forma_plan_pagos').val()
+        forma = $('#formas_de_pago').val()
+        vr_regular = $('#valor_fn').val()
+        vr_extra = $('#valor_ce').val()
+        cant_fn = parseInt($('#cant_fn').val())
+
+        if (titular1 == '' || null) {
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML = 'El titular 1 no puede estar vacio';
+            event.preventDefault();
+        } else if (restante_ci != 0) {
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML =
+                'La cuota inicial no coincide con las cuotas aplicadas';
+            event.preventDefault();
+        } else if (vr_regular == '' || null) {
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML = 'No hay ninguna cuota regular asignada';
+            event.preventDefault();
+        } else if (forma != 'Amortizacion' && cant_fn > 12) {
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML =
+                'Para planes de pago mayores a 12 cuotas debes seleccionar tipo Amortizacion';
+            event.preventDefault();
+        } else if (vr_extra == '' && plan == 'Extraordinario') {
+            $('#alertas').modal('show');
+            document.getElementById('msj-alert').innerHTML =
+                'Seleccionaste un plan extraordinario pero no asignaste ninguna cuota';
+            event.preventDefault();
+        }
+        
+
+    })
+</script>
+<script>
+    $('#vr_ci').on('change', function () {
+        calcular_por_valor()
+        borrar_formapago()
+        diferencia_ci()
+    })
+    $('#valor').on('change', function () {
+        var numero_en_letras = numeroALetras($('#valor').val());
+        $('#valor_letras').val(numero_en_letras + 'M/CTE')
+        calcular_por_porcentaje()
+        borrar_formapago()
+        diferencia_ci()
+    })
+    $('#porc_cta_ini').on('change', function () {
+        calcular_por_porcentaje()
+        borrar_formapago()
+        diferencia_ci()
+    })
+    $('#valor_ci1').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci2').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci3').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci4').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci5').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci6').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+    $('#valor_ci7').on('change', function () {
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    })
+
+    function borrar_titular(titular) {
+        $('#' + titular).val(null);
+        document.getElementById('nombre-' + titular).innerHTML = null
+    }
+
+    function calcular_por_valor() {
+        let valor_lote = $('#valor').val()
+        let valor_ci = $('#vr_ci').val()
+        let porc_ini = Math.round(valor_ci * 100 / valor_lote)
+        let porc_saldo = 100 - porc_ini
+        let valor_saldo = valor_lote - valor_ci
+        $('#porc_cta_ini').val(porc_ini)
+        $('#vr_saldo').val(valor_saldo)
+        $('#porc_saldo').val(porc_saldo)
+    }
+
+    function calcular_por_porcentaje() {
+        let valor_lote = $('#valor').val()
+        let porc_ini = ($('#porc_cta_ini').val()) / 100
+        let porc_saldo = (1 - porc_ini) * 100
+        let valor_ci = Math.round(porc_ini * valor_lote)
+        let valor_saldo = valor_lote - valor_ci
+        $('#vr_ci').val(valor_ci)
+        $('#vr_saldo').val(valor_saldo)
+        $('#porc_saldo').val(porc_saldo)
+    }
+
+    function mostrar_lineaci() {
+        nro_ctas = parseInt($('#nro-ctas-ci').val()) + 1
+        if (nro_ctas < 2) {
+            nro_ctas = 2
+        }
+        $("#ci-linea" + nro_ctas).css("display", "block")
+        $('#nro-ctas-ci').val(nro_ctas)
+        lineas_ini = nro_ctas - 1
+        nro_cta = $('#cant_ci_' + lineas_ini).val()
+        fecha_ini_ci = $('#fecha_ini_ci' + lineas_ini).val()
+        fecha_fin = sumar_meses(new Date(fecha_ini_ci), parseInt(nro_cta))
+        $('#fecha_ini_ci' + nro_ctas).datetimepicker('date', fecha_fin)
+
+    };
+
+    function quitar_lineaci() {
+        nro_ctas = parseInt($('#nro-ctas-ci').val())
+        if (nro_ctas > 7) {
+            nro_ctas = 7
+        }
+        if (nro_ctas != 1) {
+            $("#ci-linea" + nro_ctas).css("display", "none")
+        }
+        $('#nro-ctas-ci').val(nro_ctas - 1)
+        $('#cant_ci_' + nro_ctas).val(null)
+        $('#fecha_ini_ci' + nro_ctas).datetimepicker('date', null)
+        $('#valor_ci' + nro_ctas).val(null)
+        diferencia = diferencia_ci()
+        $('#restante_ci').val(diferencia)
+    };
+
+    function calcular_cuotas(capital, tasa, nCuotas) {
+        if (tasa == 0) {
+            return Math.ceil(capital / nCuotas)
+        } else {
+            up = capital * tasa
+            down = 1 - (1 + tasa) ** (-1 * nCuotas)
+            cuota = up / down
+            return Math.ceil(cuota)
+        }
+    }
+
+    function calcularvp(cuota, tasa, nCuotas) {
+        up = (1 - (1 + tasa) ** (-1 * nCuotas)) * cuota
+        down = tasa
+        capital = up / down
+        return Math.ceil(capital)
+    }
+
+    function diferencia_ci() {
+        ci1 = parseInt($('#valor_ci1').val())
+        valorci1 = parseInt($('#cant_ci_1').val())
+        var totalci1 = (ci1 * valorci1) || 0
+        ci2 = parseInt($('#valor_ci2').val())
+        valorci2 = parseInt($('#cant_ci_2').val())
+        var totalci2 = (ci2 * valorci2) || 0
+        ci3 = parseInt($('#valor_ci3').val())
+        valorci3 = parseInt($('#cant_ci_3').val())
+        var totalci3 = (ci3 * valorci3) || 0
+        ci4 = parseInt($('#valor_ci4').val())
+        valorci4 = parseInt($('#cant_ci_4').val())
+        var totalci4 = (ci4 * valorci4) || 0
+        ci5 = parseInt($('#valor_ci5').val())
+        valorci5 = parseInt($('#cant_ci_5').val())
+        var totalci5 = (ci5 * valorci5) || 0
+        ci6 = parseInt($('#valor_ci6').val())
+        valorci6 = parseInt($('#cant_ci_6').val())
+        var totalci6 = (ci6 * valorci6) || 0
+        ci7 = parseInt($('#valor_ci7').val())
+        valorci7 = parseInt($('#cant_ci_7').val())
+        var totalci7 = (ci7 * valorci7) || 0
+
+        vr_ci = parseInt($('#vr_ci').val())
+        lleva_ci = totalci1 + totalci2 + totalci3 + totalci4 + totalci5 + totalci6 + totalci7
+        restante_ci = vr_ci - lleva_ci
+        $('#restante_ci').val(restante_ci)
+        return restante_ci
+    }
+
+    function borrar_comision(cargo) {
+        $('#cc_' + cargo).val(null);
+        $('#porc_' + cargo).val(null);
+        document.getElementById('name-' + cargo).innerHTML = null
+    }
+</script>
+<script>
+    $(document).ready(function(){
+        get_Escala();
+    });
+    $('#forma_plan_pagos').on('change', function () {
+        plan_pagos = $('#forma_plan_pagos').val()
+        borrar_formapago()
+
+        if (plan_pagos == 'Regular') {
+            document.getElementById('valor_ce').readOnly = true
+            document.getElementById('fecha_ini_ce').disabled = true
+            document.getElementById('cant_ce').disabled = true
+            document.getElementById('valor_fn').readOnly = true
+            document.getElementById('periodo_ce').disabled = true
+
+        } else {
+            document.getElementById('valor_fn').readOnly = false
+            document.getElementById('valor_ce').readOnly = true
+            document.getElementById('fecha_ini_ce').disabled = false
+            document.getElementById('cant_ce').disabled = false
+            document.getElementById('periodo_ce').disabled = false
+        }
+    });
+    $('#formas_de_pago').on('change',function(){
+        forma_pago=$('#formas_de_pago').val()
+        borrar_formapago()
+        
+        if (forma_pago=='Amortizacion'){
+            $('#tasa-valor option[value=0]').prop('disabled',true)
+            $('#tasa-valor').val('0.015')
+        }
+        else{
+            $('#tasa-valor option[value=0]').prop('disabled',false)
+            $('#tasa-valor').val('0')
+        }
+    })
+    $('#tasa-valor').on('change',function(){
+        borrar_formapago()
+    })
+    $('#cant_fn').on('change', function () {
+        plan_pagos = $('#forma_plan_pagos').val()
+        lineas_ini = parseInt($('#nro-ctas-ci').val())
+        nro_ctas = $('#cant_ci_' + lineas_ini).val()
+        fecha_ini_ci = $('#fecha_ini_ci' + lineas_ini).val()
+        fecha_fin = sumar_meses(new Date(fecha_ini_ci), parseInt(nro_ctas))
+        $('#fecha_ini_fn').datetimepicker('date', fecha_fin)
+        tasa = $('#tasa-valor').val()
+        capital = $('#vr_saldo').val()
+        ncuotas = $('#cant_fn').val()
+        if (plan_pagos == 'Regular') {
+            valor_cuotafn = calcular_cuotas(capital, tasa, ncuotas)
+            $('#valor_fn').val(valor_cuotafn)
+        }
+    })
+    $('#cant_ce').on('change', function () {
+        if (plan_pagos != 'Regular') {
+            periodoce = $('#periodo_ce').val()
+            if (periodoce == 'Trimestral') {
+                periodo = 3
+            } else if (periodoce == 'Semestral') {
+                periodo = 6
+            } else {
+                periodo = 12
+            }
+
+            tasa = $('#tasa-valor').val()
+            saldo = $('#vr_saldo').val()
+            cuota_regular = $('#valor_fn').val()
+            nro_ctas_reg = $('#cant_fn').val()
+            capital_fn = calcularvp(cuota_regular, tasa, nro_ctas_reg)
+            ncuotas = $('#cant_ce').val()
+            capital_ce = saldo - capital_fn
+            cuota_ce = calcular_cuotas(capital_ce, tasa * periodo, ncuotas)
+            $('#valor_ce').val(cuota_ce)
+            fecha_ini_fn = $('#fecha_ini_fn').val()
+            fecha_fin = sumar_meses(new Date(fecha_ini_fn), periodo)
+            $('#fecha_ini_ce').datetimepicker('date', fecha_fin)
+
+        }
+    })
+    
+    function calcular_cuotas(capital, tasa, nCuotas) {
+        if (tasa == 0) {
+            return Math.ceil(capital / nCuotas)
+        } else {
+            up = capital * tasa
+            down = 1 - (Math.pow(1 + (parseFloat(tasa)), -1 * nCuotas))
+            cuota = Math.ceil(up / down)
+            return cuota
+        }
+    }
+
+    function calcularvp(cuota, tasa, nCuotas) {
+        up = (1 - Math.pow(1 + (parseFloat(tasa)), -1 * nCuotas)) * cuota
+        down = tasa
+        capital = up / down
+        console.log(up)
+        console.log(down)
+        return Math.ceil(capital)
+    }
+
+    function sumar_meses(fecha_ini, meses_sumar) {
+        var dia_inicial = fecha_ini.getDate();
+        var mes_inicial = fecha_ini.getMonth();
+        var año = fecha_ini.getFullYear();
+        var fecha_fin = fecha_ini;
+        mes_final = mes_inicial
+        for (var i = 0; i <= meses_sumar; i++) {
+            if (mes_final == 12) {
+                mes_final = 0
+            };
+            if (mes_final == 0) {
+                año += 1
+            };
+            mes_final += 1
+        }
+        fecha_fin.setFullYear(año)
+        fecha_fin.setMonth(mes_final - 1)
+        fecha_fin.setDate(dia_inicial + 1)
+        return fecha_fin
+    }
+
+    function borrar_formapago() {
+        $('#valor_fn').val(null)
+        $('#fecha_ini_fn').val(null)
+        $('#cant_fn').val(null)
+        $('#valor_ce').val(null)
+        $('#fecha_ini_ce').val(null)
+        $('#cant_ce').val(null)
+        $('#periodo_ce').val(null)
+    }
+    var tablaAsesoresComis = $('#tablaAsesoresComis').DataTable({
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/ajax_request/salesmen',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'cedula'},
+                {'data':'nombre'},
+                {'data':'tipo_asesor'},
+            ],
+        })
+    $('#tablaAsesoresComis tbody').on('click','tr',function(){
+            let line = tablaAsesoresComis.row(this).data()
+            let active_row = $('#tablaEscalaComis tbody tr.selected')
+            active_row[0].cells[1].children[0].children[0].value = line.cedula
+            active_row[0].cells[2].children[0].children[0].value = line.nombre
+            $('#modalAsesoresComis').modal('hide')
+            
+        })
+    $('#btnAgrCargoComis').click(function(){
+            let cargo = $('#id_cargo').val()
+            let cargo_existe = false
+            $('#tablaEscalaComis input[name="cargo_comis"]').each(function(index,elem){
+                let cargo_existente = $(elem).val()
+                if (cargo == cargo_existente.split(' - ')[0]){
+                    $('#alerta-general').modal('show')
+                    document.getElementById('mensaje-alerta').innerHTML = 'Este cargo ya fue registrado en la escala';
+                    document.getElementById('titulo-alerta').innerHTML = 'Oh Oh';
+                    cargo_existe = true
+                    return;
+                }
+            })
+            if (cargo_existe) return
+            $.ajax({
+                type:'GET',
+                url: '/ajax_request/comisions',
+                data:{
+                    'tipo':'cargos',
+                    'proyecto':'{{proyecto}}',
+                    'cargo':cargo
+                },
+                success:function(response){
+                    let data = response.data[0]
+                    let row = `
+                    <tr>
+                        <td>
+                            <div class="btn-toolbar gap-2" role="toolbar">
+                                <button class="btn btn-outline-danger btn-circle"
+                                onclick="eliminarCargoComis($(this))" type="button">
+                                        <i class="fas fa-minus"></i>
+                                </button>
+                                <button class="btn btn-outline-primary btn-circle" type="button"  onclick="seleccionarRow(this)"
+                                    data-target="#modalAsesoresComis" data-toggle="modal"
+                                    id="btnBuscarAsesor">
+                                        <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="">
+                                <input type="text" name="id_asesor_comis" class="form-control" required="" readonly="">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="">
+                                <input type="text" name="asesor_comis" class="form-control" required="" readonly="">
+                            </div>
+                        </td>
+                        <td>
+                            <div class="">
+                                <input type="text" name="cargo_comis" class="form-control text-center" required="" value="${data.idcargo} - ${data.nombrecargo}" readonly="">
+                            </div>
+                        </td>
+                        <td>
+                            <input type="number" step="0.01" name="comision" class="form-control text-center" required="" min="0" max="${data.tasa}" value="${data.tasa}">
+                        </td>
+                    </tr>
+                    `
+                    $('#tablaEscalaComis tbody').append(row)
+                }
+
+            })
+        })
+    $('#formEscala').on('submit',function(e){
+            e.preventDefault();
+            form_data = new FormData(this)
+            form_data.append('venta','{{contrato}}')
+            form_data.append('proyecto','{{proyecto}}')
+            let btnSubmit = $('#btnGrabarEscala')
+            btnSubmit.html('Cargando <i class="fas fa-circle-notch fa-spin"></i>'
+            ).addClass('disabled')
+            $.ajax({
+                type:'POST',
+                url:'/ajax_request/comisions',
+                data:form_data,
+                processData:false,
+                contentType:false,
+                success: function(response){
+                    setTimeout(() => {
+                        $('#alerta-general').modal('show')
+                        document.getElementById('mensaje-alerta').innerHTML = 'La escala fue asignada con exito';
+                        document.getElementById('titulo-alerta').innerHTML = 'Listo!';
+                    }, 1600);
+                    
+                },
+                error: function(response) {
+                    console.log(response.responseText)
+                },
+                complete:function(){
+                    setTimeout(() => {
+                        btnSubmit.html('Registrar'
+                        ).removeClass('disabled')
+                    }, 1500);
+                }
+            })
+        })
+    function seleccionarRow(element){
+        $('#tablaEscalaComis tbody tr.selected').removeClass('selected')
+        $(element).parent().parent().parent().addClass('selected')
+    }
+    function eliminarCargoComis(element){
+    element.parent().parent().parent().remove()
+    }
+    function get_Escala(){
+            $('#tablaEscalaComis tbody').empty()
+            $.ajax({
+                type:'GET',
+                url:'/ajax_request/comisions',
+                data:{
+                    'tipo':'escala_asignada',
+                    'tipo_escala':'variable',
+                    'venta':'{{contrato}}',
+                    'proyecto':'{{proyecto}}'
+                },
+                success: function(response){
+                    data = response.data
+                    for (let i in data){
+                        let row = `
+                        <tr>
+                            <td>
+                                <div class="btn-toolbar gap-2" role="toolbar">
+                                    <button class="btn btn-outline-danger btn-circle"
+                                    onclick="eliminarCargoComis($(this))" type="button">
+                                            <i class="fas fa-minus"></i>
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-circle" type="button"  onclick="seleccionarRow(this)"
+                                        data-bs-target="#modalAsesoresComis" data-bs-toggle="modal" data-bs-dismiss="modal"
+                                        id="btnBuscarAsesor">
+                                            <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="">
+                                    <input type="text" name="id_asesor_comis" class="form-control" required="" readonly="" value="${data[i].gestor.cedula}">
+                                </div>
+                            </td>
+                            <td>
+                                <div class="">
+                                    <input type="text" name="asesor_comis" class="form-control" required="" readonly="" value="${data[i].gestor.nombre}">
+                                </div>
+                            </td>
+                            <td>
+                                <div class="">
+                                    <input type="text" name="cargo_comis" class="form-control text-center" required="" value="${data[i].cargo.id} - ${data[i].cargo.nombre}" readonly="">
+                                </div>
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" name="comision" class="form-control text-center" required="" min="0" value="${data[i].comision}">
+                            </td>
+                        </tr>
+                            `
+                        $('#tablaEscalaComis tbody').append(row)
+                    }
+                },
+            })
+        }
+    
+</script>
+{%if alerta%}
+<script>
+    $('#alerta-general').modal('show')
+    document.getElementById('mensaje-alerta').innerHTML = '{{mensaje}}';
+    document.getElementById('titulo-alerta').innerHTML = '{{titulo_alerta}}';
+</script>
+{%endif%}
+<script>
+    cargarParametros()
+
+    function cargarParametros() {
+        var parametros = JSON.parse('{{parameters|escapejs}}')
+        for (i = 0; i < parametros.length; i++) {
+            var parametro = parametros[i]['fields']['descripcion']
+            var status = parametros[i]['fields']['estado']
+            if (parametro == 'formasOpcionManual' && status) {
+                $('#ModalformaManual').modal('show')
+                return
+            } else if (parametro == 'formasVerificacionManual' && status) {
+                $('#ModalformaManual').modal('show')
+                return
+            }
+        }
+    }
+</script>
+{%if request.user|has_group:"Asesores"%}
+<script>
+    $('#valor').prop('readonly', true)
+    $('#porc_cta_ini').attr('min', '40')
+    $('#btnrecibo').prop('disabled', true)
+    $('#btnactfecha').prop('disabled', true)
+    $('#nav-escala-tab').addClass('disabled').attr('aria-disabled', "true")
+    $('#nav-recibos-tab').addClass('disabled').attr('aria-disabled', "true")
+    $('#nav-documentos-tab').addClass('disabled').attr('aria-disabled', "true")
+</script>
+{%endif%}
+<script type="text/javascript" language="javascript" src="{%static 'js/numero_letras.js'%}"></script>
+<script src='{%static "js/preventDbClick.js"%}'></script>
+{%endblock%}

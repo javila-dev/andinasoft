@@ -1,0 +1,206 @@
+{%load static%}{%load l10n%}
+<html>
+    <body>        
+        <div id="header_content">
+            <table class="border-visible">
+                <tr>
+                    <th style="width:20%;text-align:center" rowspan="3">
+                        <img src="/media/{{reembolso.caja.nit_empresa.logo}}" width="140">
+                    </th>
+                    <th style="width:57%;text-align:center;color:#345555">
+                       <h3>SOLICITUD DE REEMBOLSO A CAJA</h3>
+                    </th>
+                    <th style="width:10%;">
+                        CÓDIGO
+                    </th>
+                    <th style="width:13%;">
+                        SCG-TES-02
+                    </th>
+                </tr>
+                <tr>
+                    <th rowspan="2" style="padding-top: 3px;">
+                        {{reembolso.caja.nit_empresa.nombre.upper}}<br>
+                        <small>Formato para el registro de los gastos realizados en una caja de manejo de efectivo, ya sea 
+                            general o de gasto menor.
+                        </small>
+                    </th>
+                    <th style="width:10%;">
+                        VERSIÓN
+                    </th>
+                    <th style="width:13%;">
+                        1
+                    </th>
+                </tr>
+                <tr>
+                    <th style="width:10%;">
+                        FECHA
+                    </th>
+                    <th style="width:13%;">
+                        26/07/2024
+                    </th>
+                </tr>
+            </table>
+        </div>
+        <div>
+            <table class="border-visible">
+                <tr style="padding-top: 3px;">
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Id Reembolso</th>
+                    <td style="width: 10%;">{{reembolso.pk}}</td>
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Solicitado por</th>
+                    <td style="width: 30%;">{{reembolso.usuario_solicita.get_full_name.upper}}</td>
+                    <th style="width: 15%;text-align: left;padding-left: 2px;">Fecha solicitud</th>
+                    <td style="width: 15%;">{{reembolso.fecha_solicita|date:"d/m/Y"}}</td> 
+                </tr>
+            </table><br>
+            <table class="border-visible">
+                <tr style="padding-top: 3px;" class="title">
+                    <th colspan="8">Relación de gastos</th>
+                </tr>
+                <tr style="padding-top: 3px;" class="title">
+                    <th style="width: 10%;">Fecha</th>
+                    <th style="width: 10%;">Nit</th>
+                    <th style="width: 20%;">Nombre</th>
+                    <th style="width: 25%;">Descripción</th>
+                    <th>Subtotal</th>
+                    <th>IVA</th>
+                    <th>Rte</th>
+                    <th>Total</th>
+                </tr>
+                {%for gasto in gastos_reembolso%}<tr style="padding-top: 3px;">
+                    <td>{{gasto.fecha_gasto|date:"d/m/Y"}}</td>
+                    <td>{{gasto.tercero.pk}}</td>
+                    <td style="text-align: left;padding-left: 2px;">{{gasto.tercero.nombre_completo}}</td>
+                    <td style="text-align: left;padding-left: 2px;">{{gasto.descripcion.capitalize}}</td>
+                    <td>${{gasto.subtotal}}</td>
+                    <td>${{gasto.valor_iva|default_if_none:"0"}}</td>
+                    <td>${{gasto.valor_rte|default_if_none:"0"}}{%if gasto.rte_asumida%}(A){%endif%}</td>
+                    <td>${{gasto.valor}}</td>
+                </tr>{%endfor%}
+                <tr>
+                    <th colspan="7" class="text-align:right;">TOTAL</th>
+                    <th>${{reembolso.valor}}</th>
+                </tr>
+            </table>
+            <br><br><br>
+            <table>
+                <tr style="text-align:center">
+                    <td><img src="/static/img/firmas/{{reembolso.usuario_solicita.username}}.png" width="140"></td>
+                    <td></td>
+                    <td><img src="/static/img/firmas/{{user_aprueba.username}}.png" width="140"></td>
+                    <td></td>
+                    <td><img src="/static/img/firmas/{{reembolso.usuario_aprueba.username}}.png" width="140"></td>
+                </tr>
+                <tr style="margin-top: 6rem;">
+                    <th style="border-top:black solid;width:30%"></th>
+                    <th></th>
+                    <th style="border-top:black solid;width:30%"></th>
+                    <th></th>
+                    <th style="border-top:black solid;width:30%"></th>
+                    
+                </tr>
+                <tr style="text-align:center">
+                    <td><b>Solicita:</b> {{reembolso.usuario_solicita.get_full_name}}</td>
+                    <td></td>
+                    <td><b>Aprueba:</b> {{user_aprueba.get_full_name}}</td>
+                    <td></td>
+                    <td><b>Legaliza:</b> {{reembolso.usuario_aprueba.get_full_name}}</td>
+                </tr>
+            </table>
+            
+        </div><br>
+        <p style="text-align:right">Reporte generado por <b>{{user.get_full_name}}</b> el <b>{{now}}</b></p>
+    </body>
+
+    <head>
+        <style>
+            @page {
+                size: a4;
+                @frame header_frame {           /* Static Frame */
+                    -pdf-frame-content: header_content;
+                    left: 40pt; 
+                    width: 520pt; 
+                    top: 55px; 
+                    height: 100px;
+                }
+                @frame footer_frame {           /* Another static Frame */
+                    -pdf-frame-content: footer_content;
+                    left: 50pt; width: 530pt; top: 950pt; height: 40pt;
+                }
+                @frame content_frame {          /* Content Frame */
+                    left: 40pt; 
+                    width: 520pt; 
+                    top: 157.5px; 
+                    height: 810pt;
+                }
+        
+            }
+        
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuLight.ttf'%}");
+            }
+        
+            /* Bold */
+            @font-face {
+                font-family: Ubuntu;
+                src: url("{%static 'fonts/Ubuntu/UbuntuBold.ttf'%}");
+                font-weight: bold;
+            }
+        
+            body {
+                font-family: Ubuntu;
+            }
+            
+            table {
+                font-size: 8.5pt;
+                
+            }
+            table.border-visible{
+                border: darkgray 1px solid;
+            }
+            td{
+                vertical-align: top!important;
+                text-align: center;
+            }
+            tr {
+                padding-top: 3px;
+            }
+            
+            .text-muted{
+                color: gray;
+                
+            }
+            tr.title{
+                background-color: gray;
+                color: white;
+            }
+        
+            #encabezados-logos p {
+                padding: 0px;
+                margin: 0px;
+                font-size: large;
+                color: lightslategray;
+            }
+        
+            #detail-table th,
+            #detail-table td {
+                padding: 2px;
+                width: 50%;
+                height: 50%;
+            }
+        
+            .underline {
+                border-bottom: 0.5px solid gray;
+            }
+        
+            .text-center {
+                text-align: center;
+            }
+        
+            .title {
+                font-weight: bold;
+            }
+        </style>
+    </head>
+
+</html>

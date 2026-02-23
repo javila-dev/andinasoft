@@ -1,0 +1,576 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Tesorería | Carga de Movimientos{% endblock %}
+{% block content %}
+<div class='principal-container bg-light shadow-lg rounded pb-2'>
+    <div class="mx-auto" style="width: 160px;">
+        <lord-icon
+            src="https://cdn.lordicon.com/qhgmphtg.json"
+            trigger="loop"
+            delay="2000"
+            style="width:120px;height:120px">
+        </lord-icon>
+    </div>
+    <h3 class="text-center">Carga de Movimientos Bancarios</h3>
+
+    <!-- Selector de empresa -->
+    <div class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <label for="empresa-select" class="form-label">
+                    Empresa <span class="text-danger">*</span>
+                </label>
+                <select id="empresa-select" class="form-control" required>
+                    <option value="">Seleccionar empresa...</option>
+                    {% for empresa in empresas %}
+                    <option value="{{ empresa.pk }}">{{ empresa.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumen de movimientos (oculto inicialmente) -->
+    <div id="resumen-container" class="container mt-4" style="display: none;">
+        <hr>
+        <h5 class="text-center mb-3">Movimientos Recientes (Últimos 5 días)</h5>
+
+        <div id="resumen-loading" class="text-center my-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Cargando...</span>
+            </div>
+            <p class="mt-2 text-muted">Consultando movimientos...</p>
+        </div>
+
+        <div id="resumen-content" style="display: none;">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover">
+                    <thead class="thead-dark">
+                        <tr>
+                            <th>Fecha</th>
+                            <th class="text-right">Banco</th>
+                            <th class="text-right">Wompi</th>
+                            <th class="text-right">Plink</th>
+                            <th class="text-right"><strong>Total</strong></th>
+                        </tr>
+                    </thead>
+                    <tbody id="resumen-tbody">
+                        <!-- Se llena dinámicamente con JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="resumen-error" class="alert alert-danger" style="display: none;">
+            <i class="fas fa-exclamation-triangle"></i>
+            Error al cargar el resumen de movimientos
+        </div>
+    </div>
+
+    <!-- Formulario de carga (oculto hasta seleccionar empresa) -->
+    <div id="upload-form-container" class="container mt-4" style="display: none;">
+        <hr>
+        <h5 class="text-center mb-3">Cargar Nuevos Movimientos</h5>
+
+        <form id="upload-form" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="row justify-content-center">
+                <!-- Movimiento Banco -->
+                <div class="col-md-4 mb-3">
+                    <label for="archivo-banco" class="form-label">
+                        <i class="fas fa-university"></i> Movimiento Banco
+                    </label>
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="archivo-banco"
+                               accept=".xlsx,.xls,.csv">
+                        <label class="custom-file-label" for="archivo-banco">
+                            Seleccionar archivo...
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Movimiento Wompi -->
+                <div class="col-md-4 mb-3">
+                    <label for="archivo-wompi" class="form-label">
+                        <i class="fas fa-credit-card"></i> Movimiento Wompi
+                    </label>
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="archivo-wompi"
+                               accept=".xlsx,.xls,.csv">
+                        <label class="custom-file-label" for="archivo-wompi">
+                            Seleccionar archivo...
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Movimiento Plink -->
+                <div class="col-md-4 mb-3">
+                    <label for="archivo-plink" class="form-label">
+                        <i class="fas fa-link"></i> Movimiento Plink
+                    </label>
+                    <div class="custom-file">
+                        <input type="file" class="custom-file-input" id="archivo-plink"
+                               accept=".xlsx,.xls,.csv">
+                        <label class="custom-file-label" for="archivo-plink">
+                            Seleccionar archivo...
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-3">
+                <button type="submit" class="btn btn-primary btn-lg" id="btn-submit">
+                    <i class="fas fa-upload"></i>
+                    <span id="btn-text">Cargar Movimientos</span>
+                    <span id="btn-spinner" class="spinner-border spinner-border-sm ml-2"
+                          style="display: none;"></span>
+                </button>
+                <button type="button" class="btn btn-secondary btn-lg ml-2" id="btn-limpiar">
+                    <i class="fas fa-eraser"></i>
+                    Limpiar Archivos
+                </button>
+            </div>
+        </form>
+
+        <!-- Alertas -->
+        <div id="alert-container" class="mt-4"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+$(document).ready(function() {
+    const empresaSelect = $('#empresa-select');
+    const resumenContainer = $('#resumen-container');
+    const resumenLoading = $('#resumen-loading');
+    const resumenContent = $('#resumen-content');
+    const resumenError = $('#resumen-error');
+    const resumenTbody = $('#resumen-tbody');
+    const uploadFormContainer = $('#upload-form-container');
+    const uploadForm = $('#upload-form');
+    const btnSubmit = $('#btn-submit');
+    const btnText = $('#btn-text');
+    const btnSpinner = $('#btn-spinner');
+    const alertContainer = $('#alert-container');
+
+    // Inicializar custom file input
+    bsCustomFileInput.init();
+
+    // Cuando cambia la empresa
+    empresaSelect.on('change', async function() {
+        const empresaId = $(this).val();
+        console.log('Empresa seleccionada:', empresaId);
+
+        if (!empresaId) {
+            resumenContainer.hide();
+            uploadFormContainer.hide();
+            return;
+        }
+
+        // Mostrar contenedores
+        resumenContainer.show();
+        uploadFormContainer.show();
+        console.log('Contenedores mostrados');
+
+        // Mostrar loading
+        resumenLoading.show();
+        resumenContent.hide();
+        resumenError.hide();
+        resumenTbody.empty();
+
+        try {
+            // Fetch resumen
+            console.log('Fetching:', `/accounting/api/movements-summary?empresa=${empresaId}`);
+            const response = await fetch(
+                `/accounting/api/movements-summary?empresa=${empresaId}`
+            );
+
+            console.log('Response status:', response.status);
+
+            if (!response.ok) {
+                throw new Error('Error al cargar el resumen');
+            }
+
+            const data = await response.json();
+            console.log('Data recibida:', data);
+            renderResumen(data.resumen);
+
+        } catch (error) {
+            console.error('Error:', error);
+            resumenError.show();
+        } finally {
+            resumenLoading.hide();
+        }
+    });
+
+    // Renderizar tabla de resumen
+    function renderResumen(resumen) {
+        if (resumen.length === 0) {
+            resumenTbody.html(`
+                <tr>
+                    <td colspan="5" class="text-center text-muted">
+                        No hay movimientos recientes
+                    </td>
+                </tr>
+            `);
+            resumenContent.show();
+            return;
+        }
+
+        const rows = resumen.map(dia => `
+            <tr>
+                <td>${formatearFecha(dia.fecha)}</td>
+                <td class="text-right">${dia.banco.toLocaleString()}</td>
+                <td class="text-right">${dia.wompi.toLocaleString()}</td>
+                <td class="text-right">${dia.plink.toLocaleString()}</td>
+                <td class="text-right"><strong>${dia.total.toLocaleString()}</strong></td>
+            </tr>
+        `).join('');
+
+        resumenTbody.html(rows);
+        resumenContent.show();
+    }
+
+    // Formatear fecha
+    function formatearFecha(fechaISO) {
+        const fecha = new Date(fechaISO + 'T00:00:00');
+        const opciones = {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            timeZone: 'America/Bogota'
+        };
+        return fecha.toLocaleDateString('es-CO', opciones);
+    }
+
+    // Enviar formulario
+    uploadForm.on('submit', async function(e) {
+        e.preventDefault();
+
+        const empresaId = empresaSelect.val();
+        if (!empresaId) return;
+
+        // Preparar FormData
+        const formData = new FormData();
+        formData.append('empresa', empresaId);
+
+        const archivoBanco = $('#archivo-banco')[0].files[0];
+        const archivoWompi = $('#archivo-wompi')[0].files[0];
+        const archivoPlink = $('#archivo-plink')[0].files[0];
+
+        if (archivoBanco) formData.append('archivo_banco', archivoBanco);
+        if (archivoWompi) formData.append('archivo_wompi', archivoWompi);
+        if (archivoPlink) formData.append('archivo_plink', archivoPlink);
+
+        // Validar que al menos un archivo fue seleccionado
+        if (!archivoBanco && !archivoWompi && !archivoPlink) {
+            mostrarAlerta('Debes seleccionar al menos un archivo', 'warning');
+            return;
+        }
+
+        // Mostrar loading
+        btnText.text('Procesando...');
+        btnSpinner.show();
+        btnSubmit.prop('disabled', true);
+        alertContainer.empty();
+
+        try {
+            const response = await fetch('/accounting/api/upload-movements', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                }
+            });
+
+            console.log('Response status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('Result recibido:', result);
+
+            // Si tenemos job_id, iniciar polling
+            if (result.job_id) {
+                mostrarAlerta(
+                    '⏳ Procesando archivos... Este proceso puede tardar varios minutos.',
+                    'info'
+                );
+
+                // Iniciar polling del estado
+                iniciarPolling(result.job_id);
+                return;
+            }
+
+            // Si no hay job_id pero hay success (modo síncrono legacy)
+            if (result.success === true) {
+                // Éxito
+                mostrarAlerta(
+                    result.message || 'Movimientos cargados exitosamente',
+                    'success'
+                );
+
+                // Limpiar form
+                uploadForm[0].reset();
+                $('.custom-file-label').text('Seleccionar archivo...');
+
+                // Recargar resumen
+                empresaSelect.trigger('change');
+
+            } else if (result.success === false) {
+                // Hay rechazados - descargar archivo
+                mostrarAlerta(
+                    result.message || 'Algunos movimientos fueron rechazados',
+                    'warning'
+                );
+
+                if (result.archivo_rechazados) {
+                    descargarArchivoRechazados(
+                        result.archivo_rechazados,
+                        result.nombre_archivo
+                    );
+                }
+            } else {
+                // Respuesta inesperada
+                console.error('Respuesta inesperada:', result);
+                mostrarAlerta(
+                    result.detail || result.message || 'Respuesta inesperada del servidor',
+                    'danger'
+                );
+            }
+
+        } catch (error) {
+            console.error('Error completo:', error);
+
+            let errorMessage = 'Error al procesar los archivos. Intenta nuevamente.';
+            if (error.message) {
+                errorMessage = `Error: ${error.message}`;
+            }
+
+            mostrarAlerta(errorMessage, 'danger');
+        } finally {
+            btnText.text('Cargar Movimientos');
+            btnSpinner.hide();
+            btnSubmit.prop('disabled', false);
+        }
+    });
+
+    // Botón limpiar archivos
+    $('#btn-limpiar').on('click', function() {
+        // Limpiar inputs de archivo
+        $('#archivo-banco').val('');
+        $('#archivo-wompi').val('');
+        $('#archivo-plink').val('');
+
+        // Restablecer labels
+        $('.custom-file-label').text('Seleccionar archivo...');
+
+        // Limpiar alertas
+        alertContainer.empty();
+    });
+
+    // Mostrar alertas
+    function mostrarAlerta(mensaje, tipo) {
+        const alertHtml = `
+            <div class="alert alert-${tipo} alert-dismissible fade show" role="alert">
+                ${mensaje}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        `;
+        alertContainer.html(alertHtml);
+
+        // Scroll al alert
+        alertContainer[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Descargar archivo de rechazados
+    function descargarArchivoRechazados(base64, nombreArchivo) {
+        const link = document.createElement('a');
+        link.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + base64;
+        link.download = nombreArchivo || 'rechazados.xlsx';
+        link.click();
+    }
+
+    // Polling del estado del job
+    let pollingInterval = null;
+    let pollingAttempts = 0;
+    const MAX_POLLING_ATTEMPTS = 150; // 5 minutos (150 * 2 segundos)
+
+    function iniciarPolling(jobId) {
+        console.log('Iniciando polling para job:', jobId);
+        pollingAttempts = 0;
+
+        // Limpiar cualquier polling anterior
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+        }
+
+        // Hacer primera consulta inmediatamente
+        consultarEstado(jobId);
+
+        // Luego consultar cada 2 segundos
+        pollingInterval = setInterval(() => {
+            consultarEstado(jobId);
+        }, 2000);
+    }
+
+    async function consultarEstado(jobId) {
+        pollingAttempts++;
+
+        // Si excede el máximo de intentos
+        if (pollingAttempts > MAX_POLLING_ATTEMPTS) {
+            clearInterval(pollingInterval);
+            btnText.text('Cargar Movimientos');
+            btnSpinner.hide();
+            btnSubmit.prop('disabled', false);
+
+            mostrarAlerta(
+                '⏱️ El procesamiento está tomando más tiempo del esperado. Puedes recargar la página más tarde para verificar el resultado.',
+                'warning'
+            );
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                `/accounting/api/check-upload-status?job_id=${jobId}`,
+                {
+                    headers: {
+                        'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                console.error('Error al consultar estado:', response.status);
+                return;
+            }
+
+            const status = await response.json();
+            console.log('Estado del job:', status);
+
+            // Si sigue procesando, continuar polling
+            if (status.status === 'processing') {
+                // Actualizar mensaje cada 10 intentos
+                if (pollingAttempts % 10 === 0) {
+                    const segundos = pollingAttempts * 2;
+                    mostrarAlerta(
+                        `⏳ Procesando archivos... (${segundos} segundos)`,
+                        'info'
+                    );
+                }
+                return;
+            }
+
+            // Procesamiento terminado - detener polling
+            clearInterval(pollingInterval);
+            btnText.text('Cargar Movimientos');
+            btnSpinner.hide();
+            btnSubmit.prop('disabled', false);
+
+            // Manejar resultado según el estado
+            if (status.status === 'completed') {
+                // Éxito total
+                mostrarAlerta(
+                    `✅ ${status.mensaje || 'Movimientos cargados exitosamente'}`,
+                    'success'
+                );
+
+                if (status.detalles) {
+                    const detalles = status.detalles;
+                    const resumenHtml = `
+                        <div class="mt-2 small">
+                            <strong>Movimientos cargados:</strong>
+                            ${detalles.banco ? `Banco: ${detalles.banco}` : ''}
+                            ${detalles.wompi ? ` • Wompi: ${detalles.wompi}` : ''}
+                            ${detalles.plink ? ` • Plink: ${detalles.plink}` : ''}
+                        </div>
+                    `;
+                    alertContainer.find('.alert').append(resumenHtml);
+                }
+
+                // Limpiar form
+                uploadForm[0].reset();
+                $('.custom-file-label').text('Seleccionar archivo...');
+
+                // Recargar resumen
+                setTimeout(() => {
+                    empresaSelect.trigger('change');
+                }, 1000);
+
+            } else if (status.status === 'partial') {
+                // Completado con rechazos
+                mostrarAlerta(
+                    `⚠️ ${status.mensaje || 'Algunos movimientos fueron rechazados'}`,
+                    'warning'
+                );
+
+                // Descargar archivo de rechazados
+                if (status.archivo_rechazados) {
+                    descargarArchivoRechazados(
+                        status.archivo_rechazados,
+                        status.nombre_archivo
+                    );
+                }
+
+                // Mostrar detalles
+                if (status.detalles) {
+                    const detalles = status.detalles;
+                    const resumenHtml = `
+                        <div class="mt-2 small">
+                            <strong>Movimientos cargados:</strong>
+                            ${detalles.banco ? `Banco: ${detalles.banco}` : ''}
+                            ${detalles.wompi ? ` • Wompi: ${detalles.wompi}` : ''}
+                            ${detalles.plink ? ` • Plink: ${detalles.plink}` : ''}
+                        </div>
+                    `;
+                    alertContainer.find('.alert').append(resumenHtml);
+                }
+
+                // Limpiar form
+                uploadForm[0].reset();
+                $('.custom-file-label').text('Seleccionar archivo...');
+
+                // Recargar resumen
+                setTimeout(() => {
+                    empresaSelect.trigger('change');
+                }, 1000);
+
+            } else if (status.status === 'failed') {
+                // Error
+                mostrarAlerta(
+                    `❌ ${status.mensaje || 'Error al procesar los archivos'}`,
+                    'danger'
+                );
+
+                if (status.error) {
+                    const errorHtml = `
+                        <div class="mt-2 small">
+                            <strong>Detalle del error:</strong> ${status.error}
+                        </div>
+                    `;
+                    alertContainer.find('.alert').append(errorHtml);
+                }
+            }
+
+        } catch (error) {
+            console.error('Error en polling:', error);
+            // No detener el polling por errores de red temporales
+        }
+    }
+
+    // Actualizar label de archivos custom file input
+    $('.custom-file-input').on('change', function() {
+        const fileName = $(this).val().split('\\').pop();
+        $(this).siblings('.custom-file-label').text(
+            fileName || 'Seleccionar archivo...'
+        );
+    });
+});
+</script>
+{% endblock %}

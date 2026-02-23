@@ -1,0 +1,378 @@
+{%extends 'base.html'%}
+{%load static%}
+{%load crispy_forms_tags%}
+{%block title%}Inventario Administrativo {{proyecto}}{%endblock%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchbuilder/1.0.0/css/searchBuilder.dataTables.min.css" rel="stylesheet">
+{%endblock%}
+{%block js%}<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchbuilder/1.0.0/js/dataTables.searchBuilder.min.js"></script>{%endblock%}
+{%block content%}
+<div class="principal-container bg-white rounded shadow-lg">
+
+    <h3 class='border-bottom border-gray text-center text-white section-title'>Inventario Administrativo</h3>
+    <button class="btn btn-outline-primary btn-sm float-right" data-toggle="modal" data-target="#modal-texto-inv">
+        Generar texto inventario
+    </button>
+    <div class='table-responsive p-2'>
+        <table id='tabla-inventario' class="display" style="width:100%">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th class='text-center' style='font-size: small;'>Inmueble</th>
+                    <th class='text-center' style='font-size: small;'>Etapa</th>
+                    <th class='text-center' style='font-size: small;'>Manzana</th>
+                    <th class='text-center' style='font-size: small;'>Valor Metro</th>
+                    <th class='text-center' style='font-size: small;'>Estado</th>
+                    <th class='text-center' style='font-size: small;'>Fecha Entrega</th>
+                    <th class='text-center' style='font-size: small;'>Area</th>
+                    <th class='text-center' style='font-size: small;'>Esquinero</th>
+                    <th class='text-center' style='font-size: small;'>Obs bloqueo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for lote in inmuebles%}
+                    <tr>
+                        <td class=' details-control'><i class="far fa-plus-square"></i></td>
+                        <td class='text-center'>
+                            <a href='#' data-toggle='modal' data-target='#modal-opciones' data-lote='{{lote.idinmueble}}' 
+                                style='font-size: smaller;'>{{lote.idinmueble}}</a></td>
+                        <td class='text-center' style='font-size: small;'>{{lote.etapa}}</td>
+                        <td class='text-center' style='font-size: small;'>{{lote.manzananumero}}</td>
+                        <td class='text-center' style='font-size: small;'>{{lote.vrmetrocuadrado}}</td>
+                        <td class='text-center' style='font-size: small;'>{{lote.estado}}</td>
+                        <td class='text-center' style='font-size: small;'>{{lote.finobra|date:"Y-m-d"}}</td>
+                        <td class='text-center' style='font-size: small;'>{{lote.areaprivada}}</td>
+                        <td class='text-center' style='font-size: small;'>
+                            {%if lote.fac_valor_esquinero > 1%}
+                            Si
+                            {%else%}
+                            No
+                            {%endif%}
+                        </td>
+                        <td style='font-size: small;'>{{lote.obsbloqueo|default_if_none:""|truncatechars:"50"}}</td>
+                    </tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+<!-- Modal -->
+<div class="modal fade" id="modal-opciones" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form method="post" action=''>{%csrf_token%}
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="titulo-inmueble">Opciones Inmueble </h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p id='usuario-bloquea' class='lead'></p>
+          <p id='fecha-bloqueo' class='lead'></p>
+          <p id='obs-bloqueo' class='lead'></p>
+          {{form_lote|crispy}}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <input class='btn btn-primary' type='submit' name='btnDesistir' value='Registrar'>
+        </div>
+      </div>
+    </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="modal-texto-inv" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <form method="post" id='form-texto-inv'>{%csrf_token%}
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="titulo-inmueble">Generar texto inventario</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <p>Ten en cuenta que el archivo a cargar debe tener la siguiente estructura:</p>
+            <small>
+                <ol>
+                    <li>Columna A: Manzana (Numero)</li>
+                    <li>Columna B: Lote (Numero)</li>
+                    <li>Columna C: Area (Numero)</li>
+                    <li>Columna D: Norte (Numero)</li>
+                    <li>Columna E: Lindero Norte (R o Q)</li>
+                    <li>Columna F: Colindante Norte (Texto)</li>
+                    <li>Columna G: Sur (Numero)</li>
+                    <li>Columna H: Lindero Sur (R o Q)</li>
+                    <li>Columna I: Colindante Sur (Texto)</li>
+                    <li>Columna J: Este (Numero)</li>
+                    <li>Columna K: Lindero Este (R o Q)</li>
+                    <li>Columna L: Colindante Este (Texto)</li>
+                    <li>Columna M: Oeste (Numero)</li>
+                    <li>Columna N: Lindero Oeste (R o Q)</li>
+                    <li>Columna O: Colindante Oeste (Texto)</li>          
+                    <li>Columna P: Coeficiente (Numero)</li>            
+                </ol>
+                Verifica que no exista ningun tipo de formula en los campos a cargar.
+            </small>
+            <input type="file" id="file-inventario" class="mt-2" name="linderos"/>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <input class='btn btn-primary' type='submit' name='btnDesistir' value='Generar'>
+        </div>
+      </div>
+    </div>
+    </form>
+  </div>
+</div>
+{{form_lote.media}}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    $('#modal-opciones').on('show.bs.modal',function(event){
+        var button = $(event.relatedTarget)
+        var inmueble= button.data('lote')
+        $('#inmueble-buscar').val(inmueble);
+        $.ajax({
+            type: 'GET',
+            url: '/operaciones/inventario_administrativo/{{proyecto}}',
+            data: {'inmueble':inmueble},
+            success: function(response){
+                var instance=JSON.parse(response['instance'])
+                document.getElementById('titulo-inmueble').innerHTML='Opciones Inmueble '+inmueble
+                var datoslote=instance[0]['fields']
+                $('#estados_lote').val(datoslote['estado'])
+                $('#id_Meses_Entrega').val(datoslote['meses'])
+                $('#fecha_entrega').datetimepicker('date', datoslote['finobra'])
+                console.log(datoslote['estado'])
+                if (datoslote['estado']=='Bloqueado'){
+                document.getElementById('usuario-bloquea').innerHTML='<strong>Usuario Bloquea: </strong>'+datoslote['usuariobloquea']
+                document.getElementById('fecha-bloqueo').innerHTML='<strong>Fecha Bloqueo: </strong>'+datoslote['fechadesbloque']
+                document.getElementById('obs-bloqueo').innerHTML='<strong>Observacion Bloqueo: </strong>'+datoslote['obsbloqueo']
+                }
+                else if (datoslote['estado']=='Adjudicado'||datoslote['estado']=='Reservado'){
+                    console.log('entra')
+                    $('#estados_lote').prop('disabled',true)
+                }
+                else{
+                    $('#usuario-bloquea').text('')
+                    $('#fecha-bloqueo').text('')
+                    $('#obs-bloqueo').text('')
+                    $('#estados_lote').prop('disabled',false)
+                }
+                $('#lote').val(inmueble)
+                $('#nuevo_val_lote').val(datoslote['vrmetrocuadrado'])
+
+            }
+        })
+
+    })
+</script>
+<script>
+    function format(d,i) {
+        // `d` is the original data object for the row
+        var table = '<table cellpadding="5" cellspacing="0" border="0" style="padding-left:50px;">'
+        
+        table += '<tr>'+
+                "<th class='text-center' style='font-size: small;'>Norte</th>"+
+                "<th class='text-center' style='font-size: small;'>Colindante Norte</th>"+
+                "<th class='text-center' style='font-size: small;'>Sur</th>"+
+                "<th class='text-center' style='font-size: small;'>Colindante Sur</th>"+
+                "<th class='text-center' style='font-size: small;'>Este</th>"+
+                "<th class='text-center' style='font-size: small;'>Colindante Este</th>"+
+                "<th class='text-center' style='font-size: small;'>Oeste</th>"+
+                "<th class='text-center' style='font-size: small;'>Colindante Oeste</th>"+
+                "<th class='text-center' style='font-size: small;'>Via Principal</th>"+
+                "<th class='text-center' style='font-size: small;'>Area Social</th>"+
+                "<th class='text-center' style='font-size: small;'>Esquinero</th>"+
+            "</tr>"
+        
+            table += '<tr>' +
+                    '<td class="text-center">' + d['norte'] + '</td>' +
+                    '<td class="text-center">' + d['colindante_norte'] + '</td>' +
+                    '<td class="text-center">' + d['sur'] + '</td>' +
+                    '<td class="text-center">' + d['colindante_sur'] + '</td>' +
+                    '<td class="text-center">' + d['este'] + '</td>' +
+                    '<td class="text-center">' + d['colidante_este'] + '</td>' +
+                    '<td class="text-center">' + d['oeste'] + '</td>' +
+                    '<td class="text-center">' + d['colindante_oeste'] + '</td>' +
+                    '<td class="text-center">' + d['fac_valor_via_principal'] + '</td>' +
+                    '<td class="text-center">' + d['fac_valor_area_social'] + '</td>' +
+                    '<td class="text-center">' + d['fac_valor_esquinero'] + '</td>' +
+                '</tr>'
+            if(i != undefined){
+                table += "<tr>"+
+                    "<td colspan='11'>Id relacionado: "+i.tipo+" Nº <a target='_blank' href='"+ i.url+"'><strong>"+i.id+"</strong></a></td>"+
+                    "</tr>"+
+                    "<tr>"+
+                    "<td colspan='11'>Cliente: "+i.nombretitular+"</td>" +
+                    "</tr>"
+            }
+        
+        table += '</table>';
+        return table
+    }
+    $(document).ready(function() {
+    var tablaInventario=$('#tabla-inventario').DataTable({
+                    'scrollY':        "550px",
+                    'scrollX':        true,
+                    'scrollCollapse': true,
+                    'paging':         false,
+                searchBuilder:{
+                        conditions: {
+                                num: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    '<': {
+                                        conditionName: 'Menor que'
+                                    },
+                                    '<=': {
+                                        conditionName: 'Menor o igual que'
+                                    },
+                                    '>': {
+                                        conditionName: 'Mayor que'
+                                    },
+                                    '>=': {
+                                        conditionName: 'Mayor o igual que'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'between': {
+                                        conditionName: 'Entre'
+                                    },
+                                    '!between': {
+                                        conditionName: 'No esta entre'
+                                    }
+                                },
+                                string: {
+                                    '=': {
+                                        conditionName: 'Igual a'
+                                    },
+                                    '!=': {
+                                        conditionName: 'Diferente de'
+                                    },
+                                    '!null': {
+                                        conditionName: 'No esta vacio'
+                                    },
+                                    'null': {
+                                        conditionName: 'Vacio'
+                                    },
+                                    'starts': {
+                                        conditionName: 'Empieza con'
+                                    },
+                                    'ends': {
+                                        conditionName: 'Termina en'
+                                    },
+                                    'contains': {
+                                        conditionName: 'Contiene'
+                                    },
+                                }
+                            },
+                    },
+                language:{
+                    searchBuilder: {
+                        add:'Nuevo filtro',
+                        clearAll:'Borrar filtro',
+                        deleteTitle:'Borrar',
+                        data:'Columna',
+                        logicAnd:'Y',
+                        logicOr:'O',
+                        condition: 'Condición',
+                        value: 'Valor',
+                        title: 'Filtro Avanzado',
+                    }
+                },
+                dom: 'Qlfrtip',
+    });
+    
+    $('#tabla-inventario tbody').on( 'click', 'tr', function () {
+        if ( $(this).hasClass('selected') ) {
+            $(this).removeClass('selected');
+        }
+        else {
+            tablaInventario.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected');
+        }
+        } );
+    $('#tabla-inventario tbody').on('click', 'td.details-control', function () {
+        var tr = $(this).closest('tr');
+        var row = tablaInventario.row(tr);
+        if (row.child.isShown()) {
+            row.child.hide();
+            tr.find('i').removeClass('fa-minus-square');
+            tr.find('i').addClass('fa-plus-square');
+        } else {
+            // Open this row
+            var inmueble = row.data()[1]
+            $.ajax({
+                type: 'GET',
+                url: '/ajax_request/datainmuebles/{{proyecto}}',
+                data: {
+                    'inmueble': inmueble
+                },
+                success: function (response) {
+                    var data = JSON.parse(response['data_inmueble'])
+                    var info = Array(response['infopropietario'])
+                    row.child(format(data[0]['fields'],info[0])).show();
+                }
+            })
+            tr.find('i').removeClass('fa-plus-square')
+            tr.find('i').addClass('fa-minus-square')
+        }
+    });
+    });
+</script>
+<script>
+    $(document).ready(function(){
+        $('#form-texto-inv').submit(function(e){
+            e.preventDefault();
+            file = $('#file-inventario').val()
+            if (!file.endsWith('.xlsx')){
+                Swal.fire({
+                    title: '¡Error!',
+                    text: 'El archivo debe ser .xlsx',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                })
+                return;
+            }
+            let form = new FormData(this);
+            $.ajax({
+                type: 'POST',
+                url: '/ajax_request/linderos',
+                data: form,
+                contentType: false,
+                processData: false,
+                success: function(response){
+                        Swal.fire({
+                            title: '¡Exito!',
+                            text: response['message'],
+                            icon:'success',
+                            confirmButtonText: 'OK'
+                        })
+                        $('#modal-texto-inv').modal('hide')
+                        $('#form-texto-inv').trigger('reset')
+                        window.open(response['href'],'_blank');
+
+                },
+                error: function(error){
+                    Swal.fire({
+                            title: '¡Error!',
+                            text: 'Ocurrio un error, intentelo de nuevo',
+                            icon: 'error',
+                            confirmButtonText: 'OK'
+                        })
+                }
+            })
+        })
+    })
+</script>
+{%endblock%}

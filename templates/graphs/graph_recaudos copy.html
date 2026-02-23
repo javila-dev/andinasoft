@@ -1,0 +1,142 @@
+{%extends 'base.html'%}
+{%load l10n%}
+{%block style%}
+<link href="https://cdn.datatables.net/searchpanes/1.2.0/css/searchPanes.dataTables.min.css" rel="stylesheet">
+<link href="https://cdn.datatables.net/select/1.3.1/css/select.dataTables.min.css" rel="stylesheet">
+{%endblock %}
+{%block js%}
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/searchpanes/1.2.0/js/dataTables.searchPanes.min.js"></script>
+<script type="text/javascript" language="javascript" src="https://code.highcharts.com/highcharts.js"></script>
+<script type="text/javascript" language="javascript" src="https://cdn.datatables.net/select/1.3.1/js/dataTables.select.min.js"></script>
+{%endblock%}
+{%block content%}
+<div class='container-xl bg-light rounded shadow'>
+    <div class='row'>
+        <div class='col-xs-12 col-lg-12'>
+            <div class='table-responsive'>
+                <table id='tablaRecaudos' class='display' style='width: 100%;'>
+                    <thead>
+                        <tr>
+                            <th>Adj</th>
+                            <th>Fecha</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {%for recaudo in recaudos%}
+                        <tr>
+                            <td>{{recaudo.idadjudicacion}}</td>
+                            <td>{{recaudo.fecha.day}}</td>
+                            <td>{{recaudo.valor|unlocalize}}</td>
+                        </tr>
+                        {%endfor%}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $(document).ready(function(){
+        var tabla = $('#tablaRecaudos').DataTable()
+        var recaudo = getRecaudos(tabla)
+
+        var axis = {
+            id: 'Valor',
+            min: 0,
+            title:{
+                text:'Recaudo'
+            }
+        };
+
+        var series={
+            name:'Recaudo Mes',
+            data:Object.values(recaudo)
+        };
+
+        var container = $('<div/>').insertBefore(tabla.table().container());
+
+        var chart = Highcharts.chart(container[0], {
+            chart: {
+                type: 'column',
+            },
+            title: {
+                text: 'Recaudos',
+            },
+            xAxis: {
+                text: 'Recaudos'
+            },
+            yAxis: {
+                categories: Object.keys(recaudo)
+            },
+            series: [series],
+        });
+        tabla.on('draw', function () {
+            recaudo=getRecaudos(tabla)
+            chart.axes[0].categories = Object.keys(recaudo)
+            chart.series[0].setData(Object.values(recaudo));
+        });
+        function chartData(table) {
+            var counts = {};
+            var sums = {}
+        
+            // Count the number of entries for each position
+            table
+                .column(1, { search: 'applied' })
+                .data()
+                .each(function (val) {
+                    if (counts[val]) {
+                        counts[val] += 1;
+                    } else {
+                        counts[val] = 1;
+                    }
+                });
+            console.log(counts)
+            
+            // And map it to the format highcharts uses
+            return $.map(counts, function (val, key) {
+                return {
+                    name: key,
+                    y: val,
+                };
+            });
+        }
+        function getRecaudos(table){
+            var recaudoCount = {}
+            var recuaudoValor = {}
+
+            var indexes = table.rows({search:'applied'}).indexes().toArray();
+
+            for (var i=0;i<indexes.length;i++){
+                var fecha = table.cell(indexes[i],1)
+                if (recaudoCount[fecha] === undefined){
+                    recaudoCount[fecha]=[+
+                        table
+                            .cell(indexes[i],2)
+                            .data()
+                            .replace(/[^0-9.]/g, ''),
+                            ];
+                }
+                else{
+                    recaudoCount[fecha].push(
+                        +table
+                            .cell(indexes[i],2)
+                            .data()
+                            .replace(/[^0-9.]/g, ''),
+                    );
+                }
+            }
+
+            var keys = Object.keys(recaudoCount);
+
+            for (var i = 0; i<keys.length; i++){
+                var length = recaudoCount[keys[i]].length;
+                var total = recaudoCount[keys[i]].reduce((a,b) => a+b,0);
+                recuaudoValor[keys[i]] = total/length
+            }
+            return recuaudoValor;
+        }
+
+    })
+</script>
+{%endblock%}

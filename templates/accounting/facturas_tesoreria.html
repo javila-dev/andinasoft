@@ -1,0 +1,1843 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load static%}
+{%block title%}Accounting | Pagar facturas{%endblock%}
+{%block style%}
+<style>
+    th{
+        font-size: small;
+        text-align: center;
+    }
+    td{
+        font-size: x-small;
+        text-align: center;
+    }
+    tr{
+        cursor: pointer;
+    }
+</style>
+{%endblock%}
+{%block js%}
+{%include 'datepicker_gigjo.html'%}
+<script src='{%static "js/jquery.mask.js"%}'></script>
+{%endblock%}
+{%block content%}
+<div class='principal-container bg-light shadow-lg rounded'>
+    <h3 class='section-title text-white text-center'>
+        Pagar facturas
+        </h3>
+    <div class='d-inline-flex my-2'>
+        <div class='input-group ml-3'>
+            <div class='input-group-prepend'>
+                <span class='input-group-text'>Oficina</span>
+            </div>
+            <select id='oficina' class='custom-select'>
+                <option value=''>Seleccionar...</option>
+                <option value='MEDELLIN'>MEDELLIN</option>
+                <option value='MONTERIA'>MONTERIA</option>
+            </select> 
+        </div>
+    </div>
+    <div class='row justify-content-around mx-0 pt-3 pb-4'>
+        <div class='col-md-12 bg-white shadow rounded py-3'>
+            <p class='lead text-center border-bottom border-gray'>Pendientes de pago</p>
+            <div class='table-responsive'>
+                <table id='tablaRecibidos' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Tercero</th>
+                            <th>Fecha Fact</th>
+                            <th>Descripcion</th>
+                            <th>Valor</th>
+                            <th>Empresa</th>
+                            <th>Causacion</th>
+                            <th>Pago Neto</th>
+                            <th>Saldo</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<div class='row position-absolute position-fixed' style='bottom:15px;right:15px'>
+    <button disabled class='btn btn-xl btn-circle btn-primary  shadow' id='btnModalSinRecibir'
+            data-toggle="modal" data-target='#modalSinRecibir'><i class="fas fa-paper-plane"></i></button>
+    <button disabled class='btn btn-xl btn-circle btn-success  mx-3 shadow' id='btnmodalAnt'
+            data-toggle="modal" data-target='#modalAnticipo'><i class="fas fa-plus"></i></button>
+    <button disabled class='btn btn-xl btn-circle btn-warning shadow mr-3' id='btnmodalTransf'
+            data-toggle="modal" data-target='#modalTransf'><i class="fas fa-random"></i></button>
+    <button disabled class='btn btn-xl btn-circle btn-info shadow mr-3' id='btnmodalMvtos'
+        ><i class="fas fa-list"></i></button>
+
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuRecibir' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;z-index:1060">
+    <a class="dropdown-item" id='recibir' href="#">Recibir</a>
+    <a class="dropdown-item" id='ver' href="#">Ver Soporte</a>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuRecibidos' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px">
+    <a class="dropdown-item" id='timeline' href="#">Timeline</a>
+    <a class="dropdown-item" id='ver' href="#">Ver Soporte</a>
+    <a class="dropdown-item" id='causacion' href="#">Ver Causacion</a>
+</div>     
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenudivMvto' aria-labelledby="dropdownMenuLink"
+  style="max-width: 150px;z-index:1100">
+    <a class="dropdown-item" id='id_div_mvto' data-toggle="modal" data-target="#modalDividirMvto">Dividir</a>
+</div>     
+<!-- Modal -->
+<div class="modal fade" id="modalPagar" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalPagartitle"></h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <nav>
+                <div class="nav nav-tabs" id="nav-tab" role="tablist">
+                  <a class="nav-link active" id="nav-home-tab" data-toggle="tab" href="#nav-nuevo" role="tab" aria-controls="nav-home" aria-selected="true">Nuevo pago</a>
+                  <a class="nav-link" id="nav-profile-tab" data-toggle="tab" href="#nav-historico" role="tab" aria-controls="nav-profile" aria-selected="false">Pagos realizados</a>
+                </div>
+              </nav>
+              <div class="tab-content" id="nav-tabContent">
+                <div class="tab-pane fade show active" id="nav-nuevo" role="tabpanel">
+                    <nav>
+                        <div class="nav nav-pills mt-2" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                            <a class="nav-link active" id="v-pills-normal-tab" data-toggle="pill" href="#v-pills-normal" role="tab" aria-controls="v-pills-normal" aria-selected="true">Normal</a>
+                            <a class="nav-link disabled" id="v-pills-gtt-tab" data-toggle="pill" href="#v-pills-gtt" role="tab" aria-controls="v-pills-gtt" aria-selected="false">GTT</a>
+                            <a class="nav-link disabled" id="v-pills-comis-tab" data-toggle="pill" href="#v-pills-comis" role="tab" aria-controls="v-pills-comis" aria-selected="false">Comisiones</a>
+                            <a class="nav-link disabled" id="v-pills-nomina-tab" data-toggle="pill" href="#v-pills-nomina" role="tab" aria-controls="v-pills-nomina" aria-selected="false">Nomina</a>
+                            <a class="nav-link" id="v-pills-otros-tab" data-toggle="pill" href="#v-pills-otros" role="tab" aria-controls="v-pills-comis" aria-selected="false">Otros</a>
+                        </div>
+                    </nav>
+                    <div class="row pt-3">
+                        <div class="col-6">
+                            <div class='table-responsive'>
+                                <table id='tablaCONBanco' class='display' style='width:100%'>
+                                    <thead>
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Descripcion</th>
+                                            <th>Referencia</th>
+                                            <th>Valor</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                                <div class="input-group mt-3">
+                                    <div class="input-group-prepend">
+                                        <span class="input-group-text">Total</span>
+                                    </div>
+                                    <input type="text" readonly class="form-control text-center" id='total-pago-banco'>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            
+                          <div class="tab-content" id="v-pills-tabContent">
+                            <div class="tab-pane fade show active pagos" id="v-pills-normal" role="tabpanel" aria-labelledby="v-pills-normal-tab">
+                                {%crispy form_facturas%}
+                            </div>
+                            <div class="tab-pane fade pagos" id="v-pills-gtt" role="tabpanel" aria-labelledby="v-pills-gtt-tab">
+                                {%crispy formgtt%}
+                            </div>
+                            <div class="tab-pane fade pagos" id="v-pills-comis" role="tabpanel" aria-labelledby="v-pills-comis-tab">
+                                {%crispy formcomis%}
+                            </div>
+                            <div class="tab-pane fade pagos" id="v-pills-nomina" role="tabpanel" aria-labelledby="v-pills-nomina-tab">
+                                {%crispy formnomina%}
+                            </div>
+                            <div class="tab-pane fade pagos" id="v-pills-otros" role="tabpanel" aria-labelledby="v-pills-otros-tab">
+                                {%crispy formotrospag%}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                </div>
+                <div class="tab-pane fade" id="nav-historico" role="tabpanel">
+                    <div class='table-responsive mb-3'>
+                        <table id='tablaListaPagos' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Empresa</th>
+                                    <th>Cuenta</th>
+                                    <th>Usuario</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                </div>  
+              </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<div class="modal fade" id="modalHistory" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+<div class="modal-dialog">
+    <div class="modal-content">
+    <div class="modal-header">
+        <h5 class="modal-title" id="modalHistorytitle"></h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+        </button>
+    </div>
+    <div class="modal-body">
+        <div id='historyDiv'></div>
+    </div>
+    </div>
+</div>
+  </div>
+<div class="modal fade" id="modalSinRecibir" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="staticBackdropLabel">Radicados por recibir</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <div class='table-responsive'>
+                <table id='tablaSinRecibir' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Id</th>
+                            <th rowspan="2">Tercero</th>
+                            <th colspan="2">Fechas</th>
+                            <th rowspan="2">Causacion</th>
+                            <th rowspan="2">Valor</th>
+                        </tr>
+                        <tr>
+                            <th>Radica</th>
+                            <th>Factura</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<div class="modal fade" id="modalAnticipo" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="modalAnticip">Registrar Anticipo</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class='table-responsive'>
+                        <table id='tablaCONBanco_ant' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Descripcion</th>
+                                    <th>Referencia</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                    <div class="input-group mt-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">Total</span>
+                        </div>
+                        <input type="text" readonly class="form-control text-center" id='total-anticipo-banco'>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    {%crispy form_anticipo%}
+                </div>
+            </div>
+            
+        </div>
+        </div>
+    </div>
+</div>  
+<div class="modal fade" id="modalTransf" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="modalAnticip">Transferencia entre cuentas</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class='table-responsive'>
+                        <table id='tablaCONBanco_tr' class='display' style='width:100%'>
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Descripcion</th>
+                                    <th>Referencia</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                        </table>
+                    </div>
+                    <div class="input-group mt-3">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">Total</span>
+                        </div>
+                        <input type="text" readonly class="form-control text-center" id='total-tr-banco'>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    {%crispy form_transf%}
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>  
+<div class="modal fade" id="modalMvtosDia" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">Movimientos bancarios</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            {%crispy form_buscar_mvto%}
+            <div class='table-responsive'>
+                <table id='tablaCONBanco_mvtos' class='display' style='width:100%'>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Descripcion</th>
+                            <th>Referencia</th>
+                            <th>Valor</th>
+                            <th>Tipo</th>
+                            <th>Pago</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+        </div>
+    </div>
+</div> 
+
+<div class="modal fade" id="modalDividirMvto" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">Dividir movimiento banco</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <span class="input-group-text">Valor linea original</span>
+                </div>
+                <input type="text" readonly class="text-center money form-control" id="vr-linea-orig">
+            </div>
+            <div class="input-group mt-2">
+                <div class="input-group-prepend">
+                    <span class="input-group-text">Lineas a crear</span>
+                </div>
+                <input type="number" min="2" class="text-center form-control" id="lineas-dividir">
+            </div>
+            <div class="mt-2">
+                <form id="form-dividir-mvto" method="POST">{%csrf_token%}
+                    <ol id="lineas-nuevas"></ol>
+                    <button id="'btn-dividir-mvto" type="submit" class="btn btn-primary float-right">Dividir</button>
+                </form>
+                
+            </div>
+            
+        </div>
+        </div>
+    </div>
+</div> 
+
+<script>
+    $(document).ready(function(){
+        var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
+        var groupColumn_SR = 6;
+        var tablaSinRecibir = $('#tablaSinRecibir').DataTable({
+            processing:true,
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/infofacturas',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'tercero'},
+                {'data':'fecha_rad'},
+                {'data':'fecha_fact'},
+                {'data':'causacion'},
+                {'data':'valor'},
+                {'data':'empresa'},
+            ],
+            order: [[ groupColumn_SR, "asc" ],[0,'desc']],
+            "columnDefs": [
+                { "visible": false, "targets": groupColumn_SR },
+                {targets:[1],"className":"dt-body-left"},
+            ],
+            drawCallback: function ( settings ) {
+            var api = this.api();
+            var rows = api.rows( {page:'current'} ).nodes();
+            var last=null;
+            api.column(groupColumn_SR, {page:'current'} ).data().each( function ( group, i ) {
+                if ( last !== group ) {
+                    $(rows).eq( i ).before(
+                        '<tr class="group text-left"><td colspan="5" class="text-left"><strong>Empresa: </strong>'+group+'</td></tr>'
+                    );
+                    last = group;
+                }
+            } );
+        }
+        })
+        var tablaRecibidos = $('#tablaRecibidos').DataTable({
+            processing:true,
+            language:{
+                url:'/ajax_request/datatable_spanish',
+            },
+            ajax:{
+                url:'/accounting/ajax/infofacturas',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'pk'},
+                {'data':'tercero'},
+                {'data':'fecha_fact'},
+                {'data':'descripcion'},
+                {'data':'valor'},
+                {'data':'empresa'},
+                {'data':'causacion'},
+                {'data':'pagoneto'},
+                {'data':'saldo'},
+            ],
+            columnDefs: [
+            {targets: [3,6],type: 'num-fmt'},
+            {targets:[1,3],"className":"dt-body-left"},
+            {targets:[4,7,8],"className":"dt-body-right"}, 
+            ],
+            order: [[ 0, "desc" ]]
+        })
+        var tablaListaPagos = $('#tablaListaPagos').DataTable({
+            scrollY : "40vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,  
+            language:{
+                url:'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/getpaymentsfact',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'empresa'},
+                {'data':'cuenta'},
+                {'data':'usuario'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                {targets: [4], type: 'num-fmt'},
+                {targets: [0], type: 'date-uk'},
+                {targets:[1],"className":"dt-body-left"},
+                {targets:[4],"className":"dt-body-right"}, 
+            ],
+        })
+        var tablaCONBanco = $('#tablaCONBanco').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        var tablaCONBanco_ant = $('#tablaCONBanco_ant').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        var tablaCONBanco_tr = $('#tablaCONBanco_tr').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        var tablaCONBanco_mvtos = $('#tablaCONBanco_mvtos').DataTable({
+            scrollY : "30vh",
+            scrollX : true,
+            scrollCollapse : true,
+            paging : false,
+            info:false,
+            processing: true,
+            language: {
+                'url':'/ajax_request/datatable_spanish'
+            },
+            ajax:{
+                url:'/accounting/ajax/bancarymovements',
+                dataSrc:"data"
+            },
+            columns:[
+                {'data':'fecha'},
+                {'data':'descripcion'},
+                {'data':'referencia'},
+                {'data':'valor'},
+                {'data':'tipo'},
+                {'data':'pagorelacionado'},
+                {'data':'usuario'},
+            ],
+            order: [[ 0, "desc" ]],
+            columnDefs: [
+                { "targets":[1],"className":"dt-body-left"},
+                { "targets":[3],"className":"dt-body-right"},
+                { type: 'date-uk', targets: 0 }
+            ],
+        })
+        
+        $('#tablaSinRecibir').on('click','tr',function(e){
+            tablaSinRecibir.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaSinRecibir').on('contextmenu','tr',function(e){
+            tablaSinRecibir.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuRecibir').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $('#tablaSinRecibir tbody').on( 'click', 'tr.group', function () {
+            var currentOrder = tablaSinRecibir.order()[0];
+            if ( currentOrder[0] === groupColumn_SR && currentOrder[1] === 'asc' ) {
+                tablaSinRecibir.order( [ groupColumn_SR, 'desc' ] ).draw();
+            }
+            else {
+                tablaSinRecibir.order( [ groupColumn_SR, 'asc' ] ).draw();
+            }
+        } );
+        $('#tablaSinRecibir tbody').on( 'contextmenu', 'tr.group', function () {
+            return false;
+            } );
+        $('#tablaRecibidos').on('click','tr',function(e){
+            tablaRecibidos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var line = tablaRecibidos.row(this).data()
+            $('#modalPagar').find('.modal-title').text('Registrar pago radicado #'+line.pk)
+            tablaListaPagos.ajax.url(
+                '/accounting/ajax/getpaymentsfact?id_radicado='+line.pk
+            ).load()
+            $('#containerTabComis').remove()
+            if (line.descripcion.includes('GTT')){
+                $('#v-pills-gtt-tab').removeClass('disabled')
+            }
+            else{
+                $('#v-pills-gtt-tab').addClass('disabled')
+            }
+            if (line.descripcion.includes('COMISION')){
+                $('#v-pills-comis-tab').removeClass('disabled')
+            }
+            else{
+                $('#v-pills-comis-tab').addClass('disabled')
+            }
+            if (line.descripcion.includes('NOMINA')){
+                $('#v-pills-nomina-tab').removeClass('disabled')
+            }
+            else{
+                $('#v-pills-nomina-tab').addClass('disabled')
+            }
+            
+            $('#v-pills-normal-tab').click()
+            $('#modalPagar').modal('show')
+            
+        })
+        $('#tablaRecibidos').on('contextmenu','tr',function(e){
+            tablaRecibidos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenuRecibidos').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        $('#tablaSinRecibir').on('click','tr',function(e){
+            tablaSinRecibir.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+        })
+        $('#tablaListaPagos').on('click','tr',function(e){
+            tablaListaPagos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var line = tablaListaPagos.row(this).data()
+            var ruta = '/media/'+line.soporte
+            let params = `status=no,location=no,toolbar=no,menubar=no,
+            width=650,height=450,left=100,top=100`;
+            window.open(ruta,'Soporte pago radicado '+ruta.pk,params)
+        })
+        $('#tablaCONBanco_mvtos').on('contextmenu','tr',function(e){
+            tablaCONBanco_mvtos.$('tr.selected').removeClass('selected');
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position>=width*3/4){
+                position -= 150
+            }
+            $('#contextMenudivMvto').css({
+                'display':'block',
+                'left':position,
+                'top':e.pageY,
+            })
+            return false;
+        })
+        
+        $('#oficina').on('change',function(){
+            var oficina = $(this).val()
+            var url = '/accounting/ajax/infofacturas?oficina='+oficina+'&ubicacion=Contabilidad&causado=1'
+            tablaSinRecibir.ajax.url(url).load()
+            var url = '/accounting/ajax/infofacturas?oficina='+oficina+'&ubicacion=Tesoreria&tesoreria=1'
+            tablaRecibidos.ajax.url(url).load()
+            if (oficina==null){
+                $('#btnmodalTransf').prop('disabled',true)
+                $('#btnModalSinRecibir').prop('disabled',true)
+                $('#btnmodalAnt').prop('disabled',true)
+                $('#btnmodalMvtos').prop('disabled',true)
+                
+            }
+            else{
+                $('#btnmodalTransf').prop('disabled',false)
+                $('#btnModalSinRecibir').prop('disabled',false)
+                $('#btnmodalAnt').prop('disabled',false)
+                $('#btnmodalMvtos').prop('disabled',false)
+            }
+        })
+        $("#contextMenuRecibir").click(function(e){
+            var line = tablaSinRecibir.row('.selected').data()
+            switch(e.target.id){
+                case "recibir":
+                    $.ajax({
+                        type:'POST',
+                        url:'/accounting/ajax/recibir',
+                        data:{
+                            'radicado':line.pk,
+                            'recibe':'Tesoreria',
+                            'csrfmiddlewaretoken':csrf_token,
+                        },
+                        success:function(response){
+                            $('#alert-title').text(response.title)
+                            $('#alert-data').text(response.msj)
+                            $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                            tablaSinRecibir.ajax.reload()
+                            tablaRecibidos.ajax.reload()
+                        }
+                    })
+                    break;    
+                case "ver":
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/datafactura',
+                        data:{
+                            'pk':line.pk,
+                        },
+                        success:function(response){
+                            var data = JSON.parse(response['data'])[0]['fields']
+                            var ruta = '/media/'+data['soporte_radicado']
+                            let params = `status=no,location=no,toolbar=no,menubar=no,
+                            width=650,height=450,left=100,top=100`;
+                            window.open(ruta,'Soporte radicado '+ruta.pk,params)
+                            tablaSinRecibir.$('tr.selected').removeClass('selected');
+                        }
+                    })
+                    break;    
+                    
+            }
+        });
+        $("#contextMenuRecibidos").click(function(e){
+            var line = tablaRecibidos.row('.selected').data()
+            switch(e.target.id){
+                case "timeline":
+                    $('#modalHistory').find('.modal-title').text('Acciones radicado '+line.pk)
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/gethistory',
+                        data:{
+                            'pk':line.pk
+                        },
+                        success:function(response){
+                            $('#historyDiv').empty()
+                            let data = response['data']
+                            for (let i in data){
+                                let fecha = new Date(data[i]['fecha'])
+                                fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
+                                let action = `<div class="media border-bottom border-gray pt-2">
+                                    <img src="/media/`+data[i]['imagen']+`" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                                    <div class="media-body">
+                                    <h6 class="mt-0">`+data[i]['usuario']+' el '+fecha+`</h6>
+                                    <p>`+data[i]['accion']+`</p>
+                                    </div>
+                                </div>`
+                                $('#historyDiv').append(action)
+                            }
+                        }
+                    })
+                    $('#modalHistory').modal('show')
+                    break;    
+                case "ver":
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/datafactura',
+                        data:{
+                            'pk':line.pk,
+                        },
+                        success:function(response){
+                            var data = JSON.parse(response['data'])[0]['fields']
+                            var ruta = '/media/'+data['soporte_radicado']
+                            let params = `status=no,location=no,toolbar=no,menubar=no,
+                            width=650,height=450,left=100,top=100`;
+                            window.open(ruta,'Soporte radicado '+ruta.pk,params)
+                            tablaRecibidos.$('tr.selected').removeClass('selected');
+                        }
+                    })
+                    break;   
+                case "causacion":
+                    $.ajax({
+                        type:'GET',
+                        url:'/accounting/ajax/datafactura',
+                        data:{
+                            'pk':line.pk,
+                        },
+                        success:function(response){
+                            var data = JSON.parse(response['data'])[0]['fields']
+                            var ruta = '/media/'+data['soporte_causacion']
+                            let params = `status=no,location=no,toolbar=no,menubar=no,
+                            width=650,height=450,left=100,top=100`;
+                            window.open(ruta,'Causacion radicado '+ruta.pk,params)
+                            tablaRecibidos.$('tr.selected').removeClass('selected');
+                        }
+                    })
+                break;   
+            }
+        });
+        $('#cuenta_cont').on('change',function(){
+            let cuenta = $(this).val()
+            if (cuenta == '9'|| cuenta == '16'){
+                $('#id_soporte').prop('required',false)
+            }
+            else{
+                $('#id_soporte').prop('required',true)
+            }
+        })
+        $('#empresa_cont').on('change',function(){
+            var empresa = $(this).val()
+            $('#cuenta_cont').empty()
+            $('#cuenta_cont').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#cuenta_cont').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_sale').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_sale').empty()
+            $('#id_cuenta_sale').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_sale').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_entra').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_entra').empty()
+            $('#id_cuenta_entra').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_entra').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_ant').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_ant').empty()
+            $('#id_cuenta_ant').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_ant').append(option)
+                    }
+                }
+            })
+            $('#id_tipo_anticipo').empty()
+            $('#id_tipo_anticipo').append(
+                '<option value="">Selecciona...</option>'
+            )
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/getinfointerfaz',
+                data:{
+                    'tipo':'ANTICIPO',
+                    'empresa':empresa
+                },
+                success:function(response){
+                    let data = JSON.parse(response['data'])
+                    for (let i in data){
+                        descrip = data[i]['fields']['descripcion']
+                        pk = data[i]['pk']
+                        $('#id_tipo_anticipo').append(
+                            '<option value='+pk+'>'+descrip+'</option>'
+                        )
+                    }
+                }
+            })
+        })
+        $('#id_id_tercero').on('change',function(){
+            var tercero = $(this).val()
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/matchsupplier',
+                data:{
+                    'tercero':tercero
+                },
+                success:function(response){
+                    var name = response['nombre']
+                    $('#id_nombre_tercero').val(name)
+                }
+            })
+        })
+        $('#id_empresa_gtt').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_gtt').empty()
+            $('#id_cuenta_gtt').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_gtt').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_comis').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_comis').empty()
+            $('#id_cuenta_comis').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_comis').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_otros').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_otros').empty()
+            $('#id_cuenta_otros').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_otros').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_pago_nomina').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_nomina').empty()
+            $('#id_cuenta_nomina').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_nomina').append(option)
+                    }
+                }
+            })
+        })
+        $('#id_empresa_mvtos').on('change',function(){
+            var empresa = $(this).val()
+            $('#id_cuenta_mvtos').empty()
+            $('#id_cuenta_mvtos').append('<option value="">Selecciona...</option>')
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/companies_accounts',
+                data:{
+                    'empresa':empresa
+                },
+                success:function(response){
+                    var data = JSON.parse(response['cuentas'])
+                    for (let i in data){
+                        var pk_cuenta = data[i]['pk']
+                        var cuenta = data[i]['fields']['cuentabanco']
+                        var option = '<option value='+pk_cuenta+'>'+
+                                    cuenta+'</option>'
+                        $('#id_cuenta_mvtos').append(option)
+                    }
+                }
+            })
+        })
+
+        $('#formAnticipos').on('submit',function(e){
+            e.preventDefault();
+            form_data = new FormData(this)
+            let oficina = $('#oficina').val()
+            form_data.append('oficina',oficina)
+            let valor = $('#id_valor_anticip').val()
+            valor = valor.replace(/[\$,]/g, '')*1
+            valor_conciliado = totalizarMovimiento('#tablaCONBanco_ant tr.selected','#total-anticipo-banco')
+            let cuenta = $('#id_cuenta_ant').val()
+
+            if (cuenta != "9" && cuenta != "16" && cuenta != "25"){
+                if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    return
+                }
+            }
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco_ant.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            form_data.append('lineas_banco', lineas_banco)
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/registraranticipo',
+                data:form_data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    $('#alert-title').text('¡Listo!')
+                    $('#alert-data').text('Se registró el anticipo de forma correcta')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    $('#formAnticipos')[0].reset()
+                    $('#modalAnticipo').modal('hide')
+                }
+            })
+        })
+        $('#formTransfers').on('submit',function(e){
+            e.preventDefault();
+            data = new FormData(this)
+            let oficina = $('#oficina').val()
+            data.append(
+                'oficina',oficina
+            )
+
+            
+            let cuenta_sale = $('#id_cuenta_sale').val()
+            let cuenta_entra = $('#id_cuenta_entra').val()
+            if(cuenta_sale == cuenta_entra){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('La cuentra de ingreso no puede ser igual a la de salida')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+
+            let valor = $('#id_valor_transf').val()
+            valor = valor.replace(/[\$,]/g, '')*1
+            valor_conciliado = totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
+            let cuenta = $('#id_cuenta_ant').text()
+
+            if (cuenta_sale != "9" && cuenta_sale != "16" && cuenta_sale != "25"){
+                if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    return
+                }
+            }
+            
+
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco_tr.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            data.append('lineas_banco', lineas_banco)
+
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/newtransfer',
+                data:data,
+                processData:false,
+                contentType:false,
+                success:function(response){
+                    $('#alert-title').text('Listo!')
+                    $('#alert-data').text('Se creó la transferencia con exito')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    $('#modalTransf').modal('hide')
+                    $('#formTransfers').trigger('reset')
+                }
+            })
+        });
+        $('#formPago').on('submit',function(e){
+            e.preventDefault();
+            form_data = new FormData(this)
+            let valor = $('#valor_pago').val()
+            let radicado = tablaRecibidos.row('.selected').data()
+            form_data.append('radicado',radicado.pk)
+            let saldo =radicado.saldo
+            valor = valor.replace(/[\$,]/g, '')*1
+            saldo = saldo.replace(/[\$,]/g, '')*1
+
+            valor_conciliado = totalizarMovimiento()
+            let cuenta = $('#cuenta_cont').val()
+
+            if (cuenta != "9" && cuenta != "16" && cuenta != "25"){
+                if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    return
+                }
+            }
+
+
+            if (valor>saldo){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('No puedes asociar un pago por mayor valor al saldo pendiente')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+            if (valor==0){
+                $('#alert-title').text('Oh Oh')
+                $('#alert-data').text('No puedes registrar un pago con valor $0')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+            else{
+                var lineas_banco = []
+                var selected_rows = tablaCONBanco.rows('.selected').data()
+                for (i = 0; i < selected_rows.length; i++){
+                    lineas_banco.push(selected_rows[i].pk)
+                }
+                form_data.append('lineas_banco', lineas_banco)
+
+                $.ajax({
+                    type:'POST',
+                    url:'/accounting/ajax/payfactura',
+                    data:form_data,
+                    contentType:false,
+                    processData:false,
+                    success:function(response){
+                        tablaRecibidos.ajax.reload()
+                        tablaSinRecibir.ajax.reload()
+                        tablaCONBanco.ajax.reload()
+                        $('#alert-title').text('Listo!')
+                        $('#alert-data').text('El pago fue asociado con exito')
+                        $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                        $('#modalPagar').modal('hide')
+                        $('#id_soporte').val(null)
+                        $('#id_soporte')[0].labels[0].textContent = 'Selecciona...'
+                        $('#empresa_cont').val(null)
+                        $('#cuenta_cont').empty()
+                        $('#id_fecha').val(null)
+                        $('#valor_pago').val(null)
+                    }
+                })
+            }
+        })
+        $('#formgtt').on('submit',function(e){
+            e.preventDefault();
+            let radicado = tablaRecibidos.row('.selected').data()
+            let saldo_rad = radicado.saldo.replace(/[\$,]/g, '')*1
+            let total = $('#id_valor_gtt').val().replace(/[\$,]/g, '')*1
+            valor_conciliado = totalizarMovimiento()
+
+            if (total+valor_conciliado > 1 || total+valor_conciliado <-1){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+
+            if (total>saldo_rad){
+                $('#alert-title').text('Oh Oh')
+                $('#alert-data').html('El total a pagar no puede ser mayor que el saldo del radicado')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+            data = new FormData(this)
+            data.append(
+                'radicado',radicado.pk,
+            )
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            data.append('lineas_banco', lineas_banco)
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/gttasociado',
+                data:data,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text('Listo')
+                    $('#alert-data').html('Se registraron los pagos de forma correcta')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
+                    tablaRecibidos.ajax.reload()
+                    $('#modalPagar').modal('hide')
+                    $('#formgtt').trigger('reset')
+                    $('#tabladetalleGtt tbody').empty()
+                    tablaCONBanco.ajax.reload()
+                }
+            })
+        })
+        $('#formcomis').on('submit',function(e){
+            e.preventDefault();
+            let radicado = tablaRecibidos.row('.selected').data()
+            let saldo_rad = radicado.saldo.replace(/[\$,]/g, '')*1
+            let total = $('#id_valor_comis').val().replace(/[\$,]/g, '')*1
+            if (total>saldo_rad){
+                $('#alert-title').text('Oh Oh')
+                $('#alert-data').html('El total a pagar no puede ser mayor que el saldo del radicado')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+
+            valor_conciliado = totalizarMovimiento()
+
+            if (total+valor_conciliado > 1 || total+valor_conciliado <-1){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+
+            data = new FormData(this)
+            data.append(
+                'radicado',radicado.pk,
+            )
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            data.append('lineas_banco', lineas_banco)
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/comisionasociada',
+                data:data,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').html(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    tablaRecibidos.ajax.reload()
+                    tablaCONBanco.ajax.reload()
+                    $('#modalPagar').modal('hide')
+                    $('#formcomis').trigger('reset')
+                    $('#tabladetallecomis tbody').empty()
+                }
+            })
+        })
+        $('#formotrospagos').on('submit',function(e){
+            e.preventDefault();
+            let radicado = tablaRecibidos.row('.selected').data()
+            let saldo_rad = radicado.saldo.replace(/[\$,]/g, '')*1
+            let total = $('#id_valor_otros').val().replace(/[\$,]/g, '')*1
+            if (total>saldo_rad){
+                $('#alert-title').text('Oh Oh')
+                $('#alert-data').html('El total a pagar no puede ser mayor que el saldo del radicado')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+
+            valor_conciliado = totalizarMovimiento()
+
+            if (total+valor_conciliado > 1 || total+valor_conciliado <-1){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+
+            data = new FormData(this)
+            data.append(
+                'radicado',radicado.pk,
+            )
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            data.append('lineas_banco', lineas_banco)
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/otrospagosdetallados',
+                data:data,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').html(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    tablaRecibidos.ajax.reload()
+                    tablaCONBanco.ajax.reload()
+                    $('#modalPagar').modal('hide')
+                    $('#formcomis').trigger('reset')
+                    $('#tabladetallecomis tbody').empty()
+                }
+            })
+        })
+        $('#formnomina').on('submit',function(e){
+            e.preventDefault();
+            let radicado = tablaRecibidos.row('.selected').data()
+            let saldo_rad = radicado.saldo.replace(/[\$,]/g, '')*1
+            let total = $('#id_valor_nomina').val().replace(/[\$,]/g, '')*1
+            if (total>saldo_rad){
+                $('#alert-title').text('Oh Oh')
+                $('#alert-data').html('El total a pagar no puede ser mayor que el saldo del radicado')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+
+            valor_conciliado = totalizarMovimiento()
+            
+            let cuenta = $('#id_cuenta_nomina').val()
+            // Solo validar si la cuenta no es efectivo (9, 16, 25)
+            if (cuenta != "9" && cuenta != "16" && cuenta != "25") {
+                if (total+valor_conciliado > 1 || total+valor_conciliado < -1){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                    return
+                }
+            }
+
+            data = new FormData(this)
+            data.append(
+                'radicado',radicado.pk,
+            )
+
+            var lineas_banco = []
+            var selected_rows = tablaCONBanco.rows('.selected').data()
+            for (i = 0; i < selected_rows.length; i++){
+                lineas_banco.push(selected_rows[i].pk)
+            }
+            data.append('lineas_banco', lineas_banco)
+
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/nominadetallada',
+                data:data,
+                contentType:false,
+                processData:false,
+                success: function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').html(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    tablaRecibidos.ajax.reload()
+                    $('#modalPagar').modal('hide')
+                    $('#formcomis').trigger('reset')
+                    $('#tabladetallenomina tbody').empty()
+                }
+            })
+        }) 
+        
+        $('#id_proyecto_gtt').on('change',function(e){
+            let proyecto = $(this).val()
+            $('#id_fecha_gtt').empty()
+            $.ajax({
+                type:'get',
+                url:'/accounting/ajax/gttasociado',
+                data:{
+                    'proyecto':proyecto,
+                    'tipo':'all'
+                },
+                success: function(response){
+                    let data = JSON.parse(response['data'])
+                    for (i in data){
+                        let fecha_desde = data[i]['fields']['fecha_desde']
+                        let fecha_hasta = data[i]['fields']['fecha_hasta']
+                        let pk = data[i]['pk']
+                        
+                        $('#id_fecha_gtt').append(
+                            '<option value='+pk+'>'+fecha_desde+' AL '+fecha_hasta+'</option>'
+                        )
+                    } 
+                }
+            })
+        })
+        $('#btnseachGTT').click(function(){
+            $('#tabladetalleGtt tbody').empty()
+            let gtt = $('#id_fecha_gtt').val()
+            let proyecto = $('#id_proyecto_gtt').val()
+            $.ajax({
+                type:'get',
+                url:'/accounting/ajax/gttasociado',
+                data:{
+                    'proyecto':proyecto,
+                    'gtt':gtt,
+                    'tipo':'detalle'
+                },
+                success: function(response){
+                    let data = response.data
+                    for (i in data){
+                        let cc = data[0].cc
+                        let row = `
+                        <tr>
+                            <td>
+                                <input name="idTercero" type="text" class='form-control-plaintext' value= "${data[i].cc}"" readonly style="font-size:small">
+                            </td>
+                            <td>
+                                <input name="nombretercero" type="text" class='form-control-plaintext' value= "${data[i].nombre}"  style="font-size:small" readonly>
+                            </td>
+                            <td>
+                                <input type="number" name="vencimientoGtt" min="1" class='form-control text-center' required style="font-size:small">
+                            </td>
+                            <td>
+                                <input name="valorGtt" type="number" class='form-control-plaintext text-right' value= "${data[i].valor}" readonly style="font-size:small">
+                            </td>
+                        </tr>
+                        `
+                        $('#tabladetalleGtt tbody').append(row)
+                    } 
+                    
+                    $('#id_valor_gtt').val(response.total)
+                }
+            })
+        })
+        $('#btnseachcomis').click(function(){
+            $('#tabladetallecomis tbody').empty()
+            let fecha = $('#id_fecha_comis').val()
+            let proyecto = $('#id_proyecto_comis').val()
+            $.ajax({
+                type:'get',
+                url:'/accounting/ajax/comisionasociada',
+                data:{
+                    'proyecto':proyecto,
+                    'fecha':fecha,
+                },
+                success: function(response){
+                    let data = response.data
+                    for (i in data){
+                        let cc = data[0].cc
+                        let row = `
+                        <tr>
+                            <td>
+                                <input name="idTercero" type="text" class='form-control-plaintext' value= "${data[i].cc}"" readonly style="font-size:small">
+                            </td>
+                            <td>
+                                <input name="nombretercero" type="text" class='form-control-plaintext' value= "${data[i].nombre}"  style="font-size:small" readonly>
+                            </td>
+                            <td>
+                                <input type="number" name="vencimientocomis" min="1" class='form-control text-center' required style="font-size:small">
+                            </td>
+                            <td>
+                                <input name="valorComis" onchange="totalizarComis()" type="number" class='form-control-plaintext text-right' value= "${data[i].valor*1}" style="font-size:small">
+                            </td>
+                        </tr>
+                        `
+                        $('#tabladetallecomis tbody').append(row)
+                    } 
+                    
+                    $('#id_valor_comis').val(response.total)
+                }
+            })
+        })
+        $('#btnsearchnomina').click(function(){
+            that = this
+            $(this).addClass('disabled')
+              .html('<i class="fas fa-spinner fa-pulse">')
+            $('#tabladetallenomina tbody').empty()
+            $('#id_valor_nomina').val(null)
+            let year = $('#id_year_nomina').val()
+            let month = $('#id_month_nomina').val()
+            let quincena = $('#id_quincena_nomina').val()
+            let empresa = $('#id_empresa_nomina').val()
+            $.ajax({
+                type:'get',
+                url:'/accounting/ajax/nominaasociada',
+                data:{
+                    'year':year,
+                    'month':month,
+                    'quincena':quincena,
+                    'empresa':empresa,
+                },
+                success: function(response){
+                    let data = response.data
+                    let total = 0
+                    for (i in data){
+                        let cc = data[0].cc
+                        let row = `
+                        <tr>
+                            <td>
+                                <input name="idTercero" type="text" class='form-control-plaintext' value= "${data[i].worker_id_number}"" readonly style="font-size:small">
+                            </td>
+                            <td>
+                                <input name="nombretercero" type="text" class='form-control-plaintext' value= "${data[i].worker_name}"  style="font-size:small" readonly>
+                            </td>
+                            <td>
+                                <input type="number" name="vencimientonomina" min="1" class='form-control text-center' required style="font-size:small">
+                            </td>
+                            <td>
+                                <input name="valornomina" onchange="totalizarNomina()" type="number" class='form-control-plaintext text-right' value= "${data[i].worker_payment*1}" style="font-size:small">
+                            </td>
+                        </tr>
+                        `
+                        $('#tabladetallenomina tbody').append(row)
+                        total += data[i].worker_payment*1
+                    }
+
+                    totalizarNomina()
+                },
+                complete: function(xhr){
+                    $(that).removeClass('disabled')
+                    .html('<i class="fas fa-search" aria-hidden="true"></i>')
+                }
+            })
+        })
+        $('#btnbuscarmvtos').click(function(){
+            let fecha = $('#id_fecha_mvtos').val()
+            let cuenta = $('#id_cuenta_mvtos').val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=general&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco_mvtos.ajax.url(url_bco).load()
+            }
+        })
+
+        $('#btnaddotros').click(function(){
+            let row = `
+                    <tr>
+                        <td>
+                            <input name="idTercero" type="text" class='form-control' style="font-size:small" required>
+                        </td>
+                        <td>
+                            <input name="nombretercero" type="text" class='form-control' style="font-size:small" required>
+                        </td>
+                        <td>
+                            <input type="number" name="vencimiento_otros" min="1" class='form-control text-center' required style="font-size:small">
+                        </td>
+                        <td>
+                            <input onchange="totalizarOtros()" name="valor_det_otros" type="text" class='form-control text-right money' style="font-size:small">
+                        </td>
+                    </tr>
+                    `
+                    $('#tabladetalleOtrosPag tbody').append(row)     
+                    $('.money').mask("#,##0", {reverse: true});      
+        })
+        $('#tabladetalleGtt tbody').on('contextmenu','tr',function(e){
+            e.preventDefault();
+            $(this).remove()
+            totalizarGTT()
+            
+        });
+        $('#tabladetallecomis tbody').on('contextmenu','tr',function(e){
+            e.preventDefault();
+            $(this).remove()
+            totalizarComis()
+            
+        });
+        $('#tabladetalleOtrosPag tbody').on('contextmenu','tr',function(e){
+            e.preventDefault();
+            $(this).remove()
+            totalizarOtros()
+        });
+        $('#tabladetallenomina tbody').on('contextmenu','tr',function(e){
+            e.preventDefault();
+            $(this).remove()
+            totalizarNomina()
+        });
+        $(this).click(function(e){
+            if(e.button == 0){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        $(this).keydown(function(e){
+            if(e.keyCode == 27){
+                $(".contextmenu").css("display", "none");
+            }
+        });
+        bsCustomFileInput.init();
+        $('#valor_pago').mask("#,##0", {reverse: true});
+        $('#id_valor_anticip').mask("#,##0", {reverse: true});
+        $('#id_valor_transf').mask("#,##0", {reverse: true});
+        $('#id_valor_gtt').mask("#,##0", {reverse: true});
+        $('#id_cuenta_sale').empty()
+        $('#id_cuenta_entra').empty()
+        $('.money').mask("#,##0", {reverse: true})
+        
+        $('.fecha-pago').on('change', function(){
+            let fecha = $('div.tab-pane.active.pagos').find('.fecha-pago').val()
+            let cuenta = $('div.tab-pane.active.pagos').find('.cuenta-pago').val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=sin_pago&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco.ajax.url(url_bco).load()
+            }
+        })
+        $('.cuenta-pago').on('change', function(){
+            let fecha = $('div.tab-pane.active.pagos').find('.fecha-pago').val()
+            let cuenta = $('div.tab-pane.active.pagos').find('.cuenta-pago').val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=sin_pago&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco.ajax.url(url_bco).load()
+            }
+        })
+        $('#id_fecha_anticip').change(function(){
+            let fecha = $(this).val()
+            let cuenta = $('#id_cuenta_ant').val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=sin_pago&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco_ant.ajax.url(url_bco).load()
+            }
+        })
+        $('#id_cuenta_ant').change(function(){
+            let fecha = $('#id_fecha_anticip').val()
+            let cuenta = $(this).val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=sin_pago&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco_ant.ajax.url(url_bco).load()
+            }
+        })
+        $('#id_fecha_transf').change(function(){
+            let fecha = $(this).val()
+            let cuenta = $('#id_cuenta_sale').val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=transfer&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco_tr.ajax.url(url_bco).load()
+            }
+        })
+        $('#id_cuenta_sale').change(function(){
+            let fecha = $('#id_fecha_transf').val()
+            let cuenta = $(this).val()
+            if (fecha != "" && cuenta != ""){
+                var url_bco = '/accounting/ajax/bancarymovements?tipo=transfer&cuenta='+cuenta+'&fecha='+fecha
+                tablaCONBanco_tr.ajax.url(url_bco).load()
+            }
+        })
+
+
+
+        $('#modalDividirMvto').on('show.bs.modal', function(){
+            let row = tablaCONBanco_mvtos.row($('tr.selected')).data()
+            $('#modalMvtosDia').modal('hide')
+            
+            $('#vr-linea-orig').val(
+                new Intl.NumberFormat('en-EN').format(row.valor * -1)    
+             )
+        })
+        $('#modalDividirMvto').on('hide.bs.modal', function(){
+            $('#lineas-nuevas').empty()
+            $('#lineas-dividir').val('')
+            $('#vr-linea-orig').val('')
+        })
+        $('#btnmodalMvtos').click(function(){
+            $('#modalMvtosDia input').val('')
+            $('#modalMvtosDia select').val('')
+            var url_bco = '/accounting/ajax/bancarymovements'
+            tablaCONBanco_mvtos.ajax.url(url_bco).load()
+            $('#modalMvtosDia').modal('show');
+            
+        })
+        $('#lineas-dividir').keyup(function(){
+            $('#lineas-nuevas').empty();
+            let lineas = $(this).val()
+            let row = `
+                <li><input type="text" class="text-center form-control money-decimals mt-3" name="nuevo_valor_linea" required></<li>
+            `
+            for (i=0;i<lineas;i++) {
+                $('#lineas-nuevas').append(row)
+            }
+            $('.money-decimals').mask("#,##0.00", {reverse: true});
+        })
+        $('#form-dividir-mvto').submit(function(e){
+            e.preventDefault();
+            let row = tablaCONBanco_mvtos.row($('tr.selected')).data()
+            
+            let total_lineas = 0
+
+            $('input[name="nuevo_valor_linea"]').each(function(index,element){
+                total_lineas += $(element).val().replace(/[\$,]/g,'') * 1
+            })
+            
+            dif = parseFloat(total_lineas) + parseFloat(row.valor)
+
+            if (dif != 0){
+                $('#alert-title').text('Oh Oh')
+                $('#alert-data').text('La suma de las lineas nuevas es diferente a la linea original en '+dif)
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return;
+            }
+            
+            let data = new FormData(this)
+            data.append('line', row.pk)
+            data.append('todo', 'dividir_mvto')
+            $.ajax({
+                type:'POST',
+                url:'/accounting/ajax/reconciliate',
+                data:data,
+                contentType: false,
+                processData: false,
+                success:function(response){
+                    $('#alert-title').text(response.title)
+                    $('#alert-data').text(response.msj)
+                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
+                    tablaCONBanco_mvtos.ajax.reload()
+                    $('#modalDividirMvto').modal('hide')
+                    $('#modalMvtosDia').modal('show')
+                },
+                error: function(response){
+                    $('#alert-title').text('Oh Oh')
+                    $('#alert-data').text('Ocurrio un error, intentalo mas tarde')
+                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                }
+            })
+        })
+        
+        $('#tablaCONBanco tbody').on('click','tr',function(){
+            $(this).toggleClass('selected')
+            bsCustomFileInput.init()
+            totalizarMovimiento()
+        })
+        $('#tablaCONBanco_ant tbody').on('click','tr',function(){
+            $(this).toggleClass('selected')
+            bsCustomFileInput.init()
+            totalizarMovimiento('#tablaCONBanco_ant tr.selected','#total-anticipo-banco')
+        })
+        $('#tablaCONBanco_tr tbody').on('click','tr',function(){
+            $(this).toggleClass('selected')
+            bsCustomFileInput.init()
+            totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
+        })
+        $('#modalPagar').on('hidden.bs.modal', function(){
+            $('#modalPagar form').trigger('reset')
+            tablaCONBanco.ajax.url('/accounting/ajax/bancarymovements').load()
+        })
+        $('#modalAnticipo').on('hidden.bs.modal', function(){
+            $('#modalAnticipo form').trigger('reset')
+            tablaCONBanco_ant.ajax.url('/accounting/ajax/bancarymovements').load()
+        })
+        $('#modalTransf').on('hidden.bs.modal', function(){
+            $('#modalTransf form').trigger('reset')
+            tablaCONBanco_tr.ajax.url('/accounting/ajax/bancarymovements').load()
+        })
+
+    })
+    function totalizarMovimiento(tabla="#tablaCONBanco tr.selected",total_input="#total-pago-banco"){
+        let total = 0
+        $(tabla).each(function(index, element){
+            let valor = $(element).find('.dt-body-right').text()
+            valor = valor.replace(/[\$,]/g,'') * 1
+            total += valor
+        })
+        fmt_total = new Intl.NumberFormat('en-EN').format(total)
+        $(total_input).val(fmt_total)
+
+        return total
+    }
+    function totalizarGTT(){
+        let total = 0
+        $('input[name="valorGtt"]').each(function(index,elem){
+            total += parseInt($(elem).val())
+        })
+        total = new Intl.NumberFormat('en-EN').format(total)
+        $('#id_valor_gtt').val(total)
+    }
+    function totalizarComis(){
+        let total = 0
+        $('input[name="valorComis"]').each(function(index,elem){
+            total += parseInt($(elem).val())
+        })
+        total = new Intl.NumberFormat('en-EN').format(total)
+        $('#id_valor_comis').val(total)
+    }
+    function totalizarOtros(){
+        let total = 0
+        $('input[name="valor_det_otros"]').each(function(index,elem){
+            total += $(elem).val().replace(/[\$,]/g,'') * 1
+        })
+        total = new Intl.NumberFormat('en-EN').format(total)
+        $('#id_valor_otros').val(total)
+    }
+    function totalizarNomina(){
+        let total = 0
+        $('input[name="valornomina"]').each(function(index,elem){
+            total += $(elem).val().replace(/[\$,]/g,'') * 1
+        })
+        total = new Intl.NumberFormat('en-EN').format(total)
+        $('#id_valor_nomina').val(total)
+    }
+</script>
+{%endblock%}

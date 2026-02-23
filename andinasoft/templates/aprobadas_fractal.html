@@ -1,0 +1,62 @@
+{%extends 'base_fomantic.html'%}
+{%load static%}
+{%block title%}Ventas sin radicar{%endblock%}
+{%block content%}
+<h2 class="ui center aligned icon violet header" style="margin-bottom: 2rem;">
+    <i class="folder open circular icon"></i>
+    <div class="content">
+      Ventas por adjudicar
+      <div class="sub header">Aquí encontrarás las ventas que ya fueron aprobadas comercialmente pero están a espera de verificación y aprobación del area de operaciones.</div>
+    </div>
+  </h2>
+  <div class="ui basic segment" id="lista-ventas-segment">
+    <table class="ui selectable table" id="table-ventas">
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Fecha</th>
+          <th>Cliente</th>
+          <th>Inmueble</th>
+          <th>Cantidad Fracciones</th>
+          <th>Valor</th>
+          <th>Fecha aprobado</th>
+          <th>Usuario Aprueba</th>
+        </tr>
+      </thead>
+      <tbody>
+        {%for venta in ventas%}
+        <tr onclick="redirect('{{venta.pk}}')">
+          <td style="text-align: center;">{{venta.pk}}</td>
+          <td style="text-align: center;">{{venta.fecha_contrato|date:"d/m/Y"}}</td>
+          <td>{{venta.titulares.0.nombrecompleto}}</td>
+          <td style="text-align: center;">{{venta.inmueble}}</td>
+          <td style="text-align: center;">{{venta.fractales_ventas.nro_fracciones}}</td>
+          <td style="text-align: center;">${{venta.valor_venta}}</td>
+          <td style="text-align: center;">{{venta.fecha_aprueba|date:"d/m/Y"}}</td>
+          <td style="text-align: center;">{{venta.usuarioaprueba}}</td>
+          
+        </tr>
+        {%endfor%}
+      </tbody>
+    </table>
+  </div>
+
+{%endblock%}
+{%block script%}
+<script>
+  function redirect(venta){
+    $('#table-ventas tbody').css('cursor', 'wait!important')
+    location.replace("/operaciones/adjudicar_contrato/Fractal/"+venta)
+  }
+</script>
+{%endblock%}
+{%block style%}
+<style>
+    th {
+        text-align: center!important;
+    }
+    .ui.labeled input {
+      text-align: center;
+    }
+</style>
+{%endblock%}

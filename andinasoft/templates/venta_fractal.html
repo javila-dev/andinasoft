@@ -1,0 +1,1693 @@
+{%extends 'base_fomantic.html'%}
+{%load static%}{%load crispy_forms_tags%}
+{%block title%}Ventas sin radicar{%endblock%}
+{%block content%}
+<h2 class="ui center aligned icon violet header" style="margin-bottom: 2rem;">
+    <i class="folder open circular icon"></i>
+    <div class="content">
+      Ventas sin radicar
+      <div class="sub header">Aquí encontrarás las ventas que aún no han sido radicadas para su procesamiento.</div>
+    </div>
+  </h2>
+  <div class="ui basic segment" id="lista-ventas-segment">
+    <table class="ui selectable table" id="table-ventas">
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Fecha</th>
+          <th>Cliente</th>
+          <th>Inmueble</th>
+          <th>Cantidad Fracciones</th>
+          <th>Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {%for venta in ventas%}
+        <tr>
+          <td style="text-align: center;">{{venta.pk}}</td>
+          <td style="text-align: center;">{{venta.fecha_contrato|date:"d/m/Y"}}</td>
+          <td>{{venta.titulares.0.nombrecompleto}}</td>
+          <td style="text-align: center;">{{venta.inmueble}}</td>
+          <td style="text-align: center;">{{venta.fractales_ventas.nro_fracciones}}</td>
+          <td style="text-align: center;">${{venta.valor_venta}}</td>
+        </tr>
+        {%endfor%}
+      </tbody>
+    </table>
+  </div>
+  <div class="ui basic segment" class="ui basic segment" id="detalle-venta-segment" style="display: none;">
+    <h3 class="ui block header" id="block-invertir">
+      Propiedad a invertir: 
+    </h3>
+    <div class="ui basic segment" id="page-segment">
+      <form method="POST" id="form-venta" enctype="multipart/form-data">{%csrf_token%}
+        <div class="ui basic segment" id="form-segment">
+          <div class="ui raised segment" id="inversionista">
+            <div class="ui basic center aligned segment">
+              <div class="ui fluid search" id="search_id_inversionista">
+                <div class="ui icon input" style="min-width:40%">
+                  <input class="prompt" type="text" id="id_inversionista" 
+                    style="text-align: center;" placeholder="Buscar un inversionista...">
+                  <i class="search icon"></i>
+                </div>
+                <div class="results"></div>
+                <a class="ui violet button" type="button" style="margin-left: 1rem;" href="/reg_cliente" target="_blank">
+                  <i class="plus icon"></i>
+                  Nuevo</a>
+              </div>
+              <div class="ui basic center aligned segment">
+                <div class="ui right labeled input" id="div_inversionista">
+                  <input required readonly type="text" id="id_nit_inversionista" name='inversionista' placeholder="Inversionista" spellcheck="false" data-ms-editor="true">
+                  <div class="ui basic label">                  
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+          <div class="ui raised segment"id="valor">
+            <div class="ui basic center aligned segment">
+              <div class="ui labeled input">
+                <div class="ui label">
+                  Cantidad de fracciones
+                </div>
+                <input type="number" min="1" id="id_numero_fracciones" name="numero_fracciones"
+                  style="text-align: center;" spellcheck="false" data-ms-editor="true">
+              </div>
+              <div class="ui labeled input">
+                <div class="ui label">
+                  Valor inversión
+                </div>
+                <input type="text" min="1" readonly id="id_valor_inversion" name="valor_inversion"
+                style="text-align: center;" spellcheck="false" data-ms-editor="true" class="money">
+              </div>
+            </div>   
+          </div>
+          <div class="ui raised segment" id="formapago">
+            <div class="ui basic segment">
+              <div class="ui two column center aligned relaxed stackable grid">
+                <div class="column">
+                  <div class="ui segment">
+                    <div class="ui labeled input">
+                      <div class="ui label">
+                        Cuota Inicial (40%)
+                      </div>
+                      <input type="text" readonly id="id_valor_ci" name="valor_ci"
+                        spellcheck="false" data-ms-editor="true" class="money">
+                    </div>
+                    <div class="ui basic segment">
+                      <button type="button" class="ui circular green icon button" id="btn-add-ci">
+                        <i class="plus icon"></i>
+                      </button>
+                      <button type="button" class="ui circular red icon button" id="btn-remove-ci">
+                        <i class="minus icon"></i>
+                      </button>
+                    </div>
+                    <div class="ui grid" id="ci_form">
+                      <div class="four wide column" style="">
+                        ¿Cuantas cuotas?
+                      </div>
+                      <div class="six wide column">
+                        ¿Desde cuando?
+                      </div>
+                      <div class="six wide column">
+                        ¿De que valor?
+                      </div>
+                      <div class="row ci-row">
+                        <div class="four wide column">
+                          <div class="ui input" style="width: 120%;">
+                            <input type="number" min="1" name="nro_cuota_ci" style="text-align: center;" onchange="pendiente_ci()">
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui calendar" id="id_fecha_cta_ci_1">
+                            <div class="ui input left icon" style="width: 110%">
+                              <i class="calendar icon"></i>
+                              <input type="text" name="fecha_cta_ci" placeholder="Desde" required 
+                                readonly style="cursor: pointer;text-align: center;">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui input">
+                            <input type="text" name="valor_cuota_ci" class="money" style="width: 100%;text-align: center;" onkeyup="pendiente_ci()">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ui labeled input" style="margin-top: 1.5rem;">
+                      <div class="ui label">
+                        Pendiente
+                      </div>
+                      <input type="text" readonly id="id_restante_ci" name="restante_ci"
+                        spellcheck="false" data-ms-editor="true" class="money">
+                    </div>
+                  </div>
+                </div>
+                <div class="column">
+                  <div class="ui segment" id="saldo_segment">
+                    <div class="ui labeled input">
+                      <div class="ui label">
+                        Saldo (60%)
+                      </div>
+                      <input type="text" readonly id="id_valor_saldo" name="valor_saldo"
+                        spellcheck="false" data-ms-editor="true" class="money">
+                    </div>
+                    <div class="ui basic segment">
+                      <div class="ui labeled input">
+                        <div class="ui label">Tipo de plan</div>
+                        <select id="id_tipo_saldo" class="ui selection dropdown" name="tipo_saldo">
+                          <option value="regular" selected>Regular</option>
+                          <option value="extra">Extraordinario</option>
+                        </select> 
+                      </div>
+                      
+                    </div>
+                    <div class="ui grid" id="saldo_form">
+                      <p>Cuotas regulares</p>
+                      <div class="row saldo-row" style="padding-top: 0;">
+                        <div class="four wide column">
+                          <div class="ui input " style="width: 120%;">
+                            <input type="number" min="1" id="id_nro_cuota_saldo" name="nro_cuota_saldo" class="fp regular" style="text-align: center;">
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui calendar" id="id_fecha_cta_saldo">
+                            <div class="ui input left icon" style="width: 110%">
+                              <i class="calendar icon"></i>
+                              <input class="fp regular" type="text" id="id_fecha_saldo" name="fecha_cta_saldo" placeholder="Desde" required 
+                                readonly style="cursor: pointer;text-align: center;">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui input">
+                            <input type="text" class="fp regular" id="id_valor_cuota_saldo" readonly name="valor_cuota_saldo" class="money" style="width: 100%;text-align: center;">
+                          </div>
+                        </div>
+                      </div>
+
+                      <p>Cuotas extra</p>
+                      <div class="row extra-row" style="padding-top: 0;">
+                        <div class="sixteen wide column" style="margin-bottom: 1rem;">
+                            <select id="id_periodo_extra" class="ui selection disabled dropdown extra" name="periodo_extra" style="width: 120%">
+                              <option value="" selected>Selecciona...</option>
+                              <option value="1" >Mensual</option>
+                              <option value="2" >Bimestral</option>
+                              <option value="3">Trimestral</option>
+                              <!-- <option value="6">Semestral</option> -->
+                              <!-- <option value="12">Anual</option> -->
+                            </select> 
+                        </div>
+                        <div class="four wide column">
+                          <div class="ui disabled input" style="width: 120%;">
+                            <input type="number" min="1" id="id_nro_cuota_extra" name="nro_cuota_extra" class="fp extra" style="text-align: center;">
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui disabled calendar" id="id_fecha_cta_extra">
+                            <div class="ui input left icon" style="width: 110%">
+                              <i class="calendar icon"></i>
+                              <input class="fp" type="text" name="fecha_cta_extra" placeholder="Desde" required 
+                                readonly style="cursor: pointer;text-align: center;">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="six wide column">
+                          <div class="ui disabled input">
+                            <input type="text" class="fp extra" id="id_valor_cuota_extra" readonly name="valor_cuota_extra" class="money" style="width: 100%;text-align: center;">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ui left corner labeled input" style="width: 100%; margin-top:1rem;">
+                <div class="ui left corner label">
+                    <i class="asterisk icon"></i>
+                </div>
+                <textarea name="observaciones" spellcheck="false" data-ms-editor="true" style="width: 100%" placeholder="Observaciones (solo incluir observaciones sobre la forma de pago)"></textarea>
+              </div>
+            </div>
+            </button>
+          </div>
+          <div class="ui basic right aligned segment">
+            <button type="button" class="ui icon labeled violet button"
+              id="btn-modificar-contrato">
+              <i class="sync icon"></i>
+              Modificar
+            </button>
+          </div>
+        </div>
+      </form>
+      <div class="ui raised segment" id="div-recibos">
+        <table class="ui compact celled selectable table" id="table-recibos">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Numero</th>
+              <th>Usuario</th>
+              <th>Forma pago</th>
+              <th>Valor</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+          </tbody>
+          <tfoot class="full-width">
+            <th colspan="5"></th>
+            <th>
+              <button type="button" class="ui icon violet circular button"
+                id="btn-agregar-recibos">
+                <i class="plus icon"></i>
+              </button>
+              <button type="button" class="ui icon violet circular button"
+                id="btn-new-dlocal">
+                <i class="dollar icon"></i>
+              </button>
+            </th>
+          </tfoot>
+        </table>
+      </div>
+      <form id="form-docs" method="POST" enctype="multipart/form-data" style="margin-bottom: 1.5rem;">{%csrf_token%}
+        <div class="ui raised segment" id="documentos">
+          <div class="ui two column relaxed center aligned grid" style="margin-bottom: 1rem;">
+              <div class="column">
+                <button type="button" class="ui labeled icon basic button download-docs"
+                  data-download="contrato">
+                  <i class="arrow alternate circle down icon"></i>
+                  Descargar CONTRATO
+                </button>
+              </div>
+              <div class="column">
+                <div class="ui file action input">
+                  <input type="file" id="id_contrato_upload" name="contrato_upload">
+                  <button type="button" label for="actionfileinput" class="ui violet button upload" 
+                    id="upload-contrato" data-doc="Contrato">
+                    <i class="cloud upload alternate icon"></i>
+                  </button>
+                  <button type="button" label for="actionfileinput" class="ui button disabled view" 
+                    id="view-contrato" data-doc="Contrato">
+                    <i class="eye outline icon"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="column">
+                <button type="button" class="ui labeled icon basic button download-docs"
+                  data-download="verificacion">
+                  <i class="arrow alternate circle down icon"></i>
+                  Descargar VERIFICACION
+                </button>
+              </div>
+              <div class="column">
+                <div class="ui file action input">
+                  <input type="file" id="id_verificacion_upload" name="verificacion_upload">
+                  <button type="button" label for="actionfileinput" class="ui violet button upload" 
+                    id="upload-verificacion" data-doc="Verificacion">
+                    <i class="cloud upload alternate icon"></i>
+                  </button>
+                  <button type="button" label for="actionfileinput" class="ui button disabled view"
+                    id="view-verificacion" data-doc="Verificacion">
+                    <i class="eye outline icon"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="column">
+                <button type="button" class="ui labeled icon basic button download-docs"
+                  data-download="sagrilaft">
+                  <i class="arrow alternate circle down icon"></i>
+                  Descargar SAGRILAFT
+                </button>
+              </div>
+              <div class="column">
+                <div class="ui file action input">
+                  <input type="file" id="id_sagrilaft_upload" name="sagrilaft_upload">
+                  <button type="button" label for="actionfileinput" class="ui violet button upload"
+                    id="upload-sagrilaft" data-doc="Sagrilaft">
+                    <i class="cloud upload alternate icon"></i>
+                  </button>
+                  <button type="button" label for="actionfileinput" class="ui button disabled view"
+                    id="view-sagrilaft" data-doc="Sagrilaft">
+                    <i class="eye outline icon"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="column">
+                <button type="button" class="ui labeled icon basic button download-docs"
+                  data-download="pagare">
+                  <i class="arrow alternate circle down icon"></i>
+                  Descargar PAGARÉ
+                </button>
+              </div>
+              <div class="column">
+                <div class="ui file action input">
+                  <input type="file" id="id_pagare_upload" name="pagare_upload">
+                  <button type="button" label for="actionfileinput" class="ui violet button upload"
+                    id="upload-pagare" data-doc="Pagare">
+                    <i class="cloud upload alternate icon"></i>
+                  </button>
+                  <button type="button" label for="actionfileinput" class="ui button disabled view"
+                    id="view-pagare" data-doc="Pagare">
+                    <i class="eye outline icon"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="column">
+                <button type="button" class="ui labeled icon basic button download-docs"
+                  data-download="alttum">
+                  <i class="arrow alternate circle down icon"></i>
+                  Descargar VINCULACIÓN ALTTUM
+                </button>
+              </div>
+              <div class="column">
+                <div class="ui file action input">
+                  <input type="file" id="id_alttum_upload" name="alttum_upload">
+                  <button type="button" label for="actionfileinput" class="ui violet button upload"
+                    id="upload-alttum" data-doc="Alttum">
+                    <i class="cloud upload alternate icon"></i>
+                  </button>
+                  <button type="button" label for="actionfileinput" class="ui button disabled view"
+                    id="view-alttum" data-doc="Alttum">
+                    <i class="eye outline icon"></i>
+                  </button>
+                </div>
+              </div>
+          </div>
+        </div>
+      </form>
+
+      <button type="button" class="ui left floated icon labeled button"
+        id="btn-atras">
+        <i class="angle double left icon"></i>
+        Atras
+      </button>
+      <button type="button" class="ui right floated icon labeled violet button"
+        id="btn-modal-comisions">
+        <i class="dollar icon"></i>
+        Comisiones
+      </button>
+      <button type="button" class="ui right floated icon labeled violet button"
+        id="btn-aprobar-contrato">
+        <i class="check icon"></i>
+        Aprobar
+      </button>
+    </div>
+  </div>
+  <div class="ui tiny modal" id="modal-recibos">
+    <div class="header">Nuevo recibo</div>
+    <div class="content">
+      <form id="form-nuevo-recibo" method="POST" class="ui form" enctype="multipart/form-data">
+        {%csrf_token%}
+        <div class="two fields">
+          <div class="field">
+            <label>Forma pago</label>
+            <select class="ui dropdown" id="id_formapagorecibo" required name="formapagorecibo">
+              <option value="">Selecciona...</option>
+              {%for fp in formaspago%}<option value="{{fp.pk}}">{{fp.descripcion}}</option>{%endfor%}
+            </select>
+          </div>
+          <div class="field">
+            <label>Valor</label>
+            <input type="text" id="id_valor_recibo" name="valor_recibo" style="text-align: center;"
+            spellcheck="false" data-ms-editor="true" class="money" required>
+          </div>
+        </div>
+        <div class="ui file left action input">
+          <label for="actionfileinput" class="ui button">
+            Soporte
+          </label>
+          <input id="id_soporterecibo" name="soporterecibo" type="file">
+        </div>
+      </form> 
+      </div>
+      
+    <div class="actions">
+      <div class="ui cancel button">Cancelar</div>
+      <button class="ui approve green button">Guardar</button>
+    </div>
+  </div>
+  <div class="ui modal" id="modal-comisiones">
+    <div class="header">Escala comisiones</div>
+    <div class="content">
+      <form class='ui form' id="form-comisiones" method="POST">{%csrf_token%}
+        <div class='fields'>
+          <div class="five wide field">
+            <label>Cargo</label>
+            <select id='cargo_8' readonly name="cargo_comision" class="ui disabled dropdown">
+              <option selected value="8">Generador</option>
+            </select>
+          </div>
+          <div class="four wide field">
+            <label>Porcentaje</label>
+            <div class="ui right labeled input">
+              <input type="number" id="porcentaje_8" name="porcentaje_comision" min="0.1" step="0.05">
+              <div class="ui label">%</div>
+            </div>
+          </div>
+          <div class="seven wide field">
+            <label>Asesor</label>
+            <select id='asesor_8' name="asesor_comision" class="ui search clearable dropdown">
+              <option value="">Seleccione...</option>
+              {%for asesor in asesores%}<option value="{{asesor.pk}}">{{asesor.nombre.upper}}</option>{%endfor%}
+            </select>
+          </div>
+        </div>
+        <div class='fields'>
+          <div class="five wide field">
+            <select id='cargo_9' readonly name="cargo_comision" class="ui disabled dropdown">
+              <option selected value="9">Linea</option>
+            </select>
+          </div>
+          <div class="four wide field">
+            <div class="ui right labeled input">
+              <input type="number" id="porcentaje_9" name="porcentaje_comision" min="0.1" step="0.05">
+              <div class="ui label">%</div>
+            </div>
+          </div>
+          <div class="seven wide field">
+            <select id='asesor_9' name="asesor_comision" class="ui search clearable dropdown">
+              <option value="">Seleccione...</option>
+              {%for asesor in asesores%}<option value="{{asesor.pk}}">{{asesor.nombre.upper}}</option>{%endfor%}
+            </select>
+          </div>
+        </div>
+        <div class='fields'>
+          <div class="five wide field">
+            <select id='cargo_99' readonly name="cargo_comision" class="ui disabled dropdown">
+              <option selected value="99">Cerrador</option>
+            </select>
+          </div>
+          <div class="four wide field">
+            <div class="ui right labeled input">
+              <input type="number" id="porcentaje_99" name="porcentaje_comision" min="0.1" step="0.05">
+              <div class="ui label">%</div>
+            </div>
+          </div>
+          <div class="seven wide field">
+            <select id='asesor_99' name="asesor_comision" class="ui search clearable dropdown">
+              <option value="">Seleccione...</option>
+              {%for asesor in asesores%}<option value="{{asesor.pk}}">{{asesor.nombre.upper}}</option>{%endfor%}
+            </select>
+          </div>
+        </div>
+        <div class='fields'>
+          <div class="five wide field">
+            <select id='cargo_13' readonly name="cargo_comision" class="ui disabled dropdown">
+              <option selected value="13">Jefe de Ventas</option>
+            </select>
+          </div>
+          <div class="four wide field">
+            <div class="ui right labeled input">
+              <input type="number" id="porcentaje_13" name="porcentaje_comision" min="0.1" step="0.05">
+              <div class="ui label">%</div>
+            </div>
+          </div>
+          <div class="seven wide field">
+            <select id='asesor_13' name="asesor_comision" class="ui search clearable dropdown">
+              <option value="">Seleccione...</option>
+              {%for asesor in asesores%}<option value="{{asesor.pk}}">{{asesor.nombre.upper}}</option>{%endfor%}
+            </select>
+          </div>
+        </div>
+        <div class='fields'>
+          <div class="five wide field">
+            <select id='cargo_12' readonly name="cargo_comision" class="ui disabled dropdown">
+              <option selected value="12">Gerente Comercial</option>
+            </select>
+          </div>
+          <div class="four wide field">
+            <div class="ui right labeled input">
+              <input type="number" id="porcentaje_12" name="porcentaje_comision" min="0.1" step="0.05">
+              <div class="ui label">%</div>
+            </div>
+          </div>
+          <div class="seven wide field">
+            <select id='asesor_12' name="asesor_comision" class="ui search clearable dropdown">
+              <option value="">Seleccione...</option>
+              {%for asesor in asesores%}<option value="{{asesor.pk}}">{{asesor.nombre.upper}}</option>{%endfor%}
+            </select>
+          </div>
+        </div>
+      </form>
+      </div>
+      
+    <div class="actions">
+      <div class="ui cancel button">Cancelar</div>
+      <button class="ui approve green button" id="btn-reg-comision">Guardar</button>
+    </div>
+  </div>
+  <div class="ui tiny modal" id="modal-new-payment">
+    <div class="header">Generar link de pago</div>
+    <div class="content">
+      <div class="ui labeled input">
+        <div class="ui label">Valor</div>
+        <input type="text" id="id_valor_dlocal" style="text-align: center;"
+        spellcheck="false" data-ms-editor="true" class="money" required>
+      </div>
+      <div class="ui labeled action input" style="width: 100%; margin-top: 2rem;">
+        <div class="ui label">URL</div>
+        <input type="text" id="id_url_dlocal" style="text-align: center;"
+        spellcheck="false" data-ms-editor="true" readonly>
+        <button class="ui button green" id="btn-copy-url">
+          <i class="copy outline icon"></i>
+        </button>
+      </div>
+    </div>
+      
+    <div class="actions">
+      <button class="ui cancel button">Cerrar</button>
+      <button class="ui button green" id="btn-solicitar-dlocal">Registrar</button>
+    </div>
+  </div>
+   
+   
+{%endblock%}
+{%block script%}
+<script>
+  const param_meses_ci = 3
+  const param_meses_saldo = 10
+  const param_fechas_manuales = false  
+  const param_tasa = 0
+  const proyecto = 'Fractal'
+</script>
+<script src='{%static "js/jquery.mask.js"%}'></script>
+<script src='{%static "js/utilsfomantic.js"%}'></script>
+<script src="https://momentjs.com/downloads/moment.min.js"></script>
+<script>
+    $(document).ready(function(){
+      $('.ui.dropdown').dropdown()
+      $('.money').mask("#,##0", {reverse: true});  
+      $('#id_nro_cuota_saldo').prop('max',param_meses_saldo)
+      $('.ui.calendar').calendar({
+              type: 'date',
+              firstDayOfWeek: 1,
+              text: calendar_spanish(),
+              formatter:{
+                date: 'YYYY-MM-DD',
+              },
+              minDate: new Date(),
+            });
+      $('#search_id_inversionista').search({
+          // change search endpoint to a custom endpoint by manipulating apiSettings
+          preserveHTML : false,
+          apiSettings: {
+            url: '/ajax_request/dataclients?client={query}'
+          },
+          fields: {
+            results : 'results',
+            id: 'idTercero',
+            title   : 'idTercero',  
+            description : 'nombrecompleto'
+
+          },
+          minCharacters : 3,
+          onSelect: function(result,response){
+            console.log(result)
+            $('#id_nit_inversionista').val(result.idTercero)
+            $('#div_inversionista').find('.label').text(result.nombrecompleto)
+            $('#id_inversionista').val('')
+          }
+        })
+      $('#table-ventas tbody').on('click', 'tr', function(){        
+        $('#table-ventas tr.green').removeClass('green')        
+        $(this).addClass('green');
+        $('#table-ventas').parent('.ui.segment').addClass('loading')
+        let id_venta = $(this)[0].childNodes[1].childNodes[0].nodeValue        
+        $.ajax({
+          type:'GET',
+          url: '/andinasoftajx/detallesventa',
+          data:{
+            todo:'getsaleinfo',
+            venta: id_venta,
+            proyecto: proyecto
+          },
+          success: function(data){
+            let i = data.venta[0]
+            $('h3.ui.block.header').text('Propiedad a invertir: '+i.inmueble+' - Número de contrato: '+id_venta)
+            $('#id_nit_inversionista').val(i.id_t1)
+            $('#div_inversionista').find('.label').text(i.fractal.titular)
+            $('#id_numero_fracciones').val(i.fractal.cantidad)
+            $('#id_valor_inversion').val(
+              new Intl.NumberFormat('en','EN').format(i.valor_venta)
+            )
+            $('#id_valor_ci').val(
+              new Intl.NumberFormat('en','EN').format(i.cuota_inicial)
+            )
+            $('#id_valor_saldo').val(
+              new Intl.NumberFormat('en','EN').format(i.saldo)
+            )
+            $('input[name="nro_cuota_ci"]').val(i.cant_ci1)
+            let date = new Date(Date.parse(i.fecha_ci1+'T00:00:00.000-05:00'))
+            $(`#id_fecha_cta_ci_1`).calendar(
+              'set date', date
+            )
+            $('input[name="valor_cuota_ci"]').val(
+              new Intl.NumberFormat('en','EN').format(i.valor_ci1)
+            )
+            let iterable = [
+              [i.cant_ci2,i.fecha_ci2,i.valor_ci2],
+              [i.cant_ci3,i.fecha_ci3,i.valor_ci3],
+              [i.cant_ci4,i.fecha_ci4,i.valor_ci4],
+              [i.cant_ci5,i.fecha_ci5,i.valor_ci5],
+              [i.cant_ci6,i.fecha_ci6,i.valor_ci6],
+              [i.cant_ci7,i.fecha_ci7,i.valor_ci7]
+            ]
+            let ci_count=2
+            for (let j of iterable) {
+              cant = j[0]
+              fecha = j[1]
+              valor = j[2]
+              if (cant == null){
+                break
+              }
+              else{
+                let cirow = `
+                <div class="row ci-row">
+                  <div class="four wide column">
+                    <div class="ui input" style="width: 120%;">
+                      <input type="number" min="1" name="nro_cuota_ci" style="text-align: center;" onchange="pendiente_ci()";>
+                    </div>
+                  </div>
+                  <div class="six wide column">
+                    <div class="ui calendar" id="id_fecha_cta_ci_${ci_count}">
+                      <div class="ui input left icon" style="width: 110%">
+                        <i class="calendar icon"></i>
+                        <input type="text" name="fecha_cta_ci" placeholder="Desde" required 
+                          readonly style="cursor: pointer;text-align: center;">
+                      </div>
+                    </div>
+                  </div>
+                  <div class="six wide column">
+                    <div class="ui input">
+                      <input type="text" name="valor_cuota_ci" class="money" style="width: 100%;text-align: center" onkeyup="pendiente_ci()"">
+                    </div>
+                  </div>
+                </div>
+                `
+                let last_ci_row = $('.ci-row').last()
+                $('#ci_form').append(cirow)
+                let cantidad_ci =  last_ci_row.find('input[name="nro_cuota_ci"]').val() * 1
+                let previous_date = $(`#id_fecha_cta_ci_${ci_count-1}`).calendar('get date')
+                
+
+                new_date = new Date(previous_date.getFullYear(), previous_date.getMonth() + cantidad_ci, previous_date.getDate())
+                max_date = new Date(new_date.getFullYear(), new_date.getMonth(), 31)
+                actual_date = new Date(Date.parse(fecha+'T00:00:00.000-05:00'))
+
+                $(`#id_fecha_cta_ci_${ci_count}`).calendar({
+                    type: 'date',
+                    firstDayOfWeek: 1,
+                    text: calendar_spanish(),
+                    formatter:{
+                      date: 'YYYY-MM-DD',
+                    },
+                    maxDate: max_date,
+                  }).calendar(
+                    'set date', actual_date
+                  )
+                $('input[name="nro_cuota_ci"]').last().val(cant)
+                $('input[name="valor_cuota_ci"]').last().val(
+                  new Intl.NumberFormat('en','EN').format(valor)
+                )
+                $('.money').mask("#,##0", {reverse: true});  
+                ci_count++
+              }
+            }
+            pendiente_ci();
+            $('#id_tipo_saldo').parent('.ui.dropdown').dropdown('set selected',i.forma_pago)
+            $('#id_nro_cuota_saldo').val(i.nro_cuotas_fn)
+            $('#id_fecha_cta_saldo').calendar('set date',new Date(Date.parse(i.inicio_fn+'T00:00:00.000-05:00')))
+            $('#id_valor_cuota_saldo').val(
+              new Intl.NumberFormat('en','EN').format(i.valor_ctas_fn)
+            )
+            if (i.forma_pago == 'extra') {
+              $('#id_periodo_extra').parent('div').dropdown('set selected',i.period_ce)
+              $('#id_nro_cuota_extra').val(i.nro_cuotas_ce)
+              $('#id_fecha_cta_extra').calendar('set date',new Date(Date.parse(i.inicio_ce+'T00:00:00.000-05:00')))
+              $('#id_valor_cuota_extra').val(
+                new Intl.NumberFormat('en','EN').format(i.valor_ctas_ce)
+              )
+              $('.extra-row .ui.input').removeClass('disabled')
+              $('.extra-row .ui.dropdown').removeClass('disabled')
+              $('.extra-row .ui.calendar').removeClass('disabled')
+              $('#id_valor_cuota_saldo').prop('readonly', false)
+              $('#id_valor_cuota_saldo').mask("#,##0", {reverse: true});  
+            }
+            else {
+              $('.extra-row .ui.input').addClass('disabled')
+              $('.extra-row .ui.calendar').addClass('disabled')
+              $('.extra-row .ui.dropdown').addClass('disabled')
+              $('#id_valor_cuota_saldo').prop('readonly', true)
+            }
+            $('#id_numero_fracciones').change(function(){
+              let numero_fracciones = $(this).val() * 1
+              let valor_inversion = i.fractal.valor_fraccion
+              let disponible = i.fractal.disponibles
+
+              if (numero_fracciones == '' || numero_fracciones <= 0 ){
+                  $.toast({
+                  class: 'error',
+                  showIcon: false,
+                  message: 'La cantidad de fracciones debe ser minimo 1',
+                  displayTime: 'auto',
+                  closeIcon: true,
+                })
+                $(this).val(1)
+                numero_fracciones = 1
+              }
+
+              else if (numero_fracciones > disponible ){
+                  $.toast({
+                  class: 'error',
+                  showIcon: false,
+                  message: 'La cantidad de fracciones debe ser máximo '+disponible,
+                  displayTime: 'auto',
+                  closeIcon: true,
+                })
+                $(this).val(disponible) //
+                
+                numero_fracciones = disponible
+              }
+
+              let nuevo_valor = numero_fracciones * valor_inversion
+
+              let ci = Math.round(nuevo_valor * 0.4)
+              let saldo = nuevo_valor - ci
+
+              $('#id_valor_ci').val(
+                new Intl.NumberFormat('en-EN').format(ci)
+              )
+
+            /*  $('#id_restante_ci').val(
+                new Intl.NumberFormat('en-EN').format(ci)
+              ) */
+
+              $('#id_valor_saldo').val(
+                new Intl.NumberFormat('en-EN').format(saldo)
+              )
+
+              $('#id_numero_fracciones').prop('max',disponible)
+
+              $('#id_valor_inversion').val(
+                new Intl.NumberFormat('en','EN').format(nuevo_valor)
+              )
+
+              pendiente_ci();
+              
+          });
+            $('textarea[name="observaciones"]').val(i.observaciones)
+            $('#lista-ventas-segment').transition({
+              animation:'fade',
+              onComplete: function(){
+                $('#detalle-venta-segment').transition('fade')
+              }
+            })
+            $('#table-ventas').parent('.ui.segment').removeClass('loading')
+            $('#table-recibos tbody').empty()
+            
+            for (let rc of i.recaudos) {
+              let valor = new Intl.NumberFormat('en','EN').format(rc.valor)
+              let row = `<tr style="text-align:center;">
+                <td>${rc.fecha}</td>
+                <td>${rc.recibo}</td>
+                <td>${rc.usuario}</td>
+                <td>${rc.formapago}</td>
+                <td>$ ${valor}</td>
+                <td><a href="${rc.soportepago}" target="_blank" class="ui circular icon teal button"><i class="eye outline icon"></i></a>
+                
+                  <button type="button" class="ui icon violet circular button downloadreceipts"
+                    onclick="dwnldrecibo(${rc.recibo})">
+                    <i class="arrow alternate circle down outline icon"></i>
+                  </button>
+                </td></tr>
+                `
+              $('#table-recibos tbody').append(row)
+
+            }
+
+            
+
+            for (let doc of i.documents) {
+              let url_doc = `/media/docs_andinasoft/doc_contratos/${proyecto}/${doc.adj}/${doc.descripcion_doc}.pdf`
+              $(`button[data-doc="${doc.descripcion_doc}"]`).addClass('green').removeClass('disabled')
+              .click(function(){
+                window.open(url_doc, '_blank')
+              })
+            }
+          },
+          error: function(){
+            $('#table-ventas tbody tr').css('cursor','default')
+            $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'Ocurrió un error, contacta al administrador.',
+              displayTime: 0,
+              closeIcon: true,
+            })
+          }
+        })
+        
+      })
+      $('#btn-atras').click(function(){
+          $('#detalle-venta-segment').transition({
+            animation:'fade',
+            onComplete: function(){
+              $('#lista-ventas-segment').transition('fade')
+              $('.ci-row').each(function(index, element){
+                if (index!=0) $(element).remove()
+              })
+            $('#form-docs').trigger('reset')
+              $(`.button.view`).removeClass('green').addClass('disabled')
+              .click(function(){
+                null
+              })
+            }
+          })
+        })
+      $('#btn-add-ci').click(function(){
+        let last_ci_row = $('.ci-row').last()
+        let errors = 0
+        let nro_ci_row = $('.ci-row').length;
+
+        if (nro_ci_row == 7){
+          $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'No se pueden agregar mas de 7 lineas de pago.',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+            return;
+        }
+
+        last_ci_row.find('input').each(function(index,element){
+          if ($(element).val() == ''){
+            $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'Debes diligenciar todos los campos antes de agregar otra línea',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+            errors += 1
+            return false;
+            }
+          })
+        if (errors>0) return;
+        
+        let cantidad_ci =  last_ci_row.find('input[name="nro_cuota_ci"]').val() * 1
+        let previous_date = $('#id_fecha_cta_ci_'+nro_ci_row).calendar('get date')
+        new_date = new Date(previous_date.getFullYear(), previous_date.getMonth() + cantidad_ci, previous_date.getDate())
+        max_date = new Date(new_date.getFullYear(), new_date.getMonth(), 31)
+
+        let first_ci = $('#id_fecha_cta_ci_1').calendar('get date')
+        months = moment(new_date).diff(first_ci,'months')
+        if (months > param_meses_ci) {
+          $.toast({
+              class: 'error',
+              showIcon: false,
+              message: `El número de meses para pago de la Cuota Inicial está superando el permitido (Actual: ${months}, Parametro: ${param_meses_ci})`,
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+            return;
+        }
+
+        let cirow = `
+        <div class="row ci-row">
+          <div class="four wide column">
+            <div class="ui input" style="width: 120%;">
+              <input type="number" min="1" name="nro_cuota_ci" style="text-align: center;" onchange="pendiente_ci()";>
+            </div>
+          </div>
+          <div class="six wide column">
+            <div class="ui calendar" id="id_fecha_cta_ci_${nro_ci_row+1}">
+              <div class="ui input left icon" style="width: 110%">
+                <i class="calendar icon"></i>
+                <input type="text" name="fecha_cta_ci" placeholder="Desde" required 
+                  readonly style="cursor: pointer;text-align: center;">
+              </div>
+            </div>
+          </div>
+          <div class="six wide column">
+            <div class="ui input">
+              <input type="text" name="valor_cuota_ci" class="money" style="width: 100%;text-align: center" onkeyup="pendiente_ci()"">
+            </div>
+          </div>
+        </div>
+        `
+        $('#ci_form').append(cirow)
+
+        $(`#id_fecha_cta_ci_${nro_ci_row+1}`).calendar({
+            type: 'date',
+            firstDayOfWeek: 1,
+            text: calendar_spanish(),
+            formatter:{
+              date: 'YYYY-MM-DD',
+            },
+            maxDate: max_date,
+          }).calendar(
+            'set date', new_date
+          )
+        $('.money').mask("#,##0", {reverse: true});  
+      })
+      $('#btn-remove-ci').click(function(){
+        nro_ci_row = $('.ci-row').length;
+        if (nro_ci_row == 1) {
+          $('.ci-row input').val('')
+          pendiente_ci();
+          return false;
+        }
+        $('.ci-row').last().remove()
+        pendiente_ci();
+
+      })
+      $('#id_nro_cuota_saldo').on('change keyup', function(){
+        let capital = $('#id_valor_saldo').val().replace(/[$,]/g, '')*1
+        let cuotas = $(this).val()
+        
+        if (cuotas > param_meses_saldo){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `El numero de meses para pago del está superando el permitido (Actual: ${cuotas}, Parametro: ${param_meses_saldo})`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          $(this).val(param_meses_saldo)
+          cuotas = param_meses_saldo
+        }
+        
+        let tipo = $('#id_tipo_saldo').val()
+        if (tipo == 'extra'){
+          $('#id_periodo_extra').val('')
+          $('#id_nro_cuota_extra').val('')
+          $('input[name="fecha_cta_extra"]').val('')
+          $('#id_valor_cuota_extra').val('')
+          return false; 
+        } 
+
+        let val_cta = calcular_cuotas(capital, param_tasa, cuotas)
+
+        $('#id_valor_cuota_saldo').val(
+          new Intl.NumberFormat('en','EN').format(val_cta)
+        )
+
+      })
+      $('#id_valor_cuota_saldo').on('change keyup ',function(){
+          $('#id_periodo_extra').val('')
+          $('#id_nro_cuota_extra').val('')
+          $('input[name="fecha_cta_extra"]').val('')
+          $('#id_valor_cuota_extra').val('')
+          
+      })
+      $('#id_tipo_saldo').change(function(){
+        let tipo = $(this).val()
+        $('#saldo_form input').val('')
+        $('#id_periodo_extra').parent('.ui.dropdown').dropdown('clear')
+        if (tipo == 'extra'){
+          $('.extra-row .ui.input').removeClass('disabled')
+          $('.extra-row .ui.dropdown').removeClass('disabled')
+          $('.extra-row .ui.calendar').removeClass('disabled')
+          $('#id_valor_cuota_saldo').prop('readonly', false)
+          $('#id_valor_cuota_saldo').mask("#,##0", {reverse: true});  
+        }
+        else {
+          $('.extra-row .ui.input').addClass('disabled')
+          $('.extra-row .ui.calendar').addClass('disabled')
+          $('.extra-row .ui.dropdown').addClass('disabled')
+          $('#id_valor_cuota_saldo').prop('readonly', true)
+        }
+      })
+      $('.extra').on('change keyup', function(){
+        calcular_extra()
+      })
+      $('#id_periodo_extra').change(function(){
+        $('#id_nro_cuota_extra').val('')
+        $('input[name="fecha_cta_extra"]').val('')
+        $('#id_valor_cuota_extra').val('')
+      })
+      $('#id_nro_cuota_extra').change(function(){
+        let fecha_ini_reg = $('#id_fecha_cta_saldo').calendar('get date')
+        let nro_ctas = $(this).val() * 1
+        let periodicidad = $('#id_periodo_extra').val() * 1
+
+        let max_nctas = Math.floor(param_meses_saldo/periodicidad)
+
+        if (nro_ctas > max_nctas){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `El numero de cuotas extraordinarias debe estar dentro del plazo maximo para el saldo (${param_meses_saldo} meses)`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          $(this).val(max_nctas)
+          nro_ctas = max_nctas 
+          calcular_extra()
+        }
+
+        new_month = fecha_ini_reg.getMonth() + (param_meses_saldo - periodicidad*nro_ctas)
+        let date_max_ini_extra = new Date(fecha_ini_reg.getFullYear(),new_month,30)
+
+        $('#id_fecha_cta_extra').calendar({
+              type: 'date',
+              firstDayOfWeek: 1,
+              text: calendar_spanish(),
+              formatter:{
+                date: 'YYYY-MM-DD',
+              },
+              maxDate: date_max_ini_extra,
+              minDate: fecha_ini_reg,
+            })
+            calcular_extra()
+          
+      })
+      $('.fp').on('change keyup', function(){
+        let tipo = $('#id_tipo_saldo').val()
+        let periodo_extra = $('#id_periodo_extra').val() * 1
+        let nro_ctas_extra = $('#id_nro_cuota_extra').val() * 1
+        let fecha_ctas_extra = $('input[name="fecha_cta_extra"]').val()
+        let valor_ctas_extra = $('#id_valor_cuota_extra').val()
+
+        
+        let ctas_reg = $('#id_nro_cuota_saldo').val() * 1
+        let vr_ctas_reg = $('#id_valor_cuota_saldo').val().replace(/[$,]/g, '') *1
+        let fecha_cta_reg = $('#id_fecha_saldo').val()
+        
+        let next_button = $('#btn-modificar-contrato')
+              
+        if (tipo == 'regular'){
+          if (ctas_reg != '' && vr_ctas_reg != '' && fecha_cta_reg != ''){
+            next_button.removeClass('disabled')
+          }
+          else {
+            next_button.addClass('disabled')
+          }
+        }
+
+        else if (tipo == 'extra'){
+          if (ctas_reg != '' && vr_ctas_reg != '' && fecha_cta_reg != '' &&
+              periodo_extra != '' && nro_ctas_extra != '' &&  fecha_ctas_extra != '' &&
+              valor_ctas_extra != ''){
+            next_button.removeClass('disabled')
+          }
+          else {
+            next_button.addClass('disabled')
+          }
+        }
+      })
+      $('#btn-modificar-contrato').click(function(e){
+        $.modal({
+            title: 'Confirmar',
+            class: 'basic mini',
+            closeIcon: true,
+            content: '¿Estás segur@ de modificar esta venta?',
+            actions: [{
+              text: 'Si',
+              class: 'green approve'
+            },{
+              text: 'No',
+              class: 'red'
+            },
+          ],
+          onApprove: function(){
+            $('#form-venta').trigger('submit')  
+            return;
+          }
+        }).modal('show');
+      })
+      $('#form-venta').submit(function(e){
+        
+        e.preventDefault();
+        segment = $('#form-segment');
+        segment.addClass('loading');
+        
+        let idventa = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+        let inmueble = $('#table-ventas tr.green')[0].childNodes[7].childNodes[0].nodeValue
+
+        let data = new FormData(this)
+        data.append('proyecto',proyecto)
+        data.append('idventa',idventa)
+        data.append('tasa',param_tasa)
+        data.append('todo','modificar')
+        data.append('inmueble',inmueble)
+        
+        $.ajax({
+          url: '/andinasoftajx/detallesventa',
+          type:'POST',
+          data: data,
+          contentType: false,
+          processData: false,
+          success: function(response){
+            $.toast({
+              class: response.message.class,
+              showIcon: false,
+              message: response.message.text,
+              displayTime: 0,
+              closeIcon: true,
+            })
+          },
+          complete: function(){
+            segment.removeClass('loading');
+          }
+        })
+      })
+      $('#form-docs input[type="file"]').change(function(){
+          let completed = true
+          $('input[type="file"]').each(function(number,element){
+            if (!$(element).val().endsWith('.pdf') && $(element).val()!=""){
+              $(element).val(null)
+              $.toast({
+                class: 'error',
+                showIcon: false,
+                message: `El archivo seleccionado no es un PDF`,
+                displayTime: 'auto',
+                closeIcon: true,
+              })
+              return;
+            }
+          })
+        })
+      $('.button.upload').click(function(){
+        $(this).addClass('disabled loading')
+        let doc = $(this).data('doc')
+        uploaddocs(doc,this)
+      })
+      $('#btn-aprobar-contrato').click(function(){
+        let no_green = 0
+        $('.button.view').each(function(index,element){
+          if (!$(element).hasClass('green')) no_green++
+        })
+
+        if (no_green > 0){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `Debes cargar todos los documentos para aprobar una venta`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return false;
+        }
+        $.modal({
+          title: 'Confirmar',
+          class: 'basic mini',
+          closeIcon: true,
+          content: '¿Estás segur@ de aprobar esta venta?',
+          actions: [{
+              text: 'Si',
+              class: 'green approve'
+            },{
+              text: 'No',
+              class: 'red'
+            },
+          ],
+          onApprove: function(){
+            $('#page-segment').addClass('loading')
+            let idventa = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+            $.ajax({
+              url:'/andinasoftajx/detallesventa',
+              type:'POST',
+              data:{
+                proyecto: proyecto,
+                idventa: idventa,
+                todo: 'aprobar',
+                csrfmiddlewaretoken: getCookie('csrftoken')
+              },
+              success: function(response){
+                $.toast({
+                  class: response.class,
+                  showIcon: false,
+                  message: response.message,
+                  displayTime: 0,
+                  closeIcon: true,
+                })
+
+                setTimeout(function(){
+                    window.location.reload()
+                  }, 2000
+                )
+              },
+              error: function(){
+                $('#page-segment').removeClass('loading')
+                $.toast({
+                  class: 'error',
+                  showIcon: false,
+                  message: `Ocurrió un error, contacta al administrador del sitio`,
+                  displayTime: 0,
+                  closeIcon: true,
+                })
+              }
+            })
+          }
+        }).modal('show');
+        
+      })
+      $('.download-docs').click(function(){
+        btton = $(this)
+        btton.addClass('disabled loading')
+        let doc = $(this).data('download')
+        let venta = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+        $.ajax({
+          url: '/andinasoftajx/detallesventa',
+          type:'GET',
+          data: {
+            'proyecto':proyecto,
+            'venta':venta,
+            'tipodoc':doc,
+            'todo':'printdoc'
+          },
+          success: function(response){
+            $.toast({
+              class: response.message.class,
+              showIcon: false,
+              message: response.message.text,
+              displayTime: 0,
+              closeIcon: true,
+            })
+          },
+          complete: function(){
+            btton.removeClass('disabled loading')
+          }
+        })
+      })
+      $('#btn-agregar-recibos').click(function(){
+        
+        $('#modal-recibos').modal({
+          onApprove: function(){
+            $('#form-nuevo-recibo').trigger('submit');
+            return false
+          }
+        })
+        .modal('show')
+        
+      })
+      $('#form-nuevo-recibo').submit(function(e){
+        e.preventDefault();
+        if ($('#id_soporterecibo').val() == ''){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `Debes seleccionar un soporte de recibo`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return false;
+        }
+        else if ($('#id_formapagorecibo').val()==""){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: `Debes seleccionar una forma de pago`,
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return false;
+        }
+        $('#modal-recibos').find('.approve.button').addClass('disabled loading')
+        $(this).addClass('loading')
+        let data = new FormData(this)
+        let idventa = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+        data.append('idventa', idventa)
+        data.append('proyecto',proyecto)
+        data.append('todo','newreceipt')
+        $.ajax({
+          url:'/andinasoftajx/detallesventa',
+          type:'POST',
+          data: data,
+          contentType: false,
+          processData: false,
+          success: function(response){
+            $.toast({
+              class: response.message.class,
+              showIcon: false,
+              message: response.message.text,
+              displayTime: 0,
+              closeIcon: true,
+            })
+            let valor = new Intl.NumberFormat('en','EN').format(response.data.rc.valor)
+            let row = `<tr style="text-align:center;">
+                <td>${response.data.rc.fecha}</td>
+                <td>${response.data.rc.recibo}</td>
+                <td>${response.data.rc.usuario}</td>
+                <td>${response.data.rc.formapago}</td>
+                <td>$ ${valor}</td>
+                <td><a href="${response.data.rc.soportepago}" target="_blank" class="ui circular icon teal button"><i class="eye outline icon"></i></a>
+                
+                  <button type="button" class="ui icon violet circular button downloadreceipts"
+                    onclick="dwnldrecibo(${response.data.rc.recibo})">
+                    <i class="arrow alternate circle down outline icon"></i>
+                  </button>
+                </td></tr>
+              `
+              $('#table-recibos tbody').append(row)
+              $('#modal-recibos').modal('hide');
+              $('#form-nuevo-recibo').trigger('reset');
+          },
+          complete: function(){
+            $('#form-nuevo-recibo').removeClass('loading')
+            $('#modal-recibos').find('.approve.button').removeClass('disabled loading')
+          }
+        })
+      })
+      $('#btn-solicitar-dlocal').click(function(){
+        $(this).addClass('disabled loading');
+        let valor = $('#id_valor_dlocal').val().replace(/[$,]/g,'') * 1
+        let contrato = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue 
+        
+        $.ajax({
+          url:'/ajax_request/dlocalpayment',
+          type:'GET',
+          data: {
+            'amount':valor,
+            'contrato':contrato
+          },
+          success: function(response){
+            $('#id_url_dlocal').val(response.url)
+          },
+          error: function(){
+            $.toast({
+              class: 'error',
+              showIcon: false,
+              message: `Ocurrió un error al solicitar la url, contacta al administrador del sitio`,
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+          },
+          complete: function(){
+            $('#btn-solicitar-dlocal').removeClass('disabled loading')
+          }
+        })
+      })
+      $('#btn-new-dlocal').click(function(){
+        $('#id_valor_dlocal').val('')
+        $('#id_url_dlocal').val('')
+        $('#modal-new-payment').modal('show')
+      })
+      $('#btn-copy-url').click(function(){
+        let text = $('#id_url_dlocal').val()
+        navigator.clipboard.writeText(text)
+        
+      })
+      $('#btn-modal-comisions').click(function(){
+        $('input[name="porcentaje_comision"]').val('')
+        $('select[name="asesor_comision"]').parent('.ui.dropdown').dropdown('clear')
+        let idventa = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+        $.ajax({
+          type:'GET',
+          url:'/andinasoftajx/comisiones',
+          data: {
+            'idventa':idventa,
+            'proyecto':'Fractal'
+          },
+          success: function(response){
+            for (i in response.data){
+              cargo = response.data[i].idcargo
+              valor = parseFloat(response.data[i].comision)
+              gestor = response.data[i].idgestor
+              console.log(cargo,valor,gestor)
+              $('#porcentaje_'+cargo).val(valor)
+              $('#asesor_'+cargo).parent('.ui.dropdown')
+              .dropdown('set value', gestor)
+            }
+            
+          },
+          error: function(){
+            $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'No se pudo obtener la escala de comisiones',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+          }
+        })
+        $('#modal-comisiones').modal('show')
+      })
+      $('#modal-comisiones').modal({
+        onApprove: function(){
+          $('#form-comisiones').trigger('submit');
+          return false
+        }
+      })
+      $('#form-comisiones').submit(function(e){
+        e.preventDefault();
+        $('#btn-reg-comision').addClass('disabled loading');
+        let data = new FormData(this)
+        let idventa = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+        data.append('idventa',idventa)
+        data.append('proyecto','Fractal')
+        $.ajax({
+          type:'POST',
+          url:'/andinasoftajx/comisiones',
+          data: data,
+          contentType: false,
+          processData: false,
+          success: function(response){
+            $('#modal-comisiones').modal('hide')
+            $.toast({
+              class: 'success',
+              showIcon: false,
+              message: 'Se guardó la escala de comisiones',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+            $('#btn-reg-comision').removeClass('disabled loading');
+          },
+          error: function(){
+            $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'Hubo un error al guardar la escala de comisiones',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+            $('#btn-reg-comision').removeClass('disabled loading');
+          }
+        })
+      })
+      
+    
+    })
+    function dwnldrecibo(recibo){
+      $('#div-recibos').addClass('loading')
+      $.ajax({
+            url: '/andinasoftajx/detallesventa',
+            type:'GET',
+            data: {
+              'proyecto':proyecto,
+              'recibo':recibo,
+              'tipodoc':'recibo',
+              'todo':'printdoc'
+            },
+            success: function(response){
+              $.toast({
+                class: response.message.class,
+                showIcon: false,
+                message: response.message.text,
+                displayTime: 0,
+                closeIcon: true,
+              })
+            },
+            complete: function(){
+              $('#div-recibos').removeClass('loading')
+            }
+          })
+    }
+    function pendiente_ci(){
+      $('#btn-registrar-contrato').addClass('disabled')
+      let total = 0
+      let valor_ci = $('#id_valor_ci').val().replace(/[$,]/g,'') * 1
+      $('.ci-row').each(function(index,element){
+        let cantidad = $(element).find('input[name="nro_cuota_ci"]').val()
+        let fecha = $(element).find('input[name="fecha_cta_ci"]').val()
+        let valor = $(element).find('input[name="valor_cuota_ci"]').val().replace(/[$,]/g,'')*1
+        total += cantidad * valor
+        if (total > valor_ci){
+          $(element).find('input[name="valor_cuota_ci"]').val('')
+          total -= cantidad * valor
+          $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'El valor de las cuotas supera el valor de la cuota inicial',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+          return
+        }
+        errorfechas = false
+        if(fecha == '' && (cantidad != '' && valor != '') ){
+          errorfechas = true
+        }
+
+      })
+      if (errorfechas) {
+        $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'Debes agregar una fecha para poder continuar',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return;
+      }
+      let pendiente = valor_ci - total
+
+      
+      if (pendiente == 0){
+        let last_ci_row = $('.ci-row').last()
+        let nro_ci_row = $('.ci-row').length;
+        let last_ci = $('#id_fecha_cta_ci_'+nro_ci_row).calendar('get date')
+        let first_ci = $('#id_fecha_cta_ci_1').calendar('get date')
+        let cantidad_ci = last_ci_row.find('input[name="nro_cuota_ci"]').val() * 1
+
+        new_date = new Date(last_ci.getFullYear(), last_ci.getMonth() + cantidad_ci, 1)
+        
+        max_date = new Date(first_ci.getFullYear(), first_ci.getMonth() +param_meses_ci + 1, 31)
+        
+        if (new_date > max_date){
+          $.toast({
+            class: 'error',
+            showIcon: false,
+            message: 'La fecha de la ultima cuota de la CI excede el parametro de plazo maximo de pago.',
+            displayTime: 'auto',
+            closeIcon: true,
+          })
+          return;
+        }
+        
+        $('#saldo_segment').removeClass('disabled')
+        $('#saldo_segment input.fp').val('')
+        $('#id_fecha_cta_saldo').calendar({
+          type: 'date',
+          firstDayOfWeek: 1,
+          text: calendar_spanish(),
+          formatter:{
+            date: 'YYYY-MM-DD',
+          },
+          minDate: new_date,
+          maxDate: max_date,
+        })
+      }
+      else {
+        $('#id_periodo_extra').val('')
+        $('#id_tipo_saldo').parent('.ui.dropdown').dropdown('set value','regular')
+        $('#id_periodo_extra').parent('.ui.dropdown').dropdown('clear')
+        $('#saldo_segment').addClass('disabled')
+        $('#saldo_segment input.fp').val('')
+        $('#btn-modificar-contrato').addClass('disabled')
+      }
+
+      $('#id_restante_ci').val(
+        new Intl.NumberFormat('en','EN').format(pendiente)
+      )
+    }
+    function calcular_extra(){
+
+      let saldo = $('#id_valor_saldo').val().replace(/[$,]/g, '') *1
+
+      let periodo_extra = $('#id_periodo_extra').val() * 1
+      let nro_ctas_extra = $('#id_nro_cuota_extra').val() * 1
+
+      let ctas_reg = $('#id_nro_cuota_saldo').val() * 1
+      let vr_ctas_reg = $('#id_valor_cuota_saldo').val().replace(/[$,]/g, '') *1
+
+      let vp_reg = calcularvp(vr_ctas_reg, param_tasa, ctas_reg)
+      let vp_extra = saldo - vp_reg
+
+      let value = ''
+
+      if (vp_extra <= 0 ){
+        $.toast({
+              class: 'error',
+              showIcon: false,
+              message: 'El valor de las cuotas regulares es mayor al saldo por pagar.',
+              displayTime: 'auto',
+              closeIcon: true,
+            })
+            value = ''
+          return;
+      }
+
+      if (periodo_extra > 0 && nro_ctas_extra> 0) {
+        let cta = calcular_cuotas(vp_extra, param_tasa*periodo_extra,  nro_ctas_extra)
+        value = new Intl.NumberFormat('en','EN').format(cta)
+      }
+
+      $('#id_valor_cuota_extra').val(value)
+      }
+    function calcular_cuotas(capital,tasa,nCuotas){
+        if (tasa==0){
+            return Math.ceil(capital/nCuotas)
+        }
+        else{
+            up=capital*tasa
+            down=1-(1+tasa)**(-1*nCuotas)
+            cuota=up/down
+            return Math.ceil(cuota)
+        }
+    }
+    function calcularvp(cuota,tasa,nCuotas){
+    if (tasa == 0){
+      return cuota * nCuotas
+    }
+      up=(1-(1+tasa)**(-1*nCuotas))*cuota
+      down=tasa
+      capital=up/down
+      return Math.ceil(capital)      
+    }
+    function uploaddocs(document_name,button){
+    let idventa = $('#table-ventas tr.green')[0].childNodes[1].childNodes[0].nodeValue
+    form = document.getElementById('form-docs')
+    data = new FormData(form)
+    data.append('todo','uploadfile')
+    data.append('name', document_name)
+    data.append('proyecto', proyecto)
+    data.append('idventa', idventa)
+    $.ajax({
+      type: 'POST',
+      data: data,
+      url:'/andinasoftajx/detallesventa',
+      contentType: false,
+      processData: false,
+      success: function(response){
+        $.toast({
+          class: response.message.class,
+          showIcon: false,
+          message: response.message.text,
+          displayTime: 0,
+          closeIcon: true,
+        })
+        $(button).removeClass('disabled loading')
+        let url_doc = `/media/docs_andinasoft/doc_contratos/${proyecto}/${idventa}/${document_name}.pdf`
+              
+        $(button).next('.button.view').removeClass('disabled').addClass('green')
+        .click(function(){
+            window.open(url_doc, '_blank')
+          })
+
+      } ,
+      error: function(){
+        $(button).removeClass('disabled loading')
+      }
+    })
+  }
+</script>
+
+{%endblock%}
+{%block style%}
+<style>
+    th {
+        text-align: center!important;
+    }
+    .ui.labeled input {
+      text-align: center;
+    }
+</style>
+{%endblock%}

@@ -1,0 +1,116 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Listado asesores{%endblock%}
+{%block style%}
+<style>
+    td {
+        font-size: small;
+    }
+
+    th {
+        text-align: center;
+    }
+</style>
+<link href="https://unpkg.com/gijgo@1.9.13/css/gijgo.min.css" rel="stylesheet" type="text/css" />
+{%endblock%}
+{%block js%}
+<script src="https://unpkg.com/gijgo@1.9.13/js/gijgo.min.js" type="text/javascript"></script>
+<script src="https://unpkg.com/gijgo@1.9.13/js/messages/messages.es-es.js"></script>
+{%endblock%}
+{%block content%}
+<div class='container-lg rounded shadow bg-white px-0'>
+    <h3 class=' display-4 section-title text-white text-center'>Listado Asesores {{proyecto}}</h3>
+    <div class='container px-sm-3 py-3'>
+        <div class="table-responsive">
+            <table id='asesores' class='row-border compact hover' style="width: 100%;font-size: small;">
+                <thead>
+                    <tr>
+                        <th>Cedula</th>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Telefono</th>
+                        <th>Banco</th>
+                        <th>Soportes</th>
+                        <th>Estado</th>
+                        <th>Tipo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {%for asesor in list_asesores%}
+                    <tr>
+                        <td class='text-center'>
+                            <a href='/admin/andinasoft/asesores/{{asesor.cedula}}/change/'
+                                target='_blank'>{{asesor.cedula}}</a></td>
+                        <td>{{asesor.nombre.upper}}</td>
+                        <td>{{asesor.email}}</td>
+                        <td class='text-center'>{{asesor.telefono}}</td>
+                        <td class='text-center'>{{asesor.banco}}</td>
+                        <td>
+                            <ul>
+                                <li>{%if asesor.rut%}
+                                <a
+                                    href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/Cert_bancaria.pdf' target='_blank'>{{asesor.cuenta}}</a>
+                                {%else%}
+                                {{asesor.cuenta}}
+                                {%endif%}</li>
+                                <li>{%if asesor.cc%}
+                                <a href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/CC.pdf' target='_blank'>Cedula</a>
+                                {%else%}
+                                Sin soporte de cedula
+                                {%endif%}</li>
+                                <li>{%if asesor.hv%}
+                                <a href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/Hoja_de_vida.pdf' target='_blank'>Hoja de vida</a>
+                                {%else%}
+                                Sin soporte de HV
+                                {%endif%}</li>
+                                <li>{%if asesor.afiliaciones%}
+                                <a href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/Soporte_Afiliaciones.pdf' target='_blank'>Afiliaciones</a>
+                                {%else%}
+                                Sin soporte de Afiliaciones
+                                {%endif%}</li>
+                            </ul>
+                        </td>
+                        <td class='text-center'><a href='#' data-toggle='modal' data-target='#modalAsesor'
+                            data-asesor='{{asesor.cedula}}'>{{asesor.estado}}</a></td>
+                        <td class='text-center'><a href='#' 
+                                data-asesor='{{asesor.cedula}}'>{{asesor.tipo_asesor}}</a></td>
+                    </tr>
+                    {%endfor%}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="modalAsesor" tabindex="-1" aria-labelledby="modalAsesor" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAsesorLabel">Retirar Asesor</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                ¿Estas seguro que deseas retirar este asesor?
+                <br><br>
+                {%crispy form%}
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $(document).ready(function () {
+        $('#asesores').DataTable({
+            'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
+            "pageLength": 25,
+            "order": [[ 1, "asc" ]],
+        });
+        $('#modalAsesor').on('show.bs.modal',function(event){
+            var trigger = $(event.relatedTarget)
+            var asesor = trigger.data('asesor')
+            $('#id_cedula').val(asesor)
+        })
+    });
+</script>
+{%endblock%}

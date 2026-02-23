@@ -1,0 +1,76 @@
+
+<!doctype html>
+{%load static%}
+<html lang="es">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="icon" type="image/png" href="{%static 'img/tierra.png'%}">
+    <title>{%block title%}{%endblock%}</title>
+    <link href="{%static 'css/bootstrap.min.css'%}" rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <style>
+      #content{
+        background-image: url("{%static 'img/bg-andina.jpg'%}");
+      }
+      .section-title{
+        background: rgba(51,84,75,1);
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+      }
+    </style>
+    <!-- Custom styles for this template -->
+    <link href="{%static 'css/custom.css'%}" rel="stylesheet">
+    <link href="{%static 'css/sidebar.css'%}" rel="stylesheet" type="text/css" />
+    <link href="{%static 'css/navbar.css'%}" rel="stylesheet" type="text/css" />
+    <link href="{%static 'css/custom_bs.css'%}" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
+    {%block style%}{%endblock %}
+    <!-- Boostrap Core -->
+    <script src="{%static 'js/jquery-3.5.1.js'%}" ></script>
+    <script src="{%static 'js/moment.js'%}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+    <script type="text/javascript" language="javascript" src="https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js"></script>
+    <!-- Datatables -->
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/fixedcolumns/3.3.1/css/fixedColumns.dataTables.min.css">
+   <!--  <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/dataTables.bootstrap4.min.css"> -->
+    <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    
+    <script src="https://cdn.datatables.net/plug-ins/1.11.5/dataRender/datetime.js"></script>
+    <!-- <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/1.10.21/js/dataTables.bootstrap4.min.js"></script> -->
+    <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/fixedcolumns/3.3.1/js/dataTables.fixedColumns.min.js"></script>
+    <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/plug-ins/1.10.21/sorting/date-uk.js"></script>
+    <script type="text/javascript" language="javascript" src="https:////cdn.datatables.net/plug-ins/1.10.22/sorting/formatted-numbers.js"></script>
+    <script type="text/javascript" language="javascript" src="https://cdn.datatables.net/plug-ins/1.10.22/sorting/percent.js"></script>
+    <script src="https://kit.fontawesome.com/7b35a1f8ea.js" crossorigin="anonymous"></script>
+    {%block js%}{%endblock%}
+    </head>
+    <body>
+      <div class="wrapper">
+        {%include 'sidebar.html'%}
+        <div id="content">
+          {%include 'navbar_simply.html'%}
+          <main class='pl-md-3 pl-lg-5'>
+            {%include 'alert_right.html'%}
+            {%block content%}{%endblock%}
+          </main>
+        </div>
+      </div>
+      {%block jsbottom%}{%endblock%}
+      {%include 'avatar_selection.html'%}
+      <script type="text/javascript" language="javascript" src="{%static 'js/sidebar.js'%}"></script>
+      <script>
+        $(document).ready(function(){
+          $('input:submit').dblclick(function(e){
+            e.preventDefault();
+          })
+        })
+        $(function () {
+          $('[data-toggle="tooltip"]').tooltip()
+        })
+      </script>
+      <script src='{%static "js/preventEnterSubmit.js"%}'></script>
+      <script src="https://cdn.lordicon.com/fudrjiwc.js"></script>
+    </body>
+</html>
