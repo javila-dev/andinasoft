@@ -8,3 +8,15 @@ class NonStrictCompressedManifestStaticFilesStorage(CompressedManifestStaticFile
     """
 
     manifest_strict = False
+
+    def url(self, name, force=False):
+        """
+        If a referenced static file is missing, return its plain static path
+        instead of raising ValueError and breaking the request.
+        """
+        try:
+            return super().url(name, force=force)
+        except ValueError:
+            base = (self.base_url or "/static/").rstrip("/")
+            clean_name = str(name).lstrip("/")
+            return f"{base}/{clean_name}"
