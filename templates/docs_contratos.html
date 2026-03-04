@@ -19,7 +19,7 @@
         <div class="table-responsive">
             <table id='tabla_documentos' class='table table-sm table-striped table-bordered'>
                 <thead class="thead thead-light">
-                    <tr data-url="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:adj|add:'/'|add:documento.descripcion_doc|add:'.pdf'|media_url }}">
+                    <tr>
                         <th class='text-align-center'>Documento</th>
                         <th class='text-align-center'>Fecha Carga</th>
                         <th class='text-align-center'>Usuario Carga</th>
@@ -27,7 +27,7 @@
                 </thead>
                 <tbody>
                 {%for documento in lista_documentos%}
-                    <tr>
+                    <tr data-url="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:adj|add:'/'|add:documento.descripcion_doc|add:'.pdf'|media_url }}">
                         <th>{{documento.descripcion_doc}}</th>
                         <th class='text-align-center'>{{documento.fecha_carga|date:"d/m/Y"}}</th>
                         <th class='text-align-center'>{{documento.usuario_carga}}</th>
