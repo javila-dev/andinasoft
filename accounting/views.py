@@ -1,5 +1,7 @@
 import math
 import json
+import os
+import tempfile
 import unicodedata
 from django.shortcuts import render
 from django.http import JsonResponse, FileResponse
@@ -5301,9 +5303,25 @@ def historical_data(request):
                 document = doc_file, user_carga = request.user
             )
             
-            file_path = settings.MEDIA_ROOT + '/'+ str(instance.document)
-            
-            ocr_text = get_text_from_file(file_path )
+            temp_file_path = None
+            try:
+                try:
+                    file_path = instance.document.path
+                except Exception:
+                    _, suffix = os.path.splitext(str(instance.document.name))
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or '.tmp') as temp_file:
+                        with instance.document.open('rb') as stored_file:
+                            for chunk in iter(lambda: stored_file.read(1024 * 1024), b''):
+                                if not chunk:
+                                    break
+                                temp_file.write(chunk)
+                        temp_file_path = temp_file.name
+                    file_path = temp_file_path
+
+                ocr_text = get_text_from_file(file_path)
+            finally:
+                if temp_file_path and os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
             
             instance.ocr_text = ocr_text
             instance.save()

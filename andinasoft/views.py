@@ -132,6 +132,25 @@ def _normalize_soporte_key(soporte_path):
     return candidate or None
 
 
+def _resolve_soporte_url(soporte_path):
+    if not soporte_path:
+        return None
+    raw_value = str(soporte_path).strip()
+    if not raw_value:
+        return None
+    if raw_value.startswith('http://') or raw_value.startswith('https://'):
+        return raw_value
+
+    key = _normalize_soporte_key(raw_value)
+    if not key:
+        return None
+    try:
+        return default_storage.url(key)
+    except Exception:
+        media_url = getattr(settings, 'MEDIA_URL', '/media/') or '/media/'
+        return f"{media_url.rstrip('/')}/{key.lstrip('/')}"
+
+
 @login_required
 def proyecto_popup(request,redireccion):
     redirecciones={
@@ -3157,7 +3176,9 @@ def detalle_adjudicacion(request,proyecto,adj):
                 if not num:
                     continue
                 if row.get('soporte'):
-                    soportes_map[num] = row.get('soporte')
+                    soporte_url = _resolve_soporte_url(row.get('soporte'))
+                    if soporte_url:
+                        soportes_map[num] = soporte_url
                 abono_map[num] = row.get('abono_capital')
                 condonacion_map[num] = row.get('condonacion')
         tiene_recaudos_pendientes = False
