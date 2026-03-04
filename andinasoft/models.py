@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models import Q
+from andina.storage.media_policy import PRIVATE_MEDIA_STORAGE, PUBLIC_MEDIA_STORAGE
 import json
 
 
@@ -49,7 +50,7 @@ class empresas(models.Model):
     nombre=models.CharField(max_length=255)
     representante_legal=models.CharField(max_length=255)
     cc_replegal=models.CharField(max_length=255)
-    logo=models.ImageField(upload_to='logos_empresas')
+    logo=models.ImageField(upload_to='logos_empresas', storage=PUBLIC_MEDIA_STORAGE)
     
     def __str__(self):
         return self.nombre.upper()
@@ -66,7 +67,7 @@ class notificaciones_correo(models.Model):
 class Avatars(models.Model):
     id_avatar = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255,unique=True)
-    image = models.ImageField(upload_to="avatars")
+    image = models.ImageField(upload_to="avatars", storage=PUBLIC_MEDIA_STORAGE)
     
     def __str__(self):
         return self.name
@@ -513,8 +514,8 @@ class reestructuraciones_otrosi(models.Model):
     fecha_aplica = models.DateField(null=True, blank=True)
     observaciones = models.CharField(max_length=255,null=True,blank=True)
     proyecto = models.ForeignKey(proyectos, on_delete = models.PROTECT)
-    solicitud = models.FileField(upload_to='otrosi/solicitudes')
-    otrosi = models.FileField(upload_to = 'otrosi/firmados', null=True, blank=True)
+    solicitud = models.FileField(upload_to='otrosi/solicitudes', storage=PRIVATE_MEDIA_STORAGE)
+    otrosi = models.FileField(upload_to='otrosi/firmados', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     def extra_info(self):
         

@@ -114,7 +114,7 @@
                         <tbody>{%for pq in pqrs%}
                             <tr>
                                 <td class='text-center'>
-                                    <a href='/docs_andinasoft/doc_contratos/{{proyecto}}/{{adj}}/{{pq.doc_peticion}}' target="_blank">{{pq.pk}}</td>
+                                    <a href="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:adj|add:'/'|add:pq.doc_peticion|media_url }}" target="_blank">{{pq.pk}}</td>
                                 <td class='text-center'>{{pq.tipo}}</td>
                                 <td class='text-center'>{{pq.fecha_radicado}}</td>
                                 <td class='text-center'>{{pq.usuario_radica}}</td>

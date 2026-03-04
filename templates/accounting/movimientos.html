@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load static%}
 {%block title%}Accounting | Movimientos{%endblock%}
 {%block style%}
 <style>
@@ -309,6 +310,12 @@
   </div>
 
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
         var params = `status=no,location=no,toolbar=no,menubar=no,
                 width=650,height=450,left=100,top=100`
@@ -391,8 +398,8 @@
             tablaCONBanco.$('tr.selected').removeClass('selected');
             $(this).addClass('selected')
             let line = tablaCONBanco.row(this).data()
-            let ruta_causacion = '/media/'+line.soporte_causacion
-            let ruta_pago = '/media/'+line.soporte_causacion
+            let ruta_causacion = resolveMediaUrl(line.soporte_causacion)
+            let ruta_pago = resolveMediaUrl(line.soporte_causacion)
             window.open(ruta_causacion,'Soporte causacion',params)
             window.open(ruta_pago,'Soporte Pago',params)
 
@@ -503,7 +510,7 @@
                     if (response.class=='alert-warning'){
                         $('#form-carga-contable').trigger('reset')
                         $('#alert-data').append(
-                            '.  Puedes ver el detalle de los comprobantes no cargados <a class="font-weight-bold" href="/docs_andinasoft/tmp/comprobantes_no_cargados.txt" download="Comprobantes no cargados.txt">aqui</a>'
+                            '.  Puedes ver el detalle de los comprobantes no cargados <a class="font-weight-bold" href="'+resolveMediaUrl('tmp/comprobantes_no_cargados.txt')+'" download="Comprobantes no cargados.txt">aqui</a>'
                         )
                     }
                     $('#btnCargarCont').text('Cargar')
@@ -528,7 +535,7 @@
                 $('#modalClasifMvtoCOnt').modal('show')
                 break;
                 case "Soporte":
-                    let ruta = '/media/'+line.soporte
+                    let ruta = resolveMediaUrl(line.soporte)
                     window.open(ruta,'Soporte Egreso '+line.comprobante,params)
                 break;
                 case "Cargar":
@@ -665,7 +672,7 @@
                         $('#alert-data').text(response.msj)
                         $('#general-right-alert').toggleClass('show').toggleClass(response.class)
                         $('#alert-data').append(
-                            '.  Puedes ver el detalle de los comprobantes no cargados <a class="font-weight-bold" href="/media/tmp/comprobantes_no_cargados_banco.txt" download="Comprobantes no cargados.txt">aqui</a>'
+                            '.  Puedes ver el detalle de los comprobantes no cargados <a class="font-weight-bold" href="'+resolveMediaUrl('tmp/comprobantes_no_cargados_banco.txt')+'" download="Comprobantes no cargados.txt">aqui</a>'
                         )
                         $('#btnCargarBanco').text('Cargar')
                         $('#btnCargarBanco').prop('disabled',false)

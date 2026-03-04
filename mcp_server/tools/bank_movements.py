@@ -48,43 +48,40 @@ def _normalize_text_for_search(text: str) -> str:
     return without_accents.lower()
 
 
-def _fuzzy_match(word1: str, word2: str, threshold: float = 0.7) -> bool:
-    """
-    Calcula si dos palabras son similares usando distancia de Levenshtein.
-    Retorna True si la similitud es >= threshold (default 70%).
-    """
+def _calculate_similarity(word1: str, word2: str) -> float:
+    """Calcula la similitud entre dos palabras. Retorna un float entre 0.0 y 1.0."""
     if not word1 or not word2:
-        return False
-
+        return 0.0
     if word1 == word2:
-        return True
-
+        return 1.0
+    if word1.startswith(word2) or word2.startswith(word1):
+        return min(len(word1), len(word2)) / max(len(word1), len(word2))
     if word1 in word2 or word2 in word1:
-        min_len = min(len(word1), len(word2))
-        max_len = max(len(word1), len(word2))
-        similarity = min_len / max_len
-        return similarity >= threshold
-
+        return min(len(word1), len(word2)) / max(len(word1), len(word2))
     len1, len2 = len(word1), len(word2)
     dp = [[0] * (len2 + 1) for _ in range(len1 + 1)]
-
     for i in range(len1 + 1):
         dp[i][0] = i
     for j in range(len2 + 1):
         dp[0][j] = j
-
     for i in range(1, len1 + 1):
         for j in range(1, len2 + 1):
             if word1[i-1] == word2[j-1]:
                 dp[i][j] = dp[i-1][j-1]
             else:
                 dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    return 1 - (dp[len1][len2] / max(len1, len2))
 
-    max_len = max(len1, len2)
-    distance = dp[len1][len2]
-    similarity = 1 - (distance / max_len)
 
-    return similarity >= threshold
+def _fuzzy_match(word1: str, word2: str, threshold: float = 0.7) -> bool:
+    """Retorna True si las palabras matchean (por threshold o prefijo)."""
+    if not word1 or not word2:
+        return False
+    if word1 == word2:
+        return True
+    if word1.startswith(word2) or word2.startswith(word1):
+        return True
+    return _calculate_similarity(word1, word2) >= threshold
 
 
 def bank_movements_list(
@@ -164,7 +161,14 @@ def bank_movements_list(
             try:
                 empresa_obj = empresas.objects.get(nombre__iexact=empresa)
             except empresas.DoesNotExist:
-                return {**empty_response, 'detail': f'No se encontró empresa con NIT o nombre "{empresa}".', 'empresa_enviada': empresa}
+                resultados = empresas.objects.filter(nombre__icontains=empresa)
+                if resultados.count() == 1:
+                    empresa_obj = resultados.first()
+                elif resultados.count() > 1:
+                    nombres = ', '.join([e.nombre for e in resultados])
+                    return {**empty_response, 'detail': f'Nombre ambiguo "{empresa}", encontradas: {nombres}. Usa el NIT.', 'empresa_enviada': empresa}
+                else:
+                    return {**empty_response, 'detail': f'No se encontró empresa con NIT o nombre "{empresa}".', 'empresa_enviada': empresa}
 
         if cuenta_obj and cuenta_obj.nit_empresa_id and cuenta_obj.nit_empresa_id != empresa_obj.pk:
             return {
@@ -191,6 +195,7 @@ def bank_movements_list(
         queryset = queryset.filter(valor__gt=0)
 
     # Filtro por descripción con búsqueda difusa
+    match_scores = {}
     if descripcion:
         search_term_normalized = _normalize_text_for_search(descripcion)
         search_words = search_term_normalized.split()
@@ -201,16 +206,25 @@ def bank_movements_list(
                 desc_normalized = _normalize_text_for_search(mvto.descripcion)
                 desc_words = desc_normalized.split()
 
+                word_scores = []
                 all_words_match = True
                 for search_word in search_words:
-                    word_found = any(_fuzzy_match(search_word, desc_word, threshold=0.7)
-                                   for desc_word in desc_words)
-                    if not word_found:
+                    best_match = False
+                    best_score = 0.0
+                    for dw in desc_words:
+                        if _fuzzy_match(search_word, dw, threshold=0.7):
+                            best_match = True
+                        score = _calculate_similarity(search_word, dw)
+                        if score > best_score:
+                            best_score = score
+                    if not best_match:
                         all_words_match = False
                         break
+                    word_scores.append(best_score)
 
                 if all_words_match:
                     matching_ids.append(mvto.id_mvto)
+                    match_scores[mvto.id_mvto] = round(sum(word_scores) / len(word_scores) * 100)
 
         queryset = queryset.filter(id_mvto__in=matching_ids)
 
@@ -246,7 +260,8 @@ def bank_movements_list(
             'usado_agente': mvto.usado_agente,
             'fecha_uso_agente': mvto.fecha_uso_agente.isoformat() if mvto.fecha_uso_agente else None,
             'recibo_asociado_agente': mvto.recibo_asociado_agente,
-            'proyecto_asociado_agente': mvto.proyecto_asociado_agente
+            'proyecto_asociado_agente': mvto.proyecto_asociado_agente,
+            'match_pct': match_scores.get(mvto.id_mvto)
         }
         movimientos.append(mvto_data)
 
@@ -574,43 +589,42 @@ def bank_movements_for_receipt(
 BANK_MOVEMENTS_TOOLS = [
     {
         'name': 'bank_movements_list',
-        'description': 'Consulta movimientos bancarios por cuenta y/o empresa en un rango de fechas. Soporta búsqueda difusa por descripción (~70% similitud).',
+        'description': 'Busca movimientos bancarios. Soporta búsqueda difusa en descripción.',
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'fecha_desde': {'type': 'string', 'description': 'Fecha inicio YYYY-MM-DD (requerido)'},
-                'fecha_hasta': {'type': 'string', 'description': 'Fecha fin YYYY-MM-DD (requerido)'},
-                'cuenta': {'type': 'integer', 'description': 'ID de la cuenta bancaria'},
-                'cuenta_numero': {'type': 'string', 'description': 'Número de la cuenta bancaria'},
-                'empresa': {'type': 'string', 'description': 'NIT o nombre de la empresa'},
-                'estado': {'type': 'string', 'enum': ['CONCILIADO', 'SIN CONCILIAR'], 'description': 'Filtrar por estado'},
-                'usado_agente': {'type': 'boolean', 'description': 'Filtrar por si fue usado por agente'},
-                'valor_positivo': {'type': 'boolean', 'description': 'Solo valores positivos (ingresos)'},
-                'descripcion': {'type': 'string', 'description': 'Búsqueda difusa en descripción'},
-                'page': {'type': 'integer', 'description': 'Número de página (default 1)'},
-                'page_size': {'type': 'integer', 'description': 'Tamaño de página (max 500)'}
+                'fecha_desde': {'type': 'string', 'description': 'YYYY-MM-DD'},
+                'fecha_hasta': {'type': 'string', 'description': 'YYYY-MM-DD'},
+                'cuenta': {'type': 'integer', 'description': 'ID cuenta'},
+                'cuenta_numero': {'type': 'string', 'description': 'Nro cuenta'},
+                'empresa': {'type': 'string', 'description': 'NIT o nombre'},
+                'estado': {'type': 'string', 'enum': ['CONCILIADO', 'SIN CONCILIAR']},
+                'usado_agente': {'type': 'boolean', 'description': 'Filtrar por uso de agente'},
+                'valor_positivo': {'type': 'boolean', 'description': 'True = Solo ingresos'},
+                'descripcion': {'type': 'string', 'description': 'Búsqueda difusa'},
+                'page': {'type': 'integer', 'description': 'Default 1'},
+                'page_size': {'type': 'integer', 'description': 'Max 500'}
             },
             'required': ['fecha_desde', 'fecha_hasta']
         }
     },
     {
         'name': 'bank_movements_create',
-        'description': 'Carga movimientos bancarios en lote.',
+        'description': 'Carga movimientos en lote.',
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'cuenta': {'type': 'integer', 'description': 'ID de la cuenta bancaria'},
-                'cuenta_numero': {'type': 'string', 'description': 'Número de la cuenta'},
-                'empresa': {'type': 'integer', 'description': 'ID de la empresa'},
+                'cuenta': {'type': 'integer', 'description': 'ID cuenta'},
+                'cuenta_numero': {'type': 'string', 'description': 'Nro cuenta'},
+                'empresa': {'type': 'integer', 'description': 'ID empresa'},
                 'movimientos': {
                     'type': 'array',
-                    'description': 'Lista de movimientos a crear',
                     'items': {
                         'type': 'object',
                         'properties': {
-                            'fecha': {'type': 'string', 'description': 'Fecha YYYY-MM-DD'},
-                            'descripcion': {'type': 'string', 'description': 'Descripción'},
-                            'valor': {'type': 'number', 'description': 'Valor'},
+                            'fecha': {'type': 'string', 'description': 'YYYY-MM-DD'},
+                            'descripcion': {'type': 'string'},
+                            'valor': {'type': 'number'},
                             'referencia': {'type': 'string'},
                             'estado': {'type': 'string', 'enum': ['CONCILIADO', 'SIN CONCILIAR']},
                             'pago_id': {'type': 'integer'},
@@ -627,27 +641,27 @@ BANK_MOVEMENTS_TOOLS = [
     },
     {
         'name': 'bank_movements_mark_used',
-        'description': 'Marca o desmarca un movimiento como usado por el agente de conciliación.',
+        'description': 'Marca/desmarca movimiento como usado en conciliación.',
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'movement_id': {'type': 'integer', 'description': 'ID del movimiento (requerido)'},
-                'usado_agente': {'type': 'boolean', 'description': 'True=marcar, False=desmarcar (requerido)'},
-                'recibo_asociado_agente': {'type': 'string', 'description': 'Número de recibo'},
-                'proyecto_asociado_agente': {'type': 'string', 'description': 'Nombre del proyecto'}
+                'movement_id': {'type': 'integer', 'description': 'ID movimiento'},
+                'usado_agente': {'type': 'boolean', 'description': 'True=marcar, False=desmarcar'},
+                'recibo_asociado_agente': {'type': 'string', 'description': 'Nro recibo'},
+                'proyecto_asociado_agente': {'type': 'string', 'description': 'Nombre proyecto'}
             },
             'required': ['movement_id', 'usado_agente']
         }
     },
     {
         'name': 'bank_movements_for_receipt',
-        'description': 'Obtiene movimientos bancarios para una solicitud de recibo. Busca en ±1 día de la fecha de pago.',
+        'description': 'Busca movimientos para recibo (±1 día de fecha_pago).',
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'proyecto': {'type': 'string', 'description': 'Nombre del proyecto (requerido)'},
-                'fecha_pago': {'type': 'string', 'description': 'Fecha de pago YYYY-MM-DD (requerido)'},
-                'recibo_asociado': {'type': 'string', 'description': 'Número de recibo (opcional)'}
+                'proyecto': {'type': 'string'},
+                'fecha_pago': {'type': 'string', 'description': 'YYYY-MM-DD'},
+                'recibo_asociado': {'type': 'string', 'description': 'Nro recibo'}
             },
             'required': ['proyecto', 'fecha_pago']
         }

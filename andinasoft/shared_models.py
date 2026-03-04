@@ -6,6 +6,7 @@ from dateutil import relativedelta
 from django.db import models
 from django.db.models.aggregates import Sum, Max, Min
 from django.db.models.query_utils import Q
+from django.core.files.storage import default_storage
 from andinasoft.models import clientes, cuentas_pagos
 
 from andinasoft.utilities import JsonRender, Utilidades
@@ -1050,9 +1051,14 @@ class ventas_nuevas(models.Model):
     
     def documents(self):
         db_name = self._state.db
-        docs = documentos_contratos.objects.using(db_name).filter(adj=self.pk).values()
-        
-        return list(docs)
+        docs = list(documentos_contratos.objects.using(db_name).filter(adj=self.pk).values())
+        for doc in docs:
+            doc_path = f"docs_andinasoft/doc_contratos/{db_name}/{doc['adj']}/{doc['descripcion_doc']}.pdf"
+            try:
+                doc['url'] = default_storage.url(doc_path)
+            except Exception:
+                doc['url'] = f"/media/{doc_path}"
+        return docs
     
     def recaudos(self):
         db_name = self._state.db

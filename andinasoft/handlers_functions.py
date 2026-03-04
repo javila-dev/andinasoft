@@ -12,40 +12,40 @@ from django.shortcuts import render
 from django.core.mail import EmailMultiAlternatives
 from django.db.models import Avg, Max, Min, Sum
 from django.db import IntegrityError
+from andina.storage import media_service
 
 
 #cambiar ruta a public_html
 
+def _to_storage_key(path):
+    normalized = os.path.normpath(path)
+    media_root = os.path.normpath(settings.MEDIA_ROOT)
+    if normalized.startswith(media_root):
+        return os.path.relpath(normalized, media_root).replace("\\", "/")
+    return normalized.lstrip("/").replace("\\", "/")
+
+
 def upload_docs_asesores(file,id_asesor,name_doc):
     file_dir=f'{settings.DIR_DOCS}/doc_asesores/{id_asesor}'
-    os.makedirs(file_dir,exist_ok=True)
-    with open(f'{file_dir}/{name_doc}.pdf', 'wb+') as destination:
-        for chunk in file.chunks():
-            destination.write(chunk)
+    file_path = f'{file_dir}/{name_doc}.pdf'
+    media_service.save_private(_to_storage_key(file_path), file)
             
 def upload_docs_contratos(file,adj,proyecto,name_doc):
     file_dir=f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{adj}/'
-    os.makedirs(file_dir,exist_ok=True)
-    print(file_dir)
-    with open(f'{file_dir}{name_doc}.pdf', 'wb+') as destination:
-        for chunk in file.chunks():
-            destination.write(chunk)
+    file_path = f'{file_dir}{name_doc}.pdf'
+    media_service.save_private(_to_storage_key(file_path), file)
             
 def upload_docs_radicados(file,tipo,name_doc):
     file_dir=f'{settings.DIR_DOCS}/docs_radicados/{tipo}/'
-    os.makedirs(file_dir,exist_ok=True)
-    with open(f'{file_dir}{name_doc}.pdf', 'wb+') as destination:
-        for chunk in file.chunks():
-            destination.write(chunk)
+    file_path = f'{file_dir}{name_doc}.pdf'
+    media_service.save_private(_to_storage_key(file_path), file)
             
 def upload_docs(file,dir_destino,name_doc, doctype='pdf'):
     #La dir de destino debe finalizar en /
     #el name_doc no puede iniciar en /
     file_dir = dir_destino
-    os.makedirs(file_dir,exist_ok=True)
-    with open(f'{file_dir}{name_doc}.{doctype}', 'wb+') as destination:
-        for chunk in file.chunks():
-            destination.write(chunk)
+    file_path = f'{file_dir}{name_doc}.{doctype}'
+    media_service.save_private(_to_storage_key(file_path), file)
 
 def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo,porcentaje_condonado,
                  saldo_cuotas:list,consecutivo,Recaudos:object,Recaudos_general:object,titulares:object,

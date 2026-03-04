@@ -14,6 +14,7 @@ from django.forms import ValidationError
 from django.conf import settings
 from django.template.loader import get_template
 from django.core.mail import EmailMultiAlternatives
+from django.core.files.storage import default_storage
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.urls import path
@@ -70,6 +71,30 @@ tasas = [
     {'name':'0.99%','value':'0.0099'},
     {'name':'1.5%','value':'0.0150'}
 ]
+
+
+def _move_storage_prefix(prefix_src, prefix_dst):
+    src = prefix_src.rstrip("/") + "/"
+    dst = prefix_dst.rstrip("/") + "/"
+    pending = [src]
+
+    while pending:
+        current_prefix = pending.pop()
+        current_dst = current_prefix.replace(src, dst, 1)
+        dirs, files = default_storage.listdir(current_prefix)
+
+        for dirname in dirs:
+            pending.append(f"{current_prefix}{dirname}/")
+
+        for filename in files:
+            src_path = f"{current_prefix}{filename}"
+            dst_path = f"{current_dst}{filename}"
+            with default_storage.open(src_path, "rb") as file_obj:
+                if default_storage.exists(dst_path):
+                    default_storage.delete(dst_path)
+                default_storage.save(dst_path, file_obj)
+            default_storage.delete(src_path)
+
 
 @login_required
 def proyecto_popup(request,redireccion):
@@ -3056,7 +3081,7 @@ def detalle_adjudicacion(request,proyecto,adj):
             
             
         lista_clientes=clientes.objects.using('default').all()
-        dir_redireccion=f'http://app.somosandina.co/media/docs_andinasoft/tmp/{proyecto}_estadocuenta_{adj}'
+        dir_redireccion=f'{settings.MEDIA_URL}docs_andinasoft/tmp/{proyecto}_estadocuenta_{adj}'
         timeline_adj=timeline.objects.using(proyecto).filter(adj=adj).order_by('fecha').reverse()
         seguimientos_adj=seguimientos.objects.using(proyecto).filter(adj=adj).order_by('fecha').reverse()
         saldos_por_cuotas=saldos_adj.objects.using(proyecto).filter(adj=adj).order_by('fecha')
@@ -5177,7 +5202,9 @@ def adjudicar_venta(request,proyecto,contrato):
                 doc.adj=f'ADJ{idadj}'
                 doc.save()
             try:
-                os.rename(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{contrato}',f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/ADJ{idadj}')
+                src_prefix = f'doc_contratos/{proyecto}/{contrato}'
+                dst_prefix = f'doc_contratos/{proyecto}/ADJ{idadj}'
+                _move_storage_prefix(src_prefix, dst_prefix)
             except: pass      
             #creacion plan de pagos
            #ci
@@ -6879,7 +6906,7 @@ def interfaces_contabilidad(request,proyecto):
             context['titulo_alerta']='¡Listo!'
             context['mensaje']='Descarga el archivo Aqui'
             context['link']=True
-            context['ruta_link']=f'http://www.andinasoft.com.co/docs_andinasoft/tmp/Comisiones_{proyecto}_desde_{fecha_desde}_hasta_{fecha_hasta}.xlsx' """
+            context['ruta_link']=f'{settings.MEDIA_URL}tmp/Comisiones_{proyecto}_desde_{fecha_desde}_hasta_{fecha_hasta}.xlsx' """
         if request.POST.get('btnParamRecibos'):
             nrocomprobante=request.POST.get('nrocomprobante')
             ctacapital=request.POST.get('ctacapital')
@@ -9210,7 +9237,8 @@ def acciones_venta_fractal(request):
                     adj=contrato,descripcion_doc=descrip_doc,
                     fecha_carga=datetime.date.today(),usuario_carga=request.user.username
                 )
-                href = f"/media/docs_andinasoft/doc_contratos/{proyecto}/{idventa}/{descrip_doc}.pdf"
+                doc_path = f"docs_andinasoft/doc_contratos/{proyecto}/{idventa}/{descrip_doc}.pdf"
+                href = default_storage.url(doc_path)
                 data = {
                         'status':'success',
                         'data':{

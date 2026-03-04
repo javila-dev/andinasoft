@@ -39,6 +39,12 @@
 <script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
 <script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+      if (!pathOrUrl) return '';
+      if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+      return '/media/' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
       bsCustomFileInput.init();
       $('.money').mask("#,##0", {reverse: true});  
@@ -72,7 +78,7 @@
         let row = table_archivo.row(this).data()
         let params = `status=no,location=no,toolbar=no,menubar=no,
                 width=700,height=550,left=100,top=100`
-        window.open('/media/'+row.document,'Soporte documento',params)
+        window.open(resolveMediaUrl(row.document),'Soporte documento',params)
         
       })
       $('#btn-search').click(function(){

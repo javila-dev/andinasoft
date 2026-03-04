@@ -7,10 +7,16 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+
+def env_bool(name, default=False):
+    return os.getenv(name, str(default)).lower() in ('1', 'true', 'yes', 'on')
+
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
-LIVE = os.getenv('LIVE', 'False') == 'True'
+DEBUG = env_bool('DEBUG', False)
+LIVE = env_bool('LIVE', False)
+USE_S3_MEDIA = env_bool('USE_S3_MEDIA', False)
+MAINTENANCE_MODE = env_bool('MAINTENANCE_MODE', False)
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -24,6 +30,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.sites',
     'django.contrib.humanize',
+    'storages',
     'registration',
     'crispy_forms',
     'tempus_dominus',
@@ -44,6 +51,7 @@ TEMPUS_DOMINUS_INCLUDE_ASSETS = True
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -80,12 +88,18 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_PORT     = os.getenv('DB_PORT', '3306')
 
 MYSQL_OPTIONS = {
-    'init_command': "SET sql_mode='STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+    'init_command': "SET sql_mode='STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'",
+    'connect_timeout': 5,
+    'read_timeout': 30,
+    'write_timeout': 30,
 }
 
 # Alttum tiene sql_mode diferente al resto — respetamos el original
 MYSQL_OPTIONS_ALTTUM = {
-    'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
+    'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+    'connect_timeout': 5,
+    'read_timeout': 30,
+    'write_timeout': 30,
 }
 
 def make_db(name, options=None):
@@ -99,32 +113,19 @@ def make_db(name, options=None):
         'OPTIONS': options or MYSQL_OPTIONS,
     }
 
-if LIVE:
-    DATABASES = {
-        'default':            make_db(os.getenv('DB_NAME',         'developer_web')),
-        'Sandville Beach':    make_db(os.getenv('DB_SANDVILLE',    'developer_sandville')),
-        'Perla del Mar':      make_db(os.getenv('DB_PERLA',        'developer_sandvilledelmar')),
-        'Sandville del Sol':  make_db(os.getenv('DB_SANDVILLESOL', 'developer_sandvilledelsol')),
-        'Vegas de Venecia':   make_db(os.getenv('DB_VENECIA',      'developer_venecia')),
-        'Tesoro Escondido':   make_db(os.getenv('DB_TESORO',       'developer_tesoro_escondido')),
-        'Sotavento':          make_db(os.getenv('DB_SOTAVENTO',    'developer_sotavento')),
-        'Carmelo Reservado':  make_db(os.getenv('DB_CARMELO',      'developer_carmeloreservado')),
-        'Fractal':            make_db(os.getenv('DB_FRACTAL',      'developer_fractal')),
-        'Alttum':             make_db(os.getenv('DB_ALTTUM',       'developer_alttum'), MYSQL_OPTIONS_ALTTUM),
-        'Casas de Verano':    make_db(os.getenv('DB_CASASVERANO',  'developer_casasdeverano')),
-    }
-else:
-    # Fractal, Alttum y Casas de Verano no existen en el entorno local
-    DATABASES = {
-        'default':            make_db(os.getenv('DB_NAME',         'andinaso_web')),
-        'Sandville Beach':    make_db(os.getenv('DB_SANDVILLE',    'andinaso_sandville')),
-        'Perla del Mar':      make_db(os.getenv('DB_PERLA',        'andinaso_sandvilledelmar')),
-        'Sandville del Sol':  make_db(os.getenv('DB_SANDVILLESOL', 'andinaso_sandvilledelsol')),
-        'Vegas de Venecia':   make_db(os.getenv('DB_VENECIA',      'andinaso_venecia')),
-        'Tesoro Escondido':   make_db(os.getenv('DB_TESORO',       'andinaso_tesoro_escondido')),
-        'Sotavento':          make_db(os.getenv('DB_SOTAVENTO',    'andinaso_sotavento')),
-        'Carmelo Reservado':  make_db(os.getenv('DB_CARMELO',      'andinaso_carmeloreservado')),
-    }
+DATABASES = {
+    'default':            make_db(os.getenv('DB_NAME',         'developer_web')),
+    'Sandville Beach':    make_db(os.getenv('DB_SANDVILLE',    'developer_sandville')),
+    'Perla del Mar':      make_db(os.getenv('DB_PERLA',        'developer_sandvilledelmar')),
+    'Sandville del Sol':  make_db(os.getenv('DB_SANDVILLESOL', 'developer_sandvilledelsol')),
+    'Vegas de Venecia':   make_db(os.getenv('DB_VENECIA',      'developer_venecia')),
+    'Tesoro Escondido':   make_db(os.getenv('DB_TESORO',       'developer_tesoro_escondido')),
+    'Sotavento':          make_db(os.getenv('DB_SOTAVENTO',    'developer_sotavento')),
+    'Carmelo Reservado':  make_db(os.getenv('DB_CARMELO',      'developer_carmeloreservado')),
+    'Fractal':            make_db(os.getenv('DB_FRACTAL',      'developer_fractal')),
+    'Alttum':             make_db(os.getenv('DB_ALTTUM',       'developer_alttum'), MYSQL_OPTIONS_ALTTUM),
+    'Casas de Verano':    make_db(os.getenv('DB_CASASVERANO',  'developer_casasdeverano')),
+}
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -151,8 +152,28 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static_files')
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static_pro', 'static')]
 
+if DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'static_media')
+
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+AWS_PUBLIC_BUCKET_NAME = os.getenv('AWS_PUBLIC_BUCKET_NAME', AWS_STORAGE_BUCKET_NAME)
+AWS_S3_ENDPOINT_URL = os.getenv('AWS_S3_ENDPOINT_URL', 'https://storages.somosandina.co')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+AWS_S3_ADDRESSING_STYLE = os.getenv('AWS_S3_ADDRESSING_STYLE', 'path')
+AWS_QUERYSTRING_AUTH = env_bool('AWS_QUERYSTRING_AUTH', True)
+AWS_S3_SIGNATURE_VERSION = os.getenv('AWS_S3_SIGNATURE_VERSION', 's3v4')
+AWS_QUERYSTRING_EXPIRE = int(os.getenv('AWS_QUERYSTRING_EXPIRE', 3600))
+AWS_DEFAULT_ACL = None
+
+if USE_S3_MEDIA:
+    DEFAULT_FILE_STORAGE = 'andina.storage_backends.PrivateMediaStorage'
 
 # ─── Cron ────────────────────────────────────────────────────────────────────
 
@@ -162,6 +183,7 @@ CRON_CLASSES = [
 
 CRONJOBS = [
     ('*/5 * * * *', 'andinasoft.cron_jobs.ejemplo_job'),
+    ('0 3 * * *', 'django.core.management.call_command', ['cleanup_tmp_files', '--hours', '24']),
 ]
 
 # ─── Email ───────────────────────────────────────────────────────────────────
@@ -188,7 +210,7 @@ SITE_ID = 1
 if LIVE:
     DIR_DOCS      = MEDIA_ROOT + '/docs_andinasoft'
     DIR_EXPORT    = MEDIA_ROOT + '/tmp/'
-    DIR_DOWNLOADS = 'https://app.somosandina.co/media/tmp/'
+    DIR_DOWNLOADS = MEDIA_URL + 'tmp/'
 else:
     DIR_DOCS      = MEDIA_ROOT + '/'
     DIR_EXPORT    = MEDIA_ROOT + '/'
@@ -199,3 +221,22 @@ else:
 N8N_WEBHOOK_UPLOAD_MOVEMENTS = os.getenv('N8N_WEBHOOK_UPLOAD_MOVEMENTS', 'http://localhost:5678/webhook/upload-movements')
 N8N_WEBHOOK_WOMPI_COUNT      = os.getenv('N8N_WEBHOOK_WOMPI_COUNT',      'http://localhost:5678/webhook/wompi-count')
 N8N_WEBHOOK_PLINK_COUNT      = os.getenv('N8N_WEBHOOK_PLINK_COUNT',      'http://localhost:5678/webhook/plink-count')
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'mcp_server': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

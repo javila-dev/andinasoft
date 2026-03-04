@@ -579,6 +579,12 @@
 <script src='{%static "js/utilsfomantic.js"%}'></script>
 <script src="https://momentjs.com/downloads/moment.min.js"></script>
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+      if (!pathOrUrl) return ''
+      if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl
+      return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '')
+    }
+
     $(document).ready(function(){
       $('.ui.dropdown').dropdown()
       $('.money').mask("#,##0", {reverse: true});  
@@ -833,7 +839,7 @@
             
 
             for (let doc of i.documents) {
-              let url_doc = `/media/docs_andinasoft/doc_contratos/${proyecto}/${doc.adj}/${doc.descripcion_doc}.pdf`
+              let url_doc = doc.url || resolveMediaUrl(`docs_andinasoft/doc_contratos/${proyecto}/${doc.adj}/${doc.descripcion_doc}.pdf`)
               $(`button[data-doc="${doc.descripcion_doc}"]`).addClass('green').removeClass('disabled')
               .click(function(){
                 window.open(url_doc, '_blank')
@@ -1665,7 +1671,7 @@
           closeIcon: true,
         })
         $(button).removeClass('disabled loading')
-        let url_doc = `/media/docs_andinasoft/doc_contratos/${proyecto}/${idventa}/${document_name}.pdf`
+        let url_doc = response.data.href || resolveMediaUrl(`docs_andinasoft/doc_contratos/${proyecto}/${idventa}/${document_name}.pdf`)
               
         $(button).next('.button.view').removeClass('disabled').addClass('green')
         .click(function(){

@@ -52,15 +52,15 @@
                     <td class='text-center'>{{proveedor.telefono}}</td>
                     <td class='text-center'>{{proveedor.direccion}}</td>
                     <td class='text-center'>
-                        {%if proveedor.doc_rut != ""%}
-                        <a href='/media/{{proveedor.doc_rut}}' target="_blank">Ver</a>
+                        {%if proveedor.doc_rut %}
+                        <a href='{{ proveedor.doc_rut.url }}' target="_blank">Ver</a>
                         {%else%}
                         No cargado
                         {%endif%}
                     </td>
                     <td class='text-center'>
-                        {%if proveedor.doc_cert_bancaria != ""%}
-                        <a href='/media/{{proveedor.doc_cert_bancaria}}' target="_blank">Ver</a>
+                        {%if proveedor.doc_cert_bancaria %}
+                        <a href='{{ proveedor.doc_cert_bancaria.url }}' target="_blank">Ver</a>
                         {%else%}
                         No cargado
                         {%endif%}

@@ -10,7 +10,6 @@ __pycache__/
 local_settings.py
 db.sqlite3
 static_media/
-static_pro/
 
 # Environment
 .env
@@ -27,9 +26,15 @@ env/
 
 # Claude
 .claude/
+.codex/
 
 # Docker
 *.override.yml
+docker-compose.yml
+Dockerfile
+
+# Docs locales
+README/
 
 # OS
 .DS_Store

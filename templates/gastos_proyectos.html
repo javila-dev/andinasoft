@@ -206,7 +206,7 @@
                         $('#textoRevision').append('¡Todo listo <i class="fas fa-grin-stars"></i>, puedes revisar los gastos cargados <a href="'+parametros+'">Aquí</a>!')
                         $('#RevisarGastoCard').addClass('border-success')
                         if (errores){
-                            window.location.href='http://www.andinasoft.com.co/docs_andinasoft/tmp/comprobantes_no_cargados.txt'
+                            window.location.href='{% get_media_prefix %}tmp/comprobantes_no_cargados.txt'
                         } 
                     }
                     else{
@@ -215,7 +215,7 @@
                         $('#RevisarGastoCard').addClass('border-danger')
                         $('#RevisarGastoCard').removeClass('border-success')
                         $('#textoRevision').text('')
-                        $('#textoRevision').append('Oh Oh, ocurrió un <a href="http://www.andinasoft.com.co/docs_andinasoft/tmp/console_error.txt">error</a>. Intentalo nuevamente <i class="far fa-sad-tear"></i>')
+                        $('#textoRevision').append('Oh Oh, ocurrió un <a href="{% get_media_prefix %}tmp/console_error.txt">error</a>. Intentalo nuevamente <i class="far fa-sad-tear"></i>')
                     }
                 }
             });

@@ -16,10 +16,12 @@ django-suit==0.2.25
 requests
 material
 django_cron
-xhtml2pdf
+xhtml2pdf==0.2.11
 gunicorn
-pytesseract
 pdf2image
 python-docx
 python-dotenv
 httpx
+django-storages
+boto3
+whitenoise

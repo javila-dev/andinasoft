@@ -255,6 +255,12 @@
 <script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
 
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function () {
         var params = `status=no,location=no,toolbar=no,menubar=no,
                 width=650,height=450,left=100,top=100`
@@ -586,7 +592,7 @@
         })
         $('#tablaMvtosCont tbody').on('click','tr',function(e){
             var line = tablaMvtosCont.row(this).data()
-            let ruta = '/media/'+line.soporte
+            let ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte Egreso '+line.comprobante,params)
         });
         $('#tablaPagos tbody').on('click', 'tr', function (e) {
@@ -608,7 +614,7 @@
                     width=650,height=450,left=100,top=100`
             switch (e.target.id) {
                 case "ver_ant":
-                    var ruta = '/media/' + line.soporte
+                    var ruta = resolveMediaUrl(line.soporte)
                     window.open(ruta, 'Soporte pago ' + ruta.pk, params)
                     break;
                 case "impr_ant":
@@ -655,15 +661,15 @@
                     width=650,height=450,left=100,top=100`
             switch (e.target.id) {
                 case "ver":
-                    var ruta = '/media/' + line.soporte
+                    var ruta = resolveMediaUrl(line.soporte)
                     window.open(ruta, 'Soporte pago ' + ruta.pk, params)
                     break;
                 case "ver_rad":
-                    var ruta = '/media/' + line.soporte_radicado
+                    var ruta = resolveMediaUrl(line.soporte_radicado)
                     window.open(ruta, 'Soporte radicado ' + ruta.pk, params)
                     break;
                 case "ver_causacion":
-                    var ruta = '/media/' + line.soporte_causacion
+                    var ruta = resolveMediaUrl(line.soporte_causacion)
                     window.open(ruta, 'Soporte radicado ' + ruta.pk, params)
                 break;
                 case "ver_asoc":

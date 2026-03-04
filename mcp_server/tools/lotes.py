@@ -19,7 +19,9 @@ def _normalize_lote_estado(value: str) -> Optional[str]:
     estados = {
         'libre': 'Libre',
         'bloqueado': 'Bloqueado',
-        'sin liberar': 'Sin Liberar'
+        'sin liberar': 'Sin Liberar',
+        'adjudicado': 'Adjudicado',
+        'reservado': 'Reservado'
     }
     return estados.get(normalized)
 
@@ -73,7 +75,7 @@ def _check_user_project_access(user, proyecto: str) -> bool:
 
 
 def lotes_list(
-    proyecto: str,
+    proyecto: str = None,
     estado: str = None,
     manzana: str = None,
     idinmueble: str = None,
@@ -83,7 +85,7 @@ def lotes_list(
     Consulta lotes por estado, con filtro opcional por manzanas o ID de inmueble.
 
     Args:
-        proyecto: Nombre exacto del proyecto (requerido)
+        proyecto: Nombre exacto del proyecto (requerido en práctica)
         estado: Estado del lote (Libre|Bloqueado|Sin Liberar). Default: Libre
         manzana: Lista de manzanas separadas por comas
         idinmueble: ID exacto del lote (si se envía, ignora estado y manzana)
@@ -92,15 +94,28 @@ def lotes_list(
     Returns:
         dict con count y data (lista de lotes)
     """
-    from andinasoft.models import proyectos
     from andinasoft.shared_models import Inmuebles, Adjudicacion, ventas_nuevas
+    from mcp_server.tools.utils import resolve_proyecto
 
-    proyecto = (proyecto or '').strip()
-    if not proyecto:
-        return {'error': 'Debes enviar el parámetro "proyecto".', 'count': 0, 'data': []}
+    # Si no se especificó proyecto, devolver instrucción para preguntar al usuario
+    if not (proyecto or '').strip():
+        from andinasoft.models import proyectos as ProyectosModel
+        available = sorted([p.proyecto for p in ProyectosModel.objects.all()])
+        return {
+            'accion_requerida': (
+                'El usuario no especificó el proyecto. '
+                'PREGUNTA: "¿En qué proyecto quieres consultar el inventario?" '
+                'y espera su respuesta antes de llamar este tool.'
+            ),
+            'proyectos_disponibles': available,
+            'count': 0,
+            'data': []
+        }
 
-    if not proyectos.objects.filter(proyecto__iexact=proyecto).exists():
-        return {'error': f'No encontramos el proyecto "{proyecto}".', 'count': 0, 'data': []}
+    proyecto_nombre, err = resolve_proyecto(proyecto)
+    if err:
+        return {**err, 'count': 0, 'data': []}
+    proyecto = proyecto_nombre
 
     if user and not _check_user_project_access(user, proyecto):
         return {'error': f'No tienes acceso al proyecto "{proyecto}".', 'count': 0, 'data': []}
@@ -143,29 +158,28 @@ def lotes_list(
         data = []
         for lote in inventario:
             relacion = None
-            if idinmueble:
-                estado_lote = (lote.estado or '').strip().lower()
-                if estado_lote == 'adjudicado':
-                    adj = Adjudicacion.objects.using(proyecto).filter(idinmueble=lote.idinmueble).first()
-                    if adj:
-                        cliente_nombre = _get_cliente_nombre(adj.idtercero1)
-                        relacion = {
-                            'tipo': 'adjudicacion',
-                            'referencia': adj.idadjudicacion,
-                            'cliente': cliente_nombre
-                        }
-                elif estado_lote == 'reservado':
-                    venta = (ventas_nuevas.objects.using(proyecto)
-                             .filter(inmueble=lote.idinmueble)
-                             .order_by('-fecha_contrato', '-id_venta')
-                             .first())
-                    if venta:
-                        cliente_nombre = _get_cliente_nombre(venta.id_t1)
-                        relacion = {
-                            'tipo': 'reserva',
-                            'referencia': venta.id_venta,
-                            'cliente': cliente_nombre
-                        }
+            estado_lote = (lote.estado or '').strip().lower()
+            if estado_lote == 'adjudicado':
+                adj = Adjudicacion.objects.using(proyecto).filter(idinmueble=lote.idinmueble).first()
+                if adj:
+                    cliente_nombre = _get_cliente_nombre(adj.idtercero1)
+                    relacion = {
+                        'tipo': 'adjudicacion',
+                        'referencia': adj.idadjudicacion,
+                        'cliente': cliente_nombre
+                    }
+            elif estado_lote == 'reservado':
+                venta = (ventas_nuevas.objects.using(proyecto)
+                         .filter(inmueble=lote.idinmueble)
+                         .order_by('-fecha_contrato', '-id_venta')
+                         .first())
+                if venta:
+                    cliente_nombre = _get_cliente_nombre(venta.id_t1)
+                    relacion = {
+                        'tipo': 'reserva',
+                        'referencia': venta.id_venta,
+                        'cliente': cliente_nombre
+                    }
 
             data.append({
                 'idinmueble': lote.idinmueble,
@@ -208,22 +222,21 @@ def lotes_change_status(
         dict con idinmueble, estado_anterior y estado_actual
     """
     import datetime
-    from andinasoft.models import proyectos
     from andinasoft.shared_models import Inmuebles
+    from mcp_server.tools.utils import resolve_proyecto
 
-    proyecto = (proyecto or '').strip()
     idinmueble = (idinmueble or '').strip()
     estado = (estado or '').strip()
 
-    if not proyecto:
-        return {'error': 'Debes enviar "proyecto".'}
     if not idinmueble:
         return {'error': 'Debes enviar "idinmueble".'}
     if not estado:
         return {'error': 'Debes enviar "estado".'}
 
-    if not proyectos.objects.filter(proyecto__iexact=proyecto).exists():
-        return {'error': f'No encontramos el proyecto "{proyecto}".'}
+    proyecto_nombre, err = resolve_proyecto(proyecto)
+    if err:
+        return err
+    proyecto = proyecto_nombre
 
     if user and not _check_user_project_access(user, proyecto):
         return {'error': f'No tienes acceso al proyecto "{proyecto}".'}
@@ -236,6 +249,13 @@ def lotes_change_status(
         return {'error': 'Error al buscar el lote.', 'detail': str(exc)}
 
     estado_actual = (lote.estado or '').strip()
+
+    if estado_actual in ('Adjudicado', 'Reservado'):
+        return {
+            'error': f'No se puede modificar el estado de un lote {estado_actual}. Esta acción requiere gestión directa en el sistema.',
+            'estado_actual': estado_actual
+        }
+
     estado_nuevo_norm = _normalize_lote_estado(estado)
 
     if not estado_nuevo_norm:
@@ -281,28 +301,34 @@ def lotes_change_status(
 LOTES_TOOLS = [
     {
         'name': 'lotes_list',
-        'description': 'Consulta lotes/inmuebles por proyecto y estado. Permite filtrar por manzanas o buscar un lote específico por ID.',
+        'description': 'Consulta lotes/inmuebles. Requiere proyecto explícito (preguntar si no lo menciona).',
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'proyecto': {'type': 'string', 'description': 'Nombre exacto del proyecto (requerido)'},
-                'estado': {'type': 'string', 'description': 'Estado: Libre, Bloqueado, Sin Liberar', 'enum': ['Libre', 'Bloqueado', 'Sin Liberar']},
-                'manzana': {'type': 'string', 'description': 'Manzanas separadas por comas (ej: "1,2,3")'},
-                'idinmueble': {'type': 'string', 'description': 'ID específico del lote'}
+                'proyecto': {'type': 'string'},
+                'estado': {
+                    'type': 'string', 
+                    'enum': ['Libre', 'Bloqueado', 'Sin Liberar', 'Adjudicado', 'Reservado']
+                },
+                'manzana': {'type': 'string', 'description': 'Separadas por comas (ej: 1,2,3)'},
+                'idinmueble': {'type': 'string'}
             },
             'required': ['proyecto']
         }
     },
     {
         'name': 'lotes_change_status',
-        'description': 'Cambia el estado de un lote entre Libre, Bloqueado y Sin Liberar.',
+        'description': 'Cambia el estado de un lote.',
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'proyecto': {'type': 'string', 'description': 'Nombre del proyecto'},
-                'idinmueble': {'type': 'string', 'description': 'ID del lote'},
-                'estado': {'type': 'string', 'description': 'Nuevo estado', 'enum': ['Libre', 'Bloqueado', 'Sin Liberar']},
-                'motivo_bloqueo': {'type': 'string', 'description': 'Motivo (requerido si estado=Bloqueado)'}
+                'proyecto': {'type': 'string'},
+                'idinmueble': {'type': 'string'},
+                'estado': {
+                    'type': 'string', 
+                    'enum': ['Libre', 'Bloqueado', 'Sin Liberar']
+                },
+                'motivo_bloqueo': {'type': 'string', 'description': 'Requerido si estado=Bloqueado'}
             },
             'required': ['proyecto', 'idinmueble', 'estado']
         }

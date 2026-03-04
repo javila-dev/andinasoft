@@ -13,7 +13,7 @@
         <div class='container-fluid'>
             {%if user.is_authenticated%}
             <a href='#' data-toggle="modal" data-target='#avatarModal'>
-                <img id='imgUser' src="/media/{{user.profiles.avatar.image}}" alt='Imagen usuario' class='rounded-circle mx-auto d-block userimg'>
+                <img id='imgUser' src="{{ user.profiles.avatar.image.url }}" alt='Imagen usuario' class='rounded-circle mx-auto d-block userimg'>
             </a>
             <p class='text-center'>{{request.user.first_name}}</p>            
             <p class='position-absolute' style='left:220px;top:170px'>
@@ -22,7 +22,7 @@
                 <a href='/accounts/logout' data-toggle="tooltip" data-placement="top" title="Cerrar sesion"><i class="fas fa-door-open"></i></a></p>
             {%else%}
             <a href='/accounts/login'>
-                <img id='imgUser'  src="/media/avatars/nouser.png" alt='Imagen usuario' class='rounded-circle mx-auto d-block userimg'>
+                <img id='imgUser'  src="{% get_media_prefix %}avatars/nouser.png" alt='Imagen usuario' class='rounded-circle mx-auto d-block userimg'>
                 <p class='text-center'>Iniciar sesion</p>
             </a>
             {%endif%}

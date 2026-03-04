@@ -64,8 +64,8 @@
                                 <a class="dropdown-item" href="#" data-toggle='modal' data-target="#modalPagar"
                                     data-contrato="{{contrato.pk}}">
                                     Abonar a contrato</a>
-                                {%if contrato.contrato_docs != ''%}
-                                <a class="dropdown-item" href="/media/{{contrato.contrato_docs}}"
+                                {%if contrato.contrato_docs %}
+                                <a class="dropdown-item" href="{{ contrato.contrato_docs.url }}"
                                     target='_blank'>
                                     Ver soporte contrato</a>
                                 {%else%}

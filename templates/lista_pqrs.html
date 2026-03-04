@@ -54,9 +54,9 @@
                                 {{rad.pk}}
                             </a>
                             <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                              <a class="dropdown-item" href="/media/docs_andinasoft/doc_contratos/{{proyecto}}/{{rad.idadjudicacion}}/{{rad.doc_peticion}}">Ver PQRS</a>
+                              <a class="dropdown-item" href="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:rad.idadjudicacion|add:'/'|add:rad.doc_peticion|media_url }}">Ver PQRS</a>
                               {%if rad.estado == "Cerrado"%}
-                              <a class="dropdown-item" href="/media/docs_andinasoft/doc_contratos/{{proyecto}}/{{rad.idadjudicacion}}/{{rad.doc_respuesta}}">Ver Respuesta PQRS</a>
+                              <a class="dropdown-item" href="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:rad.idadjudicacion|add:'/'|add:rad.doc_respuesta|media_url }}">Ver Respuesta PQRS</a>
                               {%else%}
                               <a class="dropdown-item" href='#' data-toggle="modal" data-target='#modalCierrePQRS'
                               data-adj='{{rad.idadjudicacion}}' data-radicado='{{rad.pk}}'>Cerrar PQRS</a>

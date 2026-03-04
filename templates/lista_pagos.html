@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load static%}
 
 {%block title%}Tesoreria | Pagos efectuados{%endblock%}
 
@@ -79,6 +80,12 @@
   </div>
   {%include 'alert.html'%}
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function() {
         bsCustomFileInput.init()
     var tablapagos=$('#tabla-pagos').DataTable({
@@ -107,7 +114,7 @@
     // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
     // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
     var modal = $(this)
-    document.getElementById('link-ver').setAttribute('href','/docs_andinasoft/docs_radicados/Soportes_Pago/Soporte_Pago_'+pago+'_Radicado_'+radicado+'.pdf')
+    document.getElementById('link-ver').setAttribute('href', resolveMediaUrl('docs_andinasoft/docs_radicados/Soportes_Pago/Soporte_Pago_'+pago+'_Radicado_'+radicado+'.pdf'))
     $('#numero-radicado').val(radicado)
     $('#numero-pago').val(pago)
     });

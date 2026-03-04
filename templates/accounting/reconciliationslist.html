@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load static%}
 {%block title%}Accounting | Lista conciliaciones{%endblock%}
 {%block style%}
 <style>
@@ -139,6 +140,12 @@ style="max-width: 150px;">
     </div>
   </div>
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
         var tablaConciliaciones = $('#tablaConciliaciones').DataTable({
             language: {
@@ -378,7 +385,7 @@ style="max-width: 150px;">
                     $('#alert-data').text('Puedes descargar tu archivo ')
                     $('#general-right-alert').toggleClass('show').toggleClass('alert-success')
                     $('#alert-data').append(
-                        '<a onclick="setTimeout(closeAlerta(),2000)" href="/media/tmp/pdf/'+filename+'" download="'+filename+'"><strong>aqui</strong></a>')
+                        '<a onclick="setTimeout(closeAlerta(),2000)" href="'+resolveMediaUrl('tmp/pdf/'+filename)+'" download="'+filename+'"><strong>aqui</strong></a>')
                 }
             })
             

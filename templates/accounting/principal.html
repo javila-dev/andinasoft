@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load static%}
 {%block title%}Accounting | Principal{%endblock%}
 {%block js%}
 {%include 'datatable_buttons.html'%}
@@ -14,7 +15,7 @@
         <div class='row my-4 px-0 justify-content-center'>
             <div class='col-md-3 mb-4 py-3 rounded-pill bg-white shadow text-center'>
                 <a href="/accounting/radicarfactura">
-                    <img src="/media/icons/documentos-oficiales.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/documentos-oficiales.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Radicar</strong></a>
             </div>
             <div class='col-md-1 mb-4 my-auto text-center'>
@@ -22,7 +23,7 @@
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/causarfactura">
-                    <img src="/media/icons/inscripcion.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/inscripcion.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Causar</strong></a>
             </div>
             <div class='col-md-1 mb-4 my-auto text-center'>
@@ -30,7 +31,7 @@
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/pagarfactura">
-                    <img src="/media/icons/metodo-de-pago.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/metodo-de-pago.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Pagar</strong></a>
             </div>
         </div>
@@ -38,17 +39,17 @@
         <div class='row my-4 px-0 justify-content-around'>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/listafacturas">
-                    <img src="/media/icons/material-de-oficina.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/material-de-oficina.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Facturas radicadas</strong></a>
             </div>
             <div class='col-md-3 mb-4 mx-2 py-3 rounded-pill bg-white shadow text-center'>
                 <a href="/accounting/listapagos">
-                    <img src="/media/icons/calendario-contable.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/calendario-contable.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Pagos efectuados</strong></a>
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/correspondencia/facturas/pagos_efectuados">
-                    <img src="/media/icons/history.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/history.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Lista pagos modulo anterior</strong></a>
             </div>
         </div>
@@ -57,17 +58,17 @@
             
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/otherincomes">
-                    <img src="/media/icons/recibo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/recibo.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Otros ingresos</strong></a>
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/movement_sheet">
-                    <img src="/media/icons/calendario-lista.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/calendario-lista.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Planilla diaria</strong></a>
             </div>
             <!-- <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/correspondencia/facturas/pagar">
-                    <img src="/media/icons/history.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/history.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Efectuar pagos modulo anterior</strong></a>
             </div> -->
             
@@ -76,7 +77,7 @@
         <div class='row my-4 px-0 justify-content-around'>
             <div class='col-md-3 mb-4 py-3 rounded-pill bg-white shadow text-center'>
                 <a href="/accounting/movements">
-                    <img src="/media/icons/teneduria-de-libros.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/teneduria-de-libros.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Ver/Cargar movimientos</strong></a>
             </div>
             <div class='col-md-1 mb-4 my-auto text-center'>
@@ -84,7 +85,7 @@
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/reconciliations">
-                    <img src="/media/icons/revisar.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/revisar.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Conciliaciones</strong></a>
             </div>
             <div class='col-md-1 mb-4 my-auto text-center'>
@@ -92,7 +93,7 @@
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="/accounting/reconciliationslist">
-                    <img src="/media/icons/check-list.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/check-list.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Lista conciliaciones</strong></a>
             </div>
         </div>
@@ -101,27 +102,27 @@
             
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="#" data-toggle="modal" data-target="#modalEgresos">
-                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/archivo.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Interfaz egresos</strong></a>
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="#" data-toggle="modal" data-target="#modalNotas">
-                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/archivo.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Interfaz notas</strong></a>
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="#" data-toggle="modal" data-target="#modalInterfacesNomina">
-                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/archivo.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Interfaces Nomina</strong></a>
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="#" data-toggle="modal" data-target="#modalInterfacesBanco">
-                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/archivo.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Interfaces Bancarias</strong></a>
             </div>
             <div class='col-md-3 mb-4 py-3 bg-white rounded-pill shadow text-center'>
                 <a href="#" data-toggle="modal" data-target="#modalConciliacionDS">
-                    <img src="/media/icons/archivo.png" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
+                    <img src="{% static 'icons/archivo.png' %}" class="rounded mx-auto d-block mb-2" alt="..." width="40" height="40">
                     <strong>Conciliacion DS</strong></a>
             </div>
         </div>

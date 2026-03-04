@@ -115,6 +115,12 @@
   </div>
   {%csrf_token%}
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
         const params = `status=no,location=no,toolbar=no,menubar=no,
                 width=650,height=450,left=100,top=100`
@@ -216,7 +222,7 @@
             tablaListaPagos.$('tr.selected').removeClass('selected');
             $(this).addClass('selected')
             var line = tablaListaPagos.row(this).data()
-            var ruta = '/media/'+line.soporte
+            var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte pago radicado '+ruta.pk,params)
         })
         $("#contextMenu").click(function(e){
@@ -237,7 +243,7 @@
                                 let fecha = new Date(data[i]['fecha'])
                                 fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
                                 let action = `<div class="media border-bottom border-gray pt-2">
-                                    <img src="/media/`+data[i]['imagen']+`" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                                    <img src="`+resolveMediaUrl(data[i]['imagen'])+`" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                                     <div class="media-body">
                                     <h6 class="mt-0">`+data[i]['usuario']+' el '+fecha+`</h6>
                                     <p>`+data[i]['accion']+`</p>
@@ -250,7 +256,7 @@
                     $('#modalHistory').modal('show')
                     break;    
                 case "ver":
-                    var ruta = '/media/'+line.soporte
+                    var ruta = resolveMediaUrl(line.soporte)
                     window.open(ruta,'Soporte radicado '+ruta.pk,params)
                     break;  
                 case "pagos":
@@ -261,7 +267,7 @@
                     $('#modalPagar').modal('show')
                     break;
                 case "ver_causacion":
-                    var ruta = '/media/' + line.soporte_causacion
+                    var ruta = resolveMediaUrl(line.soporte_causacion)
                     window.open(ruta, 'Soporte radicado ' + ruta.pk, params)
                 break;
                 }

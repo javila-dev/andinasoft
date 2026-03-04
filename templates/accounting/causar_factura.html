@@ -138,6 +138,12 @@
   </div>
 {%include 'accounting/radicados_internos.html'%}
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
         var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
         var tablaSinRecibir = $('#tablaSinRecibir').DataTable({
@@ -298,7 +304,7 @@
                         },
                         success:function(response){
                             var data = JSON.parse(response['data'])[0]['fields']
-                            var ruta = '/media/'+data['soporte_radicado']
+                            var ruta = resolveMediaUrl(data['soporte_radicado'])
                             let params = `status=no,location=no,toolbar=no,menubar=no,
                             width=650,height=450,left=100,top=100`;
                             window.open(ruta,'Soporte radicado '+ruta.pk,params)
@@ -327,7 +333,7 @@
                             let fecha = new Date(data[i]['fecha'])
                             fecha = fecha.toLocaleString('es-CO',{ timeZone: 'America/Bogota' })
                             let action = `<div class="media border-bottom border-gray pt-2">
-                                <img src="/media/`+data[i]['imagen']+`" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                                <img src="`+resolveMediaUrl(data[i]['imagen'])+`" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                                 <div class="media-body">
                                 <h6 class="mt-0">`+data[i]['usuario']+' el '+fecha+`</h6>
                                 <p>`+data[i]['accion']+`</p>
@@ -348,7 +354,7 @@
                         },
                         success:function(response){
                             var data = JSON.parse(response['data'])[0]['fields']
-                            var ruta = '/media/'+data['soporte_radicado']
+                            var ruta = resolveMediaUrl(data['soporte_radicado'])
                             let params = `status=no,location=no,toolbar=no,menubar=no,
                             width=650,height=450,left=100,top=100`;
                             window.open(ruta,'Soporte radicado '+ruta.pk,params)

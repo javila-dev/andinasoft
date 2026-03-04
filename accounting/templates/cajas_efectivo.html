@@ -500,6 +500,12 @@
 <script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
 <script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
 <script>
+  function resolveMediaUrl(pathOrUrl) {
+    if (!pathOrUrl) return '';
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+    return '/media/' + pathOrUrl.replace(/^\/+/, '');
+  }
+
   $(document).ready(function(){
     const params = `status=no,location=no,toolbar=no,menubar=no,
                 width=650,height=450,left=100,top=100`
@@ -931,12 +937,12 @@
       var line = tabla_movimientos.row('.selected').data()
       switch(e.target.id){
           case "ver_soporte":
-            var ruta = '/media/'+line.soporte
+            var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte legalizacion anticipo',params)
             break;     
           
             case "ver_soporte_prov":
-            var ruta = '/media/'+line.soporte_doc_prov
+            var ruta = resolveMediaUrl(line.soporte_doc_prov)
             window.open(ruta,'Soporte idenficacion proveedor',params)
             break;    
 
@@ -1067,7 +1073,7 @@
       var line = tabla_movimientos_reemb.row('.selected').data()
       switch(e.target.id){
           case "ver_soporte_r":
-            var ruta = '/media/'+line.soporte
+            var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte legalizacion anticipo',params)
             break;     
           case "devolver_r":
@@ -1138,7 +1144,7 @@
       var line = tabla_reembolsos.row('.selected').data()
       switch(e.target.id){
           case "soporte_reemb":
-            var ruta = '/media/'+line.soporte_legalizacion
+            var ruta = resolveMediaUrl(line.soporte_legalizacion)
             window.open(ruta,'Soporte legalizacion reembolso',params)
             break;     
           case "pagar_reemb":
@@ -1164,7 +1170,7 @@
             break;
 
           case "soporte_transf":
-            ruta = '/media/'+line.transferencia_asociada.soporte_pago
+            ruta = resolveMediaUrl(line.transferencia_asociada.soporte_pago)
             window.open(ruta,'Soporte pago reembolso',params)
             break;
           case "print_reemb":

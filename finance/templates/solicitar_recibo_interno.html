@@ -151,6 +151,12 @@
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '/media/' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
         bsCustomFileInput.init();
         $('.money').mask("#,##0", {reverse: true});  
@@ -254,7 +260,7 @@
             $('#id_not_duplicated').prop('checked', false);
             $('#id_soporte').prop('required', false).val('').trigger('change');
             if (line.soporte){
-                const soporteUrl = `/media/${line.soporte}`;
+                const soporteUrl = resolveMediaUrl(line.soporte);
                 $supportLink.attr('href',soporteUrl).text('Ver soporte actual');
                 $supportWrapper.removeClass('d-none');
             } else {
@@ -601,7 +607,7 @@
                     window.location.href = `/finance/printreceipts?proyecto=${line.proyecto.proyecto}&recibo=${line.recibo_asociado}`
                     break;     
                 case "soporte":
-                    var ruta = '/media/'+line.soporte
+                    var ruta = resolveMediaUrl(line.soporte)
                     window.open(ruta,'Soporte solicitud recibo Id '+line.id,params)
                     break;         
                 case "eliminar":

@@ -137,7 +137,13 @@ padding:0px; left: 0px;top:0px;max-width: 15rem;">
   const proyecto = 'Fractal'
 </script>
 <script>
-    $(document).ready(function(){
+          function resolveMediaUrl(pathOrUrl) {
+              if (!pathOrUrl) return '';
+              if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+              return '/media/' + pathOrUrl.replace(/^\/+/, '');
+          }
+
+          $(document).ready(function(){
       $('.money').mask("#,##0", {reverse: true});  
       $(this).click(function(e){
             if(e.button == 0){
@@ -226,7 +232,7 @@ padding:0px; left: 0px;top:0px;max-width: 15rem;">
                   window.location.href = `/finance/printreceipts?proyecto=${line.proyecto.proyecto}&recibo=${line.recibo_asociado}`
                   break;     s
               case "soporte":
-                  var ruta = '/media/'+line.soporte
+                  var ruta = resolveMediaUrl(line.soporte)
                   window.open(ruta,'Soporte solicitud recibo Id '+line.id,params)
                   break;         
               case "eliminar":

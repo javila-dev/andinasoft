@@ -13,6 +13,7 @@ import logging
 import time
 import uuid
 
+from django.conf import settings
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -20,6 +21,12 @@ from django.views.decorators.http import require_http_methods
 from api_auth.decorators import api_token_auth
 
 logger = logging.getLogger(__name__)
+
+
+# Flags de runtime para evitar que conexiones largas de SSE saturen workers WSGI.
+MCP_ENABLE_SSE_STREAM = getattr(settings, 'MCP_ENABLE_SSE_STREAM', False)
+MCP_SSE_MAX_SECONDS = int(getattr(settings, 'MCP_SSE_MAX_SECONDS', 55))
+MCP_SSE_KEEPALIVE_SECONDS = int(getattr(settings, 'MCP_SSE_KEEPALIVE_SECONDS', 15))
 
 
 # Importar tools y sus schemas
@@ -31,10 +38,16 @@ from mcp_server.tools.bank_movements import (
     bank_movements_mark_used, bank_movements_for_receipt,
     BANK_MOVEMENTS_TOOLS
 )
+from mcp_server.tools.comisiones import (
+    comisiones_list, COMISIONES_TOOLS
+)
+from mcp_server.tools.adjudicaciones import (
+    adjudicacion_estado_cuenta, adjudicacion_documentos, ADJUDICACIONES_TOOLS
+)
 
 
 # Combinar todos los tools disponibles
-ALL_TOOLS = LOTES_TOOLS + BANK_MOVEMENTS_TOOLS
+ALL_TOOLS = LOTES_TOOLS + BANK_MOVEMENTS_TOOLS + COMISIONES_TOOLS + ADJUDICACIONES_TOOLS
 
 # Almacén simple de sesiones (en producción usar Redis/DB)
 _sessions = {}
@@ -98,12 +111,20 @@ def _handle_streamable_post(request):
     session_id = request.META.get('HTTP_MCP_SESSION_ID')
 
     for msg in messages:
+        if not isinstance(msg, dict):
+            responses.append({
+                'jsonrpc': '2.0',
+                'error': {'code': -32600, 'message': 'Invalid Request'},
+                'id': None
+            })
+            continue
+
         method = msg.get('method', '')
         params = msg.get('params', {})
         msg_id = msg.get('id')
 
-        # Si es notificación (sin id), no requiere respuesta
-        if msg_id is None and method.startswith('notifications/'):
+        # Cualquier request sin "id" es notificación JSON-RPC: no requiere respuesta.
+        if msg_id is None:
             continue
 
         result = _process_jsonrpc_message(method, params, request.user, session_id)
@@ -144,6 +165,12 @@ def _handle_streamable_post(request):
 
 def _handle_streamable_get(request):
     """Maneja GET en Streamable HTTP (stream de notificaciones)."""
+    if not MCP_ENABLE_SSE_STREAM:
+        return JsonResponse(
+            {'error': 'SSE stream deshabilitado en este entorno. Usa POST /mcp/.'},
+            status=405
+        )
+
     accept = request.META.get('HTTP_ACCEPT', '')
     if 'text/event-stream' not in accept:
         return JsonResponse({'error': 'Accept header must include text/event-stream'}, status=406)
@@ -151,11 +178,12 @@ def _handle_streamable_get(request):
     def event_stream():
         """Generador de eventos SSE."""
         # En una implementación completa, aquí se enviarían notificaciones
-        # Por ahora solo keepalive
-        while True:
+        # Por ahora solo keepalive con duración limitada para no bloquear workers.
+        started = time.monotonic()
+        while time.monotonic() - started < MCP_SSE_MAX_SECONDS:
             try:
                 yield ": keepalive\n\n"
-                time.sleep(30)
+                time.sleep(MCP_SSE_KEEPALIVE_SECONDS)
             except GeneratorExit:
                 break
 
@@ -212,16 +240,23 @@ def mcp_sse_endpoint(request):
     if not request.user.is_authenticated:
         return JsonResponse({'detail': 'Token inválido o no autenticado'}, status=401)
 
+    if not MCP_ENABLE_SSE_STREAM:
+        return JsonResponse(
+            {'error': 'SSE legacy deshabilitado en este entorno. Usa POST /mcp/.'},
+            status=405
+        )
+
     def event_stream():
         """Generador de eventos SSE."""
         # Enviar evento con la URL del endpoint de mensajes (protocolo legacy)
         yield f"event: endpoint\ndata: /mcp/messages\n\n"
 
-        # Mantener la conexión abierta con keepalives
-        while True:
+        # Mantener la conexión abierta por ventana corta para evitar saturación.
+        started = time.monotonic()
+        while time.monotonic() - started < MCP_SSE_MAX_SECONDS:
             try:
                 yield ": keepalive\n\n"
-                time.sleep(30)
+                time.sleep(MCP_SSE_KEEPALIVE_SECONDS)
             except GeneratorExit:
                 break
 
@@ -254,9 +289,20 @@ def mcp_messages_endpoint(request):
             'id': None
         }, status=400)
 
+    if not isinstance(payload, dict):
+        return JsonResponse({
+            'jsonrpc': '2.0',
+            'error': {'code': -32600, 'message': 'Invalid Request'},
+            'id': None
+        }, status=400)
+
     method = payload.get('method', '')
     params = payload.get('params', {})
     msg_id = payload.get('id')
+
+    # Notificación JSON-RPC en endpoint legacy.
+    if msg_id is None:
+        return HttpResponse(status=202)
 
     result = _process_jsonrpc_message(method, params, request.user, None)
 
@@ -378,6 +424,25 @@ def _handle_call_tool(params: dict, user) -> dict:
             proyecto=args.get('proyecto'),
             fecha_pago=args.get('fecha_pago'),
             recibo_asociado=args.get('recibo_asociado')
+        ),
+        'comisiones_list': lambda args: comisiones_list(
+            proyecto=args.get('proyecto'),
+            fecha_desde=args.get('fecha_desde'),
+            fecha_hasta=args.get('fecha_hasta'),
+            asesor=args.get('asesor'),
+            user=user
+        ),
+        'adjudicacion_estado_cuenta': lambda args: adjudicacion_estado_cuenta(
+            proyecto=args.get('proyecto'),
+            idadjudicacion=args.get('idadjudicacion'),
+            cliente=args.get('cliente'),
+            user=user
+        ),
+        'adjudicacion_documentos': lambda args: adjudicacion_documentos(
+            proyecto=args.get('proyecto'),
+            idadjudicacion=args.get('idadjudicacion'),
+            cliente=args.get('cliente'),
+            user=user
         ),
     }
 

@@ -1,0 +1,337 @@
+/*
+    DEMO STYLE
+*/
+@import "https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700";
+body {
+    font-family: 'Poppins', sans-serif;
+    background: #fafafa;
+}
+
+#sidebar p {
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.1em;
+    font-weight: 300;
+    line-height: 1.7em;
+    color: #999;
+}
+main{
+    padding: 20px;
+}
+
+a,
+a:hover,
+a:focus {
+    color: inherit;
+    text-decoration: none;
+    transition: all 0.3s;
+}
+
+
+
+.line {
+    width: 100%;
+    height: 1px;
+    border-bottom: 1px dashed #ddd;
+    margin: 40px 0;
+}
+
+/* ---------------------------------------------------
+    SIDEBAR STYLE
+----------------------------------------------------- */
+
+.wrapper {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+}
+
+#sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    min-width: 250px;
+    max-width: 250px;
+    background: rgb(31,52,46);
+    background: linear-gradient(0deg, rgba(31,52,46,1) 0%, rgba(51,84,75,1) 88%);
+    color: #fff;
+    transition: all 0.3s;
+    z-index: 1040; /* Behind the navbar */
+    box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+}
+
+#sidebar.minimal {
+    min-width: 100px;
+    max-width: 100px;
+    text-align: center;
+}
+
+#sidebar.minimal .dropdown-toggle::after {
+    top: auto;
+    bottom: 10px;
+    right: 50%;
+    -webkit-transform: translateX(50%);
+    -ms-transform: translateX(50%);
+    transform: translateX(50%);
+}
+
+#sidebar .sidebar-header {
+    padding: 20px;
+    padding-bottom: 8px;
+    background: rgb(31,52,46);
+}
+
+#sidebar ul.components {
+    padding: 0;
+}
+
+.sidebarItems{
+    height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+#sidebar.minimal .sidebarItems{
+    height: 100%;
+}
+#sidebar ul p {
+    color: #fff;
+    padding: 10px;
+}
+
+#sidebar ul li a {
+    padding: 10px;
+    padding-left: 20px;;
+    font-size: 0.8em;
+    display: block;
+}
+
+#sidebar ul li a:hover {
+    color: rgba(51,84,75,1);
+    background: #fff;
+}
+
+#sidebar ul li.minimal>a,
+a[aria-expanded="true"] {
+    color: #fff;
+    background:transparent;
+}
+
+a[data-toggle="collapse"] {
+    position: relative;
+}
+
+#sidebar .dropdown-toggle::after {
+    display: block;
+    position: absolute;
+    top: 50%;
+    right: 20px;
+    transform: translateY(-50%);
+}
+
+ul ul a {
+    font-size: 0.8em !important;
+    padding-left: 30px !important;
+    background:  rgb(61, 110, 97);
+}
+
+ul.CTAs {
+    padding: 20px;
+}
+
+ul.CTAs a {
+    text-align: center;
+    font-size: 0.9em !important;
+    display: block;
+    border-radius: 5px;
+    margin-bottom: 5px;
+}
+
+
+#sidebar.minimal .sidebar-header #brandname {
+    display: none;
+}
+#sidebar.minimal .sidebar-header strong {
+    display: block;
+}
+
+#sidebar ul li a {
+    text-align: left;
+}
+
+#sidebar.minimal ul li a {
+    padding: 20px 10px;
+    text-align: center;
+    font-size: 0.6em!important;
+}
+
+#sidebar.minimal ul li a i {
+    margin-right:  0;
+    display: block;
+    font-size: 1.8em;
+    margin-bottom: 5px;
+}
+
+/* Same dropdown links padding*/
+#sidebar.minimal ul ul a {
+    padding: 10px !important;
+}
+
+#sidebarCollapse{
+    width: 50px;
+    height: 50px;
+    position: fixed;
+    top:12px;
+    left:220px;
+    transition: all 0.3s;
+    z-index: 1030;
+    background: rgb(31,52,46);
+    border-color: transparent;
+    transform: rotate(45deg);
+
+}
+#sidebarCollapse i{
+    padding-left: 25px;
+    padding-bottom: 10px;
+    transform: rotate(-45deg);
+}
+#sidebarCollapse::after{
+    z-index: -1;
+    transform: rotate(45deg);
+    background: rgb(31,52,46);
+    border-radius: 10px;
+    top:0;
+    left:0;
+    right: 0;
+    bottom: 0;
+}
+#sidebarCollapse.minimal{
+    left:68px;
+}
+
+
+#sidebarCollapse.focus, #sidebarCollapse:focus{
+    box-shadow: 0 0 0 0rem rgb(0 0 0 / 100%)!important;
+}
+
+#siderbar.minimal img.userimg{
+    width: 35px;
+    height: 35px;
+}
+
+img.userimg{
+    width: 70px!important;
+    height: 70px!important;
+    margin-bottom: 0.5rem;
+}
+
+#sidebar.minimal .sidebar-header img.userimg{
+    width: 35px!important;
+    height: 35px!important;
+}
+#sidebar.minimal .sidebar-header p{
+    display: none;
+}
+#sidebar .sidebar-header p{
+    display: block;
+    transition: all 0.3s;
+}
+
+#sidebar a.sidebarFooter{
+    bottom: 10px;
+}
+/* ---------------------------------------------------
+    CONTENT STYLE
+----------------------------------------------------- */
+
+#content {
+    width: 100%;
+    min-height: 100vh;
+    transition: all 0.3s;
+    margin-left: 250px;
+}
+
+#content.nosidebar{
+    margin-left: 80px;
+}
+
+.principal-container{
+    max-width: calc(100vw - 340px);
+}
+
+#content.nosidebar .principal-container{
+    max-width: calc(100vw - 170px);
+}
+
+/* ---------------------------------------------------
+    MEDIAQUERIES
+----------------------------------------------------- */
+
+@media (max-width: 768px) {
+    #content{
+        margin-left:0px!important;
+    }
+    #sidebar.minimal {
+        min-width: 250px;
+        max-width: 250px;
+        text-align: center;
+        margin-left: 0px !important;
+    }
+
+    .principal-container{
+        max-width: 100%;
+    }
+
+    /* Reappearing the sidebar on toggle button click */
+    #sidebar {
+        margin-left: -251px; 
+    }
+    /* Toggling the sidebar header content, 
+       hide the big heading [h3] and showing the small heading [strong] and vice versa
+    */
+    #sidebar.minimal .sidebar-header #brandname {
+        display: block;
+    }
+    /* Downsize the navigation links font size */
+    #sidebar.minimal ul li a {
+        padding: 20px 10px;
+        font-size: 0.8em!important;
+    }
+    #sidebar.minimal ul li a i {
+        margin-right:  0;
+        display: block;
+        font-size: 1.85em!important;
+        margin-bottom: 5px;
+    }
+    /* Adjust the dropdown links padding*/
+    #sidebar.minimal ul ul a {
+        padding: 10px !important;
+    }
+    #sidebarCollapse{
+        left:-60px;
+    }
+    #sidebarCollapse.minimal{
+        left:220px;
+    }
+    #sidebar.minimal .sidebar-header p{
+        display: block;
+    }
+    #sidebar.minimal .sidebar-header img.userimg{
+        width: 50px!important;
+        height: 50px!important;
+    }
+    /* Changing the arrow position to bottom center position, 
+      translateX(50%) works with right: 50% 
+      to accurately  center the arrow */
+    .dropdown-toggle::after {
+        top: auto;
+        bottom: 10px;
+        right: 50%;
+        -webkit-transform: translateX(50%);
+        -ms-transform: translateX(50%);
+        transform: translateX(50%);
+    }
+    
+    #sidebar.minimal .sidebarItems{
+        height: calc(100vh - 200px);
+    }
+}

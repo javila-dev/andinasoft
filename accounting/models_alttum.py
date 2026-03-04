@@ -2,6 +2,7 @@ from datetime import datetime
 from django.db import models
 from django.db.models import Sum, Q
 from django.contrib.auth.models import User
+from andina.storage.media_policy import PRIVATE_MEDIA_STORAGE
 
 class Countries(models.Model):
     id_country = models.CharField(max_length=255, primary_key=True)
@@ -131,7 +132,7 @@ class Forma_pago_alttum(models.Model):
 # Create your models here.
 class Hoteles(models.Model):
     nombre = models.CharField(unique=True, max_length=255)
-    logo = models.ImageField(upload_to='hoteles',null=True,blank=True)
+    logo = models.ImageField(upload_to='hoteles', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     id_facturacion_siigo = models.CharField(max_length=255)
     administrador = models.ForeignKey(User,on_delete=models.PROTECT)
     activo = models.BooleanField(default=True)
@@ -462,4 +463,3 @@ class Consumos(models.Model):
 
     
         
-

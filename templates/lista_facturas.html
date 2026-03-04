@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load static%}
 {%load l10n%}
 
 {%block title%}Radicar Facturas{%endblock%}
@@ -91,6 +92,12 @@
     </div>
   </div>
 <script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function() {
     var tablafacturas=$('#tabla-facturas').DataTable({
         'lengthMenu':[[10,25,50,-1],[10,25,50,'All']],
@@ -116,7 +123,7 @@
     // Update the modal's content. We'll use jQuery here, but you could use a data binding library or other methods instead.
     var modal = $(this)
     modal.find('.modal-title').text('¿Que deseas hacer con el radicado ' + radicado+'?')
-    document.getElementById('link-ver').setAttribute('href','/docs_andinasoft/docs_radicados/Facturas/Radicado_'+radicado+'_Factura_'+factura+'.pdf')
+    document.getElementById('link-ver').setAttribute('href', resolveMediaUrl('docs_andinasoft/docs_radicados/Facturas/Radicado_'+radicado+'_Factura_'+factura+'.pdf'))
     $('#numero-radicado').val(radicado)
     $('#numero-factura').val(factura)
     $.ajax({

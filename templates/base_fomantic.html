@@ -22,7 +22,7 @@
         </h4>
         <div class="ui horizontal list" style="margin-top: 0px;margin-bottom: 1rem;position: absolute;bottom: 1rem;left: 2rem;">
           <div class="item">
-            <img class="ui mini circular image" src="/media/{{user.profiles.avatar.image}}">
+            <img class="ui mini circular image" src="{{ user.profiles.avatar.image.url }}">
             <div class="content">
               <div class="ui sub grey header" style="color:white">{{request.user.first_name.capitalize}}</div>
             </div>

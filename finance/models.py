@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from andinasoft.ajax_request import JSONRender
 from andinasoft.models import proyectos, clientes
 from andinasoft.shared_models import Adjudicacion
+from andina.storage.media_policy import PRIVATE_MEDIA_STORAGE
 
 
 # Create your models here.
@@ -11,7 +12,7 @@ class recibos_internos(models.Model):
     proyecto = models.ForeignKey(proyectos,on_delete=models.PROTECT)
     fecha = models.DateField(auto_now=True)
     fecha_pago = models.DateField()
-    soporte = models.FileField(upload_to='soportes_recibos')
+    soporte = models.FileField(upload_to='soportes_recibos', storage=PRIVATE_MEDIA_STORAGE)
     soporte_hash = models.CharField(max_length=64, blank=True, null=True)
     valor = models.IntegerField()
     cliente = models.CharField(max_length=255,null=True,blank=True)

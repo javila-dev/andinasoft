@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 #------Otros modelos---------
 from andinasoft.models import proyectos,empresas,Pagos, ItemsInforme
+from andina.storage.media_policy import PRIVATE_MEDIA_STORAGE
 #Universal packages
 import datetime
 
@@ -45,8 +46,8 @@ class proveedores(models.Model):
     telefono=models.CharField(max_length=255,null=True,blank=True)
     direccion=models.CharField(max_length=255,null=True,blank=True)
     fecha_creacion = models.DateField(auto_now=True)
-    doc_rut = models.FileField(upload_to='building_control/proveedores',null=True,blank=True)
-    doc_cert_bancaria = models.FileField(upload_to='building_control/proveedores',null=True,blank=True)
+    doc_rut = models.FileField(upload_to='building_control/proveedores', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
+    doc_cert_bancaria = models.FileField(upload_to='building_control/proveedores', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     class Meta:
         verbose_name = 'Proveedor'
@@ -93,7 +94,7 @@ class contratos(models.Model):
     )
     estado=models.CharField(max_length=255,choices=estados)
     porcentaje_canje=models.IntegerField()
-    contrato_docs = models.FileField(upload_to='contratos_obra',null=True,blank=True)
+    contrato_docs = models.FileField(upload_to='contratos_obra', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     empresa_contrata = models.ForeignKey(empresas,null=True,blank=True,on_delete=models.PROTECT)
     a = models.DecimalField(decimal_places=2,max_digits=6)
     i = models.DecimalField(decimal_places=2,max_digits=6)
@@ -245,7 +246,7 @@ class bitacora(models.Model):
 class fotos_bitacora(models.Model):
     id_foto = models.AutoField(primary_key=True)
     bitacora = models.ForeignKey(bitacora,on_delete=models.CASCADE)
-    foto = models.ImageField(upload_to='fotos_bitacora')
+    foto = models.ImageField(upload_to='fotos_bitacora', storage=PRIVATE_MEDIA_STORAGE)
     
     class Meta:
         verbose_name = 'Fotos Bitacora'

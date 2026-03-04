@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load extras%}
 {%block title%}Listado asesores{%endblock%}
 {%block style%}
 <style>
@@ -49,22 +50,22 @@
                             <ul>
                                 <li>{%if asesor.rut%}
                                 <a
-                                    href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/Cert_bancaria.pdf' target='_blank'>{{asesor.cuenta}}</a>
+                                    href="{{ 'docs_andinasoft/doc_asesores/'|add:asesor.cedula|add:'/Cert_bancaria.pdf'|media_url }}" target='_blank'>{{asesor.cuenta}}</a>
                                 {%else%}
                                 {{asesor.cuenta}}
                                 {%endif%}</li>
                                 <li>{%if asesor.cc%}
-                                <a href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/CC.pdf' target='_blank'>Cedula</a>
+                                <a href="{{ 'docs_andinasoft/doc_asesores/'|add:asesor.cedula|add:'/CC.pdf'|media_url }}" target='_blank'>Cedula</a>
                                 {%else%}
                                 Sin soporte de cedula
                                 {%endif%}</li>
                                 <li>{%if asesor.hv%}
-                                <a href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/Hoja_de_vida.pdf' target='_blank'>Hoja de vida</a>
+                                <a href="{{ 'docs_andinasoft/doc_asesores/'|add:asesor.cedula|add:'/Hoja_de_vida.pdf'|media_url }}" target='_blank'>Hoja de vida</a>
                                 {%else%}
                                 Sin soporte de HV
                                 {%endif%}</li>
                                 <li>{%if asesor.afiliaciones%}
-                                <a href='/media/docs_andinasoft/doc_asesores/{{asesor.cedula}}/Soporte_Afiliaciones.pdf' target='_blank'>Afiliaciones</a>
+                                <a href="{{ 'docs_andinasoft/doc_asesores/'|add:asesor.cedula|add:'/Soporte_Afiliaciones.pdf'|media_url }}" target='_blank'>Afiliaciones</a>
                                 {%else%}
                                 Sin soporte de Afiliaciones
                                 {%endif%}</li>

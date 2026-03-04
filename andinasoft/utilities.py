@@ -1,10 +1,12 @@
 import math
 import os
+import tempfile
 import numpy_financial as npf
-import pytesseract
+#import pytesseract
 from django.template.loader import get_template
 from django.conf import settings
 from django.http import HttpResponse
+from django.core.files.storage import default_storage
 from xhtml2pdf import pisa
 from dateutil.relativedelta import relativedelta
 from datetime import datetime
@@ -18,11 +20,20 @@ from django.db.models.fields.files import FileField, ImageField
 
 
 def link_callback(uri, rel):
-    path=''
-    if uri.startswith('/static'):   
-        path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
-    elif uri.startswith('/media'):   
-        path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ""))
+    path = ''
+    if uri.startswith(settings.STATIC_URL):
+        return os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
+    if uri.startswith(settings.MEDIA_URL):
+        media_key = uri.replace(settings.MEDIA_URL, "")
+        if getattr(settings, 'USE_S3_MEDIA', False):
+            suffix = os.path.splitext(media_key)[1]
+            with default_storage.open(media_key, "rb") as stored_file:
+                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                temp_file.write(stored_file.read())
+                temp_file.flush()
+                temp_file.close()
+            return temp_file.name
+        return os.path.join(settings.MEDIA_ROOT, media_key)
     return path
 
 def pdf_gen(template_path,context,filename,):
@@ -33,14 +44,10 @@ def pdf_gen(template_path,context,filename,):
     template = get_template(template_path)
     html = template.render(context)
     file_dir = settings.MEDIA_ROOT + f'/tmp/{filename}'
-    try:
-        output_file = open(file_dir,"w+b")
-    except FileNotFoundError:
-        os.makedirs(settings.MEDIA_ROOT + '/tmp')
-        output_file = open(file_dir,"w+b")
-    # create a pdf
-    pisa_status = pisa.CreatePDF(
-       html, dest=output_file, link_callback=link_callback)
+    os.makedirs(settings.MEDIA_ROOT + '/tmp', exist_ok=True)
+    with open(file_dir, "w+b") as output_file:
+        pisa_status = pisa.CreatePDF(
+           html, dest=output_file, link_callback=link_callback)
     # if error then show some funy view
     if pisa_status.err:
        return HttpResponse('We had some errors <pre>' + html + '</pre>')
@@ -56,13 +63,13 @@ def pdf_gen(template_path,context,filename,):
 
 def get_text_from_file(file_path):
     
-    pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
+    #pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
 
     image_name = file_path.split('.')[0]
 
     text = ''
     
-    if file_path.endswith('.pdf'):
+    """ if file_path.endswith('.pdf'):
         pages = convert_from_path(file_path, 500)
         i = 1
         for page in pages:
@@ -77,9 +84,10 @@ def get_text_from_file(file_path):
             os.remove(image_path)
             
     else:
-        text = pytesseract.image_to_string(Image.open(file_path), lang="spa")
-
+        text = ""#pytesseract.image_to_string(Image.open(file_path), lang="spa")
+ """
     return text
+
 
 class JsonRender():
     

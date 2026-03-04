@@ -1,6 +1,7 @@
+{%load static%}
 <div class='container-fluid bg-white rounded shadow p-3'>
     <h5 class='text-center'>
-        <img src='/media/icons/recordatorio.png' class='mr-2' width='30' height='30'>Recordatorios</h5>
+        <img src="{% static 'icons/recordatorio.png' %}" class='mr-2' width='30' height='30'>Recordatorios</h5>
         <br>
 {%for grupo in grupos%}
     <table>

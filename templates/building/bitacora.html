@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load static%}
 {%load l10n%}
 {%block title%}Proyectos | Bitacora{%endblock%}
 {%block js%}{%include 'datepicker_gigjo.html'%}{%endblock%}
@@ -77,7 +78,13 @@
       </div>
     </div>
   </div>
-  <script>
+<script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
     $(document).ready(function(){
         $('#modalBitacora').on('show.bs.modal',function(event){
             var trigger = $(event.relatedTarget)
@@ -110,7 +117,7 @@
                         for (i=0;i<data.length;i++){
                             href = data[i]['fields']['foto']
                             var photo = "<div class='col-6'>"+
-                                "<img class='img-fluid' src='/media/"+href+"'>"+
+                                "<img class='img-fluid' src='"+resolveMediaUrl(href)+"'>"+
                             "</div>"
                             $('#container-photo').append(photo)
                         }

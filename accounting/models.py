@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from andinasoft.models import empresas,cuentas_pagos, proyectos, Gtt, Countries, States, Cities
 from andinasoft.shared_models import Pagocomision, ventas_nuevas
 from django.db.models.aggregates import Sum, Max, Min
+from andina.storage.media_policy import PRIVATE_MEDIA_STORAGE
 
 class info_interfaces(models.Model):
     id_doc = models.AutoField(primary_key=True)
@@ -53,8 +54,8 @@ class Facturas(models.Model):
         
     )
     oficina = models.CharField(db_column='Oficina', max_length=255,blank=True,null=True,choices=oficinas_choices)
-    soporte_radicado = models.FileField(upload_to='Facturas/Facturas',null=True,blank=True)
-    soporte_causacion = models.FileField(upload_to='Facturas/Causacion',null=True,blank=True)
+    soporte_radicado = models.FileField(upload_to='Facturas/Facturas', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
+    soporte_causacion = models.FileField(upload_to='Facturas/Causacion', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     proyecto_rel = models.CharField(max_length=255, choices=(
         ('Perla del Mar','Perla del Mar'),
         ('Caracola del Mar','Caracola del Mar'),
@@ -135,7 +136,7 @@ class egresos_contable(models.Model):
         ('INTEREMPRESAS','INTEREMPRESAS'),
     ),null=True,blank=True)
     proyecto = models.ForeignKey(proyectos,on_delete=models.CASCADE,null=True,blank=True)
-    soporte_egreso = models.FileField(upload_to='Facturas/Egresos contables', null=True,blank=True)
+    soporte_egreso = models.FileField(upload_to='Facturas/Egresos contables', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     
     
@@ -158,7 +159,7 @@ class Pagos(models.Model):
     fecha_registro = models.DateTimeField(auto_now=True)
     cuenta = models.ForeignKey(cuentas_pagos,on_delete=models.PROTECT,related_name='cuenta_pago')
     empresa = models.ForeignKey(empresas,on_delete=models.PROTECT,related_name='empresa_pago')
-    soporte_pago = models.FileField(upload_to='Facturas/Soportes de pago', null=True,blank=True)
+    soporte_pago = models.FileField(upload_to='Facturas/Soportes de pago', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     class Meta:
         verbose_name = 'Pago'
@@ -176,7 +177,7 @@ class Anticipos(models.Model):
     tipo_anticipo = models.ForeignKey(info_interfaces,on_delete=models.PROTECT,related_name='tipo_anticipo')
     cuenta = models.ForeignKey(cuentas_pagos,on_delete=models.PROTECT,related_name='cuenta_anticipo')
     empresa = models.ForeignKey(empresas,on_delete=models.PROTECT,related_name='empresa_anticipo')
-    soporte_pago = models.FileField(upload_to='Anticipos/Soportes de pago', null=True,blank=True)
+    soporte_pago = models.FileField(upload_to='Anticipos/Soportes de pago', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     oficina = models.CharField(choices=(
             ('MEDELLIN','MEDELLIN'),
             ('MONTERIA','MONTERIA'),),
@@ -205,7 +206,7 @@ class transferencias_companias(models.Model):
             ('MONTERIA','MONTERIA'),),
         max_length=255)
     usuario = models.ForeignKey(User,on_delete=models.PROTECT)
-    soporte_pago = models.FileField(upload_to='Transferencias/Soportes de pago', null=True,blank=True)
+    soporte_pago = models.FileField(upload_to='Transferencias/Soportes de pago', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     class Meta:
         verbose_name = 'Transferencia'
@@ -291,7 +292,7 @@ class otros_ingresos(models.Model):
             ('MONTERIA','MONTERIA'),),
         max_length=255)
     fecha_registro = models.DateTimeField(auto_now=True)
-    soporte = models.FileField(upload_to='Otros Ingresos', null=True,blank=True)
+    soporte = models.FileField(upload_to='Otros Ingresos', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     
     class Meta:
@@ -506,7 +507,7 @@ class Partners(models.Model):
     fecha_actualizacion=models.DateField(auto_now=True)
     fecha_creacion=models.DateField(auto_now_add=True)
     siigo_id = models.CharField(max_length=255, null=True,blank=True)
-    soporte_identificacion = models.FileField(upload_to='Proveedores', null=True, blank=True)
+    soporte_identificacion = models.FileField(upload_to='Proveedores', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
     
     class Meta:
         verbose_name = 'Proveedor'
@@ -570,7 +571,7 @@ class legalizacion_anticipos(models.Model):
     descripcion = models.CharField(max_length=255)
     tercero = models.ForeignKey(Partners, on_delete=models.PROTECT)
     valor = models.IntegerField()
-    soporte = models.FileField(upload_to='legalizaciones_anticipos')
+    soporte = models.FileField(upload_to='legalizaciones_anticipos', storage=PRIVATE_MEDIA_STORAGE)
     aprobado = models.BooleanField(default=False)
     usuario_carga = models.ForeignKey(User, on_delete = models.PROTECT,
                                       related_name='user_leg_carga')
@@ -622,7 +623,7 @@ class reembolsos_caja(models.Model):
                                         null = True, blank =  True)
     fecha_aprueba =  models.DateField(null=True, blank=True)
     doc_legalizacion = models.CharField(max_length=255, null=True, blank=True)
-    soporte_legalizacion = models.FileField(upload_to='Cajas/Legalizacion')
+    soporte_legalizacion = models.FileField(upload_to='Cajas/Legalizacion', storage=PRIVATE_MEDIA_STORAGE)
     transferencia_asociada = models.ForeignKey(transferencias_companias, on_delete=models.PROTECT, null=True, blank=True)
     valor_a_reembolsar = models.IntegerField(null=True, blank=True)
     
@@ -639,7 +640,7 @@ class gastos_caja(models.Model):
     descripcion = models.CharField(max_length=255)
     tercero = models.ForeignKey(Partners, related_name='tercero_gasto',on_delete=models.PROTECT)
     valor = models.IntegerField()
-    soporte = models.FileField(upload_to='Cajas/Gastos')
+    soporte = models.FileField(upload_to='Cajas/Gastos', storage=PRIVATE_MEDIA_STORAGE)
     aprobado = models.BooleanField(default=False)
     usuario_carga = models.ForeignKey(User, on_delete = models.PROTECT,
                                       related_name='user_carga_gasto')
@@ -688,7 +689,7 @@ class archivo_contable(models.Model):
     tipo_doc = models.CharField(max_length=255)
     consecutivo = models.IntegerField()
     fecha_doc = models.DateField()
-    document = models.FileField(upload_to=upload_to)
+    document = models.FileField(upload_to=upload_to, storage=PRIVATE_MEDIA_STORAGE)
     user_carga = models.ForeignKey(User, on_delete=models.PROTECT)
     fecha_carga = models.DateTimeField(auto_now_add=True)
     ocr_text = models.TextField(null=True, blank=True)

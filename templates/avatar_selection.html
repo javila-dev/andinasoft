@@ -1,3 +1,4 @@
+{%load static%}
 <div class="modal fade" id="avatarModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -14,8 +15,14 @@
       </div>
     </div>
   </div>
-  <script>
-      $(document).ready(function(){
+<script>
+    function resolveMediaUrl(pathOrUrl) {
+        if (!pathOrUrl) return '';
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
+        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+    }
+
+    $(document).ready(function(){
         $('#avatarModal').on('show.bs.modal',function(event){
             $('#avatarList').children().remove()
             $.ajax({
@@ -26,7 +33,7 @@
                 data = JSON.parse(response['avatars'])
                 for (let i in data){
                     var href = '/user/change_avatar/'+data[i]['fields']['name']
-                    var src = '/media/'+data[i]['fields']['image']
+                    var src = resolveMediaUrl(data[i]['fields']['image'])
                     var avatar = "<div class='col-3'>"+
                         "<a href='"+href+"'>"+
                         "<img src='"+src+"' class='img-thumbnail rounded-circle' width='160' height='160'>"+

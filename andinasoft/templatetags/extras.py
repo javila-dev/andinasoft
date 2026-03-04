@@ -1,4 +1,5 @@
 from django import template
+from django.core.files.storage import default_storage
 from andinasoft.shared_models import titulares_por_adj,Adjudicacion
 from andinasoft.models import clientes, asesores
 
@@ -179,3 +180,17 @@ def porcentaje_entero(value,total):
     porcentaje=value*100/total
     porcentaje=f'{porcentaje:.2f}'
     return porcentaje
+
+
+@register.filter(name='media_url')
+def media_url(path):
+    if not path:
+        return ''
+    path = str(path)
+    if path.startswith('http://') or path.startswith('https://'):
+        return path
+    normalized = path.lstrip('/')
+    try:
+        return default_storage.url(normalized)
+    except Exception:
+        return f'/media/{normalized}'
