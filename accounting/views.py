@@ -87,6 +87,15 @@ def _parse_datetime(value):
         except ValueError:
             return None
 
+
+def _media_url(file_field):
+    if not file_field:
+        return ''
+    try:
+        return file_field.url
+    except Exception:
+        return str(file_field)
+
 def _normalize_account(value):
     if not value:
         return None
@@ -2286,7 +2295,7 @@ def ajax_movimientos_cont(request):
                    'estado':line.estado,
                    'conciliacion':conciliac,
                    'clasificacion':line.tipo,
-                   'soporte':str(line.soporte_egreso),
+                   'soporte':_media_url(line.soporte_egreso),
                 })
             data = {
                 'data':list_mvto
@@ -3066,7 +3075,7 @@ def ajax_pagos_por_factura(request):
                     'valor':f'{pago.valor:,}',
                     'cuenta':pago.cuenta.cuentabanco,
                     'empresa':pago.empresa.nombre,
-                    'soporte':str(pago.soporte_pago)
+                    'soporte':_media_url(pago.soporte_pago)
                 })
                 i+=1
             data = {
@@ -3125,9 +3134,9 @@ def ajax_lista_facturas(request):
                     'pagoneto':pagoneto,
                     'saldo':saldo,
                     'ubicacion':ubicacion,
-                    'soporte':str(factura.soporte_radicado),
+                    'soporte':_media_url(factura.soporte_radicado),
                     'oficina':factura.oficina,
-                    'soporte_causacion':str(factura.soporte_causacion)
+                    'soporte_causacion':_media_url(factura.soporte_causacion)
                 })
                 i+=1
             data={
@@ -3615,7 +3624,7 @@ def ajax_lista_pagos(request):
             for line in defered_list:
                 fecha_fact = datetime.datetime.strftime(line.nroradicado.fechafactura,'%d/%m/%Y')
                 fecha_pago = datetime.datetime.strftime(line.fecha_pago,'%d/%m/%Y')
-                try: sc = str(line.nroradicado.soporte_causacion)
+                try: sc = _media_url(line.nroradicado.soporte_causacion)
                 except: sc = ""
                 list_mvto.append({
                     'id':i,
@@ -3629,8 +3638,8 @@ def ajax_lista_pagos(request):
                     'causacion':line.nroradicado.nrocausa,
                     'usuario':line.usuario.username,
                     'factura':line.nroradicado.nrofactura,
-                    'soporte':str(line.soporte_pago),
-                    'soporte_radicado':str(line.nroradicado.soporte_radicado),
+                    'soporte':_media_url(line.soporte_pago),
+                    'soporte_radicado':_media_url(line.nroradicado.soporte_radicado),
                     'soporte_causacion':sc,
                     'oficina':line.nroradicado.oficina,
                     'tipo_rad':line.nroradicado.origen,
@@ -3961,7 +3970,7 @@ def ajax_lista_ant(request):
                     'usuario':ant.usuario.username,
                     'oficina':ant.oficina,
                     'valor':f'{ant.valor:,}',
-                    'soporte':str(ant.soporte_pago),
+                    'soporte':_media_url(ant.soporte_pago),
                     'islinked': ant.is_linked()
                 })
                 i+=1
@@ -5349,7 +5358,7 @@ def cajas_efectivo(request):
                             'descripcion': i.descripcion.capitalize(),
                             'valor': i.valor * -1,
                             'legalizado':'',
-                            'soporte': str(i.soporte),
+                            'soporte': _media_url(i.soporte),
                             'tipo':'gasto',
                             'estado':i.estado,
                             'cuenta_iva':{
@@ -5367,7 +5376,7 @@ def cajas_efectivo(request):
                             'rte': vr_rte,
                             'subtotal':subtotal,
                             'concepto':i.concepto.descripcion,
-                            'soporte_doc_prov': str(i.tercero.soporte_identificacion),
+                            'soporte_doc_prov': _media_url(i.tercero.soporte_identificacion),
                         })
                         
                     if include_incomes == 'true':

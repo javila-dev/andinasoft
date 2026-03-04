@@ -51,6 +51,15 @@ def _parse_date_param(value):
     except (TypeError, ValueError):
         return None
 
+
+def _build_soporte_url(request, soporte_field):
+    if not soporte_field:
+        return None
+    url = soporte_field.url
+    if url.startswith('http://') or url.startswith('https://'):
+        return url
+    return request.build_absolute_uri(url)
+
 @api_token_auth
 @require_http_methods(["GET"])
 def api_pending_receipts(request):
@@ -177,8 +186,16 @@ def solicitar_recibo_interno(request):
                 elif estado == 'sin_realizar':
                     obj_recibos = obj_recibos.filter(recibo_asociado__isnull=True, requiere_revision_manual=False)
 
+                rendered = JSONRender(obj_recibos,query_functions=['adj_info','titular']).render()
+                soporte_urls = {
+                    item.pk: _build_soporte_url(request, item.soporte)
+                    for item in obj_recibos
+                }
+                for item in rendered:
+                    item['soporte_url'] = soporte_urls.get(item.get('id'))
+
                 data = {
-                    'data': JSONRender(obj_recibos,query_functions=['adj_info','titular']).render()
+                    'data': rendered
                 }
 
                 return JsonResponse(data)
@@ -425,9 +442,17 @@ def solicitud_fractal(request):
                 
                 if proyecto != 'todos':
                     obj_recibos = obj_recibos.filter(proyecto = proyecto)
-                
+
+                rendered = JSONRender(obj_recibos,query_functions=['adj_info','titular']).render()
+                soporte_urls = {
+                    item.pk: _build_soporte_url(request, item.soporte)
+                    for item in obj_recibos
+                }
+                for item in rendered:
+                    item['soporte_url'] = soporte_urls.get(item.get('id'))
+
                 data = {
-                    'data': JSONRender(obj_recibos,query_functions=['adj_info','titular']).render()
+                    'data': rendered
                 }
                 
                 return JsonResponse(data)

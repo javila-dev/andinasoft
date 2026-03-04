@@ -259,8 +259,9 @@
             $('#id_condona_mora').prop('checked', !!line.condonacion);
             $('#id_not_duplicated').prop('checked', false);
             $('#id_soporte').prop('required', false).val('').trigger('change');
-            if (line.soporte){
-                const soporteUrl = resolveMediaUrl(line.soporte);
+            const soporteActualUrl = line.soporte_url || resolveMediaUrl(line.soporte);
+            if (soporteActualUrl){
+                const soporteUrl = soporteActualUrl;
                 $supportLink.attr('href',soporteUrl).text('Ver soporte actual');
                 $supportWrapper.removeClass('d-none');
             } else {
@@ -607,7 +608,7 @@
                     window.location.href = `/finance/printreceipts?proyecto=${line.proyecto.proyecto}&recibo=${line.recibo_asociado}`
                     break;     
                 case "soporte":
-                    var ruta = resolveMediaUrl(line.soporte)
+                    var ruta = line.soporte_url || resolveMediaUrl(line.soporte)
                     window.open(ruta,'Soporte solicitud recibo Id '+line.id,params)
                     break;         
                 case "eliminar":

@@ -761,12 +761,12 @@ class JSONRender():
             item = {}
             for field in fields:
                 field_value = eval("obj."+field.name)     
-                if type(field) == ForeignKey:
+                if isinstance(field, ForeignKey):
                     field_value = self.ForeingKeyRender(field,field_value)
-                elif type(field) == ManyToManyField:
+                elif isinstance(field, ManyToManyField):
                     field_value = 'ManytoManyField'
-                elif type(field) == FileField:
-                    field_value = str(field_value)
+                elif isinstance(field, (FileField, ImageField)):
+                    field_value = self._media_value(field_value)
                 item[field.name] = field_value
             for func in self.query_functions:
                 item[func] = eval('obj.'+func+'()')
@@ -781,14 +781,22 @@ class JSONRender():
                 field_value = None
             else:
                 field_value = eval(f'queryset_item.{field.name}')
-                if type(field) == ForeignKey:
+                if isinstance(field, ForeignKey):
                     field_value = self.ForeingKeyRender(field,field_value)
-                elif type(field) == ManyToManyField:
+                elif isinstance(field, ManyToManyField):
                     field_value = 'ManytoManyField'
-                elif type(field) == FileField or ImageField:
-                    field_value = str(field_value)
+                elif isinstance(field, (FileField, ImageField)):
+                    field_value = self._media_value(field_value)
             query_dict[field.name] = field_value
         return query_dict
+
+    def _media_value(self, field_value):
+        if not field_value:
+            return ''
+        try:
+            return field_value.url
+        except Exception:
+            return str(field_value)
 
 
 @login_required
