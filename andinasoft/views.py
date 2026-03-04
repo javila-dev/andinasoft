@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import permission_required, user_passes_test
 from django.contrib.auth.models import User
 from django.db.models import Avg, Max, Min, Sum, Q, OuterRef, Subquery, DecimalField, Exists, Value
 from django.db import connections, transaction
+from django.db.utils import InternalError as DBInternalError
 from django.db.models.functions import Coalesce
 from django.core import serializers
 from django.forms import ValidationError
@@ -94,6 +95,14 @@ def _move_storage_prefix(prefix_src, prefix_dst):
                     default_storage.delete(dst_path)
                 default_storage.save(dst_path, file_obj)
             default_storage.delete(src_path)
+
+
+def _to_storage_key(path):
+    normalized = os.path.normpath(path)
+    media_root = os.path.normpath(settings.MEDIA_ROOT)
+    if normalized.startswith(media_root):
+        return os.path.relpath(normalized, media_root).replace("\\", "/")
+    return normalized.lstrip("/").replace("\\", "/")
 
 
 @login_required
@@ -5206,10 +5215,11 @@ def adjudicar_venta(request,proyecto,contrato):
                 doc.adj=f'ADJ{idadj}'
                 doc.save()
             try:
-                src_prefix = f'doc_contratos/{proyecto}/{contrato}'
-                dst_prefix = f'doc_contratos/{proyecto}/ADJ{idadj}'
+                src_prefix = _to_storage_key(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{contrato}')
+                dst_prefix = _to_storage_key(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/ADJ{idadj}')
                 _move_storage_prefix(src_prefix, dst_prefix)
-            except: pass      
+            except Exception:
+                traceback.print_exc()
             #creacion plan de pagos
            #ci
             obj_planpagos=PlanPagos.objects.using(proyecto)
@@ -9436,8 +9446,17 @@ def cartera_month_results(request):
         )
         
         book=openpyxl.load_workbook("resources/excel_formats/Bonos_cartera.xlsx")
+        failed_projects = []
         for proyecto in lista_proyectos:
-            contenido_ppto=Adjudicacion.objects.using(proyecto.proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
+            try:
+                contenido_ppto = list(
+                    Adjudicacion.objects.using(proyecto.proyecto).raw(
+                        f'CALL informe_cartera("{periodo}",NULL)'
+                    )
+                )
+            except DBInternalError as exc:
+                failed_projects.append((proyecto.proyecto, str(exc)))
+                continue
             
             sheet=book[proyecto.proyecto]
             encabezados=['Adjudicacion','Cliente','Estado','Origen','Venta Mes','Tipo Cartera','Edad',
@@ -9468,6 +9487,17 @@ def cartera_month_results(request):
                 sheet.cell(i,15,fila.recaudo_total)
                 sheet.cell(i,16,fila.asesor)
                 i+=1
+
+        if failed_projects:
+            sheet_name = 'Errores'
+            if sheet_name in book.sheetnames:
+                error_sheet = book[sheet_name]
+                error_sheet.delete_rows(1, error_sheet.max_row)
+            else:
+                error_sheet = book.create_sheet(sheet_name)
+            error_sheet.append(['Proyecto', 'Error'])
+            for project_name, error_message in failed_projects:
+                error_sheet.append([project_name, error_message[:500]])
                 
         filename = f'Informe_cartera_periodo_{periodo}.xlsx'
         ruta=settings.DIR_EXPORT+filename

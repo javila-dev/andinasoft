@@ -88,7 +88,7 @@ DB_PASSWORD = os.getenv('DB_PASSWORD')
 DB_PORT     = os.getenv('DB_PORT', '3306')
 
 MYSQL_OPTIONS = {
-    'init_command': "SET sql_mode='STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'",
+    'init_command': "SET NAMES utf8mb4 COLLATE utf8mb4_general_ci, sql_mode='STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'",
     'connect_timeout': 5,
     'read_timeout': 30,
     'write_timeout': 30,
