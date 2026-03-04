@@ -1,9 +1,0 @@
-/* Show it's not fixed to the top */
-body {
-  min-height: 40rem;
-  
-}
-
-.bg-dark{
-  background-color: #33544b !important;
-}
