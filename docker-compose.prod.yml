@@ -17,8 +17,8 @@ services:
   nginx:
     image: nginx:alpine
     restart: always
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - media_data:/code/static_media
