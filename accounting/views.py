@@ -742,12 +742,12 @@ def api_bank_movements_list(request):
                         'descripcion': radicado.descripcion,
                         'tercero': radicado.nombretercero,
                         'valor': radicado.valor,
-                        'soporte_radicado_url': radicado.soporte_radicado.url if radicado.soporte_radicado else None
+                        'soporte_radicado_url': _media_url(radicado.soporte_radicado)
                     },
                     'pago': {
                         'valor': pago.valor,
                         'fecha_pago': pago.fecha_pago.isoformat(),
-                        'soporte_pago_url': pago.soporte_pago.url if pago.soporte_pago else None
+                        'soporte_pago_url': _media_url(pago.soporte_pago)
                     }
                 }
 
@@ -762,7 +762,7 @@ def api_bank_movements_list(request):
                         'valor': anticipo.valor,
                         'fecha_pago': anticipo.fecha_pago.isoformat(),
                         'tipo_anticipo': anticipo.tipo_anticipo.descripcion if anticipo.tipo_anticipo else None,
-                        'soporte_pago_url': anticipo.soporte_pago.url if anticipo.soporte_pago else None
+                        'soporte_pago_url': _media_url(anticipo.soporte_pago)
                     }
                 }
 
@@ -778,7 +778,7 @@ def api_bank_movements_list(request):
                         'empresa_entra': transf.empresa_entra.nombre,
                         'cuenta_entra': transf.cuenta_entra.cuentabanco,
                         'valor': transf.valor,
-                        'soporte_pago_url': transf.soporte_pago.url if transf.soporte_pago else None
+                        'soporte_pago_url': _media_url(transf.soporte_pago)
                     }
                 }
 
@@ -3939,7 +3939,8 @@ def ajax_lista_transf(request):
                     'cta_entra':transf.cuenta_entra.cuentabanco,
                     'usuario':transf.usuario.username,
                     'oficina':transf.oficina,
-                    'valor':f'{transf.valor:,}'
+                    'valor':f'{transf.valor:,}',
+                    'soporte':_media_url(transf.soporte_pago)
                 })
                 i+=1
             data = {

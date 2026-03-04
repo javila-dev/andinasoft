@@ -141,6 +141,10 @@
     <a class="dropdown-item" id='asoc_mvto' href="#"><i class="fas fa-link text-muted"></i>&nbsp;Asociar Mvto</a>
     <a class="dropdown-item" id='ver_asoc_ant' href="#"><i class="far fa-eye text-muted"></i>&nbsp;Ver asociaciones</a>
 </div>
+<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuTransf' aria-labelledby="dropdownMenuLink"
+    style="max-width: 220px;">
+    <a class="dropdown-item" id='ver_transf' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Soporte pago</a>
+</div>
 <div class="modal fade" id="modalInterfaz" data-backdrop="static" data-keyboard="false" tabindex="-1"
     aria-labelledby="staticBackdropLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -600,6 +604,27 @@
             })
             return false;
         })
+        $('#tablaTransf tbody').on('contextmenu', 'tr', function (e) {
+            tablaTransf.$('tr.selected').removeClass('selected');
+            let line = tablaTransf.row(this).data()
+            if (!line.soporte) {
+                $('#ver_transf').addClass('disabled')
+            } else {
+                $('#ver_transf').removeClass('disabled')
+            }
+            $(this).addClass('selected')
+            var width = $(document).width()
+            var position = e.pageX
+            if (position >= width * 3 / 4) {
+                position -= 220
+            }
+            $('#contextMenuTransf').css({
+                'display': 'block',
+                'left': position,
+                'top': e.pageY,
+            })
+            return false;
+        })
         $('#tablaMvtosCont tbody').on('click','tr',function(e){
             var line = tablaMvtosCont.row(this).data()
             let ruta = resolveMediaUrl(line.soporte)
@@ -663,6 +688,18 @@
                     tablaMvtosCont.ajax.url(url_cont).load()
                     $('#modalAsociaciones').modal('show');
                     break
+            }
+        });
+        $("#contextMenuTransf").click(function (e) {
+            var line = tablaTransf.row('.selected').data()
+            let params = `status=no,location=no,toolbar=no,menubar=no,
+                    width=650,height=450,left=100,top=100`
+            var action = $(e.target).closest('a').attr('id')
+            switch (action) {
+                case "ver_transf":
+                    var ruta = resolveMediaUrl(line.soporte)
+                    window.open(ruta, 'Soporte transferencia', params)
+                    break;
             }
         });
         $("#contextMenu").click(function (e) {
