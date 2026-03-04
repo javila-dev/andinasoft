@@ -6,6 +6,7 @@ from dateutil import relativedelta
 from django.db import models
 from django.db.models.aggregates import Sum, Max, Min
 from django.db.models.query_utils import Q
+from django.conf import settings
 from django.core.files.storage import default_storage
 from andinasoft.models import clientes, cuentas_pagos
 
@@ -1057,7 +1058,7 @@ class ventas_nuevas(models.Model):
             try:
                 doc['url'] = default_storage.url(doc_path)
             except Exception:
-                doc['url'] = f"/media/{doc_path}"
+                doc['url'] = f"{settings.MEDIA_URL}{doc_path}"
         return docs
     
     def recaudos(self):

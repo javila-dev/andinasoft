@@ -1593,7 +1593,7 @@ def view_otros_ingresos(request):
                 filename = f'Recibo_ingreso_{ingreso.oficina}_{consecutivo_ofic}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
                 GenerarPDF().reciboIngreso(ingreso,consecutivo_ofic,ruta)
-                ruta_download = '/media/tmp/pdf/'+filename
+                ruta_download = settings.MEDIA_URL + 'tmp/pdf/' + filename
                 texto = f'Se creó el recibo de ingreso #{consecutivo_ofic}, puedes descargarlo <a href="{ruta_download}" class="font-weight-bold" target="_blank">Aqui</a>'
                 data = {
                     'mensaje':{
@@ -1701,7 +1701,7 @@ def ajax_print_interfaz_banco(request):
         book.save(ruta)
         
         data = {
-            'ruta':'/media/tmp/'+nombre_doc
+            'ruta': settings.MEDIA_URL + 'tmp/' + nombre_doc
         }
         
         return JsonResponse(data)
@@ -3004,7 +3004,7 @@ def ajax_history_facturas(request):
             for line in obj_history:
                 avatar = Profiles.objects.get(user=line.usuario)
                 list_history.append({
-                    'imagen':str(avatar.avatar.image),
+                    'imagen': avatar.avatar.image.url if avatar.avatar.image else '',
                     'usuario':line.usuario.first_name+ ' '+line.usuario.last_name,
                     'accion':line.accion,
                     'ubicacion':line.ubicacion,
@@ -3815,7 +3815,7 @@ def ajax_imprimir_otros_ingresos(request):
             filename = f'Recibo_ingreso_{ingreso.oficina}_{consecutivo_ofic}.pdf'
             ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
             GenerarPDF().reciboIngreso(ingreso,consecutivo_ofic,ruta)
-            ruta_download = '/media/tmp/pdf/'+filename
+            ruta_download = settings.MEDIA_URL + 'tmp/pdf/' + filename
             data = {
                 'ruta':ruta_download
             }
@@ -4711,9 +4711,10 @@ def solicitud_de_anticipos(request):
                 
                 
                 solicitud = solicitud_anticipos.objects.get(pk=anticipo)
+                avatar_solicita = solicitud.usuario_solicita.profiles.avatar.image.url if solicitud.usuario_solicita.profiles.avatar.image else ''
                 body = f'''
                     <div class="media border-bottom border-gray pt-2">
-                        <img src="/media/{solicitud.usuario_solicita.profiles.avatar.image}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                        <img src="{avatar_solicita}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                         <div class="media-body">
                         <h6 class="mt-0">{solicitud.usuario_solicita.get_full_name()} solicitó anticipo el {solicitud.fecha}</h6>
                         <p class="small"><b>Descripción:</b> {solicitud.descripcion}<br>
@@ -4724,9 +4725,10 @@ def solicitud_de_anticipos(request):
                     </div>
                 '''
                 if solicitud.usuario_aprueba:
+                    avatar_aprueba = solicitud.usuario_aprueba.profiles.avatar.image.url if solicitud.usuario_aprueba.profiles.avatar.image else ''
                     body += f'''
                     <div class="media border-bottom border-gray pt-2">
-                        <img src="/media/{solicitud.usuario_aprueba.profiles.avatar.image}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                        <img src="{avatar_aprueba}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                         <div class="media-body">
                         <h6 class="mt-0">{solicitud.usuario_aprueba.get_full_name()} aprobó el anticipo</h6>
                         </div>
@@ -4734,9 +4736,10 @@ def solicitud_de_anticipos(request):
                 '''
                 if solicitud.pago_anticipo:
                     obj_pago = solicitud.pago_anticipo
+                    avatar_pago = solicitud.pago_anticipo.usuario.profiles.avatar.image.url if solicitud.pago_anticipo.usuario.profiles.avatar.image else ''
                     body += f'''
                     <div class="media border-bottom border-gray pt-2">
-                        <img src="/media/{solicitud.pago_anticipo.usuario.profiles.avatar.image}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                        <img src="{avatar_pago}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                         <div class="media-body">
                         <h6 class="mt-0">{solicitud.pago_anticipo.usuario.get_full_name()} pagó el anticipo el {solicitud.pago_anticipo.fecha_pago}</h6>
                         </div>
@@ -4744,18 +4747,20 @@ def solicitud_de_anticipos(request):
                 '''
                 if solicitud.has_legalizacion():
                     obj_leg = legalizacion_anticipos.objects.filter(pk=solicitud.pk)
+                    avatar_carga = obj_leg[0].usuario_carga.profiles.avatar.image.url if obj_leg[0].usuario_carga.profiles.avatar.image else ''
                     body += f'''
                     <div class="media border-bottom border-gray pt-2">
-                        <img src="/media/{obj_leg[0].usuario_carga.profiles.avatar.image}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                        <img src="{avatar_carga}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                         <div class="media-body">
                         <h6 class="mt-0">{obj_leg[0].usuario_carga.get_full_name()} legalizó anticipo el {obj_leg[0].fecha_legalizacion}</h6>
                         </div>
                     </div>
                 '''
                     if obj_leg[0].usuario_aprueba:
+                        avatar_leg_aprueba = obj_leg[0].usuario_aprueba.profiles.avatar.image.url if obj_leg[0].usuario_aprueba.profiles.avatar.image else ''
                         body += f'''
                     <div class="media border-bottom border-gray pt-2">
-                        <img src="/media/{obj_leg[0].usuario_aprueba.profiles.avatar.image}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
+                        <img src="{avatar_leg_aprueba}" class="mr-3 rounded-circle" width="60" height="60" alt="...">
                         <div class="media-body">
                         <h6 class="mt-0">{obj_leg[0].usuario_aprueba.get_full_name()} aprobó legalización de anticipo el {obj_leg[0].fecha_aprobacion}</h6>
                         </div>
@@ -5013,7 +5018,7 @@ def legalizaciones(request):
                 filename = f'Recibo_ingreso_{ingreso.oficina}_{consecutivo_ofic}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
                 GenerarPDF().reciboIngreso(ingreso,consecutivo_ofic,ruta)
-                ruta_download = '/media/tmp/pdf/'+filename
+                ruta_download = settings.MEDIA_URL + 'tmp/pdf/' + filename
                 
                 data = {
                     'ruta':ruta_download,

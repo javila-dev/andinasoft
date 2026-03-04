@@ -80,7 +80,8 @@ $(document).ready(function () {
     }
     function RevisarImagenesRotas() {
         var img = document.getElementById('imgUser')
-        var replacementImg = "/media/user_photos/male.png";
+        var mediaPrefix = window.__ANDINA_MEDIA_PREFIX__ || '/media/';
+        var replacementImg = mediaPrefix + "user_photos/male.png";
         if (!ImagenOk(img)) {
             img.src = replacementImg;
         }}

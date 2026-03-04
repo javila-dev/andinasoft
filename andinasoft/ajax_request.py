@@ -278,7 +278,7 @@ def base_propietarios(request):
         ruta=settings.MEDIA_ROOT+'/tmp/pdf/'+filename
         book.save(ruta)
         """ data = {
-            'file':'/media/tmp/pdf/'+filename    
+            'file': settings.MEDIA_URL + 'tmp/pdf/' + filename
         }
         return JsonResponse(data) """
         
@@ -494,7 +494,7 @@ def ajax_estructura_linderos(request):
         data = {
             'status': 'success',
             'message':txt,
-            'href': f'/media/tmp/{filename}'
+            'href': settings.MEDIA_URL + f'tmp/{filename}'
         }
         
         return JsonResponse(data)
@@ -678,7 +678,7 @@ def ajax_revision_ds(request):
             wb.save('static_media/tmp/conciliacion_ds.xlsx')               
             
             
-            msj = 'Puedes descargar el archivo <strong><a href="/media/tmp/conciliacion_ds.xlsx">aquí</a></strong>' 
+            msj = f'Puedes descargar el archivo <strong><a href="{settings.MEDIA_URL}tmp/conciliacion_ds.xlsx">aquí</a></strong>' 
                 
             data = {
                 'msj':msj

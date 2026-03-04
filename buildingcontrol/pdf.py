@@ -25,7 +25,7 @@ def ordenCompra(request):
                 pdf.ordenCompra(obj_contrato,items,ruta)
                 
                 data = {
-                    'href':'/media/tmp/pdf/'+nombre_doc,
+                    'href': settings.MEDIA_URL + 'tmp/pdf/' + nombre_doc,
                     'valid':True
                 }
             except:
@@ -54,7 +54,7 @@ def actaRecibido(request):
             pdf.actaRecibido(obj_contrato,obj_acta[0],items,ruta)
             
             data = {
-                'href':'/media/tmp/pdf/'+nombre_doc,
+                'href': settings.MEDIA_URL + 'tmp/pdf/' + nombre_doc,
                 'valid':True
             }
             
@@ -77,7 +77,7 @@ def adicionalesOrden(request):
                 pdf.adicionalOrden(obj_contrato,obj_adicional,items,ruta)
                 
                 data = {
-                    'href':'/media/tmp/pdf/'+nombre_doc,
+                    'href': settings.MEDIA_URL + 'tmp/pdf/' + nombre_doc,
                     'valid':True
                 }
             except:

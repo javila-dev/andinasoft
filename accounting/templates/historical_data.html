@@ -42,7 +42,7 @@
     function resolveMediaUrl(pathOrUrl) {
       if (!pathOrUrl) return '';
       if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
-      return '/media/' + pathOrUrl.replace(/^\/+/, '');
+      return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
     }
 
     $(document).ready(function(){

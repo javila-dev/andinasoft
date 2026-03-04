@@ -249,7 +249,7 @@ def ajax_history_lead(request):
             
             for comment in obj_history:
                 avatar = Profiles.objects.get(user=comment.usuario.pk)
-                avatar = f'/media/{avatar.avatar.image}'
+                avatar = avatar.avatar.image.url if avatar.avatar.image else ''
                 history.append({
                     'usuario':comment.usuario.first_name+" "+comment.usuario.last_name,
                     'fecha':comment.fecha,
@@ -287,7 +287,7 @@ def ajax_newObs(request,id_lead):
                                                 usuario=request.user,fecha=fecha)
                 response = True
                 avatar = Profiles.objects.get(user=request.user.pk)
-                avatar = f'/media/{avatar.avatar.image}'
+                avatar = avatar.avatar.image.url if avatar.avatar.image else ''
                 new_data = {
                     'fecha':fecha,
                     'avatar':avatar,

@@ -444,13 +444,17 @@ def welcome(request):
     return render(request,'welcome.html',context)
 
 def get_avatars(request):
-    if request.is_ajax():
-        if request.method == 'GET':
-            avatars = Avatars.objects.exclude(name='noavatar')
-            avatars = serializers.serialize('json',avatars)
-            data = {
-                'avatars':avatars
+    data = {'avatars': []}
+    if request.is_ajax() and request.method == 'GET':
+        avatars = Avatars.objects.exclude(name='noavatar')
+        data['avatars'] = [
+            {
+                'name': avatar.name,
+                'image': str(avatar.image),
+                'image_url': avatar.image.url if avatar.image else '',
             }
+            for avatar in avatars
+        ]
     return JsonResponse(data)
 
 def cambiar_avatar(request,avatar):
@@ -4947,7 +4951,7 @@ def acciones_venta(request,proyecto,contrato):
                         name_doc = f'soporte_rc_{obj_consecutivo.consecutivo}_{proyecto}_CTR{contrato}'
                         typedoc = soporte.name.split('.')[-1].lower()
                         file_dir = f'{settings.MEDIA_ROOT}/soportes_recibos/ventas_nuevas/{proyecto}/'
-                        file_dwnld = f'/media/soportes_recibos/ventas_nuevas/{proyecto}/{name_doc}.{typedoc}'
+                        file_dwnld = settings.MEDIA_URL + f'soportes_recibos/ventas_nuevas/{proyecto}/{name_doc}.{typedoc}'
                         upload_docs(soporte,file_dir,name_doc,typedoc)
                         RecaudosNoradicados.objects.using(proyecto).create(recibo=obj_consecutivo.consecutivo,
                                                                         contrato=contrato,
@@ -6974,7 +6978,7 @@ def interfaces_contabilidad(request,proyecto):
             filename=f'Recaudo_detallado_{proyecto}.xlsx'
             ruta=settings.MEDIA_ROOT+'/tmp/'+filename
             book.save(ruta)
-            return JsonResponse({'url':'/media/tmp/'+filename})
+            return JsonResponse({'url': settings.MEDIA_URL + 'tmp/' + filename})
          
          
     return render(request,'interfaces_contabilidad.html',context)
@@ -8170,7 +8174,7 @@ def buscar_cliente(request):
                 book.save(ruta)
                 
                 data = {
-                    'ruta':'/media/tmp/'+nombre_doc
+                    'ruta': settings.MEDIA_URL + 'tmp/' + nombre_doc
                 }
                 print(data)
                 return JsonResponse(data)
@@ -9304,7 +9308,7 @@ def acciones_venta_fractal(request):
                 
                 
                 file_dir = f'static_media/soportes_recibos/ventas_nuevas/{proyecto}/'
-                file_dwnld = f'/media/soportes_recibos/ventas_nuevas/{proyecto}/{name_doc}.{typedoc}'
+                file_dwnld = settings.MEDIA_URL + f'soportes_recibos/ventas_nuevas/{proyecto}/{name_doc}.{typedoc}'
                 upload_docs(soporte,file_dir,name_doc,typedoc)
                 
                 

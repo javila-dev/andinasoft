@@ -30,16 +30,17 @@
             type:'GET',
             data:{},
             success:function(response){
-                data = JSON.parse(response['avatars'])
+                const data = Array.isArray(response['avatars']) ? response['avatars'] : JSON.parse(response['avatars'] || '[]')
                 for (let i in data){
-                    var href = '/user/change_avatar/'+data[i]['fields']['name']
-                    var src = resolveMediaUrl(data[i]['fields']['image'])
-                    var avatar = "<div class='col-3'>"+
+                    const avatar = data[i]
+                    var href = '/user/change_avatar/'+(avatar.name || avatar.fields?.name)
+                    var src = avatar.image_url || resolveMediaUrl(avatar.image || avatar.fields?.image)
+                    var avatarHtml = "<div class='col-3'>"+
                         "<a href='"+href+"'>"+
                         "<img src='"+src+"' class='img-thumbnail rounded-circle' width='160' height='160'>"+
                         "</a>"+
                         "</div>"
-                    $('#avatarList').append(avatar)
+                    $('#avatarList').append(avatarHtml)
                 }
             }
           }

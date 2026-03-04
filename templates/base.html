@@ -59,6 +59,9 @@
       </div>
       {%block jsbottom%}{%endblock%}
       {%include 'avatar_selection.html'%}
+      <script>
+        window.__ANDINA_MEDIA_PREFIX__ = '{% get_media_prefix %}';
+      </script>
       <script type="text/javascript" language="javascript" src="{%static 'js/sidebar.js'%}"></script>
       <script>
         $(document).ready(function(){
