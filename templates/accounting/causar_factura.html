@@ -141,7 +141,17 @@
     function resolveMediaUrl(pathOrUrl) {
         if (!pathOrUrl) return '';
         if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
-        return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+        let normalized = String(pathOrUrl).trim();
+        if (!normalized) return '';
+        if (normalized.startsWith('/media/')) {
+            normalized = normalized.slice('/media/'.length);
+        } else if (normalized.startsWith('media/')) {
+            normalized = normalized.slice('media/'.length);
+        }
+        if (normalized.startsWith('static_media/')) {
+            normalized = normalized.slice('static_media/'.length);
+        }
+        return '{% get_media_prefix %}' + normalized.replace(/^\/+/, '');
     }
 
     $(document).ready(function(){
