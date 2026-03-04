@@ -115,3 +115,4 @@ urlpatterns = [
 
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 handler403 = 'andinasoft.views.handler403'
+handler500 = 'andinasoft.views.handler500'

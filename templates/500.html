@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error interno</title>
+    <link rel="stylesheet" href="{% static 'css/403.css' %}">
+    <script src="{% static 'js/403.js' %}"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>5<div class="lock">
+            <div class="top"></div>
+            <div class="bottom"></div>
+        </div>0</h1>
+        <p>Ocurrio un error interno del servidor. Intenta nuevamente en unos minutos.</p>
+
+        <div class="box-1">
+            <div class="btn btn-one" id="btn-home">
+                <span>Ir al inicio</span>
+            </div>
+        </div>
+    </div>
+    <script>
+        var btnHome = document.getElementById('btn-home');
+        btnHome.onclick = function () {
+            window.location.href = '/';
+        };
+    </script>
+</body>
+</html>

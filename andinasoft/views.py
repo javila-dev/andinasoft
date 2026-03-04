@@ -9596,6 +9596,10 @@ def handler403(request, *args, **argv):
     context={}
     return render(request,'403.html',context)
 
+def handler500(request, *args, **argv):
+    context={}
+    return render(request,'500.html',context, status=500)
+
 def check_perms(request,perms:list,raise_exception=True):
     user=request.user
     permissions=user.get_all_permissions()
