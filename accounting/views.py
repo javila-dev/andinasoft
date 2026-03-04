@@ -2428,11 +2428,11 @@ def ajax_movimientos_banco(request):
                     if line.tipo_pago()[0] != None:
                         objeto['tipo']=line.tipo_pago()[0]
                         objeto['pagorelacionado']=line.tipo_pago()[1].pk
-                        objeto['soporte_pago']= str(line.tipo_pago()[1].soporte_pago)
+                        objeto['soporte_pago']= _media_url(line.tipo_pago()[1].soporte_pago)
                         objeto['usuario']=line.tipo_pago()[1].usuario.username
                         if line.tipo_pago()[0] == 'Pago':
-                            objeto['soporte_causacion']= str(line.tipo_pago()[1].nroradicado.soporte_causacion)
-                            objeto['soporte_factura']= str(line.tipo_pago()[1].nroradicado.soporte_radicado)
+                            objeto['soporte_causacion']= _media_url(line.tipo_pago()[1].nroradicado.soporte_causacion)
+                            objeto['soporte_factura']= _media_url(line.tipo_pago()[1].nroradicado.soporte_radicado)
                             
                         else :
                             objeto['soporte_causacion']= ""
@@ -2931,10 +2931,17 @@ def ajax_data_factura(request):
     if request.method == 'GET':
         if request.is_ajax():
             factura = request.GET.get('pk')
-            
-            obj_factura = Facturas.objects.filter(pk=factura)
+
+            obj_factura = Facturas.objects.filter(pk=factura).first()
+            if not obj_factura:
+                return JsonResponse({'detail': 'Factura no encontrada'}, status=404)
+
             data = {
-                'data':serializers.serialize('json',obj_factura)}
+                'pk': obj_factura.pk,
+                'soporte_radicado': _media_url(obj_factura.soporte_radicado),
+                'soporte_causacion': _media_url(obj_factura.soporte_causacion),
+                'data': serializers.serialize('json', [obj_factura]),
+            }
             return JsonResponse(data)
 
 @login_required         

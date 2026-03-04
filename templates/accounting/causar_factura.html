@@ -313,8 +313,8 @@
                             'pk':line.pk,
                         },
                         success:function(response){
-                            var data = JSON.parse(response['data'])[0]['fields']
-                            var ruta = resolveMediaUrl(data['soporte_radicado'])
+                            var legacy = (response['data']) ? JSON.parse(response['data'])[0]['fields'] : {}
+                            var ruta = resolveMediaUrl(response['soporte_radicado'] || legacy['soporte_radicado'])
                             let params = `status=no,location=no,toolbar=no,menubar=no,
                             width=650,height=450,left=100,top=100`;
                             window.open(ruta,'Soporte radicado '+ruta.pk,params)
@@ -363,8 +363,8 @@
                             'pk':line.pk,
                         },
                         success:function(response){
-                            var data = JSON.parse(response['data'])[0]['fields']
-                            var ruta = resolveMediaUrl(data['soporte_radicado'])
+                            var legacy = (response['data']) ? JSON.parse(response['data'])[0]['fields'] : {}
+                            var ruta = resolveMediaUrl(response['soporte_radicado'] || legacy['soporte_radicado'])
                             let params = `status=no,location=no,toolbar=no,menubar=no,
                             width=650,height=450,left=100,top=100`;
                             window.open(ruta,'Soporte radicado '+ruta.pk,params)
