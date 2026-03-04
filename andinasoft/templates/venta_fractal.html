@@ -824,7 +824,7 @@
                 <td>${rc.usuario}</td>
                 <td>${rc.formapago}</td>
                 <td>$ ${valor}</td>
-                <td><a href="${rc.soportepago}" target="_blank" class="ui circular icon teal button"><i class="eye outline icon"></i></a>
+                <td><a href="${resolveMediaUrl(rc.soportepago)}" target="_blank" class="ui circular icon teal button"><i class="eye outline icon"></i></a>
                 
                   <button type="button" class="ui icon violet circular button downloadreceipts"
                     onclick="dwnldrecibo(${rc.recibo})">
@@ -1344,7 +1344,7 @@
                 <td>${response.data.rc.usuario}</td>
                 <td>${response.data.rc.formapago}</td>
                 <td>$ ${valor}</td>
-                <td><a href="${response.data.rc.soportepago}" target="_blank" class="ui circular icon teal button"><i class="eye outline icon"></i></a>
+                <td><a href="${resolveMediaUrl(response.data.rc.soportepago)}" target="_blank" class="ui circular icon teal button"><i class="eye outline icon"></i></a>
                 
                   <button type="button" class="ui icon violet circular button downloadreceipts"
                     onclick="dwnldrecibo(${response.data.rc.recibo})">

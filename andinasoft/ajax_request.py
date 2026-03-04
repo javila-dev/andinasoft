@@ -17,6 +17,7 @@ from django.db.models.fields.related import ForeignKey, ManyToManyField
 from django.db.models.fields.files import FileField, ImageField
 from django.contrib.auth.decorators import login_required
 import datetime
+import os
 from docx import Document
 
 
@@ -487,7 +488,9 @@ def ajax_estructura_linderos(request):
             
             row += 1
         
-        document.save('static_media/tmp/'+filename)
+        tmp_dir = os.path.join(settings.MEDIA_ROOT, 'tmp')
+        os.makedirs(tmp_dir, exist_ok=True)
+        document.save(os.path.join(tmp_dir, filename))
         
         txt = f'¡Listo! Se está descargando el archivo'
         
@@ -675,7 +678,9 @@ def ajax_revision_ds(request):
                 
                 
                 
-            wb.save('static_media/tmp/conciliacion_ds.xlsx')               
+            tmp_dir = os.path.join(settings.MEDIA_ROOT, 'tmp')
+            os.makedirs(tmp_dir, exist_ok=True)
+            wb.save(os.path.join(tmp_dir, 'conciliacion_ds.xlsx'))
             
             
             msj = f'Puedes descargar el archivo <strong><a href="{settings.MEDIA_URL}tmp/conciliacion_ds.xlsx">aquí</a></strong>' 

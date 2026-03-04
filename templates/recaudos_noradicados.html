@@ -1,5 +1,6 @@
 {%extends 'base.html'%}
 {%load crispy_forms_tags%}
+{%load extras%}
 {%block title%}Recaudos no radicados{%endblock%}
 
 {%block content%}
@@ -35,7 +36,7 @@
                     <td class='text-center'>$ {{recaudo.valor}}</td>
                     <td class='text-center'>
                         {%if recaudo.soportepago%}
-                            <a href='{{recaudo.soportepago}}' target='_blank' class='btn btn-sm btn-outline-primary'>
+                            <a href='{{recaudo.soportepago|media_url}}' target='_blank' class='btn btn-sm btn-outline-primary'>
                                 Ver soporte
                             </a>
                         {%else%}

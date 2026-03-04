@@ -61,6 +61,7 @@ import math
 import calendar
 import random
 import string
+from urllib.parse import urlparse
 from openpyxl.styles import Font, Color, Alignment, Border, Side, colors, PatternFill
 from copy import copy
 
@@ -103,6 +104,32 @@ def _to_storage_key(path):
     if normalized.startswith(media_root):
         return os.path.relpath(normalized, media_root).replace("\\", "/")
     return normalized.lstrip("/").replace("\\", "/")
+
+
+def _normalize_soporte_key(soporte_path):
+    if not soporte_path:
+        return None
+
+    media_url = getattr(settings, 'MEDIA_URL', '/media/') or '/media/'
+    candidate = str(soporte_path).strip()
+    if not candidate:
+        return None
+
+    if candidate.startswith('http://') or candidate.startswith('https://'):
+        parsed = urlparse(candidate)
+        candidate = parsed.path or candidate
+
+    if media_url and candidate.startswith(media_url):
+        candidate = candidate[len(media_url):]
+    elif candidate.startswith('/media/'):
+        candidate = candidate[len('/media/'):]
+
+    candidate = candidate.lstrip('/').replace("\\", "/")
+
+    if candidate.startswith('static_media/'):
+        candidate = candidate[len('static_media/'):]
+
+    return candidate or None
 
 
 @login_required
@@ -4960,7 +4987,7 @@ def acciones_venta(request,proyecto,contrato):
                         name_doc = f'soporte_rc_{obj_consecutivo.consecutivo}_{proyecto}_CTR{contrato}'
                         typedoc = soporte.name.split('.')[-1].lower()
                         file_dir = f'{settings.MEDIA_ROOT}/soportes_recibos/ventas_nuevas/{proyecto}/'
-                        file_dwnld = settings.MEDIA_URL + f'soportes_recibos/ventas_nuevas/{proyecto}/{name_doc}.{typedoc}'
+                        file_key = _to_storage_key(f'{file_dir}{name_doc}.{typedoc}')
                         upload_docs(soporte,file_dir,name_doc,typedoc)
                         RecaudosNoradicados.objects.using(proyecto).create(recibo=obj_consecutivo.consecutivo,
                                                                         contrato=contrato,
@@ -4968,7 +4995,7 @@ def acciones_venta(request,proyecto,contrato):
                                                                         concepto=concepto,
                                                                         valor=valor,
                                                                         formapago=formapago,
-                                                                        soportepago=file_dwnld)
+                                                                        soportepago=file_key)
                         recibo=RecaudosNoradicados.objects.using(proyecto).aggregate(Max('recibo'))
                         recibo=recibo['recibo__max']
                         nrorecibo = obj_consecutivo.consecutivo
@@ -5427,7 +5454,6 @@ def adjudicar_venta(request,proyecto,contrato):
             obj_recNR=RecaudosNoradicados.objects.using(proyecto).filter(contrato=datos_venta.id_venta)
             titulares=titulares_por_adj.objects.using(proyecto).get(adj=adj)
             proyecto_obj = proyectos.objects.get(pk=proyecto)
-            media_url = getattr(settings,'MEDIA_URL','/media/')
             for recibo in obj_recNR:
                 saldo_cuotas=saldos_adj.objects.using(proyecto).filter(adj=adj,saldocuota__gt=0)
                 aplicar_pago(request=request,adj=adj,fecha=recibo.fecha,forma_pago=recibo.formapago,
@@ -5435,12 +5461,7 @@ def adjudicar_venta(request,proyecto,contrato):
                              porcentaje_condonado=100,saldo_cuotas=saldo_cuotas,consecutivo=recibo.recibo,
                              Recaudos=Recaudos,Recaudos_general=Recaudos_general,titulares=titulares,
                              proyecto=proyecto)
-                soporte_rel = None
-                if recibo.soportepago:
-                    soporte_rel = recibo.soportepago
-                    if soporte_rel.startswith(media_url):
-                        soporte_rel = soporte_rel[len(media_url):]
-                    soporte_rel = soporte_rel.lstrip('/')
+                soporte_rel = _normalize_soporte_key(recibo.soportepago)
                 if soporte_rel:
                     fecha_pago_nr = recibo.fecha
                     if isinstance(fecha_pago_nr, datetime.date):
@@ -9314,19 +9335,20 @@ def acciones_venta_fractal(request):
                 consecutivo = obj_consecutivo.consecutivo
                 
                 name_doc = f'soporte_rc_{consecutivo}_{proyecto}_CTR{contrato}'
-                typedoc = soporte.name.split('.')[-1]
-                
-                
-                file_dir = f'static_media/soportes_recibos/ventas_nuevas/{proyecto}/'
-                file_dwnld = settings.MEDIA_URL + f'soportes_recibos/ventas_nuevas/{proyecto}/{name_doc}.{typedoc}'
+                typedoc = soporte.name.split('.')[-1].lower()
+
+
+                file_dir = f'{settings.MEDIA_ROOT}/soportes_recibos/ventas_nuevas/{proyecto}/'
+                file_key = _to_storage_key(f'{file_dir}{name_doc}.{typedoc}')
                 upload_docs(soporte,file_dir,name_doc,typedoc)
+                file_dwnld = default_storage.url(file_key)
                 
                 
                 
                 recaudo = RecaudosNoradicados.objects.using(proyecto).create(
                     recibo = consecutivo, contrato = contrato,
                     fecha = datetime.date.today(), formapago = fp,
-                    usuario = request.user.username, soportepago = file_dwnld,
+                    usuario = request.user.username, soportepago = file_key,
                     concepto = 'PAGO RECIBIDO DE CLIENTE',
                     valor = valor.replace(',','')
                 )
