@@ -377,10 +377,17 @@
         });
         $('#formCausar').on('submit',function(e){
             e.preventDefault();
-            form_data = new FormData(this)
+            const form_data = new FormData(this)
             let radic = tablaRecibidos.row('.selected').data().pk
             form_data.append('radicado',radic)
-            let empresa
+            const submitBtn = $(this).find('button[type="submit"], input[type="submit"]').first()
+            const originalHtml = submitBtn.is('button') ? submitBtn.html() : submitBtn.val()
+            submitBtn.prop('disabled', true).addClass('disabled')
+            if (submitBtn.is('button')) {
+                submitBtn.html('<i class="fas fa-spinner fa-spin"></i> Registrando...')
+            } else {
+                submitBtn.val('Registrando...')
+            }
             $.ajax({
                 type:'POST',
                 url:'/accounting/ajax/causarfactura',
@@ -394,6 +401,19 @@
                     $('#alert-data').text(response.msj)
                     $('#general-right-alert').toggleClass('show').toggleClass(response.class)
                     $('#modalCausar').modal('hide')
+                },
+                error:function(){
+                    $('#alert-title').text('Oh Oh!')
+                    $('#alert-data').text('No fue posible registrar la causación. Intenta nuevamente.')
+                    $('#general-right-alert').addClass('show alert-danger')
+                },
+                complete:function(){
+                    submitBtn.prop('disabled', false).removeClass('disabled')
+                    if (submitBtn.is('button')) {
+                        submitBtn.html(originalHtml)
+                    } else {
+                        submitBtn.val(originalHtml)
+                    }
                 }
             })
         })

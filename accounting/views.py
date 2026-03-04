@@ -1516,21 +1516,22 @@ def pagar_factura(request):
         'formotrospag':forms.form_asociar_otros_pagos,
         'form_buscar_mvto': forms.form_buscar_mvto_pago,
     }
-    facts_nr_tesoreria = Facturas.objects.filter(nrocausa__isnull=False)
     sin_recibir_mde = 0
     sin_recibir_mtr = 0
-    
-    estado = history_facturas.objects.filter(
-                        factura = OuterRef('pk')
-                    ).order_by('-pk')
-    
-    obj_facturas =  facts_nr_tesoreria.annotate(
-        ubicacion = Subquery(estado.values('ubicacion')[:1])
-    ).filter(
-        ubicacion = 'Contabilidad'
-    ).order_by('-pk')
-    sin_recibir_mtr = obj_facturas.filter(oficina = 'MONTERIA').count()
-    sin_recibir_mde = obj_facturas.filter(oficina = 'MEDELLIN').count()
+
+    pendientes_qs = info_facturas.objects.filter(
+        ubicacion='Contabilidad'
+    ).exclude(
+        Q(causacion__isnull=True) | Q(causacion__exact='')
+    )
+    pendientes_por_oficina = pendientes_qs.values('oficina').annotate(total=Count('radicado'))
+    for row in pendientes_por_oficina:
+        oficina = row.get('oficina')
+        total = row.get('total') or 0
+        if oficina == 'MONTERIA':
+            sin_recibir_mtr = total
+        elif oficina == 'MEDELLIN':
+            sin_recibir_mde = total
     if (sin_recibir_mtr + sin_recibir_mde)>0:
         context['topalert']={                                                                                                                                                                                                                       
                 'alert':True,
@@ -2865,32 +2866,43 @@ def ajax_info_facturas(request):
             
             if oficina:
                 obj_facturas = info_facturas.objects.filter(
-                    oficina= oficina, ubicacion = ubicacion
-                ).order_by('-radicado')
+                    oficina=oficina,
+                    ubicacion=ubicacion
+                )
                 if causado:
-                    obj_facturas = obj_facturas.filter(causacion__isnull=False)
-                if tesoreria:                    
-                    obj_facturas = obj_facturas.filter(saldo__gt = 0)
-                            
-                
-                i=0
-                for line in obj_facturas:
-                    if not (line.saldo==0 and tesoreria=="1"):
-                        list_mvto.append({
-                            'id':i,
-                            'pk':line.pk,
-                            'tercero':line.nombretercero,
-                            'fecha_rad':line.fecharadicado,
-                            'fecha_fact':line.fechafactura,
-                            'valor':f'{line.valor:,}',
-                            'empresa':line.empresa,
-                            'causacion':line.causacion,
-                            'pagoneto': f'{line.pagoneto:,}',
-                            'saldo':f'{line.saldo:,}',
-                            'descripcion':line.descripcion,
-                            'tipo':line.origen,
-                        })
-                        i+=0
+                    obj_facturas = obj_facturas.exclude(Q(causacion__isnull=True) | Q(causacion__exact=''))
+                if tesoreria:
+                    obj_facturas = obj_facturas.filter(saldo__gt=0)
+
+                obj_facturas = obj_facturas.order_by('-radicado').values(
+                    'radicado',
+                    'nombretercero',
+                    'fecharadicado',
+                    'fechafactura',
+                    'valor',
+                    'empresa',
+                    'causacion',
+                    'pagoneto',
+                    'saldo',
+                    'descripcion',
+                    'origen',
+                )
+
+                for idx, line in enumerate(obj_facturas):
+                    list_mvto.append({
+                        'id': idx,
+                        'pk': line.get('radicado'),
+                        'tercero': line.get('nombretercero'),
+                        'fecha_rad': line.get('fecharadicado'),
+                        'fecha_fact': line.get('fechafactura'),
+                        'valor': f"{line.get('valor') or 0:,}",
+                        'empresa': line.get('empresa'),
+                        'causacion': line.get('causacion'),
+                        'pagoneto': f"{line.get('pagoneto') or 0:,}",
+                        'saldo': f"{line.get('saldo') or 0:,}",
+                        'descripcion': line.get('descripcion'),
+                        'tipo': line.get('origen'),
+                    })
                                 
             data = {
                 'data':list_mvto
