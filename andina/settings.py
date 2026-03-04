@@ -155,7 +155,7 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static_pro', 'static')]
 if DEBUG:
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 else:
-    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    STATICFILES_STORAGE = 'andina.staticfiles_storage.NonStrictCompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'static_media')
