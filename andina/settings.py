@@ -195,6 +195,20 @@ EMAIL_USE_TLS       = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
 EMAIL_HOST_USER     = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL  = os.getenv('DEFAULT_FROM_EMAIL')
+SERVER_EMAIL        = os.getenv('SERVER_EMAIL', DEFAULT_FROM_EMAIL)
+
+ADMINS = []
+_admins_raw = os.getenv('ADMINS', '').strip()
+if _admins_raw:
+    for admin in _admins_raw.split(','):
+        admin = admin.strip()
+        if not admin:
+            continue
+        if ':' in admin:
+            name, email = admin.split(':', 1)
+            ADMINS.append((name.strip() or email.strip(), email.strip()))
+        else:
+            ADMINS.append((admin, admin))
 
 # ─── Auth / Registration ──────────────────────────────────────────────────────
 
@@ -232,7 +246,26 @@ LOGGING = {
             'class': 'logging.StreamHandler',
         },
     },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
     'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
         'mcp_server': {
             'handlers': ['console'],
             'level': 'INFO',
