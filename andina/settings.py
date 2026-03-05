@@ -232,9 +232,20 @@ else:
 
 # ─── N8N Webhooks ─────────────────────────────────────────────────────────────
 
-N8N_WEBHOOK_UPLOAD_MOVEMENTS = os.getenv('N8N_WEBHOOK_UPLOAD_MOVEMENTS', 'http://localhost:5678/webhook/upload-movements')
-N8N_WEBHOOK_WOMPI_COUNT      = os.getenv('N8N_WEBHOOK_WOMPI_COUNT',      'http://localhost:5678/webhook/wompi-count')
-N8N_WEBHOOK_PLINK_COUNT      = os.getenv('N8N_WEBHOOK_PLINK_COUNT',      'http://localhost:5678/webhook/plink-count')
+_n8n_base_default = 'https://n8n.2asoft.tech' if LIVE else 'http://localhost:5678'
+N8N_BASE_URL = os.getenv('N8N_BASE_URL', _n8n_base_default).rstrip('/')
+N8N_WEBHOOK_UPLOAD_MOVEMENTS = os.getenv(
+    'N8N_WEBHOOK_UPLOAD_MOVEMENTS',
+    f'{N8N_BASE_URL}/webhook/upload-movements'
+)
+N8N_WEBHOOK_WOMPI_COUNT = os.getenv(
+    'N8N_WEBHOOK_WOMPI_COUNT',
+    f'{N8N_BASE_URL}/webhook/wompi-count'
+)
+N8N_WEBHOOK_PLINK_COUNT = os.getenv(
+    'N8N_WEBHOOK_PLINK_COUNT',
+    f'{N8N_BASE_URL}/webhook/plink-count'
+)
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 

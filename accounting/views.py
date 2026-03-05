@@ -6662,13 +6662,14 @@ def api_upload_movements(request):
         from django.utils import timezone
         job.status = 'failed'
         job.mensaje = 'Error al comunicarse con el servicio de procesamiento'
-        job.error_detail = str(e)
+        job.error_detail = f'Webhook: {webhook_url} | Error: {str(e)}'
         job.completed_at = timezone.now()
         job.save()
         return JsonResponse({
             'job_id': job.id,
             'status': 'failed',
-            'error': str(e)
+            'error': f'No fue posible conectar con n8n ({webhook_url})',
+            'error_detail': str(e)
         }, status=502)
 
     except Exception as e:
