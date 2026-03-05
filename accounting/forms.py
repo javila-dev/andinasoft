@@ -916,7 +916,13 @@ class form_solicitar_anticipos(forms.Form):
         )
 
 class form_legalizar_anticipo(forms.Form):
-    fecha = forms.DateField()
+    fecha = forms.DateField(
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(
+            format='%Y-%m-%d',
+            attrs={'type': 'date', 'class': 'text-center form-control'}
+        )
+    )
     descripcion = forms.CharField(max_length=255, widget=forms.Textarea({'rows':3}))
     nit_tercero = forms.ModelChoiceField(Partners.objects.all().order_by('nombres'), empty_label="Selecciona...")
     valor = forms.CharField(max_length=255)
@@ -931,7 +937,7 @@ class form_legalizar_anticipo(forms.Form):
         self.helper.layout = Layout(
             HTML('<div class="card" id="leg_block"><div class="card-body">'),
             Row(
-                Column(customfields.datepicker('fecha',css_class='datefield'),
+                Column(Field('fecha'),
                    css_class='col-md-6'), 
                 Column(PrependedText('valor','$',css_class='text-center money'),
                    css_class='col-md-6'),    
@@ -1117,8 +1123,20 @@ class form_reg_legaliz(forms.Form):
 class form_cajas(forms.Form):
     qs = cuentas_pagos.objects.filter(es_caja = True)
     caja = forms.ModelChoiceField(qs, empty_label='Selecciona...')
-    fecha_desde = forms.DateField()
-    fecha_hasta = forms.DateField()
+    fecha_desde = forms.DateField(
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(
+            format='%Y-%m-%d',
+            attrs={'type': 'date', 'class': 'text-center form-control'}
+        )
+    )
+    fecha_hasta = forms.DateField(
+        input_formats=['%Y-%m-%d'],
+        widget=forms.DateInput(
+            format='%Y-%m-%d',
+            attrs={'type': 'date', 'class': 'text-center form-control'}
+        )
+    )
     
     def __init__(self,*args,**kwargs):
         user = kwargs.pop('user')
@@ -1147,10 +1165,10 @@ class form_cajas(forms.Form):
                     customSelectField('caja'), css_class='col-md-5',style='padding-top:2rem;'
                 ),
                 Column(
-                    customfields.datepicker('fecha_desde', css_class='text-center'), css_class='col-md-3'
+                    Field('fecha_desde'), css_class='col-md-3'
                 ),
                 Column(
-                    customfields.datepicker('fecha_hasta', css_class='text-center'), css_class='col-md-3'
+                    Field('fecha_hasta'), css_class='col-md-3'
                 ),
                 Column(StrictButton('<i class="fas fa-search"></i>',id="btnbuscarmvtos",css_class='btn btn-primary btn-circle mt-4 pt-1 ml-3')
                        , css_class='col-md-1')

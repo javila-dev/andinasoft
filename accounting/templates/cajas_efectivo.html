@@ -112,7 +112,7 @@
                     <div class="mb-3">
                       <label for="id_fecha_arqueo">Fecha arqueo</label>
                       <input type="text" name="fecha" class="text-center dateinput form-control" 
-                        required="" id="id_fecha_arqueo" readonly="readonly">
+                        required="" id="id_fecha_arqueo">
                     </div>  
                 </div>
                   <div class='row'>
@@ -508,7 +508,13 @@
     const abrir_mes = '{{abrir_mes_anterior.activo}}' == 'True' ? true:false 
     const mes_abrir = parseInt('{{abrir_mes_anterior.valor}}')
 
-    bsCustomFileInput.init();
+    function safeInitCustomFileInput() {
+      if (window.bsCustomFileInput && typeof window.bsCustomFileInput.init === 'function') {
+        window.bsCustomFileInput.init();
+      }
+    }
+
+    safeInitCustomFileInput();
     $('.rowpagos').hide()
     $('#id_check_pagado').parent('.form-check').hide()
 
@@ -537,23 +543,39 @@
 
     let endMonth = new Date()
 
-    // Initialize gijgo datepicker for arqueo and datefield inputs
-    $('#id_fecha_arqueo').datepicker({
-      uiLibrary: 'bootstrap4',
-      format: 'yyyy-mm-dd',
-      locale: 'es-es',
-      maxDate: endMonth
+    // Quitar readonly para permitir apertura por click/teclado en todos los navegadores.
+    $('#id_fecha_arqueo, #id_fecha_desde, #id_fecha_hasta, #id_fecha').removeAttr('readonly');
+
+    // Usar datepicker nativo del navegador para evitar fallos silenciosos de plugins/CDN.
+    const toIsoDate = (dateObj) => {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const minDateStr = toIsoDate(initmonth);
+    const maxDateStr = toIsoDate(endMonth);
+    $('#id_fecha_arqueo').attr({ type: 'date', max: maxDateStr }).removeAttr('readonly');
+    $("#id_fecha_desde, #id_fecha_hasta, #id_fecha").each(function() {
+      $(this).attr({ type: 'date', min: minDateStr, max: maxDateStr }).removeAttr('readonly');
     });
 
-    $(".datefield").each(function() {
-      $(this).datepicker({
-        uiLibrary: 'bootstrap4',
-        format: 'yyyy-mm-dd',
-        locale: 'es-es',
-        minDate: initmonth,
-        maxDate: endMonth,
-      });
+    // En Chrome algunos inputs date no abren picker visual sin invocarlo explícitamente.
+    $('#id_fecha_arqueo, #id_fecha_desde, #id_fecha_hasta, #id_fecha').on('focus click', function() {
+      if (typeof this.showPicker === 'function') {
+        try {
+          this.showPicker();
+        } catch (e) {
+          // Ignorar: el navegador puede bloquear showPicker fuera de gesto de usuario.
+        }
+      }
     });
+
+    function isDateInAllowedRange(dateStr) {
+      if (!dateStr) return false;
+      return dateStr >= minDateStr && dateStr <= maxDateStr;
+    }
 
     $('#modalchangeconcept').find('.modal-body').append(
           $('#id_concepto').parent('div').clone()
@@ -804,7 +826,7 @@
       })
     $('#tablaCONBanco_tr tbody').on('click','tr',function(){
           $(this).toggleClass('selected')
-          bsCustomFileInput.init()
+          safeInitCustomFileInput()
           totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
       })
     $('#tabla_movimientos tbody').on('contextmenu','tr',function(e){
@@ -1304,9 +1326,16 @@
       e.preventDefault();
       let data = new FormData(this);
       let caja = $('#id_caja').val()
+      let fechaGasto = $('#id_fecha').val()
       if (caja==""){
         $('#alert-title').text('Andinasoft dice:')
         $('#alert-data').text('Debes escoger una caja para registrar el gasto')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
+      if (!isDateInAllowedRange(fechaGasto)) {
+        $('#alert-title').text('Andinasoft dice:')
+        $('#alert-data').text(`La fecha del gasto debe estar entre ${minDateStr} y ${maxDateStr}`)
         $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
         return;
       }
@@ -1322,7 +1351,7 @@
         success: (xhr) => {
           tabla_movimientos.ajax.reload()
           $('#form-legalizar-anticipo').trigger('reset')
-          bsCustomFileInput.init()
+          safeInitCustomFileInput()
           $("#modalNuevaLegalizacion").modal('hide')
           $('#alert-title').text('Andinasoft dice:')
           $('#alert-data').text(xhr.msj)
@@ -1668,7 +1697,7 @@
             $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
             $('#modalRegLegal').modal('hide')
             $('#formLegalizarReemb').trigger('reset')
-            bsCustomFileInput.init()
+            safeInitCustomFileInput()
             tabla_reembolsos.ajax.reload()
         },
         error: (xhr) => {
