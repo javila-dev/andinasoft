@@ -3109,10 +3109,6 @@ def ajax_lista_facturas(request):
     if request.method == 'GET':
         if request.is_ajax():
             oficina = request.GET.get('oficina')
-            if oficina == 'TODAS':
-                base_qs = Facturas.objects.all()
-            else:
-                base_qs = Facturas.objects.filter(oficina=oficina)
             draw = int(request.GET.get('draw', 1))
             start = int(request.GET.get('start', 0))
             length = int(request.GET.get('length', 10))
@@ -3120,11 +3116,37 @@ def ajax_lista_facturas(request):
                 length = 10
             search_val = request.GET.get('search[value]')
 
+            if not oficina:
+                return JsonResponse({
+                    "draw": draw,
+                    "recordsTotal": 0,
+                    "recordsFiltered": 0,
+                    "data": []
+                })
+
+            if oficina == 'TODAS':
+                base_qs = Facturas.objects.all()
+            else:
+                base_qs = Facturas.objects.filter(oficina=oficina)
+            filtered_qs = base_qs
+
+            if search_val:
+                filtered_qs = filtered_qs.filter(
+                    Q(nroradicado__icontains=search_val)|
+                    Q(nombretercero__icontains=search_val)|
+                    Q(nrocausa__icontains=search_val)|
+                    Q(nrofactura__icontains=search_val)
+                )
+
+            total_records = base_qs.count()
+            total_filtered = filtered_qs.count()
+
+            # Aplicar anotaciones costosas solo a la página solicitada por DataTables.
             last_ubicacion_subquery = history_facturas.objects.filter(
                 factura=OuterRef('pk')
             ).order_by('-fecha').values('ubicacion')[:1]
 
-            obj_facturas = base_qs.order_by('-fecharadicado').select_related('empresa').annotate(
+            defered_list = filtered_qs.order_by('-fecharadicado').select_related('empresa').annotate(
                 total_pagado=Coalesce(Sum('pagos__valor'), 0, output_field=models.IntegerField()),
             ).annotate(
                 saldo=Coalesce(
@@ -3133,19 +3155,7 @@ def ajax_lista_facturas(request):
                     output_field=models.IntegerField()
                 ),
                 ubicacion_actual=Subquery(last_ubicacion_subquery),
-            )
-
-            if search_val:
-                obj_facturas = obj_facturas.filter(
-                    Q(nroradicado__icontains=search_val)|
-                    Q(nombretercero__icontains=search_val)|
-                    Q(nrocausa__icontains=search_val)|
-                    Q(nrofactura__icontains=search_val)
-                )
-
-            total_records = base_qs.count()
-            total_filtered = obj_facturas.count()
-            defered_list = obj_facturas[start:start+length]
+            )[start:start+length]
             
             i=0
             list_facturas = []

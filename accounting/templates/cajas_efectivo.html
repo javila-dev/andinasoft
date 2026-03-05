@@ -111,15 +111,9 @@
                   <div class='col-md-3'>
                     <div class="mb-3">
                       <label for="id_fecha_arqueo">Fecha arqueo</label>
-                      <input type="text" name="fecha" class="text-center dateinput form-control flatpickr-input" 
+                      <input type="text" name="fecha" class="text-center dateinput form-control" 
                         required="" id="id_fecha_arqueo" readonly="readonly">
                     </div>  
-                    <script>
-                      flatpickr('#id_fecha_arqueo',{
-                          dateFormat: 'Y-m-d',
-                          locale: "es",
-                      });
-                  </script>
                 </div>
                   <div class='row'>
                         <div class='col-md-6'>
@@ -493,8 +487,6 @@
 {%block js%}
 {%include 'datatable_buttons.html'%}
 {%include 'datepicker_gigjo.html'%}
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
 <script src='{%static "js/jquery.mask.js"%}'></script>
 <script src="{%static 'js/fstdropdown.js'%}"></script>
 <script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
@@ -545,11 +537,19 @@
 
     let endMonth = new Date()
 
-    // Initialize flatpickr for datefield inputs
+    // Initialize gijgo datepicker for arqueo and datefield inputs
+    $('#id_fecha_arqueo').datepicker({
+      uiLibrary: 'bootstrap4',
+      format: 'yyyy-mm-dd',
+      locale: 'es-es',
+      maxDate: endMonth
+    });
+
     $(".datefield").each(function() {
-      flatpickr(this, {
-        dateFormat: 'Y-m-d',
-        locale: "es",
+      $(this).datepicker({
+        uiLibrary: 'bootstrap4',
+        format: 'yyyy-mm-dd',
+        locale: 'es-es',
         minDate: initmonth,
         maxDate: endMonth,
       });
@@ -1897,7 +1897,6 @@
 {%endblock%}
 {%block style%}
 <link rel="stylesheet" href="{%static 'css/fstdropdown.css'%}">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
   th, td{
       text-align: center;
