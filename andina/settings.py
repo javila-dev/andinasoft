@@ -11,6 +11,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def env_bool(name, default=False):
     return os.getenv(name, str(default)).lower() in ('1', 'true', 'yes', 'on')
 
+
+def env_list(name, default=''):
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(',') if item.strip()]
+
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 DEBUG = env_bool('DEBUG', False)
@@ -18,7 +23,11 @@ LIVE = env_bool('LIVE', False)
 USE_S3_MEDIA = env_bool('USE_S3_MEDIA', False)
 MAINTENANCE_MODE = env_bool('MAINTENANCE_MODE', False)
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
+CSRF_TRUSTED_ORIGINS = env_list(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://localhost:8000,http://127.0.0.1:8000,https://app.somosandina.co,https://andinasoft.somosandina.co'
+)
 
 INSTALLED_APPS = [
     'material',
