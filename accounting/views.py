@@ -2047,7 +2047,7 @@ def impr_interf_egresos(request):
                 
                 nombre_doc=f'Interfaz_egresos_{egr_desde}_{egr_hasta}.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
-                ruta_dw=settings.MEDIA_URL+'/tmp/xlsx/'+nombre_doc
+                ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
                 book.save(ruta)
                 
                 data = {
@@ -2212,7 +2212,7 @@ def ajax_impr_int_notas(request):
             
             nombre_doc=f'Interfaz_notas_{empresa_egr}_{egr_desde}_{egr_hasta}.xlsx'
             ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
-            ruta_dw=settings.MEDIA_URL+'/tmp/xlsx/'+nombre_doc
+            ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
             book.save(ruta)
             
             data = {
@@ -3110,33 +3110,47 @@ def ajax_lista_facturas(request):
         if request.is_ajax():
             oficina = request.GET.get('oficina')
             if oficina == 'TODAS':
-                obj_facturas = Facturas.objects.all().order_by('-fecharadicado')
+                base_qs = Facturas.objects.all()
             else:
-                obj_facturas = Facturas.objects.filter(oficina=oficina).order_by('-fecharadicado')
-            draw = request.GET.get('draw')
-            start = request.GET.get('start')
-            length = request.GET.get('length')
+                base_qs = Facturas.objects.filter(oficina=oficina)
+            draw = int(request.GET.get('draw', 1))
+            start = int(request.GET.get('start', 0))
+            length = int(request.GET.get('length', 10))
+            if length <= 0:
+                length = 10
             search_val = request.GET.get('search[value]')
-            
-            obj_facturas = obj_facturas.annotate(
-                    saldo=Coalesce(F('pago_neto')-Sum('pagos__valor'),F('pago_neto'),output_field=models.IntegerField())
-                )
 
-            if search_val != "":
+            last_ubicacion_subquery = history_facturas.objects.filter(
+                factura=OuterRef('pk')
+            ).order_by('-fecha').values('ubicacion')[:1]
+
+            obj_facturas = base_qs.order_by('-fecharadicado').select_related('empresa').annotate(
+                total_pagado=Coalesce(Sum('pagos__valor'), 0, output_field=models.IntegerField()),
+            ).annotate(
+                saldo=Coalesce(
+                    F('pago_neto') - F('total_pagado'),
+                    F('pago_neto'),
+                    output_field=models.IntegerField()
+                ),
+                ubicacion_actual=Subquery(last_ubicacion_subquery),
+            )
+
+            if search_val:
                 obj_facturas = obj_facturas.filter(
                     Q(nroradicado__icontains=search_val)|
                     Q(nombretercero__icontains=search_val)|
                     Q(nrocausa__icontains=search_val)|
                     Q(nrofactura__icontains=search_val)
                 )
-            defered_list = obj_facturas[int(start):int(start)+int(length)]
+
+            total_records = base_qs.count()
+            total_filtered = obj_facturas.count()
+            defered_list = obj_facturas[start:start+length]
             
             i=0
             list_facturas = []
             for factura in defered_list:
-                ubicacion = history_facturas.objects.filter(factura=factura.pk)
-                try: ubicacion = ubicacion.last().ubicacion
-                except AttributeError: ubicacion = ''
+                ubicacion = factura.ubicacion_actual or ''
                 try: pagoneto = f'{factura.pago_neto:,}'
                 except TypeError: pagoneto=''
                 try:saldo = f'{factura.saldo:,}'
@@ -3161,9 +3175,9 @@ def ajax_lista_facturas(request):
                 })
                 i+=1
             data={
-                "draw": int(draw),
-                "recordsTotal": obj_facturas.count(),
-                "recordsFiltered": obj_facturas.count(),
+                "draw": draw,
+                "recordsTotal": total_records,
+                "recordsFiltered": total_filtered,
                 'data':list_facturas
                 }
             return JsonResponse(data)
@@ -4514,7 +4528,7 @@ def ajax_reclasificar_nomina(request):
                         
                 nombre_doc=f'Nomina_con_CC_reclasificados.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
-                ruta_dw=settings.MEDIA_URL+'/tmp/xlsx/'+nombre_doc
+                ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
                 book.save(ruta)
                 
                 data = {
@@ -5721,7 +5735,7 @@ def cajas_efectivo(request):
                     
                 nombre_doc=f'Interfaz_legalizacion_caja_{reembolso.caja.usuario_responsable.username}.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
-                ruta_dw=settings.MEDIA_URL+'/tmp/xlsx/'+nombre_doc
+                ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
                 book.save(ruta)
                 
                 data = {

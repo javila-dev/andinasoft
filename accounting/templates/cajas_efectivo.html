@@ -503,7 +503,11 @@
   function resolveMediaUrl(pathOrUrl) {
     if (!pathOrUrl) return '';
     if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
-    return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
+
+    const mediaPrefix = '{% get_media_prefix %}';
+    if (pathOrUrl.startsWith(mediaPrefix) || pathOrUrl.startsWith('/media/')) return pathOrUrl;
+
+    return mediaPrefix + pathOrUrl.replace(/^\/+/, '');
   }
 
   $(document).ready(function(){
