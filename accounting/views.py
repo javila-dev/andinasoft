@@ -3146,16 +3146,30 @@ def ajax_lista_facturas(request):
                 factura=OuterRef('pk')
             ).order_by('-fecha').values('ubicacion')[:1]
 
-            defered_list = filtered_qs.order_by('-fecharadicado').select_related('empresa').annotate(
-                total_pagado=Coalesce(Sum('pagos__valor'), 0, output_field=models.IntegerField()),
-            ).annotate(
-                saldo=Coalesce(
-                    F('pago_neto') - F('total_pagado'),
-                    F('pago_neto'),
-                    output_field=models.IntegerField()
-                ),
-                ubicacion_actual=Subquery(last_ubicacion_subquery),
-            )[start:start+length]
+            page_ids = list(
+                filtered_qs.order_by('-fecharadicado').values_list('pk', flat=True)[start:start+length]
+            )
+
+            if page_ids:
+                page_order = {pk: idx for idx, pk in enumerate(page_ids)}
+                defered_list = list(
+                    Facturas.objects.filter(pk__in=page_ids)
+                    .select_related('empresa')
+                    .annotate(
+                        total_pagado=Coalesce(Sum('pagos__valor'), 0, output_field=models.IntegerField()),
+                    )
+                    .annotate(
+                        saldo=Coalesce(
+                            F('pago_neto') - F('total_pagado'),
+                            F('pago_neto'),
+                            output_field=models.IntegerField()
+                        ),
+                        ubicacion_actual=Subquery(last_ubicacion_subquery),
+                    )
+                )
+                defered_list.sort(key=lambda f: page_order.get(f.pk, 0))
+            else:
+                defered_list = []
             
             i=0
             list_facturas = []
