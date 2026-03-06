@@ -151,6 +151,13 @@ def _resolve_soporte_url(soporte_path):
         return f"{media_url.rstrip('/')}/{key.lstrip('/')}"
 
 
+def _save_workbook_with_dirs(book, path):
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    book.save(path)
+
+
 @login_required
 def proyecto_popup(request,redireccion):
     redirecciones={
@@ -6362,7 +6369,7 @@ def presupuesto_cartera(request,proyecto,periodo):
                 i+=1
             filename = f'Presupuesto_{proyecto}_periodo_{periodo}.xlsx'
             ruta=settings.DIR_EXPORT+filename
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
     
     usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
@@ -6814,7 +6821,7 @@ def interfaces_bancarias(request):
         
         nombre_doc=f'Interfaz_PAB_Comisiones_{proyecto}_{desde}_{hasta}.xlsx'
         ruta=settings.DIR_EXPORT+nombre_doc
-        book.save(ruta)
+        _save_workbook_with_dirs(book, ruta)
         return FileResponse(open(ruta,'rb'),as_attachment=True,filename=nombre_doc)    
                 
                 
@@ -6863,7 +6870,7 @@ def interfaces_contabilidad(request,proyecto):
                         row+=1
             filename = f'Interfaz_Recibos_{proyecto}_{desde}_{hasta}.xlsx'
             ruta=settings.DIR_EXPORT+filename
-            book.save(ruta)            
+            _save_workbook_with_dirs(book, ruta)            
             file = open(ruta,'rb')
             return FileResponse(file,as_attachment=True,filename=filename)
         
@@ -6956,7 +6963,7 @@ def interfaces_contabilidad(request,proyecto):
                     cruce+=1
             name=f'Comisiones_{proyecto}_desde_{fecha_desde}_hasta_{fecha_hasta}.xlsx'
             ruta=settings.DIR_EXPORT+f'Comisiones_{proyecto}_desde_{fecha_desde}_hasta_{fecha_hasta}.xlsx'
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=name)
             """ context['alerta']=True
             context['titulo_alerta']='¡Listo!'
@@ -7029,7 +7036,7 @@ def interfaces_contabilidad(request,proyecto):
                 i+=1
             filename=f'Recaudo_detallado_{proyecto}.xlsx'
             ruta=settings.MEDIA_ROOT+'/tmp/'+filename
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             return JsonResponse({'url': settings.MEDIA_URL + 'tmp/' + filename})
          
          
@@ -7089,7 +7096,7 @@ def reporte_cartera(request,proyecto,año):
         row+=1
         
     ruta=settings.DIR_EXPORT+f'prueba.xlsx'
-    book.save(ruta)
+    _save_workbook_with_dirs(book, ruta)
     file=open(ruta,'rb')
     response=FileResponse(file,as_attachment=True,filename='prueba.xlsx')
     return response
@@ -7768,7 +7775,7 @@ def informe_mes(request,proyecto):
                 row+=1  
             filename=f'Informe_{proyecto}_periodo_{periodo}.xlsx'
             ruta=settings.DIR_EXPORT+filename
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
         
         if request.POST.get('btnAlttum'):
@@ -7807,7 +7814,7 @@ def informe_mes(request,proyecto):
                 row+=1
             filename=f'Informe_{alttum}_periodo_{periodo}.xlsx'
             ruta=settings.DIR_EXPORT+filename
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
         
         if request.POST.get('flujoingresos'):
@@ -7844,7 +7851,7 @@ def informe_mes(request,proyecto):
                 i+=1
             filename=f'FlujoIngresos_{proyecto}_hasta_{periodo}.xlsx'
             ruta=settings.DIR_EXPORT+filename
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
     
     return render(request,'informe_mes.html',context)
@@ -8223,7 +8230,7 @@ def buscar_cliente(request):
                 
                 nombre_doc='Interfaz_Terceros.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/'+nombre_doc
-                book.save(ruta)
+                _save_workbook_with_dirs(book, ruta)
                 
                 data = {
                     'ruta': settings.MEDIA_URL + 'tmp/' + nombre_doc
@@ -8823,7 +8830,7 @@ def compare_siigo_andinasoft_clients(request):
         nombre_doc=f'siigo_saldos_terceros.xlsx'
         ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
         ruta_dw=settings.MEDIA_URL+'/tmp/xlsx/'+nombre_doc
-        documento.save(ruta)
+        _save_workbook_with_dirs(documento, ruta)
         
         data = {
             'corpus':f'''<ul>
@@ -9544,7 +9551,7 @@ def cartera_month_results(request):
                 
         filename = f'Informe_cartera_periodo_{periodo}.xlsx'
         ruta=settings.DIR_EXPORT+filename
-        book.save(ruta)
+        _save_workbook_with_dirs(book, ruta)
         return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
         
     return render(request,'reporte_ov.html')

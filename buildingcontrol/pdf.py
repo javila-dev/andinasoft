@@ -9,6 +9,13 @@ from buildingcontrol import models as building_models
 from django.conf import settings
 from andinasoft.create_pdf import GenerarPDF
 import traceback
+import os
+
+
+def _ensure_parent_dir(path):
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
        
 def ordenCompra(request):
@@ -21,6 +28,7 @@ def ordenCompra(request):
                 items = building_models.items_contrato.objects.filter(contrato=contrato,otrosi__isnull=True).order_by('tipo_obra')
                 nombre_doc = f'Orden_{contrato}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+nombre_doc
+                _ensure_parent_dir(ruta)
                 pdf = GenerarPDF()
                 pdf.ordenCompra(obj_contrato,items,ruta)
                 
@@ -50,6 +58,7 @@ def actaRecibido(request):
             items = building_models.items_recibidos.objects.filter(acta=acta)
             nombre_doc = f'Acta_{obj_acta[0].num_acta}_Orden_{obj_acta[0].contrato.pk}.pdf'
             ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+nombre_doc
+            _ensure_parent_dir(ruta)
             pdf = GenerarPDF()
             pdf.actaRecibido(obj_contrato,obj_acta[0],items,ruta)
             
@@ -73,6 +82,7 @@ def adicionalesOrden(request):
                 items = building_models.items_contrato.objects.filter(contrato=contrato,otrosi=adicional)
                 nombre_doc = f'Adicional_{obj_adicional.num_otrosi}_Orden_{contrato}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+nombre_doc
+                _ensure_parent_dir(ruta)
                 pdf = GenerarPDF()
                 pdf.adicionalOrden(obj_contrato,obj_adicional,items,ruta)
                 

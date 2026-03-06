@@ -21,6 +21,13 @@ import os
 from docx import Document
 
 
+def _save_workbook_with_dirs(book, path):
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    book.save(path)
+
+
 def data_inmueble(request,proyecto):
     
     if request.method == 'GET':
@@ -277,7 +284,7 @@ def base_propietarios(request):
                 i+=1
         filename = f'Baseclientesactivos_{proyecto}.xlsx'
         ruta=settings.MEDIA_ROOT+'/tmp/pdf/'+filename
-        book.save(ruta)
+        _save_workbook_with_dirs(book, ruta)
         """ data = {
             'file': settings.MEDIA_URL + 'tmp/pdf/' + filename
         }

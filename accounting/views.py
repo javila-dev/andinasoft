@@ -98,6 +98,19 @@ def _media_url(file_field):
     except Exception:
         return str(file_field)
 
+
+def _save_workbook_with_dirs(book, path):
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    book.save(path)
+
+
+def _ensure_parent_dir(path):
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
 def _normalize_account(value):
     if not value:
         return None
@@ -1595,6 +1608,7 @@ def view_otros_ingresos(request):
                         oficina=ingreso.oficina).count()
                 filename = f'Recibo_ingreso_{ingreso.oficina}_{consecutivo_ofic}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
+                _ensure_parent_dir(ruta)
                 GenerarPDF().reciboIngreso(ingreso,consecutivo_ofic,ruta)
                 ruta_download = settings.MEDIA_URL + 'tmp/pdf/' + filename
                 texto = f'Se creó el recibo de ingreso #{consecutivo_ofic}, puedes descargarlo <a href="{ruta_download}" class="font-weight-bold" target="_blank">Aqui</a>'
@@ -1701,7 +1715,7 @@ def ajax_print_interfaz_banco(request):
             nombre_doc=f'Interfaz_PAB_GTT_{proyecto}_{desde}_{hasta}.xlsx'
             
         ruta=settings.MEDIA_ROOT+'/tmp/'+nombre_doc
-        book.save(ruta)
+        _save_workbook_with_dirs(book, ruta)
         
         data = {
             'ruta': settings.MEDIA_URL + 'tmp/' + nombre_doc
@@ -2048,7 +2062,7 @@ def impr_interf_egresos(request):
                 nombre_doc=f'Interfaz_egresos_{egr_desde}_{egr_hasta}.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
                 ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
-                book.save(ruta)
+                _save_workbook_with_dirs(book, ruta)
                 
                 data = {
                     'texto':f'''<ul>
@@ -2213,7 +2227,7 @@ def ajax_impr_int_notas(request):
             nombre_doc=f'Interfaz_notas_{empresa_egr}_{egr_desde}_{egr_hasta}.xlsx'
             ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
             ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
-            book.save(ruta)
+            _save_workbook_with_dirs(book, ruta)
             
             data = {
                 'texto':f'''<ul>
@@ -2769,6 +2783,7 @@ def ajax_imprimir_conciliacion(request):
         cuenta_banco = cuentas_pagos.objects.get(pk=cuenta).cuentabanco
         filename = f'Conciliacion_{empresas.objects.get(pk=empresa).pk}_{cuenta_banco}_{conciliacion}.pdf'
         ruta = settings.MEDIA_ROOT +'/tmp/pdf/'+filename
+        _ensure_parent_dir(ruta)
         GenerarPDF().Conciliacion(
             empresa = empresas.objects.get(pk=empresa),
             cuenta_banco= cuentas_pagos.objects.get(pk=cuenta).cuentabanco,
@@ -3624,6 +3639,8 @@ def ajax_print_planilla(request):
                 
                 obj_empresa = empresas.objects.get(pk=empresa)
                 filename = f'Planilla_Mvtos_{empresa}_{fecha}.pdf'
+                ruta_pdf = settings.MEDIA_ROOT+f'/tmp/pdf/{filename}'
+                _ensure_parent_dir(ruta_pdf)
                 GenerarPDF().planillaMovimientos(
                     empresa=obj_empresa,fecha =fecha,cuentas=cuentas_seleccionadas,
                     obj_ingresos=list_ingresos,
@@ -3637,7 +3654,7 @@ def ajax_print_planilla(request):
                     cuenta_efectivo =cuenta_efectivo,
                     pagos_efectivo=list_efectivo,
                     obj_saldo_ini = obj_saldo_ini,
-                    ruta = settings.MEDIA_ROOT+f'/tmp/pdf/{filename}'
+                    ruta = ruta_pdf
                 )
                 ruta_dw = settings.MEDIA_URL+f'tmp/pdf/{filename}'
                 data = {
@@ -3816,6 +3833,7 @@ def ajax_print_egreso(request):
                             ).count()+1
                 filename = f'Anticipo_{obj_pagos.oficina}_{consecutivo}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
+                _ensure_parent_dir(ruta)
                 GenerarPDF().reciboAnticipos(obj_pagos,consecutivo,ruta)
                 
                 data = {
@@ -3829,6 +3847,7 @@ def ajax_print_egreso(request):
                             ).count()+1
                 filename = f'Egreso_{obj_pagos.nroradicado.oficina}_{consecutivo}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
+                _ensure_parent_dir(ruta)
                 GenerarPDF().reciboEgreso(obj_pagos,consecutivo,ruta)
                 
                 data = {
@@ -3873,6 +3892,7 @@ def ajax_imprimir_otros_ingresos(request):
                     oficina=ingreso.oficina).count()
             filename = f'Recibo_ingreso_{ingreso.oficina}_{consecutivo_ofic}.pdf'
             ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
+            _ensure_parent_dir(ruta)
             GenerarPDF().reciboIngreso(ingreso,consecutivo_ofic,ruta)
             ruta_download = settings.MEDIA_URL + 'tmp/pdf/' + filename
             data = {
@@ -4553,7 +4573,7 @@ def ajax_reclasificar_nomina(request):
                 nombre_doc=f'Nomina_con_CC_reclasificados.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
                 ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
-                book.save(ruta)
+                _save_workbook_with_dirs(book, ruta)
                 
                 data = {
                     'texto':f'''<ul>
@@ -5077,6 +5097,7 @@ def legalizaciones(request):
                         oficina=ingreso.oficina).count()
                 filename = f'Recibo_ingreso_{ingreso.oficina}_{consecutivo_ofic}.pdf'
                 ruta = settings.MEDIA_ROOT+'/tmp/pdf/'+filename
+                _ensure_parent_dir(ruta)
                 GenerarPDF().reciboIngreso(ingreso,consecutivo_ofic,ruta)
                 ruta_download = settings.MEDIA_URL + 'tmp/pdf/' + filename
                 
@@ -5760,7 +5781,7 @@ def cajas_efectivo(request):
                 nombre_doc=f'Interfaz_legalizacion_caja_{reembolso.caja.usuario_responsable.username}.xlsx'
                 ruta=settings.MEDIA_ROOT+'/tmp/xlsx/'+nombre_doc
                 ruta_dw=settings.MEDIA_URL+'tmp/xlsx/'+nombre_doc
-                book.save(ruta)
+                _save_workbook_with_dirs(book, ruta)
                 
                 data = {
                     'class': 'alert-success',
