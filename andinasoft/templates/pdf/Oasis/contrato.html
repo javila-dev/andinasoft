@@ -883,28 +883,31 @@
         <div class="sig-nit">C.C. {{ ctr.titulares.0.pk }}</div>
       </div>
     </div>
-    <!-- Compradores adicionales -->
+    <!-- Compradores adicionales: siempre 2 columnas de 50% por fila -->
     {% if ctr.titulares.1 %}
-    <div style="display:table; width:100%;">
-      <div style="display:table-cell; {% if ctr.titulares.3 %}width:33%;{% elif ctr.titulares.2 %}width:50%;{% else %}width:50%;{% endif %} text-align:center; padding:0 10pt; vertical-align:top;">
+    <div style="display:table; width:100%; margin-bottom:24pt;">
+      <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; vertical-align:top;">
         <div class="sig-line" style="padding-bottom:28pt;"></div>
         <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.1.nombrecompleto|upper }}</div>
         <div class="sig-nit">C.C. {{ ctr.titulares.1.pk }}</div>
       </div>
-      {% if ctr.titulares.2 %}
-      <div style="display:table-cell; {% if ctr.titulares.3 %}width:33%;{% else %}width:50%;{% endif %} text-align:center; padding:0 10pt; vertical-align:top;">
+      <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; vertical-align:top;">
+        {% if ctr.titulares.2 %}
         <div class="sig-line" style="padding-bottom:28pt;"></div>
         <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.2.nombrecompleto|upper }}</div>
         <div class="sig-nit">C.C. {{ ctr.titulares.2.pk }}</div>
+        {% endif %}
       </div>
-      {% endif %}
-      {% if ctr.titulares.3 %}
-      <div style="display:table-cell; width:33%; text-align:center; padding:0 10pt; vertical-align:top;">
+    </div>
+    {% endif %}
+    {% if ctr.titulares.3 %}
+    <div style="display:table; width:100%;">
+      <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; vertical-align:top;">
         <div class="sig-line" style="padding-bottom:28pt;"></div>
         <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.3.nombrecompleto|upper }}</div>
         <div class="sig-nit">C.C. {{ ctr.titulares.3.pk }}</div>
       </div>
-      {% endif %}
+      <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; vertical-align:top;"></div>
     </div>
     {% endif %}
 
