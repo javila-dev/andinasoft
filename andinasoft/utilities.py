@@ -29,7 +29,10 @@ from django.db.models.fields.files import FileField, ImageField
 
 
 
-_HASHED_STATIC_RE = re.compile(r"^(?P<prefix>.+)\.[0-9a-f]{8,32}(?P<suffix>\.[^./]+)$")
+_HASHED_STATIC_RE = re.compile(r"^(?P<prefix>.+)\.[0-9a-f]{6,64}(?P<suffix>\.[^./]+)$")
+_STATIC_URL_TOKEN_RE = re.compile(
+    r"""(?P<prefix>url\(\s*['"]?|['"])(?P<url>(?:https?:)?//[^'")\s]+|/static/[^'")\s]+)(?P<suffix>['"]?\s*\)|['"])"""
+)
 
 
 def _unhashed_static_key(static_key):
@@ -76,6 +79,28 @@ def _resolve_static_path(static_key):
         except Exception:
             pass
     return None
+
+
+def _replace_static_urls_with_file_urls(html):
+    if not html:
+        return html
+
+    def _replace(match):
+        raw_url = match.group("url")
+        parsed = urlparse(raw_url)
+        candidate = parsed.path if parsed.scheme else raw_url
+
+        if not candidate.startswith(settings.STATIC_URL):
+            return match.group(0)
+
+        static_key = candidate.replace(settings.STATIC_URL, "", 1)
+        static_path = _resolve_static_path(static_key)
+        if not static_path or not os.path.exists(static_path):
+            return match.group(0)
+
+        return f"{match.group('prefix')}file://{static_path}{match.group('suffix')}"
+
+    return _STATIC_URL_TOKEN_RE.sub(_replace, html)
 
 
 def link_callback(uri, rel):
@@ -159,6 +184,7 @@ def pdf_gen_weasy(template_path, context, filename):
         raise RuntimeError("WeasyPrint no está instalado.")
     template = get_template(template_path)
     html = template.render(context)
+    html = _replace_static_urls_with_file_urls(html)
     oasis_logo_path = _resolve_static_path("img/logo_oasis.png")
     if oasis_logo_path:
         html = html.replace(
