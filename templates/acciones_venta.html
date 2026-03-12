@@ -502,7 +502,20 @@
                 "useCurrent": true,
                 "collapse": false,
                 "locale": "es-co",
-                'date':'{{f_escritura|date:"Y-m-d"}}'
+                'date':'{{f_escritura|date:"Y-m-d"}}',
+                'minDate':'{{f_escritura|date:"Y-m-d"}}'
+            });
+            // Cuando cambia fechaentrega, actualizar minDate de fechaescritura
+            $('#id_fechaentrega').on('change.datetimepicker', function(e) {
+                var selectedDate = e.date;
+                if (selectedDate) {
+                    $('#id_fechaescritura').datetimepicker('minDate', selectedDate);
+                    // Si la fecha actual de escritura es anterior a la nueva entrega, ajustar
+                    var currentEscritura = $('#id_fechaescritura').datetimepicker('date');
+                    if (currentEscritura && currentEscritura.isBefore(selectedDate)) {
+                        $('#id_fechaescritura').datetimepicker('date', selectedDate);
+                    }
+                }
             });
         } else {
             setTimeout(function () {

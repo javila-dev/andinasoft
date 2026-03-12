@@ -4386,6 +4386,19 @@ def acciones_venta(request,proyecto,contrato):
                         context['mensaje'] = mensaje
                         context['link'] = False
                         return render(request,'acciones_venta.html',context)
+                    if fecha_escritura.date() < fecha_entrega.date():
+                        alerta = True
+                        titulo = 'Error'
+                        link = False
+                        mensaje = (
+                            f'La fecha de escritura ({fecha_escritura.date()}) no puede ser anterior '
+                            f'a la fecha de entrega ({fecha_entrega.date()}).'
+                        )
+                        context['alerta'] = True
+                        context['titulo'] = titulo
+                        context['mensaje'] = mensaje
+                        context['link'] = False
+                        return render(request,'acciones_venta.html',context)
                     
                     parametro=obj_parametro.get(descripcion='formasOpcionManual')
                     if parametro.estado:
