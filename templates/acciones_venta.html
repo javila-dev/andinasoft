@@ -302,6 +302,9 @@
                                     </div>
                                 </div>
                             </div>
+                            <small class="form-text text-muted">
+                                Fecha minima: {{ f_entrega|date:"Y-m-d" }} ({{ min_meses_entrega }} meses desde la fecha del contrato).
+                            </small>
                             <br>
                             <div class="input-group" id="div_id_fechaescritura" data-target-input="nearest">
                                 <div class='input-group-prepend'>
@@ -322,7 +325,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-                        <input class='btn btn-primary' type="submit" name="impPromesa" value='Imprimir'>
+                        <input class='btn btn-primary' type="submit" id="btn-imp-promesa" name="impPromesa" value='Imprimir'>
                     </div>
                 </div>
             </div>
@@ -479,7 +482,8 @@
                 "useCurrent": true,
                 "collapse": false,
                 "locale": "es-co",
-                'date':'{{f_entrega|date:"Y-m-d"}}'
+                'date':'{{f_entrega|date:"Y-m-d"}}',
+                'minDate':'{{f_entrega|date:"Y-m-d"}}'
             });
         } else {
             setTimeout(function () {
@@ -512,6 +516,14 @@
 <script>
     $('#nro-ctas-ci').val(7)
     $(document).ready(function () {
+        function resetPromesaPrintButton() {
+            $('#btn-imp-promesa').removeClass('disabled').prop('disabled', false);
+        }
+
+        resetPromesaPrintButton();
+        $('#ModalPromesas').on('shown.bs.modal', resetPromesaPrintButton);
+        $(window).on('pageshow', resetPromesaPrintButton);
+
         $('#btnsagrilaft').click(function () {
             $(this).addClass('disabled')
             .html('<i class="fas fa-spinner fa-pulse"></i>')

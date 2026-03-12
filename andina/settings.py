@@ -134,6 +134,7 @@ DATABASES = {
     'Fractal':            make_db(os.getenv('DB_FRACTAL',      'developer_fractal')),
     'Alttum':             make_db(os.getenv('DB_ALTTUM',       'developer_alttum'), MYSQL_OPTIONS_ALTTUM),
     'Casas de Verano':    make_db(os.getenv('DB_CASASVERANO',  'developer_casasdeverano')),
+    'Oasis':              make_db(os.getenv('DB_OASIS',        'developer_oasis')),
 }
 
 # ─── Auth ────────────────────────────────────────────────────────────────────

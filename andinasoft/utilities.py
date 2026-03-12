@@ -1,13 +1,21 @@
 import math
+import mimetypes
 import os
 import tempfile
+from urllib.parse import urlparse
 import numpy_financial as npf
 #import pytesseract
 from django.template.loader import get_template
 from django.conf import settings
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
+from django.contrib.staticfiles import finders
 from xhtml2pdf import pisa
+try:
+    from weasyprint import HTML, default_url_fetcher
+except ImportError:  # pragma: no cover
+    HTML = None
+    default_url_fetcher = None
 from dateutil.relativedelta import relativedelta
 from datetime import datetime
 from decimal import Decimal
@@ -19,12 +27,41 @@ from django.db.models.fields.files import FileField, ImageField
 
 
 
+def _resolve_static_path(static_key):
+    cleaned_key = (static_key or "").lstrip("/")
+
+    if getattr(settings, "STATIC_ROOT", None):
+        candidate = os.path.join(settings.STATIC_ROOT, cleaned_key)
+        if os.path.exists(candidate):
+            return candidate
+
+    for static_dir in getattr(settings, "STATICFILES_DIRS", []):
+        candidate = os.path.join(static_dir, cleaned_key)
+        if os.path.exists(candidate):
+            return candidate
+
+    found = finders.find(cleaned_key)
+    if isinstance(found, (list, tuple)):
+        for item in found:
+            if item and os.path.exists(item):
+                return item
+        return found[0] if found else None
+    return found
+
+
 def link_callback(uri, rel):
     path = ''
-    if uri.startswith(settings.STATIC_URL):
-        return os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
-    if uri.startswith(settings.MEDIA_URL):
-        media_key = uri.replace(settings.MEDIA_URL, "")
+    parsed = urlparse(uri)
+    candidate = parsed.path if parsed.scheme else uri
+
+    if candidate.startswith(settings.STATIC_URL):
+        static_key = candidate.replace(settings.STATIC_URL, "", 1)
+        static_path = _resolve_static_path(static_key)
+        if static_path:
+            return static_path
+        return os.path.join(settings.STATIC_ROOT, static_key)
+    if candidate.startswith(settings.MEDIA_URL):
+        media_key = candidate.replace(settings.MEDIA_URL, "", 1)
         if getattr(settings, 'USE_S3_MEDIA', False):
             suffix = os.path.splitext(media_key)[1]
             with default_storage.open(media_key, "rb") as stored_file:
@@ -59,6 +96,70 @@ def pdf_gen(template_path,context,filename,):
         'root':settings.MEDIA_ROOT + f'/tmp/{filename}'
     }
    
+    return output
+
+
+def weasy_url_fetcher(url):
+    if default_url_fetcher is None:
+        raise RuntimeError("WeasyPrint no está instalado.")
+    parsed = urlparse(url)
+    candidate = parsed.path if parsed.scheme else url
+
+    if candidate.startswith(settings.STATIC_URL):
+        static_key = candidate.replace(settings.STATIC_URL, "", 1)
+        static_path = _resolve_static_path(static_key)
+        if static_path and os.path.exists(static_path):
+            mime_type = mimetypes.guess_type(static_path)[0]
+            return {"file_obj": open(static_path, "rb"), "mime_type": mime_type}
+
+    if candidate.startswith(settings.MEDIA_URL):
+        media_key = candidate.replace(settings.MEDIA_URL, "", 1)
+        if getattr(settings, 'USE_S3_MEDIA', False):
+            return {"file_obj": default_storage.open(media_key, "rb")}
+
+        media_path = os.path.join(settings.MEDIA_ROOT, media_key)
+        if os.path.exists(media_path):
+            mime_type = mimetypes.guess_type(media_path)[0]
+            return {"file_obj": open(media_path, "rb"), "mime_type": mime_type}
+
+    return default_url_fetcher(url)
+
+
+def pdf_gen_weasy(template_path, context, filename):
+    if HTML is None:
+        raise RuntimeError("WeasyPrint no está instalado.")
+    template = get_template(template_path)
+    html = template.render(context)
+    oasis_logo_path = _resolve_static_path("img/logo_oasis.png")
+    if oasis_logo_path:
+        html = html.replace(
+            "/static/img/logo_oasis.png",
+            f"file://{oasis_logo_path}",
+        )
+    plano_oasis_path = _resolve_static_path("img/plano_oasis.jpg")
+    if not plano_oasis_path or not os.path.exists(plano_oasis_path):
+        plano_oasis_path = os.path.join(
+            settings.BASE_DIR, "andinasoft/templates/pdf/Oasis/plano.jpg"
+        )
+    if plano_oasis_path and os.path.exists(plano_oasis_path):
+        html = html.replace(
+            "/static/img/plano_oasis.jpg",
+            f"file://{plano_oasis_path}",
+        )
+    file_dir = settings.MEDIA_ROOT + f'/tmp/{filename}'
+    os.makedirs(settings.MEDIA_ROOT + '/tmp', exist_ok=True)
+
+    HTML(
+        string=html,
+        base_url=settings.BASE_DIR,
+        url_fetcher=weasy_url_fetcher
+    ).write_pdf(target=file_dir)
+
+    output = {
+        'url': settings.MEDIA_URL + f'tmp/{filename}',
+        'root': settings.MEDIA_ROOT + f'/tmp/{filename}'
+    }
+
     return output
 
 def get_text_from_file(file_path):
@@ -322,3 +423,113 @@ class Utilidades():
                   11:'Noviembre',
                   12:'Diciembre'}
         return dctMeses[nroMes]
+
+
+def calcular_tabla_amortizacion(ctr):
+    """
+    Genera la tabla de amortización (sistema francés, cuota fija) a partir
+    de los datos de ventas_nuevas, sin requerir que exista plan_pagos.
+    Incluye CI, CE y FN ordenadas por fecha.
+
+    Retorna lista de dicts: {nrocta, fecha, tipo, capital, intcte, cuota, saldo_capital}.
+    """
+    from decimal import ROUND_HALF_UP
+
+    filas_sin_orden = []
+    saldo_corriente = Decimal(str(ctr.valor_venta))
+
+    # ── Filas de Cuota Inicial ──────────────────────────────────────────
+    for n in range(1, 8):
+        cant  = getattr(ctr, f'cant_ci{n}',  None)
+        fecha = getattr(ctr, f'fecha_ci{n}', None)
+        valor = getattr(ctr, f'valor_ci{n}', None)
+        if cant is None or fecha is None or valor is None:
+            continue
+        valor = Decimal(str(valor))
+        for j in range(int(cant)):
+            filas_sin_orden.append({
+                'fecha':  fecha + relativedelta(months=j),
+                'tipo':   'Cuota Inicial',
+                'capital': valor,
+                'intcte':  Decimal('0'),
+                'cuota':   valor,
+            })
+
+    # ── Filas de Cuota Extraordinaria ───────────────────────────────────
+    valor_ce    = ctr.valor_ctas_ce
+    inicio_ce   = ctr.inicio_ce
+    nro_ce      = ctr.nro_cuotas_ce
+    periodo_ce  = ctr.period_ce
+
+    if all([valor_ce, inicio_ce, nro_ce, periodo_ce]):
+        valor_ce   = Decimal(str(valor_ce))
+        intervalo  = int(periodo_ce)
+        for j in range(int(nro_ce)):
+            filas_sin_orden.append({
+                'fecha':   inicio_ce + relativedelta(months=j * intervalo),
+                'tipo':    'Cuota Extraordinaria',
+                'capital': valor_ce,
+                'intcte':  Decimal('0'),
+                'cuota':   valor_ce,
+            })
+
+    # ── Filas de Financiación ───────────────────────────────────────────
+    saldo      = ctr.saldo
+    tasa       = ctr.tasa
+    nro_cuotas = ctr.nro_cuotas_fn
+    inicio     = ctr.inicio_fn
+
+    if all([saldo, tasa, nro_cuotas, inicio]):
+        saldo      = Decimal(str(saldo))
+        tasa       = Decimal(str(tasa))
+        nro_cuotas = int(nro_cuotas)
+
+        if tasa > 1:
+            tasa = tasa / Decimal('100')
+
+        if tasa == 0:
+            cuota_fija = (saldo / nro_cuotas).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        else:
+            factor     = (1 + tasa) ** nro_cuotas
+            cuota_fija = (saldo * tasa * factor / (factor - 1)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+
+        capital_pendiente = saldo
+
+        for i in range(1, nro_cuotas + 1):
+            interes       = (capital_pendiente * tasa).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+            abono_capital = cuota_fija - interes
+            fecha         = inicio + relativedelta(months=i)
+
+            if i == nro_cuotas:
+                abono_capital = capital_pendiente
+                cuota_real    = abono_capital + interes
+            else:
+                cuota_real = cuota_fija
+
+            capital_pendiente -= abono_capital
+
+            filas_sin_orden.append({
+                'fecha':   fecha,
+                'tipo':    'Financiación',
+                'capital': abono_capital,
+                'intcte':  interes,
+                'cuota':   cuota_real,
+            })
+
+    # ── Ordenar por fecha y calcular saldo_capital acumulado ────────────
+    filas_sin_orden.sort(key=lambda r: r['fecha'])
+
+    tabla = []
+    for nro, fila in enumerate(filas_sin_orden, start=1):
+        saldo_corriente -= fila['capital']
+        tabla.append({
+            'nrocta':        nro,
+            'fecha':         fila['fecha'],
+            'tipo':          fila['tipo'],
+            'capital':       fila['capital'],
+            'intcte':        fila['intcte'],
+            'cuota':         fila['cuota'],
+            'saldo_capital': saldo_corriente,
+        })
+
+    return tabla

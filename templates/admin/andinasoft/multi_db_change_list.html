@@ -1,0 +1,16 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+{{ block.super }}
+<li>
+    <form method="get" style="display:inline-flex;gap:6px;align-items:center;">
+        <label for="db-selector" style="font-weight:600;">Base:</label>
+        <select id="db-selector" name="{{ db_param }}">
+            {% for alias in available_databases %}
+            <option value="{{ alias }}" {% if alias == current_db %}selected{% endif %}>{{ alias }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="button">Cambiar</button>
+    </form>
+</li>
+{% endblock %}

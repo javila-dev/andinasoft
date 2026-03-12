@@ -1733,6 +1733,8 @@ def impr_interf_egresos(request):
                 egr_desde = request.POST.get('egr_desde')
                 egr_hasta = request.POST.get('egr_hasta')
                 consec_egr = int(request.POST.get('numero_inicial_egr'))
+                if not cuentas_egr:
+                    raise ValueError('Debes seleccionar al menos una cuenta para generar la interfaz.')
                 list_mvtos = []
                 for cuenta in cuentas_egr:
                     cuenta = int(cuenta)
@@ -2031,6 +2033,11 @@ def impr_interf_egresos(request):
                             })
                     
                 list_mvtos_ord = sorted(list_mvtos,key=operator.itemgetter('fecha'))
+                if not list_mvtos_ord:
+                    data = {
+                        'texto': '<ul><li>No se encontraron movimientos con los filtros seleccionados.</li></ul>'
+                    }
+                    return JsonResponse(data)
                 
                 book=openpyxl.load_workbook("resources/excel_formats/InterfazSIIGO.xlsx")
                 sheet=book.active
@@ -2087,6 +2094,11 @@ def ajax_impr_int_notas(request):
             consec_egr = int(request.POST.get('numero_inicial_nota'))
             cuentas_egr = request.POST.getlist('cuentas_notas')
             oficina_egr = request.POST.get('oficina_notas')
+            if not cuentas_egr:
+                data = {
+                    'texto':'<ul><li>Debes seleccionar al menos una cuenta para generar la interfaz de notas.</li></ul>'
+                }
+                return JsonResponse(data)
             list_mvtos = [] 
             
             for cuenta in cuentas_egr:
@@ -2199,6 +2211,11 @@ def ajax_impr_int_notas(request):
                     })
                 
             list_mvtos_ord = sorted(list_mvtos,key=operator.itemgetter('fecha'))
+            if not list_mvtos_ord:
+                data = {
+                    'texto':'<ul><li>No se encontraron movimientos para la interfaz de notas con los filtros seleccionados.</li></ul>'
+                }
+                return JsonResponse(data)
             
             book=openpyxl.load_workbook("resources/excel_formats/InterfazSIIGO.xlsx")
             sheet=book.active

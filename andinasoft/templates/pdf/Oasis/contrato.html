@@ -1,0 +1,1035 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  /* ===================== PÁGINA ===================== */
+  @page {
+    size: Legal;
+    margin: 134pt 0 72pt 0;
+    @top-center { content: element(running_header); }
+    @bottom-center { content: element(footer_content); }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Ubuntu, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #2C2C2C;
+    background: white;
+  }
+
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/UbuntuLight.ttf' %}");
+  }
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/UbuntuBold.ttf' %}");
+    font-weight: bold;
+  }
+
+  /* ===================== HEADER RUNNING ===================== */
+  #running_header { position: running(running_header); width: 100%; }
+
+  .header-top-bar { height: 6pt; background-color: #F0E6D8; width: 100%; }
+
+  .header-content {
+    display: table; width: 100%;
+    padding: 18pt 36pt 14pt 36pt;
+  }
+
+  .header-left { display: table-cell; vertical-align: middle; width: 60%; }
+
+  .header-title-block { border-left: 3pt solid #D4572A; padding-left: 10pt; }
+
+  .header-title-block .contract-title {
+    font-size: 12pt; font-weight: bold; color: #1A4A4A;
+    text-transform: uppercase; letter-spacing: 0.5pt; line-height: 1.3;
+  }
+
+  .header-title-block .contract-subtitle {
+    font-size: 9pt; color: #D4572A; font-weight: 600;
+    margin-top: 2pt; text-transform: uppercase; letter-spacing: 0.3pt;
+  }
+
+  .header-right { display: table-cell; vertical-align: middle; text-align: right; width: 40%; }
+  .header-right img { height: 52pt; width: auto; }
+
+  .header-divider { height: 2pt; background-color: #D4572A; margin: 0 36pt; }
+
+  .contract-number-bar {
+    background-color: #1A4A4A; color: white;
+    padding: 5pt 36pt; display: table; width: 100%;
+  }
+  .contract-number-bar .number {
+    display: table-cell; text-align: right;
+    font-weight: bold; font-size: 10pt; color: #F0E6D8; vertical-align: middle;
+  }
+
+  /* ===================== FOOTER RUNNING ===================== */
+  #footer_content { position: running(footer_content); width: 100%; }
+
+  @page { @bottom-center { content: element(footer_content); } }
+
+  .footer-main { background-color: #1A4A4A; display: table; width: 100%; }
+
+  .footer-left { display: table-cell; width: 65%; padding: 10pt 36pt; vertical-align: middle; }
+  .footer-city { font-size: 8.5pt; font-weight: bold; color: white; }
+  .footer-address { font-size: 7.5pt; color: #A8C8C8; margin-top: 2pt; line-height: 1.4; }
+
+  .footer-right {
+    display: table-cell; width: 35%; background-color: #D4572A;
+    padding: 10pt 20pt; vertical-align: middle; text-align: right;
+  }
+  .footer-social { font-size: 8.5pt; color: white; font-weight: bold; }
+  .footer-social-sub { font-size: 7.5pt; color: rgba(255,255,255,0.8); margin-top: 2pt; }
+
+  .footer-page-num::before { content: "Pág. " counter(page) " / " counter(pages); }
+  .footer-page-num { font-size: 8pt; color: rgba(255,255,255,0.75); margin-top: 4pt; }
+
+  /* ===================== CONTENIDO ===================== */
+  .main-content { padding: 30pt 36pt 28pt 36pt; }
+
+  .parties-section {
+    background-color: #F9F7F4; border: 1pt solid #E8DDD4;
+    border-radius: 3pt; padding: 14pt 16pt; margin-bottom: 16pt;
+  }
+
+  .parties-header {
+    font-size: 8pt; font-weight: bold; color: #D4572A;
+    text-transform: uppercase; letter-spacing: 1pt;
+    margin-bottom: 10pt; padding-bottom: 5pt; border-bottom: 1pt solid #E8DDD4;
+  }
+
+  .intro-text { font-size: 9pt; color: #444; line-height: 1.55; margin-bottom: 10pt; text-align: justify; }
+
+  .buyer-grid { width: 100%; border-collapse: collapse; margin-top: 8pt; }
+  .buyer-grid td { padding: 2pt 2pt; font-size: 8.5pt; vertical-align: bottom; }
+  .buyer-row { background-color: white; border-bottom: 0.5pt solid #E8DDD4; }
+
+  .field-label {
+    color: #888; font-size: 7.5pt; font-weight: bold;
+    text-transform: uppercase; letter-spacing: 0.3pt; width: 12%; padding-right: 1pt;
+  }
+  .field-value { color: #2C2C2C; font-size: 8.5pt; border-bottom: 0.5pt solid #C8B89A; }
+
+  .buyer-number {
+    display: inline-block; background-color: #D4572A; color: white;
+    width: 14pt; height: 14pt; text-align: center; line-height: 14pt;
+    font-size: 7.5pt; font-weight: bold; border-radius: 50%; margin-right: 4pt;
+  }
+
+  .clause { margin-bottom: 12pt; }
+
+  .clause-title {
+    font-size: 8.5pt; font-weight: bold; color: #1A4A4A;
+    text-transform: uppercase; letter-spacing: 0.4pt;
+    margin-bottom: 4pt; padding: 4pt 8pt;
+    background-color: #EDF4F4; border-left: 3pt solid #1A4A4A;
+    page-break-after: avoid;
+  }
+
+  .clause-body { font-size: 9pt; color: #333; line-height: 1.6; text-align: justify; padding: 0 4pt; }
+
+  .paragrafo {
+    margin-top: 6pt; padding: 5pt 8pt;
+    border-left: 2pt solid #E8DDD4; background-color: #FAFAFA;
+    text-align: justify; line-height: 1.55;
+  }
+
+  .paragrafo-title {
+    display: inline; font-size: 8.5pt; font-weight: bold;
+    color: #D4572A; text-transform: uppercase; letter-spacing: 0.3pt;
+  }
+  .paragrafo-title::after { content: ": "; font-weight: normal; color: #444; letter-spacing: normal; }
+  .paragrafo-body { display: inline; font-size: 8.5pt; color: #444; line-height: 1.55; }
+
+  .payment-box {
+    background-color: #F9F7F4; border: 1pt solid #E8DDD4;
+    border-radius: 3pt; padding: 10pt 14pt; margin: 8pt 0;
+  }
+
+  .signatures-section {
+    margin-top: 20pt; padding-top: 14pt;
+    border-top: 2pt solid #E8DDD4; page-break-inside: avoid;
+  }
+  .signatures-intro { font-size: 9pt; color: #444; text-align: center; margin-bottom: 20pt; font-style: italic; }
+
+  .sig-line { border-bottom: 1.5pt solid #1A4A4A; margin: 0 auto 6pt auto; width: 85%; padding-bottom: 20pt; }
+  .sig-name { font-size: 9pt; font-weight: bold; color: #1A4A4A; text-transform: uppercase; letter-spacing: 0.3pt; }
+  .sig-role { font-size: 8pt; color: #888; margin-top: 2pt; }
+  .sig-nit { font-size: 8pt; color: #D4572A; margin-top: 2pt; font-weight: 600; }
+
+  .section-divider { height: 1pt; background-color: #E8DDD4; margin: 10pt 0; }
+
+  .highlight-teal { color: #1A4A4A; font-weight: bold; }
+  .highlight-orange { color: #D4572A; font-weight: bold; }
+  u { text-decoration: underline; }
+
+  .lote-box { margin-top:8pt; padding:8pt 12pt; background-color:#F9F7F4; border:1pt solid #E8DDD4; border-radius:3pt; }
+  .lote-label { color:#888; font-weight:bold; text-transform:uppercase; font-size:7.5pt; }
+  .lote-row { font-size:8pt; padding:3pt 0; line-height:1.8; }
+  .lindero-label { color:#1A4A4A; font-weight:bold; }
+  .lindero-divider { font-size:7.5pt; color:#888; font-weight:bold; text-transform:uppercase; margin-top:6pt; margin-bottom:4pt; letter-spacing:0.3pt; }
+
+  /* ===================== ANEXOS ===================== */
+  @page plano-page {
+    size: Legal;
+    margin: 134pt 0 72pt 0;
+    @top-center { content: element(running_header); }
+    @bottom-center { content: element(footer_content); }
+  }
+  .anexo-plano-wrap { page: plano-page; display: block; padding: 10pt 36pt 0 36pt; overflow: hidden; }
+  .anexo-plano-wrap img {
+    display: block;
+    width: 710pt;
+    height: 520pt;
+    object-fit: contain;
+    transform: rotate(90deg);
+    margin: 95pt -85pt;
+  }
+
+  .anexo-content { padding: 30pt 36pt 28pt 36pt; }
+  .anexo-header {
+    border-left: 3pt solid #D4572A; padding-left: 10pt; margin-bottom: 16pt;
+  }
+  .anexo-header .anexo-title {
+    font-size: 12pt; font-weight: bold; color: #1A4A4A;
+    text-transform: uppercase; letter-spacing: 0.5pt;
+  }
+  .anexo-header .anexo-subtitle {
+    font-size: 9pt; color: #D4572A; font-weight: 600;
+    margin-top: 2pt; text-transform: uppercase;
+  }
+  .amort-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  .amort-table thead tr { background-color: #1A4A4A; color: white; }
+  .amort-table thead th {
+    padding: 5pt 8pt; text-align: center; font-weight: bold;
+    font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.3pt;
+  }
+  .amort-table tbody tr:nth-child(even) { background-color: #F9F7F4; }
+  .amort-table tbody tr:nth-child(odd)  { background-color: white; }
+  .amort-table tbody tr.row-ci { background-color: #FEF3EE; }
+  .amort-table tbody td {
+    padding: 4pt 8pt; border-bottom: 0.5pt solid #E8DDD4;
+    vertical-align: middle;
+  }
+  .amort-table .col-num  { text-align: center; width: 6%; color: #888; }
+  .amort-table .col-date { text-align: center; width: 14%; }
+  .amort-table .col-money{ text-align: right; width: 16%; }
+  .amort-table .col-tipo { text-align: center; width: 16%; }
+  .amort-table .badge-ci { color: #D4572A; font-weight: bold; font-size: 7pt; }
+  .amort-table .badge-fn { color: #1A4A4A; font-weight: bold; font-size: 7pt; }
+  .amort-table tfoot tr  { background-color: #EDF4F4; font-weight: bold; }
+  .amort-table tfoot td  { padding: 5pt 8pt; border-top: 1.5pt solid #1A4A4A; }
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER RUNNING ===== -->
+<div id="running_header">
+  <div class="header-top-bar"></div>
+  <div class="header-content">
+    <div class="header-left">
+      <div class="header-title-block">
+        <div class="contract-title">Contrato de Promesa de Compraventa</div>
+        <div class="contract-title" style="font-size:10pt;">de Bien Futuro</div>
+        <div class="contract-subtitle">Conjunto Residencial "Oasis del Caribe"</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <img src="{% static 'img/logo_oasis.png' %}" alt="Oasis del Caribe" />
+    </div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="contract-number-bar">
+    <div class="number">Contrato N° {{ ctr.pk }}</div>
+  </div>
+</div>
+
+<!-- ===== FOOTER RUNNING ===== -->
+<div id="footer_content">
+  <div class="footer-main">
+    <div class="footer-left">
+      <div class="footer-city">Medellín</div>
+      <div class="footer-address">
+        Calle 11 # 43B – 50 | Oficina 508 | Parque Empresarial Calle 11 &nbsp;|&nbsp; Tel: (604) 4446291<br/>
+        VERSIÓN: 2 &nbsp;|&nbsp; Cheques, consignaciones y transferencias a nombre de
+        <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9</strong>
+      </div>
+    </div>
+    <div class="footer-right">
+      <div class="footer-social">@OasisdelCaribeco</div>
+      <div class="footer-social-sub">Instagram · Facebook</div>
+      <div class="footer-page-num"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONTENIDO ===== -->
+<div class="main-content">
+
+  <!-- PARTES -->
+  <div class="parties-section">
+    <div class="parties-header">Identificación de las Partes</div>
+    <div class="intro-text">
+      Entre los suscritos a saber: por una parte, la sociedad denominada
+      <span class="highlight-teal">ANDINA CONCEPTOS INMOBILIARIOS S.A.S</span>,
+      con <span class="highlight-teal">NIT 900.993.044-9</span>, sociedad con domicilio en la ciudad de Medellín,
+      inscrita en la Cámara de Comercio de Medellín para Antioquia, con la matrícula mercantil Nº 21-671654-12,
+      quien para los efectos del presente contrato se denomina
+      <span class="highlight-teal">LA PROMITENTE VENDEDORA</span>; y de la otra parte,
+      <span class="highlight-teal">EL (LOS) SEÑOR(ES):</span>
+    </div>
+
+    {% for titular in ctr.titulares %}
+    <div style="margin-bottom:8pt;">
+      <div style="font-size:8pt; font-weight:bold; color:#1A4A4A; margin-bottom:4pt;">
+        <span class="buyer-number">{{ forloop.counter }}</span> Promitente Comprador
+      </div>
+      <table class="buyer-grid">
+        <tr class="buyer-row">
+          <td class="field-label">Nombre</td>
+          <td class="field-value" style="width:43%;"><u>&nbsp;{{ titular.nombrecompleto }}&nbsp;</u></td>
+          <td class="field-label" style="width:10%;">C.C.</td>
+          <td class="field-value" style="width:35%;"><u>&nbsp;{{ titular.pk }}&nbsp;</u></td>
+        </tr>
+        <tr class="buyer-row">
+          <td class="field-label">Residencia</td>
+          <td class="field-value"><u>&nbsp;{{ titular.domicilio }}&nbsp;</u></td>
+          <td class="field-label">Municipio</td>
+          <td class="field-value">
+            <u>&nbsp;{{ titular.city.city_name|default:"" }},
+            {{ titular.estado.state_name|default:"" }},
+            {{ titular.pais.country_name|default:"" }}&nbsp;</u>
+          </td>
+        </tr>
+        <tr class="buyer-row">
+          <td class="field-label">Teléfono</td>
+          <td class="field-value"><u>&nbsp;{{ titular.telefono1|default:"Sin información" }}&nbsp;</u></td>
+          <td class="field-label">E-mail</td>
+          <td class="field-value"><u>&nbsp;{{ titular.email|default:"Sin información" }}&nbsp;</u></td>
+        </tr>
+      </table>
+    </div>
+    {% endfor %}
+
+    <div class="intro-text" style="margin-top:10pt; margin-bottom:0;">
+      Quien(es) para los efectos del presente contrato se denomina
+      <span class="highlight-teal">EL (LOS) PROMITENTE(S) COMPRADOR(ES)</span>, y ambos conjuntamente se denominarán
+      <span class="highlight-teal">LAS PARTES</span>, hemos decidido celebrar el presente contrato de
+      <span class="highlight-orange">PROMESA DE COMPRAVENTA DE BIEN FUTURO</span>,
+      regido por el Código Civil, Código de Comercio y Ley 1480 de 2011, bajo las siguientes cláusulas:
+    </div>
+  </div>
+
+  <!-- CLÁUSULA PRIMERA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Primera. Objeto del Contrato y Descripción del Inmueble</div>
+    <div class="clause-body">
+      LA PROMITENTE VENDEDORA promete vender y EL(LOS) PROMITENTE(S) COMPRADOR(ES) promete(n) comprar,
+      un lote de terreno en el conjunto residencial <span class="highlight-orange">"OASIS DEL CARIBE"</span>,
+      localizado en el Municipio de Moñitos, Departamento de Córdoba, mediante contrato de Promesa de Compraventa de
+      Bien Futuro, con descripción, nomenclatura, medidas y linderos, tal y como se describen a continuación:
+    </div>
+    <div class="lote-box">
+      <div class="lote-row">
+        <span class="lindero-label">Lote N°</span> <u>{{ ctr.general_info.inmueble.lotenumero }}</u>&nbsp;&nbsp;
+        <span class="lindero-label">Manzana N°</span> <u>{{ ctr.general_info.inmueble.manzananumero }}</u>&nbsp;&nbsp;
+        <span class="lindero-label">Área total lote</span> <u>{{ ctr.general_info.inmueble.area_lt }}</u> M²&nbsp;&nbsp;
+        <span class="lindero-label">% del derecho</span> <u>{{ ctr.general_info.inmueble.porcentaje_derecho }}</u>%&nbsp;&nbsp;
+        <span class="lindero-label">Metros Cuadrados</span> <u>{{ ctr.general_info.inmueble.areaprivada }}</u>&nbsp;&nbsp;
+        <span class="lindero-label">Fracción</span> <u>{{ ctr.general_info.inmueble.nro_fraccion }}</u>
+      </div>
+      <div class="lindero-divider">Medidas y Linderos:</div>
+      <div class="lote-row">
+        <span class="lindero-label">NORTE</span> <u>{{ ctr.general_info.inmueble.norte }}</u> m. con <u>{{ ctr.general_info.inmueble.colindante_norte }}</u>&nbsp;&nbsp;&nbsp;
+        <span class="lindero-label">SUR</span> <u>{{ ctr.general_info.inmueble.sur }}</u> m. con <u>{{ ctr.general_info.inmueble.colindante_sur }}</u>&nbsp;&nbsp;&nbsp;
+        <span class="lindero-label">ESTE</span> <u>{{ ctr.general_info.inmueble.este }}</u> m. con <u>{{ ctr.general_info.inmueble.colidante_este }}</u>&nbsp;&nbsp;&nbsp;
+        <span class="lindero-label">OESTE</span> <u>{{ ctr.general_info.inmueble.oeste }}</u> m. con <u>{{ ctr.general_info.inmueble.colindante_oeste }}</u>
+      </div>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">No obstante, el área citada, esta venta se hace como cuerpo cierto.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Segundo</span>
+      <span class="paragrafo-body">Este inmueble se identificará con el número de matrícula inmobiliaria que le asigne la Oficina de Registro de Instrumentos Públicos de Lórica (Córdoba), para cada lote, al momento de registrar la escritura pública Reglamento de Propiedad Horizontal para el proyecto.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA SEGUNDA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Segunda. Forma de Adquisición y Antecedentes</div>
+    <div class="clause-body">
+      Los terrenos en donde se desarrollará el conjunto residencial <span class="highlight-orange">"OASIS DEL CARIBE"</span>,
+      fueron adquiridos por la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT: 900.993.044-9, así: Por compraventa a
+      través de Escritura Pública No. 170 de fecha 28 de enero de 2015, de la Notaría Primera de Montería, predio identificado
+      con folio de matrícula inmobiliaria No. 146-60547. Por compraventa a través de Escritura Pública de compraventa No. 535
+      de fecha 9 de agosto de 2023, de la Notaría Única de Lorica, Córdoba, predio identificado con folio de matrícula
+      inmobiliaria No. 146-57726.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA TERCERA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Tercera. Promoción, Anuncio y/o Desarrollo de las Actividades de Enajenación</div>
+    <div class="clause-body">
+      La Sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9, presentó ante la Secretaría de Planeación
+      Municipal del Municipio de Moñitos, Departamento de Córdoba, radicación de los documentos que establece el
+      ARTÍCULO 2.2.5.3.1 del Decreto 1077 de 2015, para promocionar, anunciar y/o desarrollar las actividades de enajenación
+      de inmuebles, para la promoción y venta de 78 unidades de lotes y 78 unidades de parqueaderos, del conjunto residencial
+      <span class="highlight-orange">OASIS DEL CARIBE</span>, localizado en zona urbana del Municipio de Moñitos, Departamento de Córdoba.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA CUARTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Cuarta. Valor del Inmueble y Forma de Pago</div>
+    <div class="clause-body" style="margin-bottom:8pt;">
+      El valor del lote objeto de este contrato, es la suma de:
+      <strong><u>&nbsp;{{ ctr.general_info.valor_en_letras }}&nbsp;</u>
+      ($&nbsp;<u>{{ ctr.general_info.valor|floatformat:"-3g" }}</u>)</strong> de pesos.
+    </div>
+
+    <div class="payment-box">
+      <div style="font-size:8pt; color:#D4572A; font-weight:bold; text-transform:uppercase; letter-spacing:0.5pt; margin-bottom:8pt; padding-bottom:5pt; border-bottom:1pt solid #E8DDD4;">
+        Forma de Pago
+      </div>
+      <div style="display:table; width:100%; margin-bottom:8pt;">
+        <div style="display:table-cell; width:55%; vertical-align:top; padding-right:10pt; border-right:1pt solid #E8DDD4;">
+          <div style="font-size:8pt; font-weight:bold; color:#1A4A4A; text-transform:uppercase; margin-bottom:4pt;">1. Cuota Inicial</div>
+          <div class="clause-body">
+            La suma de $&nbsp;<u><strong>{{ ctr.general_info.ci|floatformat:"-3g" }}</strong></u>
+            a pagar así: <u>&nbsp;{{ ctr.general_info.fp_ci }}&nbsp;</u>
+          </div>
+        </div>
+        <div style="display:table-cell; width:45%; vertical-align:top; padding-left:10pt;">
+          <div style="font-size:8pt; font-weight:bold; color:#1A4A4A; text-transform:uppercase; margin-bottom:4pt;">2. Saldo a Pagar</div>
+          <div class="clause-body">
+            {% if ctr.general_info.saldo == 0 %}
+              <u>$ 0</u>
+            {% else %}
+              La suma de $&nbsp;<u><strong>{{ ctr.general_info.saldo|floatformat:"-3g" }}</strong></u>
+              a pagar con plan <u>&nbsp;{{ ctr.forma_pago }}&nbsp;</u>
+              {% if ctr.forma_pago == 'Amortizacion' %}
+                (El valor de las cuotas mensuales incluye los intereses corrientes)
+              {% endif %}
+              así: <u>&nbsp;{{ ctr.general_info.fp_saldo }}&nbsp;</u>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% if ctr.observaciones != "" %}
+      <div style="margin-top:8pt; padding-top:8pt; border-top:1pt solid #E8DDD4;">
+        <div style="font-size:8pt; font-weight:bold; color:#1A4A4A; text-transform:uppercase; margin-bottom:3pt;">Observaciones sobre la Forma de Pago</div>
+        <div class="clause-body">
+          <u>{{ ctr.observaciones }}</u>.<br/>
+          <small style="color:#888;">(Solo se tienen en cuenta las observaciones que se hagan sobre la forma de pago. Cualquier observación fuera de la forma de pago no tiene validez para este contrato.)</small>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero — Condiciones Financieras, Sistema de Amortización e Intereses</span>
+      <span class="paragrafo-body">En caso de que el saldo del precio sea financiado directamente por LA PROMITENTE VENDEDORA, se informa a EL (LOS) PROMITENTE(S) COMPRADOR(ES) que: (i) La tasa de interés corriente aplicable para la financiación, será del 1.5% mes vencido, equivalente al 19.58% efectivo anual (E.A.); (ii) El sistema de amortización utilizado será el sistema francés (cuota fija); (iii) Cada cuota estará compuesta por una porción destinada a amortización de capital y otra correspondiente a intereses corrientes, conforme a la tabla de amortización que se entrega como anexo y hace parte integral del contrato; (iv) Se indicará el número total de cuotas, su periodicidad, fecha de vencimiento y el valor total financiado, así como el valor total que el comprador terminará pagando por concepto de capital e intereses; (v) El comprador podrá realizar pagos anticipados totales o parciales sin penalidad, aplicándose estos directamente a capital y generando la correspondiente reliquidación; (vi) En caso de mora, se causarán intereses moratorios únicamente sobre las cuotas vencidas y no pagadas, hasta la tasa máxima legal vigente certificada por la Superintendencia Financiera de Colombia. No habrá capitalización de intereses.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Segundo</span>
+      <span class="paragrafo-body">Si dentro del valor del LOTE objeto de este contrato, LA PROMITENTE VENDEDORA le otorgó a EL(LOS) PROMITENTE(S) COMPRADOR(ES) un descuento financiero por valores recibidos anticipadamente, dicho descuento finalmente se aplicará, previa verificación de los dineros recibidos en las fechas pactadas, al saldo por pagar.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Tercero</span>
+      <span class="paragrafo-body">LA PROMITENTE VENDEDORA solicitará a EL(LOS) PROMITENTE(S) COMPRADOR(ES), las garantías reales o personales que juzgue convenientes para respaldar el pago de la obligación adquirida en el presente contrato, como son pagaré con autorización para diligenciar espacios en blanco, e hipoteca abierta sin límite de cuantía a favor de ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA QUINTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Quinta</div>
+    <div class="clause-body">
+      LA PROMITENTE VENDEDORA se obliga al saneamiento por evicción y a responder por cualquier gravamen y acción que resultare
+      contra el derecho que transferirá y, además, responderá por cualquier vicio redhibitorio sobre el LOTE de acuerdo al Código Civil.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA SEXTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Sexta. Fecha de Escrituración</div>
+    <div class="clause-body" style="margin-bottom:6pt;">
+      La escritura pública de compraventa del bien inmueble objeto de este contrato, se otorgará a más tardar el día
+      <u>&nbsp;{{ fecha_escritura.day }}&nbsp;</u> de <u>&nbsp;{{ fecha_escritura|date:"F" }}&nbsp;</u>
+      del año <u>&nbsp;{{ fecha_escritura.year }}&nbsp;</u>,
+      en la Notaría <u>&nbsp;QUINTA;&nbsp;</u>
+      de <u>&nbsp;MEDELLIN;&nbsp;</u>,
+      a las <u>&nbsp;10:00 de la Mañana&nbsp;</u>.
+      Fecha que podrá anticiparse o prorrogarse de mutuo acuerdo entre las partes, a través de la suscripción de un otrosí.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">La fecha de otorgamiento de la escritura pública de compraventa, podrá prorrogarse en caso de fuerza mayor o caso fortuito debidamente acreditado, entendido como un hecho externo, imprevisible e irresistible que imposibilite temporalmente el cumplimiento de la obligación. LA PROMITENTE VENDEDORA notificará por escrito a EL (LOS) PROMITENTE(S) COMPRADOR(ES) la ocurrencia del evento dentro de los diez (10) días siguientes a su conocimiento, indicando su naturaleza y la incidencia concreta en el cronograma. La prórroga se limitará al tiempo estrictamente necesario para superar el evento, sin que pueda extenderse de manera indefinida. Si la suspensión supera doce (12) meses adicionales al plazo inicialmente pactado, se informará a EL (LOS) PROMITENTE(S) COMPRADOR(ES), con el fin de presentar las alternativas que permitan la continuidad del contrato.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Segundo</span>
+      <span class="paragrafo-body">Si, llegada la fecha para el otorgamiento de la escritura pública de compraventa y EL (LOS) PROMITENTE(S) COMPRADOR(ES) presenta(n) un saldo por pagar al valor del lote, y este no ha sido cancelado antes del otorgamiento de la misma, podrá LA PROMITENTE VENDEDORA otorgar a EL (LOS) PROMITENTE(S) COMPRADOR(ES) la escritura pública de compraventa con una Hipoteca Abierta sin límite de cuantía, a favor de la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Tercero</span>
+      <span class="paragrafo-body">Si el lote objeto de este contrato se encuentra individualizado con folio de matrícula inmobiliaria antes de la fecha de escrituración pactada en esta cláusula, LA PROMITENTE VENDEDORA podrá otorgar a EL (LOS) PROMITENTE(S) COMPRADOR(ES) la escritura pública de compraventa. En caso de existir un saldo pendiente por pagar del valor del lote por parte de EL (LOS) PROMITENTE(S) COMPRADOR(ES), se otorgará dicha escritura con una Hipoteca Abierta sin límite de cuantía, a favor de la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Cuarto</span>
+      <span class="paragrafo-body">A partir del otorgamiento de la escritura pública de compraventa del lote objeto de compra, por parte de LA PROMITENTE VENDEDORA, correrá(n) por cuenta de EL (LOS) PROMITENTE(S) COMPRADOR(ES) todos los impuestos que se deriven del bien inmueble prometido en venta.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Quinto</span>
+      <span class="paragrafo-body">En caso de que, a la firma de la escritura pública de compraventa, no se encuentren individualizadas las cédulas catastrales de los lotes que conforman el proyecto OASIS DEL CARIBE, la empresa otorgará la escritura pública de compraventa con el paz y salvo del impuesto predial de los lotes de mayor extensión.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Sexto</span>
+      <span class="paragrafo-body">Una vez otorgada la escritura pública de compraventa y aún no se encuentre individualizada la cédula catastral del lote, a partir de la vigencia fiscal siguiente el (los) propietario(s) deberá(n) asumir el pago del impuesto predial correspondiente al predio de mayor extensión, en el porcentaje que corresponda al área del lote de su propiedad, hasta tanto se realice la individualización de la cédula catastral respectiva. Una vez se encuentre individualizada la cédula catastral del lote, la empresa notificará al propietario, para que en adelante proceda con el pago del impuesto predial correspondiente a la vigencia fiscal que le sea aplicable respecto de su inmueble individualizado.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA SÉPTIMA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Séptima</div>
+    <div class="clause-body">
+      LA PROMITENTE VENDEDORA se obliga a celebrar la escritura pública que solemniza la venta del lote objeto de este contrato,
+      en la fecha establecida en la cláusula sexta, previo pago por parte de EL(LOS) PROMITENTE(S) COMPRADOR(ES) de la totalidad
+      de los valores correspondientes a la cuota inicial y el saldo a pagar establecido en la cláusula cuarta del presente contrato.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">El pago anticipado total del valor del contrato por parte de EL (LOS) PROMITENTE(S) COMPRADOR(ES), antes de la fecha prevista para la escrituración, no implicará la obligación para LA PROMITENTE VENDEDORA de otorgar la escritura pública de compraventa de manera anticipada, en razón a que el proceso de escrituración depende del cumplimiento previo de trámites legales, urbanísticos y administrativos propios del proyecto. En todo caso, la escritura pública se otorgará dentro de los plazos establecidos en el presente contrato una vez se encuentren cumplidos dichos requisitos.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA OCTAVA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Octava. Gastos de Escrituración y Registro</div>
+    <div class="clause-body">
+      Todos los gastos fiscales, notariales y legales que se ocasionen por la firma de la escritura pública de compraventa,
+      donde se solemnice la transferencia del derecho de propiedad del lote que aquí se promete en venta, así como los timbres
+      y gastos de Registro Público, correrán por cuenta de EL(LOS) PROMITENTE(S) COMPRADOR(ES).
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">De igual manera, correrá por cuenta de EL(LOS) PROMITENTE(S) COMPRADOR(ES), todos los gastos fiscales, notariales, legales, timbres y gastos de Registro Público que se ocasionen por la constitución de Hipoteca Abierta sin límite de cuantía, a favor de la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA NOVENA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Novena. Entrega Material del Lote</div>
+    <div class="clause-body">
+      La entrega material del lote objeto del presente contrato a EL(LOS) PROMITENTE(S) COMPRADOR(ES) se realizará noventa (90)
+      días después del otorgamiento de la escritura pública de compraventa por parte de LA PROMITENTE VENDEDORA. No obstante, y
+      siempre que las condiciones del proyecto lo permitan, las partes podrán acordar la entrega material anticipada del lote a
+      título de mera tenencia, antes del otorgamiento de la escritura pública de compraventa. En tal caso, las partes suscribirán
+      un acuerdo de tenencia en el que se establecerán las condiciones de uso, conservación y custodia del inmueble hasta tanto se
+      otorgue la escritura pública correspondiente. En todo caso, la entrega anticipada del lote no implicará transferencia del
+      derecho de dominio, el cual solo se perfeccionará mediante el otorgamiento y registro de la escritura pública de compraventa.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">La fecha de entrega del lote, podrá prorrogarse en caso de fuerza mayor o caso fortuito debidamente acreditado, entendido como un hecho externo, imprevisible e irresistible que imposibilite temporalmente el cumplimiento de la obligación. LA PROMITENTE VENDEDORA notificará por escrito a EL (LOS) PROMITENTE(S) COMPRADOR(ES) la ocurrencia del evento dentro de los diez (10) días siguientes a su conocimiento, indicando su naturaleza y la incidencia concreta en el cronograma. La prórroga se limitará al tiempo estrictamente necesario para superar el evento, sin que pueda extenderse de manera indefinida. Si la suspensión supera doce (12) meses adicionales al plazo inicialmente pactado, se informará a EL (LOS) PROMITENTE(S) COMPRADOR(ES), con el fin de presentar las alternativas que permitan la continuidad del contrato.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Segundo</span>
+      <span class="paragrafo-body">El lote objeto de compra no se entrega intervenido. Al momento de la entrega material este será entregado en su estado natural, con la vegetación propia del terreno y conforme a las condiciones físicas propias del predio, las cuales pueden presentar variaciones derivadas de factores climáticos. En todo caso, el lote se entregará dentro del área y ubicación correspondiente al proyecto, de acuerdo con lo establecido en los planos aprobados.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Tercero</span>
+      <span class="paragrafo-body">En la fecha programada para la entrega del lote, las partes suscribirán el acta correspondiente de entrega material. En caso de que EL(LOS) PROMITENTE(S) COMPRADOR(ES) no comparezca(n) a recibir el inmueble sin haber informado previamente una causa justificada, LA PROMITENTE VENDEDORA dejará constancia de dicha situación mediante acta suscrita por representantes del proyecto y dos (2) testigos, en la cual se registrará el estado del inmueble y la disponibilidad para su entrega. En tal evento, LA PROMITENTE VENDEDORA informará por escrito a EL(LOS) PROMITENTE(S) COMPRADOR(ES) para que se programe una nueva fecha de entrega dentro de un plazo razonable. Cuando la inasistencia obedezca a circunstancias de caso fortuito o fuerza mayor, EL (LOS) PROMITENTE(S) COMPRADOR(ES) podrán informarlo y acreditarlo dentro de los tres (3) días hábiles siguientes a la fecha inicialmente prevista, con el fin de acordar una nueva fecha para la entrega del inmueble.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Cuarto</span>
+      <span class="paragrafo-body">Las zonas comunes de la URBANIZACIÓN OASIS DEL CARIBE, están conformadas por: cerramiento perimetral en malla eslabonada, portería, vías peatonales, zonas verdes.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Quinto</span>
+      <span class="paragrafo-body">LA PROMITENTE VENDEDORA hará entrega de la urbanización por etapas, hasta tanto se integre el total de las obras urbanísticas y se haga entrega de las mismas a la Junta Administradora para que, sea esta la responsable del mantenimiento y conservación. Por lo que, la entrega material del lote objeto del contrato, se hará de acuerdo a la etapa correspondiente y a través de un acta.</span>
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Sexto</span>
+      <span class="paragrafo-body">De acuerdo al avance de obra, permanecerá personal de obra en la urbanización, hasta tanto se integre el total de las construcciones y se haga entrega de las mismas. Además, LA PROMITENTE VENDEDORA se reserva el derecho de tener en la obra la casa modelo y sala de ventas, de acceder y permitir la entrada a particulares durante toda la gestión de ventas, tomando las medidas de seguridad necesarias.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima. Servicios Públicos</div>
+    <div class="clause-body">
+      LA PROMITENTE VENDEDORA, entregará la URBANIZACIÓN OASIS DEL CARIBE, con acometidas de acueducto, alcantarillado para
+      planta de tratamiento (PTAR) y acometidas de energía eléctrica, hasta el punto de conexión. El alumbrado de las zonas
+      comunes será con luminarias de energía solar.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">Estará a cargo de EL (LOS) PROMITENTE(S) COMPRADOR(ES), la instalación de las acometidas internas de los servicios públicos de acueducto, alcantarillado y de energía eléctrica. Así como, los trámites de conexión de estos servicios ante las empresas prestadoras de servicios públicos domiciliarios correspondientes. Los trámites de conexión y/o abastecimiento de los servicios públicos de gas natural y telecomunicaciones serán solicitados por parte de EL (LOS) PROMITENTE(S) COMPRADOR(ES).</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA PRIMERA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Primera</div>
+    <div class="clause-body">
+      Para la construcción de la vivienda en el lote objeto del presente contrato, EL(LOS) PROMITENTE(S) COMPRADOR(ES) deberán
+      cumplir con las disposiciones establecidas en el Estatuto Urbano y en el Reglamento de Propiedad Horizontal del proyecto,
+      así como obtener las licencias y permisos exigidos por las autoridades municipales competentes. Así mismo, previo al inicio
+      de la construcción, EL(LOS) PROMITENTE(S) COMPRADOR(ES) deberán presentar el diseño arquitectónico de la vivienda para su
+      revisión y aprobación por parte del comité encargado de velar por el cumplimiento del Estatuto Urbano de la copropiedad.
+      Una vez obtenidos los permisos municipales correspondientes y la aprobación del diseño arquitectónico, EL(LOS)
+      PROMITENTE(S) COMPRADOR(ES) deberán informar por escrito a LA PROMITENTE VENDEDORA el inicio de la obra. En caso de que,
+      al momento del inicio de la construcción, el lote no cuente con las acometidas de acueducto, alcantarillado para planta de
+      tratamiento (PTAR) y energía eléctrica, LA PROMITENTE VENDEDORA contará con un plazo máximo de doscientos setenta (270)
+      días calendario para gestionar la instalación de dichas acometidas, contados a partir de la comunicación formal de inicio
+      de obra presentada por EL(LOS) PROMITENTE(S) COMPRADOR(ES).
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA SEGUNDA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Segunda. Régimen de Copropiedad</div>
+    <div class="clause-body">
+      El conjunto residencial <span class="highlight-orange">"OASIS DEL CARIBE"</span> estará sometido con todos sus bienes de
+      dominio particular y de dominio común al régimen de Propiedad Horizontal contenido en la Ley 675 de 2001 y demás normas
+      complementarias. El Estatuto Urbano para la construcción de casas será obligatorio y formará parte del Reglamento de la
+      Copropiedad, para lo cual, EL (LOS) PROMITENTE(S) COMPRADOR(ES) lo acatarán en todos sus términos y condiciones,
+      obligándose desde ya, a dar cumplimiento a todas las obligaciones que se estipulen en dicho reglamento.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">El pago de la cuota mensual de administración se hará exigible a partir de la entrega de la garita de vigilancia y el cerramiento perimetral por parte de la PROMITENTE VENDEDORA, momento desde el cual, cada propietario asumirá el pago correspondiente según el índice de propiedad asignado a su lote.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA TERCERA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Tercera</div>
+    <div class="clause-body">
+      Las partes establecen que, en lo concerniente al LOTE o bien futuro prometido en venta, objeto de este contrato, se
+      regirán por los Títulos VI, XII y XXIII del segundo libro del Código Civil colombiano y demás normas concordantes en
+      materia civil. Así como la Ley 1480 de 2011.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA CUARTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Cuarta. Cláusula Penal</div>
+    <div class="clause-body" style="margin-bottom:6pt;">
+      Constituirá incumplimiento del presente contrato por parte de EL (LOS) PROMITENTE(S) COMPRADOR(ES): el desistimiento o
+      determinación de no continuar con las obligaciones del contrato, el incumplimiento de cualquiera de las cláusulas en él
+      convenidas, la mora superior a <strong>noventa (90) días calendario</strong> en el pago de cualquiera de las cuotas
+      correspondientes al valor del lote, así como la configuración de cualquiera de las causales previstas en la cláusula
+      décima novena del mismo, relacionadas con la aparición en listas restrictivas o la existencia de condenas por delitos
+      asociados al lavado de activos y sus conexos. En caso de configurarse alguna de las causales anteriormente señaladas,
+      facultará a LA PROMITENTE VENDEDORA a dar la terminación del presente contrato, y cobrará a EL (LOS) PROMITENTE(S)
+      COMPRADOR(ES), a título de cláusula penal, el equivalente al <strong>treinta por ciento (30%)</strong> del valor total
+      del contrato, además dispondrá del inmueble objeto de la promesa de venta. Si como resultado de la liquidación contractual
+      existiere un saldo a favor de EL (LOS) PROMITENTE(S) COMPRADOR(ES), luego de descontado el valor de la cláusula penal,
+      LA PROMITENTE VENDEDORA procederá a su devolución, sin que se generen intereses de ninguna naturaleza. LA PROMITENTE
+      VENDEDORA acordará con EL(LOS) PROMITENTE(S) COMPRADOR(ES), los plazos, fechas y montos para la devolución. En caso que
+      no exista un acuerdo entre las partes, se fijará un plazo máximo de trescientos sesenta y cinco (365) días contados a
+      partir de la fecha de terminación del contrato.
+    </div>
+    <div class="clause-body">
+      Será causal de incumplimiento por parte de LA PROMITENTE VENDEDORA el desistimiento injustificado de continuar con las
+      obligaciones del contrato o el incumplimiento grave de las obligaciones a su cargo. En dicho evento, EL (LOS)
+      PROMITENTE(S) COMPRADOR(ES) podrá(n) solicitar la terminación del contrato y exigir el pago de la cláusula penal
+      equivalente al <strong>treinta por ciento (30%)</strong> del valor total del contrato, junto con la restitución de las
+      sumas pagadas, valores que serán devueltos por LA PROMITENTE VENDEDORA sin que se generen intereses de ninguna naturaleza,
+      dentro de un plazo máximo de trescientos sesenta y cinco (365) días calendario contados a partir de la fecha de
+      terminación del contrato.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">Antes de proceder a la terminación del contrato por un incumplimiento, la parte afectada deberá comunicar por escrito a la otra parte la situación presentada, otorgándole un plazo razonable para pronunciarse sobre el mismo.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA QUINTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Quinta. Libertad de Gravámenes y Obligación de Saneamiento</div>
+    <div class="clause-body">
+      LA PROMITENTE VENDEDORA garantiza que no ha enajenado a ninguna persona el LOTE prometido en venta y que tiene el dominio
+      de posesión tranquila del inmueble, y declara que hará su entrega libre de registro por demanda civil, uso y habitación,
+      arrendamiento por escritura pública, patrimonio de familia inembargable, hipotecas y condiciones suspensivas o resolutorias
+      de dominio.
+    </div>
+    <div class="paragrafo">
+      <span class="paragrafo-title">Parágrafo Primero</span>
+      <span class="paragrafo-body">Declara igualmente LA PROMITENTE VENDEDORA, que al momento de la escritura pública el LOTE prometido en venta, estará a paz y salvo por todo concepto, en especial libre de tasas, impuestos, valorizaciones, contribuciones municipales. En el evento que por algún motivo no se hubiere cancelado, éstos correrán por cuenta de LA PROMITENTE VENDEDORA siempre que su liquidación sea anterior a la fecha de otorgamiento de la escritura pública, o entrega del inmueble que legalice el presente Contrato de Promesa de Compraventa.</span>
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA SEXTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Sexta. Cesión</div>
+    <div class="clause-body">
+      Los deberes y derechos de este contrato, podrán ser cedidos por parte de LA PROMITENTE VENDEDORA, a la(s) persona(s)
+      jurídica(s) que estime conveniente, quienes asumirán la posición contractual de promitente vendedor, con todos sus deberes
+      y obligaciones del contrato de promesa de compraventa de bien futuro. Caso en el cual, se informará a EL (LOS)
+      PROMITENTE(S) COMPRADOR(ES), de la cesión de derechos realizada, mediante comunicación escrita.
+      <br/><br/>
+      Los derechos de este contrato, podrán ser cedidos por parte de EL (LOS) PROMITENTE(S) COMPRADOR(ES), a persona(s)
+      natural(es) o jurídica(s) que estime(n) conveniente. Para lo cual, deberá(n) estar al día en el pago de sus obligaciones
+      al momento de solicitar la cesión del contrato. La solicitud deberá presentarse por escrito ante LA PROMITENTE VENDEDORA,
+      indicando la identidad de la persona natural o jurídica que asumirá la posición contractual, junto con la documentación
+      necesaria para su verificación y cancelando la suma equivalente al
+      <strong>tres por ciento (3%)</strong> del valor del presente contrato.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA SÉPTIMA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Séptima. Autorización para el Tratamiento de Datos Personales</div>
+    <div class="clause-body">
+      Para efectos de la protección de los datos personales y su tratamiento de acuerdo a lo establecido en la Ley 1581 de 2012,
+      y su decreto reglamentario 1377 de 2013, EL (LOS) PROMITENTE(S) COMPRADOR(ES) autoriza(n) de manera libre, expresa,
+      voluntaria, a LA PROMITENTE VENDEDORA, la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S., para recolectar, manejar,
+      almacenar, usar, circular, actualizar, cruzar información propia, con el fin de facilitar la venta de bienes y servicios
+      de la empresa, adelantar acciones de cobro y de recuperación de cartera a través de la empresa o de terceros que esta
+      encargue, reportar a centrales de riesgo cuando corresponda, y demás fines que estipule la empresa en cumplimiento de la
+      obligación contractual derivada de este contrato; y en general realizar toda acción tendiente al tratamiento de los datos
+      personales de acuerdo con la política establecida para tal fin por la empresa como responsable y encargada de la
+      información. El alcance de la autorización comprende además, la facultad que tiene la empresa para que, a través de
+      proveedor tecnológico, realice la toma de firma electrónica y validación de quien firma a través de fotografía digital,
+      de todos los documentos necesarios para la vinculación contractual entre las partes, como lo son: contratos, formularios,
+      pagaré, autorización para diligenciar espacios en blanco, y demás documentos requeridos en razón a la vinculación
+      contractual de las partes; para que envíe mensajes de correo electrónico, mensajes de texto, mensajes de WhatsApp,
+      correspondencia a la dirección de residencia o lugar de trabajo, de contenidos institucionales, notificaciones,
+      información del estado de cuenta, saldos, recibos de pago, envío de cartas de cobro pre jurídico y jurídico, y demás
+      fines que estipule la empresa en cumplimiento de la obligación contractual derivada de este contrato.
+      <br/><br/>
+      Adicionalmente, la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S., sus filiales, sucursales o subordinados podrán:
+      realizar las consultas, reportes y actualizaciones necesarias en diferentes listas restrictivas requeridas en cumplimiento
+      del SAGRILAFT; consulta, reportes y actualizaciones necesarias en bancos de datos del comportamiento y crédito comercial,
+      hábitos de pago, manejo de la(s) cuenta(s) bancaria(s) y en general el cumplimiento de las obligaciones pecuniarias en
+      torno al contrato. En ese sentido, declaro conocer que los datos personales objeto del tratamiento, serán utilizados para
+      las finalidades derivadas de la relación contractual suscrita entre las partes. Igualmente declaro conocer el derecho de
+      supresión de datos personales que me asiste, para lo cual, en caso de solicitarlo, LA PROMITENTE VENDEDORA procederá
+      conforme a las políticas de tratamiento de datos personales establecidas por la misma para tal fin.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA OCTAVA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Octava. Reporte a Centrales de Riesgo</div>
+    <div class="clause-body">
+      EL (LOS) PROMITENTE(S) COMPRADOR(ES) acepta(n) que LA PROMITENTE VENDEDORA puede hacer pública la información de este
+      contrato y da(n) su autorización expresa para que las centrales de riesgo o cualquier otra institución de crédito la
+      mantenga en su historial de crédito.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA DÉCIMA NOVENA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Décima Novena. Cláusula SAGRILAFT</div>
+    <div class="clause-body">
+      En cumplimiento del deber legal que le asiste a la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9,
+      sus filiales, sucursales o subordinados, en relación con la cooperación para la prevención del lavado de activos, la
+      financiación del terrorismo y cualquier otro delito conexo contemplado en normas nacionales e internacionales, como EL
+      (LOS) PROMITENTE(S) COMPRADOR(ES) de este contrato declaro(amos) que, el patrimonio y las fuentes económicas que permiten
+      la compra mediante el presente contrato de Promesa de Compraventa de bien futuro, del lote en el conjunto residencial
+      <span class="highlight-orange">"OASIS DEL CARIBE"</span>, no son fruto de actividades ilícitas u otros delitos conexos,
+      razón por la cual, acepto(amos) que, en el evento en que me(nos) encuentre(n) en la lista OFAC (Office of Foreign Assets
+      Control) o la lista ONU (Lista del Consejo de Seguridad de la Organización de las Naciones Unidas) o de alguna otra de
+      igual o similar naturaleza, de carácter nacional o internacional, o haya(mos) sido sentenciado(s) judicialmente por
+      cualquier delito fuente o relacionado con el lavado de activos, financiación del terrorismo o la proliferación de armas
+      de destrucción masiva, o haya sido extraditado, seré(mos) responsable(s) por los daños y perjuicios que dicho reporte o
+      sentencia le ocasione a la sociedad ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9, sus filiales, sucursales
+      o subordinados, sin perjuicio de la responsabilidad penal que me(nos) asiste y, faculto(amos) a la sociedad ANDINA
+      CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9, sus filiales, sucursales o subordinados, para dar por terminado
+      unilateralmente el contrato de promesa de compraventa de bien futuro en cualquier momento y sin previo aviso, por
+      configurarse una causal objetiva de terminación del contrato, y hacer el reporte a los diferentes entes de control u
+      autoridades competentes del hallazgo del mismo.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima. Declaración de Origen de Fondos</div>
+    <div class="clause-body">
+      Como EL (LOS) PROMITENTE(S) COMPRADOR(ES) del presente contrato de Promesa de Compraventa de bien futuro, para la compra
+      del lote en conjunto residencial <span class="highlight-orange">"OASIS DEL CARIBE"</span>, obrando en nombre propio, de
+      manera voluntaria y dando certeza de que todo lo aquí consignado es cierto, realiza la siguiente declaración de
+      utilización de fondos a ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9, con el propósito de que se pueda dar
+      cumplimiento a lo señalado al respecto en la Circular Básica Jurídica de la Superintendencia de Sociedades: 1. Que mi
+      actividad, profesión y/u oficio las ejerzo dentro del marco regulatorio aplicable y que los recursos que poseo no
+      provienen del desarrollo de las actividades contempladas en el Código Penal Colombiano (Ley 599 de 2000 o cualquier norma
+      que lo adicione, complemente o modifique). 2. Que la información que he suministrado a través de este documento es veraz,
+      verificable y que además asumo el compromiso de actualizarla anualmente conforme a los requerimientos realizados por
+      ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9. 3. Informaré inmediatamente cualquier circunstancia que
+      modifique la presente declaración, una vez tenga conocimiento de la misma. 4. Cuando a ello haya lugar, autorizo a ANDINA
+      CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9, a dar inicio a la liquidación del (los) Contrato(s) que me vincule(n),
+      en el caso de infracción de cualquiera de los numerales anteriores o en el eventual caso de que por aplicación de normas
+      sancionadas con posterioridad a la firma de este documento se modifiquen las declaraciones por mí efectuadas, eximiendo
+      por lo tanto a ANDINA CONCEPTOS INMOBILIARIOS S.A.S., con NIT 900993044-9, de toda responsabilidad que se derive por
+      información errónea, falsa o inexacta que yo hubiere proporcionado en este documento, o de la violación del mismo. 6. Me
+      comprometo y obligo a actualizar al menos una vez cada año los datos e información que fueren requeridos por ANDINA
+      CONCEPTOS INMOBILIARIOS S.A.S. 7. No soy una persona expuesta políticamente según la legislación nacional y asumo el
+      compromiso de informar cualquier modificación que se produzca al respecto, dentro de los treinta (30) días de ocurrencia
+      de la novedad, mediante la presentación de una nueva declaración.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA PRIMERA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima Primera. Derecho de Retracto</div>
+    <div class="clause-body">
+      EL (LOS) PROMITENTE(S) COMPRADOR(ES) tendrá(n) derecho a ejercer el derecho de retracto, de conformidad con lo dispuesto
+      en el artículo 47 de la Ley 1480 de 2011 (Estatuto del Consumidor), esto es, dentro de los cinco (5) días hábiles
+      siguientes a la celebración del contrato. El retracto deberá ser comunicado por escrito a LA PROMITENTE VENDEDORA dentro
+      del término señalado, a través de los canales de atención dispuestos por esta para tal efecto. Ejercido oportunamente el
+      derecho de retracto, se resolverá el contrato y LA PROMITENTE VENDEDORA procederá a reintegrar todas las sumas pagadas
+      por EL (LOS) PROMITENTE(S) COMPRADOR(ES), sin que haya lugar a retenciones o descuentos, dentro de un plazo máximo de
+      treinta (30) días calendario contados a partir del momento en que se ejerza el retracto, en los términos establecidos
+      en la ley.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA SEGUNDA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima Segunda. Comercialización del Proyecto</div>
+    <div class="clause-body">
+      LA PROMITENTE VENDEDORA, autoriza y entrega toda la comercialización del conjunto residencial
+      <span class="highlight-orange">"OASIS DEL CARIBE"</span>, a la sociedad
+      <strong>CONSTRUCTORA ROJOZ S.A.S.</strong>, con NIT 900.396.340-3, sociedad con domicilio en la ciudad de Medellín,
+      inscrita en la Cámara de Comercio de Medellín para Antioquia con la matrícula Nº 43982112. Sociedad que recaudará los
+      dineros correspondientes de las ventas de los lotes de este proyecto.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA TERCERA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima Tercera. Arbitramento</div>
+    <div class="clause-body">
+      Toda controversia o diferencia relativa a este contrato, se resolverá por un Tribunal de Arbitramento presentado ante el
+      Centro de Conciliación y Arbitraje de la Cámara de Comercio de Medellín para Antioquia, el cual estará sujeto a sus
+      reglamentos y al procedimiento allí contemplado. El Tribunal estará integrado por <strong>un (1) árbitro</strong>
+      designado por el Centro de Conciliación y Arbitraje de la Cámara de Comercio de Medellín para Antioquia, a solicitud de
+      cualquiera de las partes. Los gastos ocasionados por el tribunal de arbitramento, serán cancelados en su totalidad, por
+      la parte quien lo convoque.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA CUARTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima Cuarta. Acuerdos Anteriores</div>
+    <div class="clause-body">
+      Las partes manifiestan que no reconocen la validez de estipulaciones verbales relacionadas con el presente contrato o
+      cualquier acuerdo escrito con anterioridad relacionado con el LOTE FUTURO, objeto de este contrato, ya que el presente
+      contrato constituye el acuerdo completo y total entre las partes. De la misma manera, las partes acuerdan que cualquier
+      reclamo, solicitud, queja, petición o información que afecte directamente el objeto de este contrato, debe ser comunicado
+      únicamente por medio escrito, y será respondido dentro del término legal.
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA QUINTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima Quinta. Declaraciones</div>
+    <div class="clause-body">
+      Declara(n) EL (LOS) PROMITENTE(S) COMPRADOR(ES): 1) Que la dirección oficial de correspondencia es la anotada en el
+      encabezamiento de este contrato. 2) Que es su obligación informar por escrito a LA PROMITENTE VENDEDORA cualquier cambio
+      de dirección o teléfonos. 3) Que está(n) de acuerdo con el contenido en todas las cláusulas del presente contrato, por
+      lo que firma(n) conforme(s).
+    </div>
+  </div>
+
+  <!-- CLÁUSULA VIGÉSIMA SEXTA -->
+  <div class="clause">
+    <div class="clause-title">Cláusula Vigésima Sexta. Domicilio</div>
+    <div class="clause-body">
+      Que, para todos los efectos de este contrato el domicilio es la ciudad de <strong>Medellín</strong>,
+      departamento de Antioquia.
+    </div>
+  </div>
+
+  <!-- FIRMAS -->
+  <div class="signatures-section">
+    <div class="signatures-intro">
+      En señal de aceptación de lo aquí suscrito, firman LAS PARTES,
+      {% if es_promesa %}
+        el día <u>&nbsp;{{ ctr.fechapromesa.day }}&nbsp;</u> de
+        <u>&nbsp;{{ ctr.fechapromesa|date:"F" }}&nbsp;</u> de
+        <u>&nbsp;{{ ctr.fechapromesa.year }}&nbsp;</u>
+      {% else %}
+        el día <u>&nbsp;{{ ctr.fecha_contrato.day }}&nbsp;</u> de
+        <u>&nbsp;{{ ctr.fecha_contrato|date:"F" }}&nbsp;</u> de
+        <u>&nbsp;{{ ctr.fecha_contrato.year }}&nbsp;</u>
+      {% endif %}
+      en la ciudad de <u>&nbsp;{{ oficina }}&nbsp;</u>
+    </div>
+    <!-- Vendedora + primer comprador -->
+    <div style="display:table; width:100%; margin-bottom:24pt;">
+      <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; border-right:1pt solid #E8DDD4; vertical-align:top;">
+        <div style="font-size:8pt; font-weight:bold; color:#D4572A; text-transform:uppercase; margin-bottom:14pt;">La Promitente Vendedora</div>
+        <div class="sig-line" style="padding-bottom:28pt;"></div>
+        <div class="sig-name" style="margin-top:6pt;">ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</div>
+        <div class="sig-role">Representante Legal</div>
+        <div class="sig-nit">NIT 900.993.044-9</div>
+      </div>
+      <div style="display:table-cell; text-align:center; padding:0 14pt; vertical-align:top;">
+        <div style="font-size:8pt; font-weight:bold; color:#D4572A; text-transform:uppercase; margin-bottom:14pt;">El (Los) Promitente(s) Comprador(es)</div>
+        <div class="sig-line" style="padding-bottom:28pt;"></div>
+        <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.0.nombrecompleto|upper }}</div>
+        <div class="sig-nit">C.C. {{ ctr.titulares.0.pk }}</div>
+      </div>
+    </div>
+    <!-- Compradores adicionales -->
+    {% if ctr.titulares.1 %}
+    <div style="display:table; width:100%;">
+      <div style="display:table-cell; {% if ctr.titulares.3 %}width:33%;{% elif ctr.titulares.2 %}width:50%;{% else %}width:50%;{% endif %} text-align:center; padding:0 10pt; vertical-align:top;">
+        <div class="sig-line" style="padding-bottom:28pt;"></div>
+        <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.1.nombrecompleto|upper }}</div>
+        <div class="sig-nit">C.C. {{ ctr.titulares.1.pk }}</div>
+      </div>
+      {% if ctr.titulares.2 %}
+      <div style="display:table-cell; {% if ctr.titulares.3 %}width:33%;{% else %}width:50%;{% endif %} text-align:center; padding:0 10pt; vertical-align:top;">
+        <div class="sig-line" style="padding-bottom:28pt;"></div>
+        <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.2.nombrecompleto|upper }}</div>
+        <div class="sig-nit">C.C. {{ ctr.titulares.2.pk }}</div>
+      </div>
+      {% endif %}
+      {% if ctr.titulares.3 %}
+      <div style="display:table-cell; width:33%; text-align:center; padding:0 10pt; vertical-align:top;">
+        <div class="sig-line" style="padding-bottom:28pt;"></div>
+        <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.3.nombrecompleto|upper }}</div>
+        <div class="sig-nit">C.C. {{ ctr.titulares.3.pk }}</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     ANEXO 1 — PLANO
+     ══════════════════════════════════════════════════════ -->
+<div class="anexo-plano-wrap">
+  <div class="anexo-header" style="margin-bottom:10pt;">
+    <div class="anexo-title">Anexo 1 — Plano</div>
+    <div class="anexo-subtitle">Conjunto Residencial Oasis del Caribe · Moñitos, Córdoba</div>
+  </div>
+  <img src="{% static 'img/plano_oasis.jpg' %}" alt="Plano Oasis del Caribe" />
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     ANEXO 2 — TABLA DE AMORTIZACIÓN
+     ══════════════════════════════════════════════════════ -->
+{% if plan_pagos %}
+<div class="anexo-content" style="page-break-before: always;">
+  <div class="anexo-header">
+    <div class="anexo-title">Anexo 2 — Tabla de Amortización</div>
+    <div class="anexo-subtitle">Contrato No. {{ ctr.pk }} · Conjunto Residencial Oasis del Caribe</div>
+  </div>
+
+  <table class="amort-table">
+    <thead>
+      <tr>
+        <th class="col-num">No.</th>
+        <th class="col-date">Fecha vencimiento</th>
+        <th class="col-tipo">Tipo cuota</th>
+        <th class="col-money">Capital</th>
+        <th class="col-money">Interés cte</th>
+        <th class="col-money">Cuota total</th>
+        <th class="col-money">Saldo capital</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cuota in plan_pagos %}
+      <tr{% if cuota.tipo == 'Cuota Inicial' %} class="row-ci"{% endif %}>
+        <td class="col-num">{{ cuota.nrocta }}</td>
+        <td class="col-date">{{ cuota.fecha|date:"d/m/Y" }}</td>
+        <td class="col-tipo">
+          {% if cuota.tipo == 'Cuota Inicial' %}
+            <span class="badge-ci">Cuota Inicial</span>
+          {% else %}
+            <span class="badge-fn">Financiación</span>
+          {% endif %}
+        </td>
+        <td class="col-money">${{ cuota.capital|floatformat:0 }}</td>
+        <td class="col-money">${{ cuota.intcte|floatformat:0 }}</td>
+        <td class="col-money">${{ cuota.cuota|floatformat:0 }}</td>
+        <td class="col-money">${{ cuota.saldo_capital|floatformat:0 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="7" style="text-align:right; font-size:7.5pt; color:#555;">
+          Total: {{ plan_pagos|length }} cuota(s)
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════
+     ANEXO 3 — MEMORIA TÉCNICA
+     ══════════════════════════════════════════════════════ -->
+<div class="anexo-content" style="page-break-before: always;">
+  <div class="anexo-header">
+    <div class="anexo-title">Anexo 3 — Memoria Técnica</div>
+    <div class="anexo-subtitle">Oasis del Caribe · Conjunto Residencial</div>
+  </div>
+
+  <p style="font-size:9pt; line-height:1.6; margin-bottom:10pt; text-align:justify;">
+    El proyecto contempla la construcción y adecuación de las siguientes obras de infraestructura y urbanismo:
+  </p>
+
+  <ul style="font-size:9pt; line-height:1.9; padding-left:18pt; margin-bottom:14pt;">
+    <li><strong>Portería.</strong></li>
+    <li><strong>Cerramiento perimetral:</strong> cerramiento en malla eslabonada.</li>
+    <li><strong>Parqueadero descubierto:</strong> zona pavimentada y demarcada.</li>
+    <li><strong>Vías peatonales y ciclorruta:</strong> senderos pavimentados para circulación de peatones y bicicletas.</li>
+    <li><strong>Red de alcantarillado:</strong> sistema para conducción de aguas residuales y lluvias.</li>
+    <li><strong>Red de acueducto:</strong> infraestructura para el suministro y distribución de agua potable.</li>
+    <li><strong>Red eléctrica:</strong> sistema de suministro de energía para el proyecto.</li>
+    <li><strong>Luminarias solares:</strong> iluminación de zonas comunes mediante energía solar.</li>
+    <li><strong>Parque infantil:</strong> área recreativa equipada para uso de niños.</li>
+  </ul>
+
+  <p style="font-size:9pt; line-height:1.6; margin-bottom:6pt; text-align:justify;">
+    Declaro haber leído y aceptado libremente las especificaciones y descripción técnica del proyecto
+    detalladas en este anexo técnico.
+  </p>
+  <p style="font-size:9pt; line-height:1.6; margin-bottom:20pt;">
+    En señal de aceptación, es firmado el día <u>&nbsp;{{ ctr.fecha_contrato.day }}&nbsp;</u>
+    de <u>&nbsp;{{ ctr.fecha_contrato|date:"F" }}&nbsp;</u>
+    de <u>&nbsp;{{ ctr.fecha_contrato.year }}&nbsp;</u>.
+  </p>
+
+  <div style="font-size:8pt; font-weight:bold; color:#D4572A; text-transform:uppercase; letter-spacing:0.5pt; margin-bottom:14pt;">
+    El (Los) Promitente(s) Comprador(es)
+  </div>
+  <div style="display:table; width:100%; table-layout:fixed;">
+    <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; vertical-align:top;">
+      <div class="sig-line" style="padding-bottom:50pt;"></div>
+      {% if ctr.titulares.0 %}
+      <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.0.nombrecompleto|upper }}</div>
+      <div class="sig-nit">C.C. {{ ctr.titulares.0.pk }}</div>
+      {% endif %}
+    </div>
+    <div style="display:table-cell; width:50%; text-align:center; padding:0 14pt; vertical-align:top;">
+      {% if ctr.titulares.1 %}
+      <div class="sig-line" style="padding-bottom:50pt;"></div>
+      <div class="sig-name" style="margin-top:6pt; font-size:8.5pt;">{{ ctr.titulares.1.nombrecompleto|upper }}</div>
+      <div class="sig-nit">C.C. {{ ctr.titulares.1.pk }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

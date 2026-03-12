@@ -752,7 +752,26 @@ class Recaudos_general(models.Model):
             'inmueble':adj.idinmueble
         }
         return data
-        
+
+    def detalle_pago(self):
+        from django.db.models import Sum
+        db_name = self._state.db
+        det = Recaudos.objects.using(db_name).filter(recibo=self.numrecibo).aggregate(
+            capital=Sum('capital'),
+            interescte=Sum('interescte'),
+            interesmora=Sum('interesmora'),
+        )
+        return {
+            'capital':     det['capital']     or 0,
+            'interescte':  det['interescte']  or 0,
+            'interesmora': det['interesmora'] or 0,
+        }
+
+    def titulares_lista(self):
+        adj = self.info_adj()
+        return adj.titulares2()
+
+
 class Recaudos(models.Model):
     idrecaudo = models.IntegerField(primary_key=True,db_column='id')
     recibo = models.CharField(db_column='Recibo', max_length=12, blank=True, null=True)  # Field name made lowercase.
@@ -1346,7 +1365,7 @@ class Pqrs(models.Model):
         db_table = 'pqrs'
 
 class Parametros_Operaciones(models.Model):
-    descripcion = models.CharField(db_column='Descripcion', max_length=255, blank=True, null=True)  # Field name made lowercase.
+    descripcion = models.CharField(db_column='Descripcion', max_length=255, primary_key=True)
     estado = models.BooleanField(blank=True, null=True)
 
     class Meta:

@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+
+{% block form_top %}
+{{ block.super }}
+<input type="hidden" name="{{ db_param }}" value="{{ current_db }}">
+<p style="margin:8px 0 12px;">
+    <strong>Base activa:</strong> {{ current_db }}
+    <a style="margin-left:8px;" href="../?{{ db_query_suffix }}">Volver al listado</a>
+</p>
+{% endblock %}

@@ -5,6 +5,13 @@ RUN apt-get update -y && \
         poppler-utils \
         locales \
         libgtk-3-0 \
+        libcairo2 \
+        libpango-1.0-0 \
+        libpangocairo-1.0-0 \
+        libpangoft2-1.0-0 \
+        libgdk-pixbuf-2.0-0 \
+        libffi-dev \
+        shared-mime-info \
         gcc \
         g++ \
         python3-dev \

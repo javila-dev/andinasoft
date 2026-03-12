@@ -17,7 +17,8 @@ class job_cartera(CronJobBase):
             'Vegas de Venecia',
             'Perla del Mar',
             'Sandville Beach',
-            'Sotavento'
+            'Sotavento',
+            'Oasis',
         )
         subject='Clientes que deben pagar hoy'
         carteras=User.objects.filter(groups__name='Gestor Cartera',is_active=True).order_by('first_name')

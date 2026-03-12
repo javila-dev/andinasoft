@@ -17,6 +17,8 @@ requests
 material
 django_cron
 xhtml2pdf==0.2.11
+weasyprint==61.2
+pydyf==0.10.0
 gunicorn
 pdf2image
 python-docx

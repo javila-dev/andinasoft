@@ -165,6 +165,23 @@ def nombre_numero(numero):
     return valor_letras
     
 
+@register.filter(name='dia_en_letras')
+def dia_en_letras(dia):
+    nombres = {
+        1:'uno', 2:'dos', 3:'tres', 4:'cuatro', 5:'cinco',
+        6:'seis', 7:'siete', 8:'ocho', 9:'nueve', 10:'diez',
+        11:'once', 12:'doce', 13:'trece', 14:'catorce', 15:'quince',
+        16:'dieciséis', 17:'diecisiete', 18:'dieciocho', 19:'diecinueve',
+        20:'veinte', 21:'veintiuno', 22:'veintidós', 23:'veintitrés',
+        24:'veinticuatro', 25:'veinticinco', 26:'veintiséis', 27:'veintisiete',
+        28:'veintiocho', 29:'veintinueve', 30:'treinta', 31:'treinta y uno',
+    }
+    try:
+        return nombres.get(int(dia), str(dia))
+    except (ValueError, TypeError):
+        return str(dia)
+
+
 @register.filter(name='porcentaje')
 def porcentaje(value,total):
     if total==0:

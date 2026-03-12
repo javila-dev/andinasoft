@@ -13,6 +13,9 @@
     <button class="btn btn-outline-primary btn-sm float-right" data-toggle="modal" data-target="#modal-texto-inv">
         Generar texto inventario
     </button>
+    <button class="btn btn-outline-success btn-sm float-right mr-2" data-toggle="modal" data-target="#modal-cargar-inv">
+        Cargar inventario (Excel/CSV)
+    </button>
     <div class='table-responsive p-2'>
         <table id='tabla-inventario' class="display" style="width:100%">
             <thead>
@@ -82,6 +85,34 @@
   </div>
 </div>
 
+<div class="modal fade" id="modal-cargar-inv" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-hidden="true">
+    <form method="post" id="form-cargar-inv" enctype="multipart/form-data">{%csrf_token%}
+    <input type="hidden" name="btn-cargar-inventario" value="1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Cargar Inventario</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <p class="mb-2">Carga un archivo <strong>.xlsx</strong> o <strong>.csv</strong> con la estructura del modelo <code>Inmuebles</code>.</p>
+            <a class="btn btn-link p-0 mb-3" href="/operaciones/inventario_administrativo/{{proyecto}}?download_inventario_template=1">
+                Descargar plantilla de carga
+            </a>
+            <input type="file" id="file-cargar-inventario" class="form-control-file" name="inventario_file" accept=".xlsx,.csv" required/>
+            <small class="text-muted d-block mt-2">No uses fórmulas en el archivo.</small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-success" type="submit">Cargar</button>
+        </div>
+      </div>
+    </div>
+    </form>
+  </div>
+
 <div class="modal fade" id="modal-texto-inv" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
     <form method="post" id='form-texto-inv'>{%csrf_token%}
     <div class="modal-dialog">
@@ -125,7 +156,6 @@
     </div>
     </form>
   </div>
-</div>
 {{form_lote.media}}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
@@ -332,6 +362,53 @@
 </script>
 <script>
     $(document).ready(function(){
+        $('#form-cargar-inv').submit(function(e){
+            e.preventDefault();
+            var file = $('#file-cargar-inventario').val();
+            if (!file.toLowerCase().endsWith('.xlsx') && !file.toLowerCase().endsWith('.csv')){
+                Swal.fire({
+                    title: '¡Error!',
+                    text: 'El archivo debe ser .xlsx o .csv',
+                    icon: 'error',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+            var form = new FormData(this);
+            $.ajax({
+                type: 'POST',
+                url: '/operaciones/inventario_administrativo/{{proyecto}}',
+                data: form,
+                contentType: false,
+                processData: false,
+                success: function(response){
+                    Swal.fire({
+                        title: '¡Éxito!',
+                        text: response['message'],
+                        icon:'success',
+                        confirmButtonText: 'OK'
+                    }).then(function(){
+                        $('#modal-cargar-inv').modal('hide');
+                        $('#form-cargar-inv').trigger('reset');
+                        location.reload();
+                    });
+                },
+                error: function(xhr){
+                    var payload = xhr.responseJSON || {};
+                    var extra = '';
+                    if (payload.errors && payload.errors.length){
+                        extra = '\n\n' + payload.errors.slice(0, 5).join('\n');
+                    }
+                    Swal.fire({
+                        title: '¡Error!',
+                        text: (payload.message || 'Ocurrió un error al cargar el inventario') + extra,
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                }
+            });
+        });
+
         $('#form-texto-inv').submit(function(e){
             e.preventDefault();
             file = $('#file-inventario').val()

@@ -67,6 +67,7 @@ class registrar_asesor(forms.Form):
         ('Tesoro Escondido','Tesoro Escondido'),
         ('Vegas de Venecia','Vegas de Venecia'),
         ('Perla del mar','Perla del mar'),
+        ('Oasis','Oasis'),
                 )
     Equipo=forms.ChoiceField(choices=list_equipos)
     query_bancos=entidades_bancarias.objects.all()
@@ -223,7 +224,7 @@ class documentos_contrato(forms.Form):
         return nombre_doc
     
 class form_lista_proyectos(forms.Form):
-    project_list=proyectos.objects.using('default').all()
+    project_list=proyectos.objects.using('default').filter(activo=True)
     proyecto=forms.ModelChoiceField(project_list,label='Proyecto')
 
 class form_nuevo_cliente(forms.Form):

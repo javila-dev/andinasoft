@@ -8344,6 +8344,8 @@ class GenerarPDF():
         'Sandville del Sol':'./resources/Logos/Perla del Mar.png',
         'Sotavento':'./resources/Logos/logo-sotavento.png',
         'Carmelo Reservado': './resources/Carmelo Reservado/logo.png',
+        'Casas de Verano': 'resources/Casas de Verano/logo.png',
+        'Oasis': 'resources/Logos/logo_oasis.png',
         'Alttum Collection':'',
         'Fractal':'/static_files/img/fractal450x.png'
       }

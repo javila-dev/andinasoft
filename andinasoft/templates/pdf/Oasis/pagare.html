@@ -1,0 +1,435 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: legal;
+    margin: 0 0 72pt 0;
+    @bottom-center { content: element(footer_content); }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/UbuntuLight.ttf' %}");
+  }
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/UbuntuBold.ttf' %}");
+    font-weight: bold;
+  }
+
+  body {
+    font-family: Ubuntu, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 9pt;
+    color: #2C2C2C;
+    background: white;
+  }
+
+  .doc-header { width: 100%; margin-bottom: 14pt; }
+  .header-top-bar { height: 6pt; background-color: #F0E6D8; width: 100%; }
+  .header-content { display: table; width: 100%; padding: 10pt 0 10pt 0; }
+  .header-left { display: table-cell; vertical-align: middle; width: 60%; }
+  .header-title-block { border-left: 3pt solid #D4572A; padding-left: 10pt; }
+  .header-title-block .doc-title {
+    font-size: 12pt; font-weight: bold; color: #1A4A4A;
+    text-transform: uppercase; letter-spacing: 0.5pt; line-height: 1.3;
+  }
+  .header-title-block .doc-subtitle {
+    font-size: 9pt; color: #D4572A; font-weight: 600;
+    margin-top: 2pt; text-transform: uppercase; letter-spacing: 0.3pt;
+  }
+  .header-right { display: table-cell; vertical-align: middle; text-align: right; width: 40%; }
+  .header-right img { height: 52pt; width: auto; }
+  .header-divider { height: 2pt; background-color: #D4572A; margin: 0 36pt; }
+  .doc-number-bar {
+    background-color: #1A4A4A; color: white; padding: 5pt 36pt; display: table; width: 100%;
+  }
+  .doc-number-bar .number {
+    display: table-cell; text-align: right; font-weight: bold; font-size: 10pt; color: #F0E6D8;
+  }
+
+  #footer_content { position: running(footer_content); width: 100%; }
+  .footer-main { background-color: #1A4A4A; display: table; width: 100%; }
+  .footer-left { display: table-cell; width: 65%; padding: 10pt 36pt; vertical-align: middle; }
+  .footer-city { font-size: 8.5pt; font-weight: bold; color: white; }
+  .footer-address { font-size: 7.5pt; color: #A8C8C8; margin-top: 2pt; line-height: 1.4; }
+  .footer-right {
+    display: table-cell; width: 35%; background-color: #D4572A;
+    padding: 10pt 20pt; vertical-align: middle; text-align: right;
+  }
+  .footer-social { font-size: 8.5pt; color: white; font-weight: bold; }
+  .footer-social-sub { font-size: 7.5pt; color: rgba(255,255,255,0.8); margin-top: 2pt; }
+  .footer-page-num::before { content: "Pág. " counter(page) " / " counter(pages); }
+  .footer-page-num { font-size: 8pt; color: rgba(255,255,255,0.75); margin-top: 4pt; }
+
+  .main-content { padding: 26pt 36pt 26pt 36pt; }
+  .section-title {
+    font-size: 13pt; font-weight: bold; color: #1A4A4A;
+    text-transform: uppercase; letter-spacing: 0.6pt; margin-bottom: 4pt;
+  }
+  .section-subtitle {
+    font-size: 8.3pt; color: #D4572A; margin-bottom: 10pt; text-transform: uppercase; font-weight: bold;
+  }
+  .meta-box {
+    background-color: #F9F7F4; border: 1pt solid #E8DDD4; border-radius: 3pt;
+    padding: 10pt 12pt; margin-bottom: 12pt;
+  }
+  .meta-line { font-size: 9pt; line-height: 1.9; }
+  .label { color: #D4572A; font-weight: bold; text-transform: uppercase; }
+  .value-line {
+    display: inline-block; min-width: 220pt; border-bottom: 0.8pt solid #8F8F8F;
+    height: 11pt; vertical-align: bottom;
+  }
+  .value-line-short {
+    display: inline-block; min-width: 80pt; border-bottom: 0.8pt solid #8F8F8F;
+    height: 11pt; vertical-align: bottom;
+  }
+  .body-text {
+    font-size: 9pt; line-height: 1.65; text-align: justify; margin-bottom: 8pt;
+  }
+  .clause-title {
+    color: #1A4A4A; font-weight: bold; text-transform: uppercase; margin-top: 10pt; margin-bottom: 3pt;
+    letter-spacing: 0.3pt;
+  }
+  .body-text ol { padding-left: 16pt; }
+  .body-text li { margin-bottom: 5pt; }
+  .signatures { margin-top: 18pt; page-break-inside: avoid; }
+  .sig-list { width: 100%; font-size: 0; }
+  .sig-item {
+    display: inline-block; width: 48%; margin-right: 4%; margin-bottom: 14pt;
+    vertical-align: top;
+  }
+  .sig-item:nth-child(2n) { margin-right: 0; }
+  .sig-line { border-bottom: 1.2pt solid #1A4A4A; height: 22pt; margin-bottom: 4pt; }
+  .sig-name { font-size: 8.7pt; font-weight: bold; color: #1A4A4A; text-transform: uppercase; }
+  .sig-id { font-size: 8pt; color: #555; }
+  .sig-role { font-size: 8pt; color: #444; margin-top: 2pt; text-transform: uppercase; }
+  .sig-extra { font-size: 8pt; color: #555; margin-top: 1pt; }
+  .sign-main { width: 100%; border-collapse: collapse; margin-top: 8pt; }
+  .sign-main td { vertical-align: bottom; }
+  .right-align { text-align: right; }
+  .page-break { page-break-before: always; }
+
+  /* Montos box */
+  .amounts-box {
+    border: 1pt solid #D4572A; border-radius: 3pt;
+    margin: 10pt 0; overflow: hidden;
+  }
+  .amounts-row {
+    display: table; width: 100%; border-bottom: 0.5pt solid #E8DDD4;
+  }
+  .amounts-row:last-child { border-bottom: none; }
+  .amounts-label {
+    display: table-cell; background-color: #F9F7F4; padding: 5pt 10pt;
+    width: 38%; font-weight: bold; color: #D4572A; font-size: 8.3pt;
+    text-transform: uppercase; vertical-align: middle;
+  }
+  .amounts-value {
+    display: table-cell; padding: 5pt 10pt; vertical-align: bottom;
+  }
+  .amounts-value .value-line { min-width: 180pt; }
+
+  /* Carta de instrucciones — compacta para una sola hoja */
+  .carta-content { padding: 12pt 36pt 12pt 36pt; }
+  .carta-content .doc-header { margin-bottom: 8pt; }
+  .carta-content .body-text { font-size: 8.5pt; line-height: 1.4; margin-bottom: 4pt; }
+  .carta-content .body-text li { margin-bottom: 2pt; }
+  .carta-content .body-text ol { padding-left: 14pt; }
+  .carta-content .signatures { margin-top: 8pt; }
+  .carta-content .sig-item { padding-top: 32pt; }
+  .main-content .sig-item { padding-top: 32pt; }
+</style>
+</head>
+<body>
+
+<div id="footer_content">
+  <div class="footer-main">
+    <div class="footer-left">
+      <div class="footer-city">Medellín</div>
+      <div class="footer-address">
+        Calle 11 # 43B – 50 | Oficina 508 | Parque Empresarial Calle 11 | Tel: (604) 4446291<br/>
+        ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9
+      </div>
+    </div>
+    <div class="footer-right">
+      <div class="footer-social">@OasisdelCaribeco</div>
+      <div class="footer-social-sub">Instagram · Facebook</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PÁGINA 1 — PAGARÉ
+     ══════════════════════════════════════════════════════ -->
+<div class="main-content">
+  <div class="doc-header">
+    <div class="header-top-bar"></div>
+    <div class="header-content">
+      <div class="header-left">
+        <div class="header-title-block">
+          <div class="doc-title">Pagaré No. {{ ctr.pk }}</div>
+          <div class="doc-subtitle">Título valor — Código de Comercio, art. 709 y siguientes</div>
+          <div class="doc-subtitle">Conjunto Residencial Oasis del Caribe</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <img src="{% static 'img/logo_oasis.png' %}" alt="Oasis del Caribe" />
+      </div>
+    </div>
+    <div class="header-divider"></div>
+    <div class="doc-number-bar"></div>
+  </div>
+
+  <!-- Datos de suscripción -->
+  <div class="meta-box">
+    <div class="meta-line">
+      <span class="label">Deudor(es):</span>
+      <strong>{% for titular in ctr.titulares %}{{ titular.nombrecompleto|upper }}{% if not forloop.last %} y {% endif %}{% endfor %}</strong>,
+      mayor(es) de edad, identificado(s) como aparece(mos) al pie de la(s) firma(s).
+    </div>
+    <div class="meta-line">
+      <span class="label">Fecha de suscripción:</span>
+      Medellín, {{ ctr.fecha_contrato.day }} de {{ ctr.fecha_contrato|date:"F" }} de {{ ctr.fecha_contrato.year }}
+    </div>
+    <div class="meta-line">
+      <span class="label">Fecha de vencimiento:</span>
+      El día <span class="value-line-short"></span> del mes de <span class="value-line-short"></span> del año <span class="value-line-short"></span>
+    </div>
+  </div>
+
+  <!-- Montos -->
+  <p class="clause-title">Sumas a pagar</p>
+  <div class="amounts-box">
+    <div class="amounts-row">
+      <div class="amounts-label">Por capital</div>
+      <div class="amounts-value">
+        <span class="value-line"></span>&nbsp;&nbsp;
+        ($ <span class="value-line-short"></span>) M.C.
+      </div>
+    </div>
+    <div class="amounts-row">
+      <div class="amounts-label">Por intereses causados y no pagados</div>
+      <div class="amounts-value">
+        <span class="value-line"></span>&nbsp;&nbsp;
+        ($ <span class="value-line-short"></span>) M.C.
+      </div>
+    </div>
+    <div class="amounts-row">
+      <div class="amounts-label">Por otros conceptos</div>
+      <div class="amounts-value">
+        <span class="value-line"></span>&nbsp;&nbsp;
+        ($ <span class="value-line-short"></span>) M.C.
+      </div>
+    </div>
+  </div>
+
+  <!-- Cláusulas -->
+  <p class="body-text">
+    Yo (Nosotros), <strong>{% for titular in ctr.titulares %}{{ titular.nombrecompleto|upper }}{% if not forloop.last %} y {% endif %}{% endfor %}</strong>, mayor(es) de edad, con domicilio en la ciudad
+    de Medellín, identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s), actuando en mi(nuestro) propio nombre,
+    o en la condición indicada al pie de mi(nuestras) firma(s), declaro(amos):
+  </p>
+
+  <p class="clause-title">Primero</p>
+  <p class="body-text">
+    Que me(nos) obligo(amos) a pagar solidaria, indivisible, irrevocable e incondicionalmente a la orden de
+    <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</strong>, con NIT 900.993.044-9, en adelante <strong>EL ACREEDOR</strong>,
+    o a quien represente sus derechos, o a la persona natural o jurídica a quien el acreedor ceda o endose sus derechos
+    sobre este pagaré, en sus oficinas del país o en los puntos de pago autorizados expresamente para el efecto,
+    las sumas de dinero indicadas en el cuadro anterior, correspondientes al contrato de venta de bien futuro
+    identificado con el número <strong>{{ ctr.pk }}</strong> del proyecto <strong>Oasis del Caribe</strong>.
+  </p>
+
+  <p class="clause-title">Segundo</p>
+  <p class="body-text">
+    Que pagare(mos) intereses moratorios a la tasa máxima legalmente autorizada sobre la suma de capital insoluto.
+  </p>
+
+  <p class="clause-title">Tercero</p>
+  <p class="body-text">
+    Que acepto(amos) expresamente cualquier endoso o cesión que de este pagaré haga <strong>EL ACREEDOR</strong>
+    y reconozco(emos) desde ya al endosatario o cesionario dentro de cualquier proceso judicial.
+  </p>
+
+  <p class="clause-title">Cuarto</p>
+  <p class="body-text">
+    Como deudor(es) renuncio(amos) expresamente a cualquier requerimiento para ser constituido(s) en mora
+    en los casos de ley.
+  </p>
+
+  <p class="clause-title">Quinto</p>
+  <p class="body-text">
+    <strong>EL ACREEDOR</strong> se podrá acoger a los términos del artículo 886 del Código de Comercio para el cobro
+    de intereses. El presente pagaré no está sujeto a la presentación para su pago, ni al aviso de rechazo, ni al
+    protesto para todos los efectos legales y se suscribe para ser llenado por <strong>EL ACREEDOR</strong> o su
+    representante según las instrucciones impartidas por mi(nosotros), las cuales están contenidas en la carta de
+    autorizaciones e instrucciones adjunta al presente documento, de conformidad con lo dispuesto en el artículo
+    622 del Código de Comercio.
+  </p>
+
+  <p class="body-text">
+    Para constancia se firma en un (1) original, con destino <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</strong>,
+    con NIT 900.993.044-9., el día <span class="value-line-short"></span> del mes de
+    <span class="value-line-short"></span> del año <span class="value-line-short"></span>.
+  </p>
+
+  <div class="signatures">
+    <table class="sign-main">
+      <tr>
+        <td style="width:100%">
+          <div class="sig-list">
+            {% for titular in ctr.titulares %}
+            <div class="sig-item">
+              <div class="sig-line"></div>
+              <div class="sig-name">{{ titular.nombrecompleto|upper }}</div>
+              <div class="sig-id">C.C. {{ titular.pk }}</div>
+              <div class="sig-role">Suscriptor / Deudor solidario</div>
+            </div>
+            {% endfor %}
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PÁGINA 2 — CARTA DE INSTRUCCIONES
+     ══════════════════════════════════════════════════════ -->
+<div class="page-break"></div>
+
+<div class="carta-content">
+  <div class="doc-header">
+    <div class="header-top-bar"></div>
+    <div class="header-content">
+      <div class="header-left">
+        <div class="header-title-block">
+          <div class="doc-title">Carta de Instrucciones</div>
+          <div class="doc-subtitle">Para el diligenciamiento del pagaré No. {{ ctr.pk }} — Art. 622 Código de Comercio</div>
+          <div class="doc-subtitle">Conjunto Residencial Oasis del Caribe</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <img src="{% static 'img/logo_oasis.png' %}" alt="Oasis del Caribe" />
+      </div>
+    </div>
+    <div class="header-divider"></div>
+    <div class="doc-number-bar"></div>
+  </div>
+
+  <p class="body-text"><strong>Medellín, {{ ctr.fecha_contrato.day }} de {{ ctr.fecha_contrato|date:"F" }} de {{ ctr.fecha_contrato.year }}</strong></p>
+  <p class="body-text">Señores</p>
+  <p class="body-text">
+    <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</strong><br>
+    NIT 900.993.044-9<br>
+    Ciudad
+  </p>
+  <p class="body-text">
+    <strong>Referencia:</strong> Autorización e instrucciones permanentes para el diligenciamiento del Pagaré No. {{ ctr.pk }}.
+  </p>
+
+  <p class="body-text">
+    Yo (Nosotros), <strong>{% for titular in ctr.titulares %}{{ titular.nombrecompleto|upper }}{% if not forloop.last %} y {% endif %}{% endfor %}</strong>, mayor(es) de edad, identificado(s) como aparece(mos) al pie de mi(nuestras) firma(s),
+    actuando en mi(nuestro) propio nombre, o en la condición indicada al píe de mi(nuestras) firma(s), declaro(amos):
+    Que de conformidad con lo dispuesto en el artículo 622 del Código de Comercio, por medio del presente documento
+    autorizo(amos) irrevocablemente y de manera permanente a <strong>ANDINA CONCEPTOS INMOBILIARIOS S.A.S.</strong>,
+    con NIT 900.993.044-9, en adelante <strong>EL ACREEDOR</strong> o a quien represente sus derechos, para llenar
+    sin previo aviso los espacios en blanco y demás aspectos generales y particulares del pagaré indicado en la
+    referencia, el cual he(mos) otorgado a su orden con espacios en blanco y del que hago(hacemos) entrega con
+    efectos negociables, teniendo en cuenta las siguientes instrucciones:
+  </p>
+
+  <div class="body-text">
+    <ol>
+      <li>
+        El pagaré podrá ser llenado cuando exista incumplimiento o mora en el pago de cualquier obligación a
+        mi(nuestro) cargo, individual o conjuntamente, en los casos estipulados en la ley, en el pagaré mismo y
+        demás documentos suscritos por mi(nosotros). Podrá también ser endosado, previo a su diligenciamiento,
+        en razón de ser negociado cualquier derecho de crédito a mi(nuestro) cargo, individual, conjunta y solidariamente.
+      </li>
+      <li>
+        La fecha de vencimiento del título valor será aquella que corresponda al día en que sea llenado el pagaré.
+        <strong>EL ACREEDOR</strong> determinará la fecha de vencimiento del Pagaré y esta corresponderá a un día
+        cierto, de tal manera que a partir de la misma serán exigibles de inmediato todas las obligaciones contenidas
+        en el Pagaré materia de estas instrucciones.
+      </li>
+      <li>
+        El espacio relacionado con el valor de capital se llenará con el monto de todas las sumas que por concepto
+        de saldo insoluto de capital deba(mos) al <strong>ACREEDOR</strong>, en forma separada, conjunta y solidaria,
+        el día en que sean diligenciados los espacios en blanco, conforme a la liquidación que el <strong>ACREEDOR</strong>
+        efectúe, derivadas de todas las obligaciones exigibles a mi(nuestro) cargo y a favor del <strong>ACREEDOR</strong>,
+        en especial la correspondiente al mutuo que hemos recibido de parte del <strong>ACREEDOR</strong>.
+      </li>
+      <li>
+        El espacio relacionado con los intereses causados y no pagados será el que corresponda por este concepto,
+        tanto de intereses de plazo como de mora, derivados de las obligaciones a mi(nuestro) cargo, conforme a
+        la liquidación que el <strong>ACREEDOR</strong> efectúe.
+      </li>
+      <li>
+        El espacio relacionado con el valor de otros conceptos se llenará con el monto de todas las sumas que por
+        cualquier otro concepto yo(nosotros) deba(amos) al <strong>ACREEDOR</strong> sin atención a su naturaleza
+        o fuente, en especial las relacionadas con los siguientes rubros: (i) El monto de cualquier gasto pagado
+        por el <strong>ACREEDOR</strong> por mi(nuestra) cuenta, especialmente honorarios de abogados, comisiones,
+        gastos administrativos y de cobranzas, así como cualquier otra suma que se deba por concepto distinto de intereses.
+      </li>
+      <li>
+        En el evento de que en desarrollo de esta facultad se cometieren errores involuntarios en el diligenciamiento
+        del pagaré, el <strong>ACREEDOR</strong> queda expresamente facultado para aclararlos, enmendarlos y
+        corregirlos de manera tal que el mismo responda a sus exigencias legales.
+      </li>
+      <li>
+        En caso de incumplimiento, retardo o existencia de cualquier causal de aceleración contemplada en los pagarés
+        y contratos, frente a cualquiera de las obligaciones a mi(nuestro) cargo, el <strong>ACREEDOR</strong> queda
+        autorizado para acelerar el vencimiento y exigir anticipadamente el valor de las demás obligaciones de las
+        que sea(amos) deudor(es), garante(s) o avalista(s), individual, conjunta o solidariamente, sin necesidad de
+        requerimiento judicial o extrajudicial para constituir en mora, así como para incorporarlas al Pagaré.
+      </li>
+      <li>
+        Así mismo, autorizo(amos) diligenciar los espacios en blanco correspondientes al número del pagaré, el
+        cual corresponderá a aquel que le asigne el <strong>ACREEDOR</strong> y que identifique cualquiera de las
+        obligaciones a mi(nuestro) cargo; así como al de mi(nuestro) domicilio, mi(nuestro) nombre y dirección.
+        Declaro(amos) expresamente haber recibido copia del presente documento para todos los efectos legales.
+      </li>
+    </ol>
+  </div>
+
+  <p class="body-text">
+    El pagaré llenado conforme a estas instrucciones, será exigible inmediatamente y prestará mérito ejecutivo
+    sin más requisitos y requerimientos.
+  </p>
+
+  <p class="body-text">
+    Declaro(amos) que conozco(cemos) y acepto(amos) los Reglamentos y/o Contratos de los productos, así como
+    que he(mos) recibido copia de esta carta de instrucciones.
+  </p>
+
+  <p class="body-text">
+    Para constancia se firma a los {{ ctr.fecha_contrato.day|dia_en_letras }} ({{ ctr.fecha_contrato.day }}) días del mes de
+    {{ ctr.fecha_contrato|date:"F" }} del año {{ ctr.fecha_contrato.year }}.
+  </p>
+  <div class="signatures">
+    <div class="sig-list">
+      {% for titular in ctr.titulares %}
+      <div class="sig-item">
+        <div class="sig-line"></div>
+        <div class="sig-name">{{ titular.nombrecompleto|upper }}</div>
+        <div class="sig-id">C.C. {{ titular.pk }}</div>
+        <div class="sig-role">Suscriptor / Otorgante</div>
+      </div>
+      {% endfor %}
+      <div class="sig-item">
+        <div class="sig-line"></div>
+        <div class="sig-name">Andina Conceptos Inmobiliarios S.A.S.</div>
+        <div class="sig-id">NIT 900.993.044-9</div>
+        <div class="sig-role">Acreedor / Beneficiario</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

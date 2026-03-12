@@ -234,6 +234,7 @@ class clientes(models.Model):
 
 class proyectos(models.Model):
     proyecto=models.CharField(max_length=255,primary_key=True)
+    activo=models.BooleanField(default=True)
     
     def __str__(self):
         return self.proyecto

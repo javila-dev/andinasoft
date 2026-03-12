@@ -1,4 +1,6 @@
 import decimal
+import csv
+import io
 from django.shortcuts import render, redirect
 from django.template import RequestContext
 from django.http import HttpResponseRedirect, JsonResponse, HttpResponse, FileResponse, QueryDict
@@ -42,7 +44,7 @@ from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_cont
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
 from andinasoft.create_pdf import GenerarPDF
-from andinasoft.utilities import Utilidades, pdf_gen
+from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, calcular_tabla_amortizacion
 from andinasoft.passes_test import perms_test
 from buildingcontrol import models as building_model
 from accounting import forms as forms_accounting
@@ -158,6 +160,177 @@ def _save_workbook_with_dirs(book, path):
     book.save(path)
 
 
+INVENTARIO_IMPORT_COLUMNS = [
+    'idinmueble',
+    'etapa',
+    'manzananumero',
+    'lotenumero',
+    'matricula',
+    'vrmetrocuadrado',
+    'estado',
+    'finobra',
+    'areaprivada',
+    'areaconstruida',
+    'area_lt',
+    'area_mz',
+    'norte',
+    'lindero_norte',
+    'colindante_norte',
+    'sur',
+    'lindero_sur',
+    'colindante_sur',
+    'este',
+    'lindero_este',
+    'colidante_este',
+    'oeste',
+    'lindero_oeste',
+    'colindante_oeste',
+    'fac_valor_via_principal',
+    'fac_valor_area_social',
+    'fac_valor_esquinero',
+    'obsbloqueo',
+    'meses',
+]
+
+
+def _normalize_header(value):
+    return str(value or '').strip().lower()
+
+
+def _clean_value(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        return value if value != '' else None
+    return value
+
+
+def _parse_decimal(value):
+    value = _clean_value(value)
+    if value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        return Decimal(str(value))
+    value = str(value).replace(' ', '')
+    if ',' in value and '.' in value:
+        if value.rfind(',') > value.rfind('.'):
+            value = value.replace('.', '').replace(',', '.')
+        else:
+            value = value.replace(',', '')
+    else:
+        value = value.replace(',', '.')
+    return Decimal(value)
+
+
+def _parse_int(value):
+    value = _clean_value(value)
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    return int(Decimal(str(value)))
+
+
+def _parse_datetime_value(value):
+    value = _clean_value(value)
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.date):
+        return datetime.datetime.combine(value, datetime.time.min)
+    value = str(value)
+    parsed = parse_date(value)
+    if parsed:
+        return datetime.datetime.combine(parsed, datetime.time.min)
+    try:
+        return datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        try:
+            return datetime.datetime.strptime(value, '%Y-%m-%d')
+        except ValueError as exc:
+            raise ValueError(f'Fecha inválida: {value}') from exc
+
+
+def _parse_inventory_row(row_data):
+    parsed = {}
+    parsed['idinmueble'] = _clean_value(row_data.get('idinmueble'))
+    if not parsed['idinmueble']:
+        raise ValueError('idinmueble es obligatorio')
+
+    parsed['etapa'] = _clean_value(row_data.get('etapa'))
+    parsed['manzananumero'] = _clean_value(row_data.get('manzananumero'))
+    parsed['lotenumero'] = _clean_value(row_data.get('lotenumero'))
+    parsed['matricula'] = _clean_value(row_data.get('matricula'))
+    parsed['estado'] = _clean_value(row_data.get('estado'))
+    parsed['obsbloqueo'] = _clean_value(row_data.get('obsbloqueo'))
+
+    decimal_fields = [
+        'vrmetrocuadrado', 'areaprivada', 'areaconstruida', 'area_lt', 'area_mz',
+        'norte', 'sur', 'este', 'oeste',
+        'fac_valor_via_principal', 'fac_valor_area_social', 'fac_valor_esquinero'
+    ]
+    for field in decimal_fields:
+        parsed[field] = _parse_decimal(row_data.get(field))
+
+    parsed['meses'] = _parse_int(row_data.get('meses'))
+    parsed['finobra'] = _parse_datetime_value(row_data.get('finobra'))
+
+    text_fields = [
+        'lindero_norte', 'colindante_norte', 'lindero_sur', 'colindante_sur',
+        'lindero_este', 'colidante_este', 'lindero_oeste', 'colindante_oeste'
+    ]
+    for field in text_fields:
+        parsed[field] = _clean_value(row_data.get(field))
+
+    return parsed
+
+
+def _iter_inventory_rows(uploaded_file):
+    extension = os.path.splitext(uploaded_file.name or '')[1].lower()
+    if extension == '.csv':
+        content = uploaded_file.read().decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(content))
+        headers = {_normalize_header(h): h for h in (reader.fieldnames or [])}
+        missing = [col for col in INVENTARIO_IMPORT_COLUMNS if col not in headers]
+        if missing:
+            raise ValueError(f'Columnas faltantes en CSV: {", ".join(missing)}')
+        for index, row in enumerate(reader, start=2):
+            normalized = {_normalize_header(k): v for k, v in row.items()}
+            if not any(_clean_value(v) is not None for v in normalized.values()):
+                continue
+            yield index, normalized
+        return
+
+    if extension == '.xlsx':
+        wb = openpyxl.load_workbook(uploaded_file, data_only=False)
+        ws = wb.active
+        header_cells = [cell.value for cell in ws[1]]
+        headers = [_normalize_header(cell) for cell in header_cells]
+        missing = [col for col in INVENTARIO_IMPORT_COLUMNS if col not in headers]
+        if missing:
+            raise ValueError(f'Columnas faltantes en XLSX: {", ".join(missing)}')
+        header_index = {name: idx for idx, name in enumerate(headers)}
+
+        for row_idx in range(2, ws.max_row + 1):
+            row_values = {}
+            is_empty = True
+            for field in INVENTARIO_IMPORT_COLUMNS:
+                cell = ws.cell(row=row_idx, column=header_index[field] + 1)
+                if cell.data_type == 'f':
+                    raise ValueError(f'No se permiten fórmulas (fila {row_idx}, columna {field})')
+                row_values[field] = cell.value
+                if _clean_value(cell.value) is not None:
+                    is_empty = False
+            if is_empty:
+                continue
+            yield row_idx, row_values
+        return
+
+    raise ValueError('Formato no soportado. Usa .xlsx o .csv')
+
+
 @login_required
 def proyecto_popup(request,redireccion):
     redirecciones={
@@ -188,9 +361,32 @@ def proyecto_popup(request,redireccion):
         'gestion_asesores':'comercial/lista_asesores_general',
         'edades_cartera':'cartera/edades_cartera',
     }
+    logos_proyecto = {
+        'Tesoro Escondido': 'img/logo-Tesoro-Escondido.png',
+        'Vegas de Venecia': 'img/logo-camisas-vegas-de-venecia.png',
+        'Carmelo Reservado': 'img/logo_carmelo_reservado.png',
+        'Sandville Beach': 'img/sandville beach.png',
+        'Perla del Mar': 'img/logo-perla.png',
+        'Fractal': 'img/fractal-logo.jpg',
+        'Casas de Verano': 'img/casas-de-verano450x.png',
+        'Oasis': 'img/logo_oasis.png',
+    }
     direccion=redirecciones[redireccion]
+    lista_proyectos = []
+    for proyecto_item in proyectos.objects.values('proyecto', 'activo').order_by('proyecto'):
+        nombre = proyecto_item['proyecto']
+        if nombre == 'default':
+            continue
+        if nombre not in connections.databases:
+            continue
+        lista_proyectos.append({
+            'nombre': nombre,
+            'logo': logos_proyecto.get(nombre),
+            'activo': bool(proyecto_item.get('activo')),
+        })
     context={
-        'redireccion':direccion
+        'redireccion':direccion,
+        'proyectos': lista_proyectos,
     }
     return render(request,'proyectos_popup.html',context)
 
@@ -223,6 +419,7 @@ def welcome(request):
         'Perla del Mar',
         'Sandville Beach',
         'Sotavento',
+        'Oasis',
     )   
     mes=datetime.date.today().month
     año=datetime.date.today().year
@@ -1613,7 +1810,10 @@ def _guardar_recaudo(
         'recibo': obj_recibo
     }
 
-    pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc, filename)
+    if proyecto == 'Oasis':
+        pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context_rc, filename)
+    else:
+        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc, filename)
 
     file = pdf.get('root')
 
@@ -3900,7 +4100,9 @@ def acciones_venta(request,proyecto,contrato):
 
         fin_pagos = max(fin_pagos_reg,fin_pagos_ce)
 
-        f_entrega = datetime.date.today() + relativedelta( months = datos_inmueble.meses)
+        meses_entrega_inmueble = int(datos_inmueble.meses or 0)
+        min_meses_entrega = max(36, meses_entrega_inmueble)
+        f_entrega = datos_venta.fecha_contrato + relativedelta(months=min_meses_entrega)
 
         if fin_pagos > f_entrega: 
             f_escritura = fin_pagos
@@ -3938,6 +4140,7 @@ def acciones_venta(request,proyecto,contrato):
             'cargos_comisiones':Cargos_comisiones.objects.using(proyecto).all(),
             'f_entrega':f_entrega,
             'f_escritura':f_escritura,
+            'min_meses_entrega':min_meses_entrega,
         }
         
         pdf=GenerarPDF()
@@ -3947,28 +4150,33 @@ def acciones_venta(request,proyecto,contrato):
                 if tipo=='recibo':
                     recibo=request.GET.get('recibo')
                     datos_recaudo=RecaudosNoradicados.objects.using(proyecto).get(recibo=recibo)
-                    ruta=settings.DIR_EXPORT+f'{proyecto}_reciboNR_{recibo}.pdf'
-                    nombre_t1=datos_t1.nombrecompleto
-                    fecha=datos_recaudo.fecha
-                    concepto=datos_recaudo.concepto
-                    valor=datos_recaudo.valor
-                    resid_t1=str(datos_t1.domicilio)
-                    cdresid_t1=str(datos_t1.ciudad)
-                    cel_t1=str(datos_t1.celular1)
-                    formapago=datos_recaudo.formapago
-                    pdf.Recibo_caja(proyecto=proyecto,
-                                    ruta=ruta,
-                                    nroRecibo=recibo,
-                                    titular1=nombre_t1,
-                                    fecha=str(fecha),
-                                    concepto=concepto,
-                                    valor=valor,
-                                    direccion=resid_t1,
-                                    ciudad=cdresid_t1,
-                                    telefono=cel_t1,
-                                    formapag=formapago,
-                                    user=request.user)
-                    dir_download=settings.DIR_DOWNLOADS+f'{proyecto}_reciboNR_{recibo}.pdf'
+                    filename=f'{proyecto}_reciboNR_{recibo}.pdf'
+                    if proyecto == 'Oasis':
+                        result = pdf_gen_weasy(
+                            f'pdf/{proyecto}/recibo_nr.html',
+                            {'recibo': datos_recaudo},
+                            filename,
+                        )
+                        dir_download = result['url']
+                    else:
+                        ruta=settings.DIR_EXPORT+filename
+                        nombre_t1=datos_t1.nombrecompleto
+                        resid_t1=str(datos_t1.domicilio)
+                        cdresid_t1=str(datos_t1.ciudad)
+                        cel_t1=str(datos_t1.celular1)
+                        pdf.Recibo_caja(proyecto=proyecto,
+                                        ruta=ruta,
+                                        nroRecibo=recibo,
+                                        titular1=nombre_t1,
+                                        fecha=str(datos_recaudo.fecha),
+                                        concepto=datos_recaudo.concepto,
+                                        valor=datos_recaudo.valor,
+                                        direccion=resid_t1,
+                                        ciudad=cdresid_t1,
+                                        telefono=cel_t1,
+                                        formapag=datos_recaudo.formapago,
+                                        user=request.user)
+                        dir_download=settings.DIR_DOWNLOADS+filename
                     return JsonResponse({'instance':dir_download},status=200)
                 elif tipo=='actualizar_fecha':
                     check_perms(request,('andinasoft.delete_ventas_nuevas',))
@@ -4162,6 +4370,22 @@ def acciones_venta(request,proyecto,contrato):
                     fecha_escritura=datetime.datetime.strptime(fecha_escritura,'%Y-%m-%d')
                     oficina=request.POST.get('oficinaopcion')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_contrato_{contrato}.pdf'
+
+                    fecha_minima_entrega = datos_venta.fecha_contrato + relativedelta(months=min_meses_entrega)
+                    if fecha_entrega.date() < fecha_minima_entrega:
+                        alerta = True
+                        titulo = 'Error'
+                        link = False
+                        mensaje = (
+                            f'La fecha de entrega no puede ser menor a {min_meses_entrega} meses '
+                            f'desde la fecha del contrato ({datos_venta.fecha_contrato}). '
+                            f'Fecha mínima permitida: {fecha_minima_entrega}.'
+                        )
+                        context['alerta'] = True
+                        context['titulo'] = titulo
+                        context['mensaje'] = mensaje
+                        context['link'] = False
+                        return render(request,'acciones_venta.html',context)
                     
                     parametro=obj_parametro.get(descripcion='formasOpcionManual')
                     if parametro.estado:
@@ -4257,7 +4481,7 @@ def acciones_venta(request,proyecto,contrato):
                         filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
                         
                             
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
                         
                         file = pdf.get('root')
                                                 
@@ -4511,24 +4735,28 @@ def acciones_venta(request,proyecto,contrato):
                         filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
                         
                             
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
                         
                         file = pdf.get('root')
                                                 
                         return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
-                    elif proyecto == 'Casas de Verano':
+                    elif proyecto == 'Casas de Verano' or proyecto == 'Oasis':
                         context = {
                             'proyecto':proyecto,
                             'ctr':obj_ctr,
                             'fecha_escritura':fecha_escritura,
                             'meses_entrega':meses_entrega,
-                            'oficina':oficina
+                            'oficina':oficina,
+                            'plan_pagos':calcular_tabla_amortizacion(obj_ctr),
                         }
                         
                         filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
                         
                             
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+                        if proyecto == 'Oasis':
+                            pdf = pdf_gen_weasy(f'pdf/{proyecto}/contrato.html', context, filename)
+                        else:
+                            pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
                         
                         file = pdf.get('root')
                                                 
@@ -4859,8 +5087,16 @@ def acciones_venta(request,proyecto,contrato):
                     parameter.estado=False
                     parameter.save()
                 if request.POST.get('impPagare'):
-                    ruta=settings.DIR_EXPORT+f'{proyecto}_pagare_{contrato}.pdf'
-                    if proyecto=='Vegas de Venecia':
+                    filename = f'{proyecto}_pagare_{contrato}.pdf'
+                    ruta=settings.DIR_EXPORT+filename
+                    if proyecto=='Oasis':
+                        context_pagare = {
+                            'proyecto': proyecto,
+                            'ctr': obj_ctr,
+                        }
+                        pdf_file = pdf_gen_weasy(f'pdf/{proyecto}/pagare.html', context_pagare, filename)
+                        ruta_link = pdf_file.get('url')
+                    elif proyecto=='Vegas de Venecia':
                         pdf.PagareQuadrata(nroPagare=contrato,
                                         nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
                                         nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
@@ -4901,7 +5137,8 @@ def acciones_venta(request,proyecto,contrato):
                     mensaje='Descarga el Pagaré aqui'
                     titulo='¡Listo!'
                     link=True
-                    ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_pagare_{contrato}.pdf'
+                    if proyecto!='Oasis':
+                        ruta_link=settings.DIR_DOWNLOADS+filename
                 if request.POST.get('impVerificacion'):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_verificacion_{contrato}.pdf'
                     parametro=obj_parametro.get(descripcion='formasVerificacionManual')
@@ -5023,30 +5260,39 @@ def acciones_venta(request,proyecto,contrato):
                                                                         concepto=concepto,
                                                                         valor=valor,
                                                                         formapago=formapago,
+                                                                        usuario=request.user.username,
                                                                         soportepago=file_key)
-                        recibo=RecaudosNoradicados.objects.using(proyecto).aggregate(Max('recibo'))
-                        recibo=recibo['recibo__max']
                         nrorecibo = obj_consecutivo.consecutivo
                         obj_consecutivo.consecutivo+=1
                         obj_consecutivo.save()
-                        ruta=settings.DIR_EXPORT+f'{proyecto}_reciboNR_{recibo}.pdf'
-                        pdf.Recibo_caja(proyecto=proyecto,
-                                        ruta=ruta,
-                                        nroRecibo=nrorecibo,
-                                        titular1=nombre_t1,
-                                        fecha=str(datetime.date.today()),
-                                        concepto=concepto,
-                                        valor=valor,
-                                        direccion=resid_t1,
-                                        ciudad=cdresid_t1,
-                                        telefono=cel_t1,
-                                        formapag=formapago,
-                                        user=request.user)
+                        filename=f'{proyecto}_reciboNR_{nrorecibo}.pdf'
+                        if proyecto == 'Oasis':
+                            datos_recaudo = RecaudosNoradicados.objects.using(proyecto).get(recibo=nrorecibo)
+                            result = pdf_gen_weasy(
+                                f'pdf/{proyecto}/recibo_nr.html',
+                                {'recibo': datos_recaudo},
+                                filename,
+                            )
+                            ruta_link = result['url']
+                        else:
+                            ruta=settings.DIR_EXPORT+filename
+                            pdf.Recibo_caja(proyecto=proyecto,
+                                            ruta=ruta,
+                                            nroRecibo=nrorecibo,
+                                            titular1=nombre_t1,
+                                            fecha=str(datetime.date.today()),
+                                            concepto=concepto,
+                                            valor=valor,
+                                            direccion=resid_t1,
+                                            ciudad=cdresid_t1,
+                                            telefono=cel_t1,
+                                            formapag=formapago,
+                                            user=request.user)
+                            ruta_link=settings.DIR_DOWNLOADS+filename
                         alerta=True
                         mensaje='Descarga el Recibo aqui'
                         titulo='¡Listo!'
-                        link=True
-                        ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_reciboNR_{recibo}.pdf'     
+                        link=True     
                 if request.POST.get('impTerminosAlttum'):
                     beneficiarios = request.POST.get('beneficiarios')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_Terminos y condiciones alttum_contrato_{contrato}.pdf'
@@ -6255,12 +6501,63 @@ def comisiones(request,proyecto):
 def inventario_admin(request,proyecto):
     
     if request.method == 'GET':
+        if request.GET.get('download_inventario_template') == '1':
+            book = openpyxl.Workbook()
+            sheet = book.active
+            sheet.title = 'inventario'
+            sheet.append(INVENTARIO_IMPORT_COLUMNS)
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename=plantilla_inventario.xlsx'
+            book.save(response)
+            return response
         if request.is_ajax():
             inmueble=request.GET.get('inmueble')
             data_inmueble=Inmuebles.objects.using(proyecto).filter(idinmueble=inmueble)
             ser_inmuebles=serializers.serialize('json',data_inmueble)
             return JsonResponse({'instance':ser_inmuebles},status=200)
     if request.method == 'POST':
+        if request.POST.get('btn-cargar-inventario') == '1':
+            check_perms(request, perms=('andinasoft.change_inmuebles',))
+            upload = request.FILES.get('inventario_file')
+            if not upload:
+                return JsonResponse({'ok': False, 'message': 'Debes cargar un archivo .xlsx o .csv'}, status=400)
+
+            created_count = 0
+            updated_count = 0
+            errors = []
+
+            try:
+                for row_number, row_data in _iter_inventory_rows(upload):
+                    try:
+                        parsed = _parse_inventory_row(row_data)
+                        inmueble_id = parsed.pop('idinmueble')
+                        _, created = Inmuebles.objects.using(proyecto).update_or_create(
+                            idinmueble=inmueble_id,
+                            defaults=parsed
+                        )
+                        if created:
+                            created_count += 1
+                        else:
+                            updated_count += 1
+                    except Exception as exc:
+                        errors.append(f'Fila {row_number}: {exc}')
+            except Exception as exc:
+                return JsonResponse({'ok': False, 'message': str(exc)}, status=400)
+
+            if errors:
+                return JsonResponse({
+                    'ok': False,
+                    'message': f'Se procesaron con errores. Creados: {created_count}, actualizados: {updated_count}',
+                    'errors': errors[:20]
+                }, status=400)
+
+            return JsonResponse({
+                'ok': True,
+                'message': f'Inventario cargado. Creados: {created_count}, actualizados: {updated_count}'
+            })
+
         check_perms(request,perms=('andinasoft.change_inmuebles',))
         form_lote=form_inv_admin(request.POST)
         if form_lote.is_valid():
@@ -7322,7 +7619,7 @@ def promesas(request,proyecto):
                         filename = f'Contrato_bien_futuro_{adj}_{proyecto}.pdf'
                         
                             
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
                         
                         ruta = pdf.get('root')
                                                 
@@ -7409,7 +7706,7 @@ def promesas(request,proyecto):
 
                         filename = f'Promesa_{proyecto}_{adj}.pdf'
                         
-                    elif proyecto == 'Sotavento':
+                    elif proyecto == 'Sotavento' or proyecto == 'Oasis':
                         try:
                             meses_entrega = math.ceil((promesa.fechaentrega - datetime.date.today()).days / 30)
                         except:
@@ -7427,7 +7724,10 @@ def promesas(request,proyecto):
                         filename = f'Contrato_bien_futuro_{adj}_{proyecto}.pdf'
                         
                             
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+                        if proyecto == 'Oasis':
+                            pdf = pdf_gen_weasy(f'pdf/{proyecto}/contrato.html', context, filename)
+                        else:
+                            pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
                         
                         file = pdf.get('root')
                                                 
@@ -8526,7 +8826,10 @@ def ajax_imprimir_promesa(request):
             filename = f'Contrato_bien_futuro_{adj}_{proyecto}.pdf'
             
                 
-            pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+            if proyecto == 'Oasis':
+                pdf = pdf_gen_weasy(f'pdf/{proyecto}/contrato.html', context, filename)
+            else:
+                pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
             
             ruta = pdf.get('root')
                                     
@@ -8613,7 +8916,8 @@ def print_documents(request,proyecto):
                 'ctr':obj_ctr,
                 'fecha_escritura':datetime.date.today(),
                 'meses_entrega':24,
-                'oficina':'Medellín'
+                'oficina':'Medellín',
+                'plan_pagos':calcular_tabla_amortizacion(obj_ctr),
             }
             
             filename = 'contrato.pdf'
@@ -8655,7 +8959,10 @@ def print_documents(request,proyecto):
                 
                 
                 
-        pdf = pdf_gen(path,context,filename)
+        if proyecto == 'Oasis' and template == 'contrato_nuevo':
+            pdf = pdf_gen_weasy(path, context, filename)
+        else:
+            pdf = pdf_gen(path, context, filename)
         
         file = pdf.get('root')
                 
@@ -9066,8 +9373,17 @@ def acciones_venta_fractal(request):
                         'proyecto':proyecto,
                         'ctr':obj_venta,
                     }
+                    if proyecto == 'Oasis':
+                        context.update({
+                            'fecha_escritura': datetime.date.today(),
+                            'meses_entrega': 24,
+                            'oficina': 'Medellín',
+                        })
                     filename = f'{venta}_acuerdo_vinculacion_{proyecto}.pdf'
-                    pdf = pdf_gen(f'pdf/{proyecto}/contrato.html',context,filename)
+                    if proyecto == 'Oasis':
+                        pdf = pdf_gen_weasy(f'pdf/{proyecto}/contrato.html', context, filename)
+                    else:
+                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
                 
                 elif tipodoc == 'verificacion':
                     obj_venta = ventas_nuevas.objects.using(proyecto).get(pk=venta)
