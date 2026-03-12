@@ -553,7 +553,7 @@ def calcular_tabla_amortizacion(ctr):
         for i in range(1, nro_cuotas + 1):
             interes       = (capital_pendiente * tasa).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
             abono_capital = cuota_fija - interes
-            fecha         = inicio + relativedelta(months=i)
+            fecha         = inicio + relativedelta(months=i - 1)
 
             if i == nro_cuotas:
                 abono_capital = capital_pendiente
