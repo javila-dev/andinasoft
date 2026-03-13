@@ -6648,10 +6648,10 @@ def presupuesto_cartera(request,proyecto,periodo):
         if request.POST.get('btnExportar'):
             usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',))
             if usuario_administrador:
-                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
+                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{periodo}', '')")
             else:
                 gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
-                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
+                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{periodo}', '')")
             book=openpyxl.Workbook()
             sheet=book.active
             encabezados=['Adjudicacion','Cliente','Estado','Origen','Venta Mes','Tipo Cartera','Edad',
@@ -6684,7 +6684,7 @@ def presupuesto_cartera(request,proyecto,periodo):
     
     usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
     if usuario_administrador:
-        obj_informe=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
+        obj_informe=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{periodo}', '')")
     else:
         gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
         obj_informe=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")')
@@ -7357,7 +7357,7 @@ def reporte_cartera(request,proyecto,año):
     sheet=book.get_sheet_by_name('Resumen x Periodo')
     agrupador={}
     for mes in range(1,13):
-        contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{año}{mes:02d}",NULL)')
+        contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{año}{mes:02d}', '')")
         for fila in contenido_ppto:
             grupo=str(mes)+'-'+fila.tipocartera+'-'+fila.edad
             if grupo not in agrupador:
@@ -8662,7 +8662,7 @@ def graph_cartera_anual(request,proyecto):
         año=request.POST.get('periodoaño')
         agrupador={}
         for mes in range(1,13):
-            contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{año}{mes:02d}",NULL)')
+            contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{año}{mes:02d}', '')")
             for fila in contenido_ppto:
                 grupo=str(mes)+'-'+fila.tipocartera+'-'+fila.edad
                 if grupo not in agrupador:
@@ -9830,7 +9830,7 @@ def cartera_month_results(request):
             try:
                 contenido_ppto = list(
                     Adjudicacion.objects.using(proyecto.proyecto).raw(
-                        f'CALL informe_cartera("{periodo}",NULL)'
+                        f"CALL informe_cartera('{periodo}', '')"
                     )
                 )
             except DBInternalError as exc:
