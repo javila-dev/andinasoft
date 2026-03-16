@@ -53,6 +53,38 @@ class GenerarPDF():
               'Quadrata Constructores':'./resources/Logos/quadrata.png'
             }
 
+
+    def _resolve_media_file_path(self, file_field):
+        if not file_field:
+            return None
+
+        try:
+            file_path = file_field.path
+        except Exception:
+            file_path = None
+
+        if file_path and os.path.exists(file_path):
+            return file_path
+
+        raw_value = str(file_field).strip()
+        if not raw_value:
+            return None
+
+        if os.path.isabs(raw_value) and os.path.exists(raw_value):
+            return raw_value
+
+        media_path = os.path.join(settings.MEDIA_ROOT, raw_value)
+        if os.path.exists(media_path):
+            return media_path
+
+        return None
+
+    def _build_media_logo(self, file_field, width, height):
+        logo_path = self._resolve_media_file_path(file_field)
+        if not logo_path:
+            return Spacer(width, height)
+        return Image(logo_path, width=width, height=height)
+
     def ExportOpcionContratoVenecia(self,nro_contrato,nombre_t1,cc_t1,tel_t1,cel_t1,
                                     ofic_t1,cdof_t1,telof_t1,
                                     resid_t1,cdresid_t1,telresid_t1,email_t1,
@@ -8524,7 +8556,7 @@ class GenerarPDF():
       headerStyle_center=ParagraphStyle('encabezado tabla',alignment=1,fontSize=10,fontName='centuryg')
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
       logo_path = self.logos['Quadrata Constructores']
-      logo = Image(f'{settings.MEDIA_ROOT}/{object_contrato.empresa_contrata.logo}',width=50*mm,height=13*mm)
+      logo = self._build_media_logo(object_contrato.empresa_contrata.logo,width=50*mm,height=13*mm)
       
       data_table =[
         [logo,'','','',Paragraph('<b>ORDEN</b>',headerStyle_center),'',f'Nº {object_contrato.pk}'],
@@ -8719,7 +8751,7 @@ class GenerarPDF():
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
       HdataStyle_c = ParagraphStyle('encabezado tabla',alignment=1,fontSize=8,fontName='centuryg')
       logo_path = self.logos['Quadrata Constructores']
-      logo = Image(f'{settings.MEDIA_ROOT}/{object_contrato.empresa_contrata.logo}',width=50*mm,height=13*mm)
+      logo = self._build_media_logo(object_contrato.empresa_contrata.logo,width=50*mm,height=13*mm)
       
       data_table =[
         [logo,'','','',Paragraph('<b>ACTA DE RECIBIDO</b>',headerStyle_center),'',f'Nº {obj_acta.num_acta}'],
@@ -8904,7 +8936,7 @@ class GenerarPDF():
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
       HdataStyle_c = ParagraphStyle('encabezado tabla',alignment=1,fontSize=8,fontName='centuryg')
       logo_path = self.logos['Quadrata Constructores']
-      logo = Image(f'{settings.MEDIA_ROOT}/{object_contrato.empresa_contrata.logo}',width=50*mm,height=13*mm)
+      logo = self._build_media_logo(object_contrato.empresa_contrata.logo,width=50*mm,height=13*mm)
       
       data_table =[
         [logo,'','','',Paragraph('<b>ADICIONAL</b>',headerStyle_center),'',f'Nº {obj_adicional.num_otrosi}'],
@@ -9099,7 +9131,7 @@ class GenerarPDF():
       headerStyle=ParagraphStyle('encabezado tabla',alignment=0,fontSize=10,fontName='centuryg')
       headerStyle_center=ParagraphStyle('encabezado tabla',alignment=1,fontSize=10,fontName='centuryg')
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
-      logo = Image(f'{settings.MEDIA_ROOT}/{obj_pagos.empresa.logo}',width=30*mm,height=13*mm)
+      logo = self._build_media_logo(obj_pagos.empresa.logo,width=30*mm,height=13*mm)
       
       oficinas ={
         'MEDELLIN':'MDE',
@@ -9198,7 +9230,7 @@ class GenerarPDF():
       headerStyle=ParagraphStyle('encabezado tabla',alignment=0,fontSize=10,fontName='centuryg')
       headerStyle_center=ParagraphStyle('encabezado tabla',alignment=1,fontSize=10,fontName='centuryg')
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
-      logo = Image(f'{settings.MEDIA_ROOT}/{obj_pagos.empresa.logo}',width=30*mm,height=13*mm)
+      logo = self._build_media_logo(obj_pagos.empresa.logo,width=30*mm,height=13*mm)
       
       oficinas ={
         'MEDELLIN':'MDE',
@@ -9301,7 +9333,7 @@ class GenerarPDF():
       headerStyle=ParagraphStyle('encabezado tabla',alignment=0,fontSize=10,fontName='centuryg')
       headerStyle_center=ParagraphStyle('encabezado tabla',alignment=1,fontSize=10,fontName='centuryg')
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
-      logo = Image(f'{settings.MEDIA_ROOT}/{obj_otros_ingresos.empresa.logo}',width=30*mm,height=13*mm)
+      logo = self._build_media_logo(obj_otros_ingresos.empresa.logo,width=30*mm,height=13*mm)
       
       oficinas ={
         'MEDELLIN':'MDE',
@@ -9399,7 +9431,7 @@ class GenerarPDF():
       headerStyle=ParagraphStyle('encabezado tabla',alignment=0,fontSize=10,fontName='centuryg')
       headerStyle_center=ParagraphStyle('encabezado tabla',alignment=1,fontSize=10,fontName='centuryg')
       HdataStyle = ParagraphStyle('encabezado tabla',alignment=0,fontSize=8,fontName='centuryg')
-      logo = Image(f'{settings.MEDIA_ROOT}/{empresa.logo}',width=30*mm,height=20*mm)
+      logo = self._build_media_logo(empresa.logo,width=30*mm,height=20*mm)
       
       fecha_date = datetime.strptime(fecha,'%Y-%m-%d')
       fecha_format = datetime.strftime(fecha_date,'%A, %d de %B de %Y')
