@@ -6748,14 +6748,124 @@ def edades_cartera(request,proyecto):
         return render(request,'adjudicados_fractal.html',context)
     
     check_groups(request,('Supervisor Cartera',))
-    obj_adj = Adjudicacion.objects.using(proyecto).filter(estado='Aprobado'
-                        ).exclude(origenventa='Canje')
+    adj_ids = list(
+        Adjudicacion.objects.using(proyecto).filter(
+            estado='Aprobado'
+        ).exclude(
+            origenventa='Canje'
+        ).values_list('idadjudicacion', flat=True)
+    )
+    today = datetime.date.today()
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    end_month = datetime.date(today.year, today.month, last_day)
+    zero = Decimal('0')
+
+    adj_info_map = {
+        info['IdAdjudicacion']: info for info in Vista_Adjudicacion.objects.using(proyecto).filter(
+            IdAdjudicacion__in=adj_ids
+        ).values('IdAdjudicacion', 'Nombre', 'tipo_cartera')
+    }
+    gestor_map = {
+        info['idadjudicacion']: (info['gestorasignado'] or 'Sin Gestor') for info in InfoCartera.objects.using(proyecto).filter(
+            idadjudicacion__in=adj_ids
+        ).values('idadjudicacion', 'gestorasignado')
+    }
+    ultimo_pago_map = {
+        recaudo['idadjudicacion']: recaudo['ultimo_pago'] for recaudo in Recaudos.objects.using(proyecto).filter(
+            idadjudicacion__in=adj_ids
+        ).values('idadjudicacion').annotate(ultimo_pago=Max('fecha'))
+    }
+    recaudos_por_cuenta = {
+        recaudo['idcta']: {
+            'capital': recaudo['capital_pagado'] or zero,
+            'interes': recaudo['interes_pagado'] or zero,
+        } for recaudo in Recaudos.objects.using(proyecto).filter(
+            idadjudicacion__in=adj_ids
+        ).exclude(
+            idcta__isnull=True
+        ).exclude(
+            idcta=''
+        ).values('idcta').annotate(
+            capital_pagado=Sum('capital'),
+            interes_pagado=Sum('interescte'),
+        )
+    }
+
+    plan_por_adj = {}
+    for cuota in PlanPagos.objects.using(proyecto).filter(
+        adj__in=adj_ids,
+        fecha__lte=end_month,
+    ).values('adj', 'idcta', 'fecha', 'capital', 'intcte'):
+        plan_por_adj.setdefault(cuota['adj'], []).append(cuota)
+
     adj_list = []
-    for adj in obj_adj:
-        adj_list.append( {
-            'info':adj,
-            'presupuesto':adj.presupuesto()
+    for adj_id in adj_ids:
+        info = adj_info_map.get(adj_id, {})
+        dias_mora = 0
+        por_vencer = zero
+        lt_30_value = zero
+        lt_60_value = zero
+        lt_90_value = zero
+        lt_120_value = zero
+        gt_120_value = zero
+
+        for cuota in plan_por_adj.get(adj_id, []):
+            fecha_cuota = cuota.get('fecha')
+            if fecha_cuota is None:
+                continue
+
+            recaudo_cuota = recaudos_por_cuenta.get(cuota.get('idcta'), {})
+            capital = cuota.get('capital') or zero
+            interes = cuota.get('intcte') or zero
+            pendiente = (
+                capital - recaudo_cuota.get('capital', zero)
+            ) + (
+                interes - recaudo_cuota.get('interes', zero)
+            )
+
+            if pendiente <= 0:
+                continue
+
+            mora = (today - fecha_cuota).days if fecha_cuota < today else 0
+            dias_mora = mora if mora > dias_mora else dias_mora
+
+            if mora <= 0:
+                por_vencer += pendiente
+            elif mora <= 30:
+                lt_30_value += pendiente
+            elif mora <= 60:
+                lt_60_value += pendiente
+            elif mora <= 90:
+                lt_90_value += pendiente
+            elif mora <= 120:
+                lt_120_value += pendiente
+            else:
+                gt_120_value += pendiente
+
+        total_pendiente = por_vencer + lt_30_value + lt_60_value + lt_90_value + lt_120_value + gt_120_value
+
+        adj_list.append({
+            'info': {
+                'pk': adj_id,
+                'extra_info': {
+                    'Nombre': info.get('Nombre', ''),
+                    'tipo_cartera': info.get('tipo_cartera', ''),
+                },
+                'gestor_cartera': gestor_map.get(adj_id, 'Sin Gestor'),
+            },
+            'presupuesto': {
+                'por_vencer': por_vencer,
+                'lt30': lt_30_value,
+                'lt60': lt_60_value,
+                'lt90': lt_90_value,
+                'lt120': lt_120_value,
+                'gt120': gt_120_value,
+                'total_pendiente': total_pendiente,
+                'ultimo_pago': ultimo_pago_map.get(adj_id),
+                'dias_mora': dias_mora,
+            }
         })
+
     context = {
         'proyecto':proyecto,
         'adjudicaciones':adj_list,
