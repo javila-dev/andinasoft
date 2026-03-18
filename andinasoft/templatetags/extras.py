@@ -206,7 +206,20 @@ def media_url(path):
     path = str(path)
     if path.startswith('http://') or path.startswith('https://'):
         return path
-    normalized = path.lstrip('/')
+
+    media_url = getattr(settings, 'MEDIA_URL', '/media/') or '/media/'
+    normalized = path.strip()
+
+    if media_url and normalized.startswith(media_url):
+        normalized = normalized[len(media_url):]
+    elif normalized.startswith('/media/'):
+        normalized = normalized[len('/media/'):]
+
+    normalized = normalized.lstrip('/').replace('\\', '/')
+
+    if normalized.startswith('static_media/'):
+        normalized = normalized[len('static_media/'):]
+
     try:
         return default_storage.url(normalized)
     except Exception:
