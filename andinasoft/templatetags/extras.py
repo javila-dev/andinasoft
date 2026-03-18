@@ -1,4 +1,5 @@
 from django import template
+from django.conf import settings
 from django.core.files.storage import default_storage
 from andinasoft.shared_models import titulares_por_adj,Adjudicacion
 from andinasoft.models import clientes, asesores
