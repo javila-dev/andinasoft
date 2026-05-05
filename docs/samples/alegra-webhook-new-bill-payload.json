@@ -1,0 +1,47 @@
+{
+  "_comment": "Ejemplo real recibido en POST /accounting/alegra/webhooks/bills/ (Alegra → AndinaSoft). subject = tipo de evento; message.bill = factura de compra.",
+  "subject": "new-bill",
+  "message": {
+    "bill": {
+      "id": "1",
+      "date": "2026-05-04",
+      "dueDate": "2026-05-04",
+      "state": "open",
+      "client": {
+        "id": "297",
+        "name": "TELESENTINEL DE ANTIOQUIA LTDA",
+        "identification": "800144355",
+        "email": null,
+        "phonePrimary": null,
+        "phoneSecondary": null,
+        "mobile": "3115301",
+        "fax": null,
+        "address": {
+          "address": null,
+          "city": null,
+          "department": null,
+          "country": "Colombia",
+          "zipCode": null
+        }
+      },
+      "warehouse": {
+        "id": "019d06f6-08df-7479-b90d-799dc90a8f41",
+        "name": "Principal",
+        "isDefault": true
+      },
+      "items": [],
+      "subtotal": 139800,
+      "total": 142456,
+      "totalPaid": 0,
+      "balance": 142456,
+      "decimalPrecision": 0,
+      "observations": null,
+      "termsConditions": "",
+      "numberTemplate": {
+        "number": "FCII327559"
+      },
+      "dateTime": "2026-05-04 00:00:00",
+      "time": "2026-05-04 16:02:28"
+    }
+  }
+}

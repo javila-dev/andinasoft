@@ -14,16 +14,94 @@ from django.utils import dateparse, html, timezone
 from crispy_forms.layout import Layout, Fieldset, ButtonHolder, Submit, Row, Column, Field, Div, HTML
 from crispy_forms.bootstrap import FieldWithButtons, StrictButton, FormActions, PrependedText, PrependedAppendedText, TabHolder, Tab
 from andina.decorators import check_perms, check_groups
-from andinasoft.models import proyectos, empresas, notificaciones_correo, Profiles, asesores
+from andinasoft.models import clientes, proyectos, empresas, notificaciones_correo, Profiles, asesores
 from andinasoft.handlers_functions import envio_notificacion
+from andinasoft.shared_models import Adjudicacion, Inmuebles, Vista_Adjudicacion, saldos_adj, titulares_por_adj, timeline, seguimientos
 from andina.decorators import group_perm_required, check_project
-from crm.models import leads, historyline_lead, Operaciones, eventos, asistentes_evento, historyline_lead, usuario_gestor
+from crm.models import leads, historyline_lead, Operaciones, eventos, asistentes_evento, historyline_lead, usuario_gestor, ActaReunion, ActaParticipante, CompromisoActa, AdjuntoActa
 from crm import forms as crm_forms
 import datetime
 import json
 import math
 import traceback
 from decimal import Decimal
+
+
+
+def _build_reunion_contexto(acta):
+    contexto = {
+        'reuniones_anteriores': ActaReunion.objects.filter(
+            cliente=acta.cliente,
+            proyecto=acta.proyecto,
+        ).exclude(pk=acta.pk).order_by('-fecha_reunion', '-id_acta')[:10]
+        if acta.cliente_id and acta.proyecto_id else []
+    }
+
+    if not acta.cliente_id or not acta.proyecto_id:
+        contexto['detalle_proyecto_error'] = 'Asocia cliente y proyecto para ver cartera, lote y antecedentes.'
+        return contexto
+
+    proyecto_alias = acta.proyecto_id
+    cliente_id = acta.cliente_id
+
+    try:
+        adjudicaciones = list(
+            titulares_por_adj.objects.using(proyecto_alias).filter(
+                Q(IdTercero1=cliente_id) |
+                Q(IdTercero2=cliente_id) |
+                Q(IdTercero3=cliente_id) |
+                Q(IdTercero4=cliente_id)
+            ).values_list('adj', flat=True)
+        )
+    except Exception as exc:
+        contexto['detalle_proyecto_error'] = f'No fue posible consultar la cartera del proyecto: {exc}'
+        return contexto
+
+    if not adjudicaciones:
+        contexto['detalle_proyecto_error'] = 'No se encontraron adjudicaciones de este cliente en el proyecto seleccionado.'
+        return contexto
+
+    if len(adjudicaciones) > 1:
+        contexto['detalle_proyecto_warning'] = 'Este cliente tiene varias adjudicaciones en el proyecto. Se requiere asociar la reunión a una adjudicación específica para mostrar cartera exacta.'
+        contexto['adjudicaciones_relacionadas'] = adjudicaciones
+        return contexto
+
+    adj_id = adjudicaciones[0]
+    vista_adj = Vista_Adjudicacion.objects.using(proyecto_alias).filter(IdAdjudicacion=adj_id).first()
+    obj_adj = Adjudicacion.objects.using(proyecto_alias).filter(pk=adj_id).first()
+    saldos = saldos_adj.objects.using(proyecto_alias).filter(adj=adj_id)
+    inmueble = Inmuebles.objects.using(proyecto_alias).filter(pk=obj_adj.idinmueble).first() if obj_adj else None
+
+    capital_pagado = saldos.aggregate(total=Sum('rcdocapital')).get('total') or 0
+    capital_pendiente = saldos.aggregate(total=Sum('saldocapital')).get('total') or 0
+    saldos_mora = saldos.filter(saldocuota__gt=0)
+    agg_mora = saldos_mora.aggregate(
+        dias=Max('diasmora'),
+        int_mora=Sum('saldomora'),
+        saldo_cuotas=Sum('saldocuota'),
+    )
+    dias_mora = agg_mora.get('dias') or 0
+    int_mora = agg_mora.get('int_mora') or 0
+    saldo_cuotas_mora = agg_mora.get('saldo_cuotas') or 0
+    total_mora = saldo_cuotas_mora + int_mora
+    cuotas_en_mora = saldos_mora.count()
+    fecha_sin_pago = saldos_mora.order_by('fecha').values_list('fecha', flat=True).first()
+
+    contexto['detalle_proyecto'] = {
+        'adj_id': adj_id,
+        'estado': getattr(vista_adj, 'Estado', None),
+        'inmueble': getattr(vista_adj, 'Inmueble', None),
+        'capital_pagado': capital_pagado,
+        'capital_pendiente': capital_pendiente,
+        'dias_mora': dias_mora,
+        'total_mora': total_mora,
+        'cuotas_en_mora': cuotas_en_mora,
+        'fecha_sin_pago': fecha_sin_pago,
+        'fecha_contrato': getattr(vista_adj, 'FechaContrato', None),
+        'proyecto_alias': proyecto_alias,
+        'estado_cuenta_url': f'/andinasoftajx/estadodecuenta?proyecto={proyecto_alias}&adj={adj_id}',
+    }
+    return contexto
 
 @group_perm_required(('crm.view_leads',),raise_exception=True)
 def principal(request):
@@ -63,6 +141,12 @@ def leads_view(request):
     }
     
     if request.method == 'POST':
+        if request.POST.get('guardar_resultado'):
+            check_perms(request, ('crm.change_actareunion',))
+            resultado_form = crm_forms.ActaResultadoForm(request.POST, instance=acta, prefix='resultado')
+            if resultado_form.is_valid():
+                resultado_form.save()
+                return HttpResponseRedirect(f'/crm/actas/{acta.pk}')
         if request.POST.get('btnGrabar'):
             form = crm_forms.form_Leads(request.POST)
             if form.is_valid():
@@ -609,6 +693,50 @@ def ajax_newEvento(request):
                 }
             return JsonResponse(data)
 
+
+def ajax_clientes_proyecto(request):
+    if request.method == 'GET':
+        proyecto_alias = request.GET.get('proyecto')
+        search = (request.GET.get('search') or '').strip()
+        if not proyecto_alias:
+            return JsonResponse({'error': 'Debes seleccionar un proyecto.'}, status=400)
+        if len(search) < 2:
+            return JsonResponse({'terceros': []})
+
+        clientes_qs = clientes.objects.filter(
+            Q(nombrecompleto__icontains=search) | Q(idTercero__icontains=search)
+        ).order_by('nombrecompleto')[:25]
+        clientes_map = {cliente.pk: cliente for cliente in clientes_qs}
+        if not clientes_map:
+            return JsonResponse({'terceros': []})
+
+        relaciones = titulares_por_adj.objects.using(proyecto_alias).filter(
+            Q(IdTercero1__in=clientes_map.keys()) |
+            Q(IdTercero2__in=clientes_map.keys()) |
+            Q(IdTercero3__in=clientes_map.keys()) |
+            Q(IdTercero4__in=clientes_map.keys())
+        ).values('IdTercero1', 'IdTercero2', 'IdTercero3', 'IdTercero4')
+
+        asociados = set()
+        for row in relaciones:
+            for field in ('IdTercero1', 'IdTercero2', 'IdTercero3', 'IdTercero4'):
+                tercero_id = row.get(field)
+                if tercero_id in clientes_map:
+                    asociados.add(tercero_id)
+
+        terceros = []
+        for tercero_id in sorted(asociados, key=lambda pk: clientes_map[pk].nombrecompleto):
+            cliente = clientes_map[tercero_id]
+            terceros.append({
+                'id': cliente.idTercero,
+                'nombre_completo': cliente.nombrecompleto,
+                'celular': cliente.celular1,
+                'email': cliente.email,
+                'ciudad': cliente.ciudad,
+            })
+
+        return JsonResponse({'terceros': terceros})
+
 def ajax_adminEventos(request):
     if request.method == 'GET':
         if request.is_ajax():
@@ -644,13 +772,296 @@ def ajax_adminEventos(request):
            
                 
 
+
+@group_perm_required(('crm.view_actareunion',), raise_exception=True)
+def actas_list(request):
+    actas = ActaReunion.objects.select_related('cliente', 'proyecto', 'lider_reunion').all()
+    filtros = {
+        'estado': request.GET.get('estado', ''),
+        'responsable': request.GET.get('responsable', ''),
+        'proyecto': request.GET.get('proyecto', ''),
+    }
+    if filtros['estado']:
+        actas = actas.filter(estado=filtros['estado'])
+    if filtros['responsable']:
+        actas = actas.filter(compromisos__responsable_id=filtros['responsable']).distinct()
+    if filtros['proyecto']:
+        actas = actas.filter(proyecto_id=filtros['proyecto'])
+    context = {
+        'actas': actas,
+        'estados': ActaReunion.ESTADOS,
+        'proyectos': proyectos.objects.filter(activo=True).order_by('proyecto'),
+        'usuarios': User.objects.filter(is_active=True).order_by('first_name', 'last_name', 'username'),
+        'filtros': filtros,
+    }
+    return render(request, 'crm/actas.html', context)
+
+
+@group_perm_required(('crm.add_actareunion',), raise_exception=True)
+def acta_create(request):
+    initial = {}
+    fecha = request.GET.get('date')
+    hora = request.GET.get('time')
+    if fecha:
+        initial['fecha_reunion'] = fecha
+    if hora:
+        initial['hora_reunion'] = hora
+    form = crm_forms.ProgramarReunionForm(request.POST or None, initial=initial if request.method == 'GET' else None)
+    if request.method == 'POST' and form.is_valid():
+        acta = form.save(commit=False)
+        acta.creado_por = request.user
+        acta.estado = 'Programada'
+        acta.save()
+        return HttpResponseRedirect(f'/crm/actas/{acta.pk}')
+    return render(request, 'crm/acta_form.html', {'form': form, 'modo': 'crear'})
+
+
+@group_perm_required(('crm.change_actareunion',), raise_exception=True)
+def acta_edit(request, acta_id):
+    acta = ActaReunion.objects.get(pk=acta_id)
+    form = crm_forms.ProgramarReunionForm(request.POST or None, instance=acta)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        return HttpResponseRedirect(f'/crm/actas/{acta.pk}')
+    return render(request, 'crm/acta_form.html', {'form': form, 'modo': 'editar', 'acta': acta})
+
+
+@group_perm_required(('crm.view_actareunion',), raise_exception=True)
+def acta_detail(request, acta_id):
+    acta = ActaReunion.objects.select_related('cliente', 'proyecto', 'lider_reunion', 'creado_por').get(pk=acta_id)
+    resultado_form = crm_forms.ActaResultadoForm(instance=acta, prefix='resultado')
+    compromiso_form = crm_forms.CompromisoActaForm(prefix='compromiso')
+    seguimiento_form = crm_forms.SeguimientoCompromisoForm(prefix='seguimiento')
+    participante_form = crm_forms.ActaParticipanteForm(prefix='participante')
+    adjunto_form = crm_forms.AdjuntoActaForm(prefix='adjunto')
+
+    if request.method == 'POST':
+        if request.POST.get('guardar_compromiso'):
+            check_perms(request, ('crm.add_compromisoacta',))
+            compromiso_form = crm_forms.CompromisoActaForm(request.POST, prefix='compromiso')
+            if compromiso_form.is_valid():
+                compromiso = compromiso_form.save(commit=False)
+                compromiso.acta = acta
+                compromiso.creado_por = request.user
+                if acta.estado == 'Programada':
+                    acta.estado = 'En curso'
+                    acta.save(update_fields=['estado'])
+                compromiso.save()
+                return HttpResponseRedirect(f'/crm/actas/{acta.pk}')
+        if request.POST.get('guardar_seguimiento'):
+            check_perms(request, ('crm.add_seguimientocompromiso',))
+            compromiso_id = request.POST.get('compromiso_id')
+            compromiso = CompromisoActa.objects.get(pk=compromiso_id, acta=acta)
+            seguimiento_form = crm_forms.SeguimientoCompromisoForm(request.POST, prefix='seguimiento')
+            if seguimiento_form.is_valid():
+                seguimiento = seguimiento_form.save(commit=False)
+                seguimiento.compromiso = compromiso
+                seguimiento.usuario = request.user
+                seguimiento.save()
+                if seguimiento.estado_nuevo:
+                    compromiso.estado = seguimiento.estado_nuevo
+                if seguimiento.fecha_proxima:
+                    compromiso.fecha_compromiso = seguimiento.fecha_proxima
+                compromiso.save()
+                if acta.estado == 'Programada':
+                    acta.estado = 'En curso'
+                    acta.save(update_fields=['estado'])
+                return HttpResponseRedirect(f'/crm/actas/{acta.pk}#compromiso-{compromiso.pk}')
+        if request.POST.get('guardar_participante'):
+            check_perms(request, ('crm.add_actaparticipante',))
+            participante_form = crm_forms.ActaParticipanteForm(request.POST, prefix='participante')
+            if participante_form.is_valid():
+                participante = participante_form.save(commit=False)
+                participante.acta = acta
+                participante.save()
+                return HttpResponseRedirect(f'/crm/actas/{acta.pk}#participantes')
+        if request.POST.get('guardar_adjunto'):
+            check_perms(request, ('crm.add_adjuntoacta',))
+            adjunto_form = crm_forms.AdjuntoActaForm(request.POST, request.FILES, prefix='adjunto')
+            if adjunto_form.is_valid():
+                adjunto = adjunto_form.save(commit=False)
+                adjunto.acta = acta
+                adjunto.cargado_por = request.user
+                adjunto.save()
+                return HttpResponseRedirect(f'/crm/actas/{acta.pk}#adjuntos')
+
+    compromisos = acta.compromisos.select_related('responsable', 'creado_por').prefetch_related('seguimientos__usuario').all()
+    participantes = acta.participantes.select_related('usuario').all()
+    adjuntos = acta.adjuntos.select_related('cargado_por').all()
+    contexto_relacion = _build_reunion_contexto(acta)
+    context = {
+        'acta': acta,
+        'compromisos': compromisos,
+        'participantes': participantes,
+        'adjuntos': adjuntos,
+        'resultado_form': resultado_form,
+        'compromiso_form': compromiso_form,
+        'seguimiento_form': seguimiento_form,
+        'participante_form': participante_form,
+        'adjunto_form': adjunto_form,
+        **contexto_relacion,
+    }
+    return render(request, 'crm/acta_detail.html', context)
+
+
+
+@group_perm_required(('crm.view_actareunion',), raise_exception=True)
+def agenda_reuniones(request):
+    return render(request, 'crm/agenda_reuniones.html')
+
+
+@group_perm_required(('crm.view_actareunion',), raise_exception=True)
+def ajax_reuniones_calendario(request):
+    start = request.GET.get('start')
+    end = request.GET.get('end')
+    reuniones = ActaReunion.objects.select_related('cliente', 'proyecto', 'lider_reunion').exclude(hora_reunion__isnull=True)
+    if start:
+        reuniones = reuniones.filter(fecha_reunion__gte=start[:10])
+    if end:
+        reuniones = reuniones.filter(fecha_reunion__lte=end[:10])
+
+    colors = {
+        'Programada': '#2563eb',
+        'En curso': '#d97706',
+        'Realizada': '#15803d',
+        'Cancelada': '#b91c1c',
+    }
+    eventos = []
+    for reunion in reuniones:
+        inicio = reunion.inicio_programado()
+        fin = reunion.fin_programado()
+        if not inicio or not fin:
+            continue
+        eventos.append({
+            'id': reunion.pk,
+            'title': reunion.titulo_calendario(),
+            'start': inicio.isoformat(),
+            'end': fin.isoformat(),
+            'url': f'/crm/actas/{reunion.pk}',
+            'backgroundColor': colors.get(reunion.estado, '#475569'),
+            'borderColor': colors.get(reunion.estado, '#475569'),
+            'extendedProps': {
+                'estado': reunion.estado,
+                'asunto': reunion.asunto,
+                'lider': reunion.lider_reunion.get_full_name() or reunion.lider_reunion.username,
+            }
+        })
+    return JsonResponse(eventos, safe=False)
+
+@group_perm_required(('crm.view_actareunion',), raise_exception=True)
+def ajax_adjudicacion_historial(request, acta_id):
+    acta = ActaReunion.objects.select_related('cliente', 'proyecto').get(pk=acta_id)
+    contexto_relacion = _build_reunion_contexto(acta)
+    detalle = contexto_relacion.get('detalle_proyecto')
+    if not detalle:
+        mensaje = contexto_relacion.get('detalle_proyecto_warning') or contexto_relacion.get('detalle_proyecto_error') or 'No hay una adjudicacion unica asociada a esta reunion.'
+        return JsonResponse({'ok': False, 'message': mensaje}, status=400)
+
+    proyecto_alias = detalle['proyecto_alias']
+    adj_id = detalle['adj_id']
+    timeline_adj = timeline.objects.using(proyecto_alias).filter(adj=adj_id).order_by('-fecha', '-id_line')[:50]
+    seguimientos_adj = seguimientos.objects.using(proyecto_alias).filter(adj=adj_id).order_by('-fecha', '-id_seg')[:50]
+
+    return JsonResponse({
+        'ok': True,
+        'adj': adj_id,
+        'timeline': [
+            {
+                'fecha': item.fecha.strftime('%Y-%m-%d') if item.fecha else '',
+                'usuario': item.usuario or '',
+                'accion': item.accion or '',
+            }
+            for item in timeline_adj
+        ],
+        'seguimientos': [
+            {
+                'fecha': item.fecha.strftime('%Y-%m-%d') if item.fecha else '',
+                'usuario': item.usuario or '',
+                'tipo_seguimiento': item.tipo_seguimiento or '',
+                'forma_contacto': item.forma_contacto or '',
+                'respuesta_cliente': item.respuesta_cliente or '',
+                'valor_compromiso': item.valor_compromiso or 0,
+                'fecha_compromiso': item.fecha_compromiso or '',
+            }
+            for item in seguimientos_adj
+        ],
+    })
+
+
+@group_perm_required(('crm.add_adjuntoacta',), raise_exception=True)
+def ajax_subir_audio_acta(request, acta_id):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'message': 'Metodo no permitido.'}, status=405)
+
+    acta = ActaReunion.objects.get(pk=acta_id)
+    archivo = request.FILES.get('audio')
+    if not archivo:
+        return JsonResponse({'ok': False, 'message': 'Debes adjuntar un archivo de audio.'}, status=400)
+
+    descripcion = (request.POST.get('descripcion') or '').strip()
+    form = crm_forms.AdjuntoActaForm(
+        data={'tipo': 'Audio', 'descripcion': descripcion or 'Grabacion de reunion'},
+        files={'archivo': archivo},
+    )
+    if not form.is_valid():
+        return JsonResponse({'ok': False, 'message': 'No fue posible guardar el audio.', 'errors': form.errors}, status=400)
+
+    adjunto = form.save(commit=False)
+    adjunto.acta = acta
+    adjunto.cargado_por = request.user
+    adjunto.save()
+
+    return JsonResponse({
+        'ok': True,
+        'adjunto': {
+            'id': adjunto.pk,
+            'tipo': adjunto.tipo,
+            'descripcion': adjunto.descripcion or 'Sin descripcion',
+            'archivo_url': adjunto.archivo.url,
+            'cargado_por': request.user.get_full_name() or request.user.username,
+            'created_at': timezone.localtime(adjunto.created_at).strftime('%Y-%m-%d %H:%M'),
+        }
+    })
+
+
+@group_perm_required(('crm.view_compromisoacta',), raise_exception=True)
+def mis_compromisos(request):
+    compromisos = CompromisoActa.objects.select_related('acta', 'responsable', 'acta__cliente', 'acta__proyecto')
+    vista = request.GET.get('vista', 'mios')
+    if not request.user.is_superuser and vista == 'mios':
+        compromisos = compromisos.filter(responsable=request.user)
+    estado = request.GET.get('estado', '')
+    if estado:
+        compromisos = compromisos.filter(estado=estado)
+    if vista == 'vencidos':
+        compromisos = compromisos.filter(fecha_compromiso__lt=timezone.localdate()).exclude(estado__in=['Cumplido', 'Cancelado'])
+    context = {
+        'compromisos': compromisos.order_by('fecha_compromiso', 'estado'),
+        'estados': CompromisoActa.ESTADOS,
+        'estado_actual': estado,
+        'vista': vista,
+        'hoy': timezone.localdate(),
+    }
+    return render(request, 'crm/mis_compromisos.html', context)
+
+
 urls=[
     path('principal',principal),
     path('leads',leads_view),
     path('manage_leads',admin_leads),
     path('events',eventos_leads),
     path('adminevents',admin_eventos),
+    path('actas', actas_list, name='crm_actas'),
+    path('agenda-reuniones', agenda_reuniones, name='crm_agenda_reuniones'),
+    path('actas/nueva', acta_create, name='crm_acta_nueva'),
+    path('actas/<int:acta_id>/editar', acta_edit, name='crm_acta_editar'),
+    path('actas/<int:acta_id>', acta_detail, name='crm_acta_detalle'),
+    path('compromisos/mios', mis_compromisos, name='crm_mis_compromisos'),
     path('ajax/leads',ajax_leads),
+    path('ajax/clientes-proyecto', ajax_clientes_proyecto, name='crm_ajax_clientes_proyecto'),
+    path('ajax/reuniones-calendario', ajax_reuniones_calendario, name='crm_ajax_reuniones_calendario'),
+    path('ajax/actas/<int:acta_id>/adjudicacion-historial', ajax_adjudicacion_historial, name='crm_ajax_adjudicacion_historial'),
+    path('ajax/actas/<int:acta_id>/subir-audio', ajax_subir_audio_acta, name='crm_ajax_subir_audio_acta'),
     path('ajax/get_comments',ajax_history_lead),
     path('ajax/events',ajax_eventos),
     path('ajax/new_obs/<id_lead>',ajax_newObs),

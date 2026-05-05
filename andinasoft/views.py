@@ -44,7 +44,7 @@ from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_cont
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
 from andinasoft.create_pdf import GenerarPDF
-from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, calcular_tabla_amortizacion
+from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy
 from andinasoft.passes_test import perms_test
 from buildingcontrol import models as building_model
 from accounting import forms as forms_accounting
@@ -1810,10 +1810,7 @@ def _guardar_recaudo(
         'recibo': obj_recibo
     }
 
-    if proyecto == 'Oasis':
-        pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context_rc, filename)
-    else:
-        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc, filename)
+    pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc, filename)
 
     file = pdf.get('root')
 
@@ -4100,9 +4097,7 @@ def acciones_venta(request,proyecto,contrato):
 
         fin_pagos = max(fin_pagos_reg,fin_pagos_ce)
 
-        meses_entrega_inmueble = int(datos_inmueble.meses or 0)
-        min_meses_entrega = max(36, meses_entrega_inmueble)
-        f_entrega = datos_venta.fecha_contrato + relativedelta(months=min_meses_entrega)
+        f_entrega = datetime.date.today() + relativedelta( months = datos_inmueble.meses)
 
         if fin_pagos > f_entrega: 
             f_escritura = fin_pagos
@@ -4140,7 +4135,6 @@ def acciones_venta(request,proyecto,contrato):
             'cargos_comisiones':Cargos_comisiones.objects.using(proyecto).all(),
             'f_entrega':f_entrega,
             'f_escritura':f_escritura,
-            'min_meses_entrega':min_meses_entrega,
         }
         
         pdf=GenerarPDF()
@@ -4150,33 +4144,28 @@ def acciones_venta(request,proyecto,contrato):
                 if tipo=='recibo':
                     recibo=request.GET.get('recibo')
                     datos_recaudo=RecaudosNoradicados.objects.using(proyecto).get(recibo=recibo)
-                    filename=f'{proyecto}_reciboNR_{recibo}.pdf'
-                    if proyecto == 'Oasis':
-                        result = pdf_gen_weasy(
-                            f'pdf/{proyecto}/recibo_nr.html',
-                            {'recibo': datos_recaudo},
-                            filename,
-                        )
-                        dir_download = result['url']
-                    else:
-                        ruta=settings.DIR_EXPORT+filename
-                        nombre_t1=datos_t1.nombrecompleto
-                        resid_t1=str(datos_t1.domicilio)
-                        cdresid_t1=str(datos_t1.ciudad)
-                        cel_t1=str(datos_t1.celular1)
-                        pdf.Recibo_caja(proyecto=proyecto,
-                                        ruta=ruta,
-                                        nroRecibo=recibo,
-                                        titular1=nombre_t1,
-                                        fecha=str(datos_recaudo.fecha),
-                                        concepto=datos_recaudo.concepto,
-                                        valor=datos_recaudo.valor,
-                                        direccion=resid_t1,
-                                        ciudad=cdresid_t1,
-                                        telefono=cel_t1,
-                                        formapag=datos_recaudo.formapago,
-                                        user=request.user)
-                        dir_download=settings.DIR_DOWNLOADS+filename
+                    ruta=settings.DIR_EXPORT+f'{proyecto}_reciboNR_{recibo}.pdf'
+                    nombre_t1=datos_t1.nombrecompleto
+                    fecha=datos_recaudo.fecha
+                    concepto=datos_recaudo.concepto
+                    valor=datos_recaudo.valor
+                    resid_t1=str(datos_t1.domicilio)
+                    cdresid_t1=str(datos_t1.ciudad)
+                    cel_t1=str(datos_t1.celular1)
+                    formapago=datos_recaudo.formapago
+                    pdf.Recibo_caja(proyecto=proyecto,
+                                    ruta=ruta,
+                                    nroRecibo=recibo,
+                                    titular1=nombre_t1,
+                                    fecha=str(fecha),
+                                    concepto=concepto,
+                                    valor=valor,
+                                    direccion=resid_t1,
+                                    ciudad=cdresid_t1,
+                                    telefono=cel_t1,
+                                    formapag=formapago,
+                                    user=request.user)
+                    dir_download=settings.DIR_DOWNLOADS+f'{proyecto}_reciboNR_{recibo}.pdf'
                     return JsonResponse({'instance':dir_download},status=200)
                 elif tipo=='actualizar_fecha':
                     check_perms(request,('andinasoft.delete_ventas_nuevas',))
@@ -4370,35 +4359,6 @@ def acciones_venta(request,proyecto,contrato):
                     fecha_escritura=datetime.datetime.strptime(fecha_escritura,'%Y-%m-%d')
                     oficina=request.POST.get('oficinaopcion')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_contrato_{contrato}.pdf'
-
-                    fecha_minima_entrega = datos_venta.fecha_contrato + relativedelta(months=min_meses_entrega)
-                    if fecha_entrega.date() < fecha_minima_entrega:
-                        alerta = True
-                        titulo = 'Error'
-                        link = False
-                        mensaje = (
-                            f'La fecha de entrega no puede ser menor a {min_meses_entrega} meses '
-                            f'desde la fecha del contrato ({datos_venta.fecha_contrato}). '
-                            f'Fecha mínima permitida: {fecha_minima_entrega}.'
-                        )
-                        context['alerta'] = True
-                        context['titulo'] = titulo
-                        context['mensaje'] = mensaje
-                        context['link'] = False
-                        return render(request,'acciones_venta.html',context)
-                    if fecha_escritura.date() < fecha_entrega.date():
-                        alerta = True
-                        titulo = 'Error'
-                        link = False
-                        mensaje = (
-                            f'La fecha de escritura ({fecha_escritura.date()}) no puede ser anterior '
-                            f'a la fecha de entrega ({fecha_entrega.date()}).'
-                        )
-                        context['alerta'] = True
-                        context['titulo'] = titulo
-                        context['mensaje'] = mensaje
-                        context['link'] = False
-                        return render(request,'acciones_venta.html',context)
                     
                     parametro=obj_parametro.get(descripcion='formasOpcionManual')
                     if parametro.estado:
@@ -4759,8 +4719,7 @@ def acciones_venta(request,proyecto,contrato):
                             'ctr':obj_ctr,
                             'fecha_escritura':fecha_escritura,
                             'meses_entrega':meses_entrega,
-                            'oficina':oficina,
-                            'plan_pagos':calcular_tabla_amortizacion(obj_ctr),
+                            'oficina':oficina
                         }
                         
                         filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
@@ -5100,16 +5059,8 @@ def acciones_venta(request,proyecto,contrato):
                     parameter.estado=False
                     parameter.save()
                 if request.POST.get('impPagare'):
-                    filename = f'{proyecto}_pagare_{contrato}.pdf'
-                    ruta=settings.DIR_EXPORT+filename
-                    if proyecto=='Oasis':
-                        context_pagare = {
-                            'proyecto': proyecto,
-                            'ctr': obj_ctr,
-                        }
-                        pdf_file = pdf_gen_weasy(f'pdf/{proyecto}/pagare.html', context_pagare, filename)
-                        ruta_link = pdf_file.get('url')
-                    elif proyecto=='Vegas de Venecia':
+                    ruta=settings.DIR_EXPORT+f'{proyecto}_pagare_{contrato}.pdf'
+                    if proyecto=='Vegas de Venecia':
                         pdf.PagareQuadrata(nroPagare=contrato,
                                         nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
                                         nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
@@ -5150,8 +5101,7 @@ def acciones_venta(request,proyecto,contrato):
                     mensaje='Descarga el Pagaré aqui'
                     titulo='¡Listo!'
                     link=True
-                    if proyecto!='Oasis':
-                        ruta_link=settings.DIR_DOWNLOADS+filename
+                    ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_pagare_{contrato}.pdf'
                 if request.POST.get('impVerificacion'):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_verificacion_{contrato}.pdf'
                     parametro=obj_parametro.get(descripcion='formasVerificacionManual')
@@ -5273,39 +5223,30 @@ def acciones_venta(request,proyecto,contrato):
                                                                         concepto=concepto,
                                                                         valor=valor,
                                                                         formapago=formapago,
-                                                                        usuario=request.user.username,
                                                                         soportepago=file_key)
+                        recibo=RecaudosNoradicados.objects.using(proyecto).aggregate(Max('recibo'))
+                        recibo=recibo['recibo__max']
                         nrorecibo = obj_consecutivo.consecutivo
                         obj_consecutivo.consecutivo+=1
                         obj_consecutivo.save()
-                        filename=f'{proyecto}_reciboNR_{nrorecibo}.pdf'
-                        if proyecto == 'Oasis':
-                            datos_recaudo = RecaudosNoradicados.objects.using(proyecto).get(recibo=nrorecibo)
-                            result = pdf_gen_weasy(
-                                f'pdf/{proyecto}/recibo_nr.html',
-                                {'recibo': datos_recaudo},
-                                filename,
-                            )
-                            ruta_link = result['url']
-                        else:
-                            ruta=settings.DIR_EXPORT+filename
-                            pdf.Recibo_caja(proyecto=proyecto,
-                                            ruta=ruta,
-                                            nroRecibo=nrorecibo,
-                                            titular1=nombre_t1,
-                                            fecha=str(datetime.date.today()),
-                                            concepto=concepto,
-                                            valor=valor,
-                                            direccion=resid_t1,
-                                            ciudad=cdresid_t1,
-                                            telefono=cel_t1,
-                                            formapag=formapago,
-                                            user=request.user)
-                            ruta_link=settings.DIR_DOWNLOADS+filename
+                        ruta=settings.DIR_EXPORT+f'{proyecto}_reciboNR_{recibo}.pdf'
+                        pdf.Recibo_caja(proyecto=proyecto,
+                                        ruta=ruta,
+                                        nroRecibo=nrorecibo,
+                                        titular1=nombre_t1,
+                                        fecha=str(datetime.date.today()),
+                                        concepto=concepto,
+                                        valor=valor,
+                                        direccion=resid_t1,
+                                        ciudad=cdresid_t1,
+                                        telefono=cel_t1,
+                                        formapag=formapago,
+                                        user=request.user)
                         alerta=True
                         mensaje='Descarga el Recibo aqui'
                         titulo='¡Listo!'
-                        link=True     
+                        link=True
+                        ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_reciboNR_{recibo}.pdf'     
                 if request.POST.get('impTerminosAlttum'):
                     beneficiarios = request.POST.get('beneficiarios')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_Terminos y condiciones alttum_contrato_{contrato}.pdf'
@@ -6648,10 +6589,10 @@ def presupuesto_cartera(request,proyecto,periodo):
         if request.POST.get('btnExportar'):
             usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',))
             if usuario_administrador:
-                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{periodo}', '')")
+                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
             else:
                 gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
-                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{periodo}', '')")
+                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
             book=openpyxl.Workbook()
             sheet=book.active
             encabezados=['Adjudicacion','Cliente','Estado','Origen','Venta Mes','Tipo Cartera','Edad',
@@ -6684,7 +6625,7 @@ def presupuesto_cartera(request,proyecto,periodo):
     
     usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
     if usuario_administrador:
-        obj_informe=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{periodo}', '')")
+        obj_informe=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
     else:
         gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
         obj_informe=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")')
@@ -6748,124 +6689,14 @@ def edades_cartera(request,proyecto):
         return render(request,'adjudicados_fractal.html',context)
     
     check_groups(request,('Supervisor Cartera',))
-    adj_ids = list(
-        Adjudicacion.objects.using(proyecto).filter(
-            estado='Aprobado'
-        ).exclude(
-            origenventa='Canje'
-        ).values_list('idadjudicacion', flat=True)
-    )
-    today = datetime.date.today()
-    last_day = calendar.monthrange(today.year, today.month)[1]
-    end_month = datetime.date(today.year, today.month, last_day)
-    zero = Decimal('0')
-
-    adj_info_map = {
-        info['IdAdjudicacion']: info for info in Vista_Adjudicacion.objects.using(proyecto).filter(
-            IdAdjudicacion__in=adj_ids
-        ).values('IdAdjudicacion', 'Nombre', 'tipo_cartera')
-    }
-    gestor_map = {
-        info['idadjudicacion']: (info['gestorasignado'] or 'Sin Gestor') for info in InfoCartera.objects.using(proyecto).filter(
-            idadjudicacion__in=adj_ids
-        ).values('idadjudicacion', 'gestorasignado')
-    }
-    ultimo_pago_map = {
-        recaudo['idadjudicacion']: recaudo['ultimo_pago'] for recaudo in Recaudos.objects.using(proyecto).filter(
-            idadjudicacion__in=adj_ids
-        ).values('idadjudicacion').annotate(ultimo_pago=Max('fecha'))
-    }
-    recaudos_por_cuenta = {
-        recaudo['idcta']: {
-            'capital': recaudo['capital_pagado'] or zero,
-            'interes': recaudo['interes_pagado'] or zero,
-        } for recaudo in Recaudos.objects.using(proyecto).filter(
-            idadjudicacion__in=adj_ids
-        ).exclude(
-            idcta__isnull=True
-        ).exclude(
-            idcta=''
-        ).values('idcta').annotate(
-            capital_pagado=Sum('capital'),
-            interes_pagado=Sum('interescte'),
-        )
-    }
-
-    plan_por_adj = {}
-    for cuota in PlanPagos.objects.using(proyecto).filter(
-        adj__in=adj_ids,
-        fecha__lte=end_month,
-    ).values('adj', 'idcta', 'fecha', 'capital', 'intcte'):
-        plan_por_adj.setdefault(cuota['adj'], []).append(cuota)
-
+    obj_adj = Adjudicacion.objects.using(proyecto).filter(estado='Aprobado'
+                        ).exclude(origenventa='Canje')
     adj_list = []
-    for adj_id in adj_ids:
-        info = adj_info_map.get(adj_id, {})
-        dias_mora = 0
-        por_vencer = zero
-        lt_30_value = zero
-        lt_60_value = zero
-        lt_90_value = zero
-        lt_120_value = zero
-        gt_120_value = zero
-
-        for cuota in plan_por_adj.get(adj_id, []):
-            fecha_cuota = cuota.get('fecha')
-            if fecha_cuota is None:
-                continue
-
-            recaudo_cuota = recaudos_por_cuenta.get(cuota.get('idcta'), {})
-            capital = cuota.get('capital') or zero
-            interes = cuota.get('intcte') or zero
-            pendiente = (
-                capital - recaudo_cuota.get('capital', zero)
-            ) + (
-                interes - recaudo_cuota.get('interes', zero)
-            )
-
-            if pendiente <= 0:
-                continue
-
-            mora = (today - fecha_cuota).days if fecha_cuota < today else 0
-            dias_mora = mora if mora > dias_mora else dias_mora
-
-            if mora <= 0:
-                por_vencer += pendiente
-            elif mora <= 30:
-                lt_30_value += pendiente
-            elif mora <= 60:
-                lt_60_value += pendiente
-            elif mora <= 90:
-                lt_90_value += pendiente
-            elif mora <= 120:
-                lt_120_value += pendiente
-            else:
-                gt_120_value += pendiente
-
-        total_pendiente = por_vencer + lt_30_value + lt_60_value + lt_90_value + lt_120_value + gt_120_value
-
-        adj_list.append({
-            'info': {
-                'pk': adj_id,
-                'extra_info': {
-                    'Nombre': info.get('Nombre', ''),
-                    'tipo_cartera': info.get('tipo_cartera', ''),
-                },
-                'gestor_cartera': gestor_map.get(adj_id, 'Sin Gestor'),
-            },
-            'presupuesto': {
-                'por_vencer': por_vencer,
-                'lt30': lt_30_value,
-                'lt60': lt_60_value,
-                'lt90': lt_90_value,
-                'lt120': lt_120_value,
-                'gt120': gt_120_value,
-                'total_pendiente': total_pendiente,
-                'ultimo_pago': ultimo_pago_map.get(adj_id),
-                'dias_mora': dias_mora,
-            }
+    for adj in obj_adj:
+        adj_list.append( {
+            'info':adj,
+            'presupuesto':adj.presupuesto()
         })
-
     context = {
         'proyecto':proyecto,
         'adjudicaciones':adj_list,
@@ -7467,7 +7298,7 @@ def reporte_cartera(request,proyecto,año):
     sheet=book.get_sheet_by_name('Resumen x Periodo')
     agrupador={}
     for mes in range(1,13):
-        contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{año}{mes:02d}', '')")
+        contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{año}{mes:02d}",NULL)')
         for fila in contenido_ppto:
             grupo=str(mes)+'-'+fila.tipocartera+'-'+fila.edad
             if grupo not in agrupador:
@@ -8772,7 +8603,7 @@ def graph_cartera_anual(request,proyecto):
         año=request.POST.get('periodoaño')
         agrupador={}
         for mes in range(1,13):
-            contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f"CALL informe_cartera('{año}{mes:02d}', '')")
+            contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{año}{mes:02d}",NULL)')
             for fila in contenido_ppto:
                 grupo=str(mes)+'-'+fila.tipocartera+'-'+fila.edad
                 if grupo not in agrupador:
@@ -9039,8 +8870,7 @@ def print_documents(request,proyecto):
                 'ctr':obj_ctr,
                 'fecha_escritura':datetime.date.today(),
                 'meses_entrega':24,
-                'oficina':'Medellín',
-                'plan_pagos':calcular_tabla_amortizacion(obj_ctr),
+                'oficina':'Medellín'
             }
             
             filename = 'contrato.pdf'
@@ -9940,7 +9770,7 @@ def cartera_month_results(request):
             try:
                 contenido_ppto = list(
                     Adjudicacion.objects.using(proyecto.proyecto).raw(
-                        f"CALL informe_cartera('{periodo}', '')"
+                        f'CALL informe_cartera("{periodo}",NULL)'
                     )
                 )
             except DBInternalError as exc:

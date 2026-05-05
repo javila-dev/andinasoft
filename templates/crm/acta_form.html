@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+{% block title %}CRM | {% if modo == 'editar' %}Editar programacion{% else %}Programar reunion{% endif %}{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-12 col-xl-8">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center flex-nowrap mb-3">
+            <div>
+              <h3 class="mb-1">{% if modo == 'crear' %}Programar reunion{% else %}Editar programacion{% endif %}</h3>
+              <small class="text-muted">Selecciona proyecto, busca el titular y reserva un bloque de tiempo sin pisar la agenda.</small>
+            </div>
+            <div>
+              <a href="/crm/agenda-reuniones" class="btn btn-outline-info mr-2 d-inline-flex align-items-center justify-content-center flex-shrink-0" aria-label="Ver agenda" title="Ver agenda"><i class="fas fa-calendar-alt"></i></a>
+              <a href="{% if acta %}/crm/actas/{{ acta.pk }}{% else %}/crm/actas{% endif %}" class="btn btn-outline-secondary d-inline-flex align-items-center justify-content-center flex-shrink-0" aria-label="Volver" title="Volver"><i class="fas fa-arrow-left"></i></a>
+            </div>
+          </div>
+          <form method="post" id="form-programar-reunion">
+            {% csrf_token %}
+            <div class="form-row">
+              <div class="col-md-4">{{ form.fecha_reunion|as_crispy_field }}</div>
+              <div class="col-md-4">{{ form.hora_reunion|as_crispy_field }}</div>
+              <div class="col-md-4">{{ form.duracion_minutos|as_crispy_field }}</div>
+            </div>
+            <div class="form-row">
+              <div class="col-md-6">{{ form.tipo_reunion|as_crispy_field }}</div>
+              <div class="col-md-6">{{ form.canal|as_crispy_field }}</div>
+            </div>
+            <div class="form-row">
+              <div class="col-md-6">{{ form.proyecto|as_crispy_field }}</div>
+              <div class="col-md-6">{{ form.lider_reunion|as_crispy_field }}</div>
+            </div>
+
+            <div class="form-group position-relative">
+              <label for="cliente-search">Cliente asociado al proyecto</label>
+              {{ form.cliente }}
+              <input
+                type="text"
+                id="cliente-search"
+                class="form-control"
+                placeholder="Selecciona primero un proyecto"
+                value="{{ form.selected_cliente_label|default:'' }}"
+                autocomplete="off"
+                {% if not form.instance.proyecto_id and not form.is_bound %}disabled{% endif %}
+              >
+              <small class="form-text text-muted">Busca por nombre o documento. Se consultan titulares 1, 2, 3 y 4 del proyecto.</small>
+              <div id="cliente-search-results" class="list-group position-absolute w-100 shadow-sm" style="z-index: 20;"></div>
+            </div>
+
+            {{ form.asunto|as_crispy_field }}
+            <div class="text-right mt-3">
+              <button class="btn btn-success">Guardar programacion</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block jsbottom %}
+<script>
+  (function() {
+    const proyectoInput = document.getElementById('id_proyecto');
+    const searchInput = document.getElementById('cliente-search');
+    const hiddenClienteInput = document.getElementById('id_cliente');
+    const resultsBox = document.getElementById('cliente-search-results');
+    let debounceTimer = null;
+
+    function clearResults() {
+      resultsBox.innerHTML = '';
+    }
+
+    function syncClienteAvailability(resetValue) {
+      const proyecto = proyectoInput.value;
+      const enabled = !!proyecto;
+      searchInput.disabled = !enabled;
+      searchInput.placeholder = enabled ? 'Buscar por nombre o documento' : 'Selecciona primero un proyecto';
+      if (resetValue) {
+        hiddenClienteInput.value = '';
+        searchInput.value = '';
+      }
+      clearResults();
+    }
+
+    function renderResults(items) {
+      clearResults();
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'list-group-item small text-muted';
+        empty.textContent = 'Sin resultados para este proyecto';
+        resultsBox.appendChild(empty);
+        return;
+      }
+
+      items.forEach(function(item) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'list-group-item list-group-item-action';
+        button.innerHTML = '<strong>' + item.nombre_completo + '</strong><br><small>' + item.id + (item.ciudad ? ' · ' + item.ciudad : '') + '</small>';
+        button.addEventListener('click', function() {
+          hiddenClienteInput.value = item.id;
+          searchInput.value = item.nombre_completo + ' (' + item.id + ')';
+          clearResults();
+        });
+        resultsBox.appendChild(button);
+      });
+    }
+
+    async function searchClientes(term) {
+      const proyecto = proyectoInput.value;
+      if (!proyecto) {
+        clearResults();
+        return;
+      }
+      const response = await fetch('/crm/ajax/clientes-proyecto?proyecto=' + encodeURIComponent(proyecto) + '&search=' + encodeURIComponent(term), {
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin'
+      });
+      if (!response.ok) {
+        clearResults();
+        return;
+      }
+      const data = await response.json();
+      renderResults(data.terceros || []);
+    }
+
+    proyectoInput.addEventListener('change', function() {
+      syncClienteAvailability(true);
+    });
+
+    searchInput.addEventListener('input', function() {
+      const term = searchInput.value.trim();
+      if (!proyectoInput.value) {
+        syncClienteAvailability(true);
+        return;
+      }
+      if (!term) {
+        hiddenClienteInput.value = '';
+        clearResults();
+        return;
+      }
+      if (term.length < 2) {
+        clearResults();
+        return;
+      }
+      debounceTimer && clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function() {
+        searchClientes(term);
+      }, 250);
+    });
+
+    document.addEventListener('click', function(event) {
+      if (!resultsBox.contains(event.target) && event.target !== searchInput) {
+        clearResults();
+      }
+    });
+
+    syncClienteAvailability(false);
+  })();
+</script>
+{% endblock %}

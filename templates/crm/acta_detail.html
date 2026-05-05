@@ -1,0 +1,640 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+{% block title %}CRM | Reunion{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start mb-4">
+    <div>
+      <div class="d-flex align-items-center flex-wrap mb-1">
+        <h4 class="mb-0 mr-2">{{ acta.cliente.nombrecompleto|default:'Cliente sin asociar' }}</h4>
+        {% if acta.estado == 'Programada' %}
+          <span class="badge badge-warning">{{ acta.estado }}</span>
+        {% else %}
+          <span class="badge badge-success">{{ acta.estado }}</span>
+        {% endif %}
+      </div>
+      <p class="text-muted mb-0">
+        <span>{{ acta.asunto }}</span>
+        <span class="mx-1">·</span>
+        <span>{{ acta.fecha_reunion }}</span>
+        <span class="mx-1">·</span>
+        <span>{{ acta.tipo_reunion }}</span>
+        <span class="mx-1">·</span>
+        <span>{{ acta.canal }}</span>
+      </p>
+    </div>
+    <div class="d-flex align-items-center mt-3 mt-md-0 flex-shrink-0">
+      <a href="/crm/actas/{{ acta.pk }}/editar" class="btn btn-outline-primary btn-sm mr-2">
+        <i class="fas fa-pen mr-1"></i> Editar
+      </a>
+      <a href="/crm/actas" class="btn btn-outline-secondary btn-sm" title="Volver">
+        <i class="fas fa-arrow-left"></i>
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12 col-xl-7">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body py-3">
+          <h6 class="text-uppercase text-muted font-weight-bold mb-3" style="font-size:0.7rem;letter-spacing:.08em;">Programacion</h6>
+          <div class="row no-gutters">
+            <div class="col-6 col-sm-4 mb-2">
+              <small class="text-muted d-block">Proyecto</small>
+              <span class="font-weight-medium">{{ acta.proyecto|default:'—' }}</span>
+            </div>
+            <div class="col-6 col-sm-4 mb-2">
+              <small class="text-muted d-block">Lider</small>
+              <span>{{ acta.lider_reunion.get_full_name|default:acta.lider_reunion.username }}</span>
+            </div>
+            <div class="col-6 col-sm-4 mb-2">
+              <small class="text-muted d-block">Programada por</small>
+              <span>{{ acta.creado_por.get_full_name|default:acta.creado_por.username }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 font-weight-bold">Resultado de la reunion</h6>
+            {% if acta.estado == 'Programada' %}
+              <span class="badge badge-warning">Pendiente</span>
+            {% endif %}
+          </div>
+          <form method="post">
+            {% csrf_token %}
+            {{ resultado_form|crispy }}
+            <button class="btn btn-primary btn-sm" name="guardar_resultado" value="1">
+              <i class="fas fa-save mr-1"></i> Guardar resultado
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3" id="participantes">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 font-weight-bold">Participantes</h6>
+            <span class="badge badge-secondary">{{ participantes|length }}</span>
+          </div>
+          {% if participantes %}
+          <div class="d-flex flex-wrap mb-2">
+            {% for participante in participantes %}
+            <div class="d-flex align-items-center mr-3 mb-2" title="{{ participante.rol }}{% if participante.email_externo %} · {{ participante.email_externo }}{% endif %}">
+              <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mr-1 flex-shrink-0" style="width:32px;height:32px;">
+                <span class="text-white font-weight-bold" style="font-size:0.75rem;">
+                  {% if participante.usuario %}{{ participante.usuario.get_full_name|default:participante.usuario.username|slice:":1"|upper }}{% else %}{{ participante.nombre_externo|slice:":1"|upper }}{% endif %}
+                </span>
+              </div>
+              <div>
+                <small class="d-block font-weight-bold" style="line-height:1.2;">{% if participante.usuario %}{{ participante.usuario.get_full_name|default:participante.usuario.username }}{% else %}{{ participante.nombre_externo }}{% endif %}</small>
+                <small class="text-muted" style="font-size:0.7rem;">{{ participante.rol }}</small>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <small class="text-muted d-block mb-2">Sin participantes cargados todavia.</small>
+          {% endif %}
+          <details class="mt-2">
+            <summary class="text-primary" style="cursor:pointer;font-size:0.875rem;"><i class="fas fa-plus mr-1"></i>Agregar participante</summary>
+            <div class="mt-3 pl-2 border-left">
+              <form method="post">
+                {% csrf_token %}
+                {{ participante_form|crispy }}
+                <button class="btn btn-outline-primary btn-sm" name="guardar_participante" value="1">Guardar participante</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3" id="adjuntos">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 font-weight-bold">Adjuntos y audio</h6>
+            <span class="badge badge-secondary">{{ adjuntos|length }}</span>
+          </div>
+          <div id="adjuntos-lista">
+          {% for adjunto in adjuntos %}
+          <div class="d-flex align-items-start mb-3">
+            <div class="mr-3 text-muted flex-shrink-0" style="width:20px;text-align:center;">
+              <i class="fas {% if adjunto.tipo == 'Audio' %}fa-microphone{% else %}fa-paperclip{% endif %}"></i>
+            </div>
+            <div class="flex-grow-1">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <span class="font-weight-bold d-block" style="font-size:0.875rem;">{{ adjunto.tipo }}</span>
+                  <small class="text-muted">{{ adjunto.descripcion|default:'Sin descripcion' }}</small>
+                </div>
+                <a href="{{ adjunto.archivo.url }}" target="_blank" class="btn btn-link btn-sm p-0 flex-shrink-0 ml-2" style="font-size:0.8rem;">
+                  <i class="fas fa-external-link-alt"></i>
+                </a>
+              </div>
+              <small class="text-muted d-block" style="font-size:0.7rem;">{{ adjunto.cargado_por.get_full_name|default:adjunto.cargado_por.username }} · {{ adjunto.created_at }}</small>
+            </div>
+          </div>
+          {% empty %}
+          <small class="text-muted d-block mb-2" id="adjuntos-empty">Aun no hay archivos o audios cargados.</small>
+          {% endfor %}
+          </div>
+
+          <div class="border rounded p-3 bg-light mb-3" id="grabador-audio">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <h6 class="mb-1 font-weight-bold">Grabar audio</h6>
+                <small class="text-muted">Ideal para tomar notas de voz desde tablet o celular.</small>
+              </div>
+              <span class="badge badge-light border" id="grabador-estado">Listo</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center mb-2">
+              <button type="button" class="btn btn-danger btn-sm mr-2 mb-2" id="btn-iniciar-audio">
+                <i class="fas fa-microphone mr-1"></i>Iniciar
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm mr-2 mb-2" id="btn-detener-audio" disabled>
+                <i class="fas fa-stop mr-1"></i>Detener
+              </button>
+              <button type="button" class="btn btn-outline-primary btn-sm mb-2" id="btn-guardar-audio" disabled data-url="/crm/ajax/actas/{{ acta.pk }}/subir-audio">
+                <i class="fas fa-save mr-1"></i>Guardar grabacion
+              </button>
+            </div>
+            <div class="d-flex flex-wrap align-items-center mb-2">
+              <small class="text-muted mr-3">Duracion: <strong id="grabador-tiempo">00:00</strong></small>
+              <small class="text-muted" id="grabador-mensaje">Tu navegador pedira permiso para usar el microfono.</small>
+            </div>
+            <div class="form-group mb-2">
+              <label for="grabador-descripcion" class="small text-muted mb-1">Descripcion del audio</label>
+              <input type="text" id="grabador-descripcion" class="form-control form-control-sm" maxlength="255" placeholder="Ej. Resumen reunion con cliente">
+            </div>
+            <audio id="grabador-preview" class="w-100 d-none" controls></audio>
+          </div>
+
+          <details class="mt-2">
+            <summary class="text-primary" style="cursor:pointer;font-size:0.875rem;"><i class="fas fa-upload mr-1"></i>Subir archivo o audio</summary>
+            <div class="mt-3 pl-2 border-left">
+              <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                {{ adjunto_form|crispy }}
+                <button class="btn btn-outline-primary btn-sm" name="guardar_adjunto" value="1">Guardar adjunto</button>
+              </form>
+              <small class="text-muted d-block mt-2">Puedes subir una nota de voz grabada desde el celular.</small>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0 font-weight-bold">Compromisos</h6>
+            <span class="badge badge-secondary">{{ compromisos|length }}</span>
+          </div>
+          {% for compromiso in compromisos %}
+          <div class="mb-3 pl-3" style="border-left:3px solid {% if compromiso.estado == 'Cumplido' %}#28a745{% elif compromiso.estado == 'Vencido' %}#dc3545{% else %}#ffc107{% endif %};" id="compromiso-{{ compromiso.pk }}">
+            <div class="d-flex justify-content-between align-items-start">
+              <strong style="font-size:0.9rem;">{{ compromiso.titulo }}</strong>
+              <span class="badge {% if compromiso.estado == 'Cumplido' %}badge-success{% elif compromiso.estado == 'Vencido' %}badge-danger{% else %}badge-warning{% endif %} ml-2 flex-shrink-0">{{ compromiso.estado }}</span>
+            </div>
+            <small class="text-muted d-block mb-1">
+              {{ compromiso.responsable.get_full_name|default:compromiso.responsable.username }}
+              <span class="mx-1">·</span>
+              {{ compromiso.fecha_compromiso }}
+            </small>
+            {% if compromiso.descripcion %}
+            <p class="mb-2 text-muted" style="white-space:pre-line;font-size:0.875rem;">{{ compromiso.descripcion }}</p>
+            {% endif %}
+
+            {% if compromiso.seguimientos.all %}
+            <div class="mt-2">
+              {% for seguimiento in compromiso.seguimientos.all %}
+              <div class="bg-light rounded px-3 py-2 mb-2" style="font-size:0.8rem;">
+                <div class="d-flex justify-content-between">
+                  <strong>{{ seguimiento.usuario.get_full_name|default:seguimiento.usuario.username }}</strong>
+                  <small class="text-muted">{{ seguimiento.created_at }}</small>
+                </div>
+                <span class="d-block mt-1">{{ seguimiento.comentario }}</span>
+                {% if seguimiento.estado_nuevo or seguimiento.fecha_proxima %}
+                <small class="text-muted d-block mt-1">
+                  {{ seguimiento.estado_nuevo|default:'Sin cambio' }}{% if seguimiento.fecha_proxima %} · Proxima: {{ seguimiento.fecha_proxima }}{% endif %}
+                </small>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <details class="mt-2">
+              <summary class="text-primary" style="cursor:pointer;font-size:0.8rem;"><i class="fas fa-plus mr-1"></i>Agregar seguimiento</summary>
+              <div class="mt-2 pl-2 border-left">
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="compromiso_id" value="{{ compromiso.pk }}">
+                  {{ seguimiento_form|crispy }}
+                  <button class="btn btn-outline-primary btn-sm" name="guardar_seguimiento" value="1">Guardar seguimiento</button>
+                </form>
+              </div>
+            </details>
+          </div>
+          {% empty %}
+          <p class="text-muted mb-0" style="font-size:0.875rem;">Todavia no se han registrado compromisos.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+
+    <div class="col-12 col-xl-5">
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6 class="text-uppercase text-muted font-weight-bold mb-3" style="font-size:0.7rem;letter-spacing:.08em;">Contexto del cliente</h6>
+          {% if detalle_proyecto %}
+          <div class="row no-gutters mb-3">
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Adjudicacion</small>
+              <span class="font-weight-bold">{{ detalle_proyecto.adj_id }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Estado negocio</small>
+              <span>{{ detalle_proyecto.estado|default:'—' }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Inmueble</small>
+              <span>{{ detalle_proyecto.inmueble|default:'—' }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Capital pagado</small>
+              <span class="text-success font-weight-bold">${{ detalle_proyecto.capital_pagado|floatformat:0|intcomma }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Capital pendiente</small>
+              <span>${{ detalle_proyecto.capital_pendiente|floatformat:0|intcomma }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Cuotas en mora</small>
+              <span {% if detalle_proyecto.cuotas_en_mora > 0 %}class="text-danger font-weight-bold"{% endif %}>{{ detalle_proyecto.cuotas_en_mora|default:'0' }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Dias de mora</small>
+              <span {% if detalle_proyecto.dias_mora > 0 %}class="text-danger font-weight-bold"{% endif %}>{{ detalle_proyecto.dias_mora }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Total en mora</small>
+              <span {% if detalle_proyecto.total_mora > 0 %}class="text-danger font-weight-bold"{% endif %}>{% if detalle_proyecto.total_mora > 0 %}${{ detalle_proyecto.total_mora|floatformat:0|intcomma }}{% else %}—{% endif %}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Sin pagar desde</small>
+              <span {% if detalle_proyecto.fecha_sin_pago %}class="text-danger"{% endif %}>{{ detalle_proyecto.fecha_sin_pago|default:'—' }}</span>
+            </div>
+            <div class="col-6 mb-2">
+              <small class="text-muted d-block">Fecha contrato</small>
+              <span>{{ detalle_proyecto.fecha_contrato|default:'—' }}</span>
+            </div>
+          </div>
+          <div class="d-flex flex-wrap">
+            <a href="{{ detalle_proyecto.estado_cuenta_url }}" target="_blank" class="btn btn-outline-primary btn-sm mr-2 mb-2">
+              <i class="fas fa-file-download mr-1"></i> Estado de cuenta
+            </a>
+            <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="btn-historial-adj" data-url="/crm/ajax/actas/{{ acta.pk }}/adjudicacion-historial">
+              <i class="fas fa-history mr-1"></i> Ver historial
+            </button>
+          </div>
+          {% elif detalle_proyecto_warning %}
+          <div class="alert alert-warning py-2 mb-2" style="font-size:0.875rem;">{{ detalle_proyecto_warning }}</div>
+          {% if adjudicaciones_relacionadas %}
+          <small class="text-muted">Adjudicaciones: {{ adjudicaciones_relacionadas|join:', ' }}</small>
+          {% endif %}
+          {% elif detalle_proyecto_error %}
+          <div class="alert alert-light border py-2 mb-0" style="font-size:0.875rem;">{{ detalle_proyecto_error }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6 class="text-uppercase text-muted font-weight-bold mb-3" style="font-size:0.7rem;letter-spacing:.08em;">Reuniones anteriores</h6>
+          {% for reunion in reuniones_anteriores %}
+          <div class="d-flex align-items-start mb-3">
+            <div class="flex-shrink-0 mr-2 mt-1">
+              <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center" style="width:8px;height:8px;"></div>
+            </div>
+            <div class="flex-grow-1">
+              <a href="/crm/actas/{{ reunion.pk }}" class="font-weight-bold d-block" style="font-size:0.875rem;">{{ reunion.asunto }}</a>
+              <small class="text-muted">{{ reunion.fecha_reunion }} · {{ reunion.estado }}</small>
+            </div>
+          </div>
+          {% empty %}
+          <small class="text-muted">No hay reuniones anteriores para este cliente y proyecto.</small>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6 class="text-uppercase text-muted font-weight-bold mb-3" style="font-size:0.7rem;letter-spacing:.08em;">Nuevo compromiso</h6>
+          <form method="post">
+            {% csrf_token %}
+            {{ compromiso_form|crispy }}
+            <button class="btn btn-success btn-sm" name="guardar_compromiso" value="1">
+              <i class="fas fa-plus mr-1"></i> Agregar compromiso
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalHistorialAdj" tabindex="-1" role="dialog" aria-labelledby="modalHistorialAdjLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalHistorialAdjLabel">Historial de adjudicacion</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="historial-adj-loading" class="text-muted">Cargando historial...</div>
+        <div id="historial-adj-error" class="alert alert-warning d-none mb-0"></div>
+        <div id="historial-adj-content" class="d-none">
+          <div class="mb-4">
+            <h6 class="mb-3">Seguimientos</h6>
+            <div id="historial-adj-seguimientos"></div>
+          </div>
+          <div>
+            <h6 class="mb-3">Timeline</h6>
+            <div id="historial-adj-timeline"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const trigger = document.getElementById('btn-historial-adj');
+    if (!trigger) return;
+
+    const modal = $('#modalHistorialAdj');
+    const loading = document.getElementById('historial-adj-loading');
+    const errorBox = document.getElementById('historial-adj-error');
+    const content = document.getElementById('historial-adj-content');
+    const seguimientosEl = document.getElementById('historial-adj-seguimientos');
+    const timelineEl = document.getElementById('historial-adj-timeline');
+
+    function money(value) {
+      return new Intl.NumberFormat('es-CO').format(Number(value || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderSeguimientos(items) {
+      if (!items.length) return '<div class="text-muted">No hay seguimientos registrados.</div>';
+      return items.map(function(item) {
+        const compromiso = item.fecha_compromiso ? 'Compromiso: ' + escapeHtml(item.fecha_compromiso) : 'Sin fecha';
+        const valor = Number(item.valor_compromiso || 0) > 0 ? '$' + money(item.valor_compromiso) : 'Sin valor';
+        return '<div class="border rounded p-2 mb-2">' +
+          '<div class="d-flex justify-content-between"><strong>' + escapeHtml(item.fecha) + '</strong><small class="text-muted">' + escapeHtml(item.usuario) + '</small></div>' +
+          '<small class="text-muted d-block">' + escapeHtml(item.tipo_seguimiento) + ' · ' + escapeHtml(item.forma_contacto) + '</small>' +
+          '<div class="mt-1" style="font-size:0.875rem;">' + escapeHtml(item.respuesta_cliente) + '</div>' +
+          '<small class="text-muted d-block mt-1">' + compromiso + ' · ' + valor + '</small>' +
+        '</div>';
+      }).join('');
+    }
+
+    function renderTimeline(items) {
+      if (!items.length) return '<div class="text-muted">No hay eventos en timeline.</div>';
+      return items.map(function(item) {
+        return '<div class="border rounded p-2 mb-2">' +
+          '<div class="d-flex justify-content-between"><strong>' + escapeHtml(item.fecha) + '</strong><small class="text-muted">' + escapeHtml(item.usuario) + '</small></div>' +
+          '<div class="mt-1" style="font-size:0.875rem;">' + escapeHtml(item.accion) + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    async function loadHistorial() {
+      loading.classList.remove('d-none');
+      errorBox.classList.add('d-none');
+      content.classList.add('d-none');
+      seguimientosEl.innerHTML = '';
+      timelineEl.innerHTML = '';
+      modal.modal('show');
+
+      try {
+        const response = await fetch(trigger.dataset.url, {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || 'No fue posible cargar el historial.');
+        seguimientosEl.innerHTML = renderSeguimientos(data.seguimientos || []);
+        timelineEl.innerHTML = renderTimeline(data.timeline || []);
+        document.getElementById('modalHistorialAdjLabel').textContent = 'Historial de adjudicacion ' + data.adj;
+        content.classList.remove('d-none');
+      } catch (error) {
+        errorBox.textContent = error.message || 'No fue posible cargar el historial.';
+        errorBox.classList.remove('d-none');
+      } finally {
+        loading.classList.add('d-none');
+      }
+    }
+
+    trigger.addEventListener('click', loadHistorial);
+  })();
+
+  (function() {
+    const startButton = document.getElementById('btn-iniciar-audio');
+    const stopButton = document.getElementById('btn-detener-audio');
+    const saveButton = document.getElementById('btn-guardar-audio');
+    const preview = document.getElementById('grabador-preview');
+    const timer = document.getElementById('grabador-tiempo');
+    const statusBadge = document.getElementById('grabador-estado');
+    const message = document.getElementById('grabador-mensaje');
+    const descripcionInput = document.getElementById('grabador-descripcion');
+    const adjuntosLista = document.getElementById('adjuntos-lista');
+    const adjuntosEmpty = document.getElementById('adjuntos-empty');
+
+    if (!startButton || !navigator.mediaDevices || !window.MediaRecorder) {
+      if (message) {
+        message.textContent = 'La grabacion no esta disponible en este navegador.';
+      }
+      if (startButton) {
+        startButton.disabled = true;
+      }
+      return;
+    }
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let audioBlob = null;
+    let audioUrl = null;
+    let mediaStream = null;
+    let timerInterval = null;
+    let startedAt = null;
+
+    function getCsrfToken() {
+      const input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      return input ? input.value : '';
+    }
+
+    function setStatus(label, badgeClass) {
+      statusBadge.textContent = label;
+      statusBadge.className = 'badge border ' + badgeClass;
+    }
+
+    function setTimer(seconds) {
+      const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const secs = String(seconds % 60).padStart(2, '0');
+      timer.textContent = mins + ':' + secs;
+    }
+
+    function startClock() {
+      startedAt = Date.now();
+      setTimer(0);
+      timerInterval = window.setInterval(function() {
+        const seconds = Math.floor((Date.now() - startedAt) / 1000);
+        setTimer(seconds);
+      }, 1000);
+    }
+
+    function stopClock() {
+      if (timerInterval) {
+        window.clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    function cleanupStream() {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(function(track) { track.stop(); });
+        mediaStream = null;
+      }
+    }
+
+    function renderAdjunto(item) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'd-flex align-items-start mb-3';
+      wrapper.innerHTML = `
+        <div class="mr-3 text-muted flex-shrink-0" style="width:20px;text-align:center;">
+          <i class="fas fa-microphone"></i>
+        </div>
+        <div class="flex-grow-1">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="font-weight-bold d-block" style="font-size:0.875rem;">${item.tipo}</span>
+              <small class="text-muted">${item.descripcion}</small>
+            </div>
+            <a href="${item.archivo_url}" target="_blank" class="btn btn-link btn-sm p-0 flex-shrink-0 ml-2" style="font-size:0.8rem;">
+              <i class="fas fa-external-link-alt"></i>
+            </a>
+          </div>
+          <small class="text-muted d-block" style="font-size:0.7rem;">${item.cargado_por} · ${item.created_at}</small>
+        </div>`;
+      if (adjuntosEmpty) {
+        adjuntosEmpty.remove();
+      }
+      adjuntosLista.prepend(wrapper);
+    }
+
+    startButton.addEventListener('click', async function() {
+      try {
+        audioChunks = [];
+        audioBlob = null;
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          audioUrl = null;
+        }
+        preview.classList.add('d-none');
+        preview.removeAttribute('src');
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(mediaStream);
+        mediaRecorder.addEventListener('dataavailable', function(event) {
+          if (event.data && event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        });
+        mediaRecorder.addEventListener('stop', function() {
+          stopClock();
+          audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+          audioUrl = URL.createObjectURL(audioBlob);
+          preview.src = audioUrl;
+          preview.classList.remove('d-none');
+          saveButton.disabled = false;
+          startButton.disabled = false;
+          stopButton.disabled = true;
+          setStatus('Grabado', 'badge-success');
+          message.textContent = 'Revisa el audio y guardalo si esta bien.';
+          cleanupStream();
+        });
+        mediaRecorder.start();
+        startClock();
+        startButton.disabled = true;
+        stopButton.disabled = false;
+        saveButton.disabled = true;
+        setStatus('Grabando', 'badge-danger');
+        message.textContent = 'Grabando audio de la reunion...';
+      } catch (error) {
+        setStatus('Error', 'badge-warning');
+        message.textContent = 'No se pudo acceder al microfono. Revisa los permisos del navegador.';
+      }
+    });
+
+    stopButton.addEventListener('click', function() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+    });
+
+    saveButton.addEventListener('click', async function() {
+      if (!audioBlob) {
+        return;
+      }
+      const extension = audioBlob.type && audioBlob.type.includes('ogg') ? 'ogg' : (audioBlob.type && audioBlob.type.includes('mp4') ? 'm4a' : 'webm');
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'reunion-' + {{ acta.pk }} + '-' + Date.now() + '.' + extension);
+      formData.append('descripcion', descripcionInput.value || 'Grabacion de reunion');
+
+      saveButton.disabled = true;
+      setStatus('Guardando', 'badge-info');
+      message.textContent = 'Subiendo audio...';
+
+      try {
+        const response = await fetch(saveButton.dataset.url, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: formData
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.message || 'No fue posible guardar el audio.');
+        }
+        renderAdjunto(data.adjunto);
+        setStatus('Guardado', 'badge-success');
+        message.textContent = 'El audio quedo asociado a la reunion.';
+        descripcionInput.value = '';
+      } catch (error) {
+        setStatus('Error', 'badge-warning');
+        message.textContent = error.message || 'No fue posible guardar el audio.';
+        saveButton.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

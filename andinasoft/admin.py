@@ -52,7 +52,9 @@ class adminProfiles(admin.ModelAdmin):
     list_display=['user']
 
 class adminEmpresas(admin.ModelAdmin):
-    list_display=['Nit','nombre','logo']
+    list_display=['Nit','nombre','alegra_enabled','logo']
+    list_filter=['alegra_enabled']
+    search_fields=['Nit','nombre']
     
 class adminNotificacionesEmail(admin.ModelAdmin):
     list_display=['id_notificacion','identificador']

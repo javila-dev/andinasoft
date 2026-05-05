@@ -46,6 +46,9 @@ class Facturas(models.Model):
         ('Comisiones','Comisiones'),
         ('GTT','GTT'),
         ('Otros','Otros'),
+        ('Interno','Interno'),
+        ('Anticipos','Anticipos'),
+        ('Alegra','Alegra'),
     )
     origen = models.CharField(db_column='Origen', max_length=255, choices=origen_choices, default='Radicado')
     oficinas_choices = (
@@ -76,7 +79,10 @@ class Facturas(models.Model):
         ('Impuestos','Impuestos'),
         ('Tierras','Tierras'),
     ), null=True,blank=True)
-    
+    alegra_bill_id = models.CharField(max_length=64, null=True, blank=True, unique=True, db_index=True)
+    alegra_bill_deleted = models.BooleanField(default=False)
+    alegra_bill_deleted_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name = 'Factura'
         verbose_name_plural = 'Facturas'
