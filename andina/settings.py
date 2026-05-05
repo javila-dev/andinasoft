@@ -58,7 +58,6 @@ INSTALLED_APPS = [
     'finance',
     'api_auth',
     'mcp_server',
-    'client_portal',
     'alegra_integration',
 ]
 
