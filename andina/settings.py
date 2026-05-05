@@ -5,6 +5,11 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
+# Webhooks Alegra: usuario para `history_facturas` (opcional; si vacío se usa el primer usuario activo).
+ALEGRA_WEBHOOK_HISTORY_USERNAME = os.getenv('ALEGRA_WEBHOOK_HISTORY_USERNAME', '').strip()
+_ALEGRA_WH_UID = os.getenv('ALEGRA_WEBHOOK_HISTORY_USER_ID', '').strip()
+ALEGRA_WEBHOOK_HISTORY_USER_ID = int(_ALEGRA_WH_UID) if _ALEGRA_WH_UID.isdigit() else None
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -53,6 +58,8 @@ INSTALLED_APPS = [
     'finance',
     'api_auth',
     'mcp_server',
+    'client_portal',
+    'alegra_integration',
 ]
 
 TEMPUS_DOMINUS_LOCALIZE = True

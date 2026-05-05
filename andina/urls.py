@@ -28,6 +28,7 @@ from mcp_server import urls as mcp_urls
 urlpatterns = [
 
     path('mcp/', include(mcp_urls)),
+    path('portal/', include('client_portal.urls')),
     path('admin/', admin.site.urls),
     path('welcome',views.welcome,name='welcome'),
     path('pago_exitoso',views.pago_exitoso,name='pago exitoso'),
