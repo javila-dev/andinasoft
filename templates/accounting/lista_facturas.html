@@ -71,6 +71,7 @@
 
 </div>    
 <!-- Modal -->
+{%include 'accounting/_alegra_soporte_modal.html'%}
 <div class="modal fade" id="modalPagar" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -258,8 +259,8 @@
                     $('#modalHistory').modal('show')
                     break;    
                 case "ver":
-                    var ruta = resolveMediaUrl(line.soporte)
-                    window.open(ruta,'Soporte radicado '+ruta.pk,params)
+                    // "Ver Factura" (soporte radicado): usar modal + fetch on-demand (Alegra)
+                    openFacturaSoporteModal(line.pk);
                     break;  
                 case "pagos":
                     tablaListaPagos.ajax.url(

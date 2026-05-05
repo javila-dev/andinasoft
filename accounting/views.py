@@ -2980,8 +2980,50 @@ def ajax_data_factura(request):
             if not obj_factura:
                 return JsonResponse({'detail': 'Factura no encontrada'}, status=404)
 
+            ensure_soporte = str(request.GET.get('ensure_soporte') or '').strip() in ('1', 'true', 'True')
+            status = 'ready' if obj_factura.soporte_radicado else 'missing'
+            message = ''
+
+            # Opción A: al dar click "Ver soporte" podemos intentar traer PDF desde Alegra si aún no existe.
+            if ensure_soporte and not obj_factura.soporte_radicado and getattr(obj_factura, 'alegra_bill_id', None):
+                try:
+                    from django.core.cache import cache
+                    from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
+                except Exception:
+                    cache = None
+                    attach_bill_pdf_from_alegra = None
+
+                throttle_key = f'alegra:soporte:radicado:{obj_factura.pk}'
+                throttled = bool(cache.get(throttle_key)) if cache else False
+                if throttled:
+                    status = 'throttled'
+                    message = 'Aún no disponible. Ya se intentó hace poco; intenta de nuevo en unos minutos.'
+                elif attach_bill_pdf_from_alegra:
+                    # Mark throttle early to avoid bursts on repeated clicks.
+                    if cache:
+                        cache.set(throttle_key, True, timeout=60 * 3)
+                    try:
+                        # alegra_bill_id se guarda como "{NIT}:{bill_id}"
+                        raw = str(obj_factura.alegra_bill_id or '')
+                        alegra_numeric_id = raw.split(':', 1)[1] if ':' in raw else raw
+                        ok = attach_bill_pdf_from_alegra(obj_factura.empresa, alegra_numeric_id, obj_factura)
+                        if ok and obj_factura.soporte_radicado:
+                            status = 'ready'
+                            message = 'Soporte descargado desde Alegra.'
+                        else:
+                            status = 'pending'
+                            message = 'Alegra todavía no publica el PDF. Intenta de nuevo en unos minutos.'
+                    except Exception:
+                        status = 'error'
+                        message = 'No fue posible descargar el soporte desde Alegra. Intenta más tarde.'
+                else:
+                    status = 'error'
+                    message = 'No se pudo inicializar el cliente de descarga de soporte Alegra.'
+
             data = {
                 'pk': obj_factura.pk,
+                'status': status,
+                'message': message,
                 'soporte_radicado': _media_url(obj_factura.soporte_radicado),
                 'soporte_causacion': _media_url(obj_factura.soporte_causacion),
                 'data': serializers.serialize('json', [obj_factura]),
@@ -6784,6 +6826,7 @@ def api_upload_movements(request):
 
 
 urls = [
+    path('alegra/', include('alegra_integration.urls')),
     path('principal',principal),
     path('movements',movimientos),
     path('upload-movements',upload_movements),

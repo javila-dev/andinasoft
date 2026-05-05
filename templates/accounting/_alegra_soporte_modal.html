@@ -1,0 +1,118 @@
+<div class="modal fade" id="alegraSoporteModal" tabindex="-1" role="dialog" aria-labelledby="alegraSoporteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:520px">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="alegraSoporteModalLabel">Buscando soporte…</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="alegraSoporteModalBody" class="small text-muted">
+          <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></div>
+            <div>Estamos consultando Alegra para descargar el PDF del radicado.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal" id="alegraSoporteBtnClose">Cerrar</button>
+        <button type="button" class="btn btn-secondary" id="alegraSoporteBtnRetry" style="display:none;">Reintentar</button>
+        <button type="button" class="btn btn-primary" id="alegraSoporteBtnOpen" style="display:none;">Abrir PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Reusa resolveMediaUrl si existe en la página; si no, fallback minimal.
+  function __resolveMediaUrlFallback(pathOrUrl) {
+    if (!pathOrUrl) return '';
+    if (String(pathOrUrl).startsWith('http://') || String(pathOrUrl).startsWith('https://')) return String(pathOrUrl);
+    return String(pathOrUrl);
+  }
+
+  function __alegraModalSet(state) {
+    const title = document.getElementById('alegraSoporteModalLabel');
+    const body = document.getElementById('alegraSoporteModalBody');
+    const btnRetry = document.getElementById('alegraSoporteBtnRetry');
+    const btnOpen = document.getElementById('alegraSoporteBtnOpen');
+    if (!title || !body || !btnRetry || !btnOpen) return;
+
+    title.textContent = state.title || 'Soporte';
+    body.innerHTML = state.html || '';
+    btnRetry.style.display = state.showRetry ? '' : 'none';
+    btnOpen.style.display = state.showOpen ? '' : 'none';
+    btnRetry.disabled = !!state.disableRetry;
+    btnOpen.disabled = !!state.disableOpen;
+  }
+
+  async function openFacturaSoporteModal(radicadoPk) {
+    const pk = String(radicadoPk || '').trim();
+    if (!pk) return;
+
+    $('#alegraSoporteModal').modal('show');
+    __alegraModalSet({
+      title: 'Buscando soporte…',
+      html:
+        '<div class="d-flex align-items-center small text-muted">' +
+          '<div class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></div>' +
+          '<div>Estamos consultando Alegra para descargar el PDF del radicado.</div>' +
+        '</div>',
+      showRetry: false,
+      showOpen: false,
+    });
+
+    const fetchUrl = '/accounting/ajax/datafactura?pk=' + encodeURIComponent(pk) + '&ensure_soporte=1';
+    let data = null;
+    try {
+      const res = await fetch(fetchUrl, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.detail) ? data.detail : ('HTTP ' + res.status));
+    } catch (e) {
+      __alegraModalSet({
+        title: 'No fue posible consultar',
+        html: '<div class="small text-danger">Ocurrió un error al consultar el soporte. ' + String(e) + '</div>',
+        showRetry: true,
+        showOpen: false,
+      });
+      // bind retry
+      document.getElementById('alegraSoporteBtnRetry').onclick = () => openFacturaSoporteModal(pk);
+      return;
+    }
+
+    const urlRaw = (data && data.soporte_radicado) ? data.soporte_radicado : '';
+    const resolve = (typeof resolveMediaUrl === 'function') ? resolveMediaUrl : __resolveMediaUrlFallback;
+    const url = resolve(urlRaw);
+
+    if (data.status === 'ready' && url) {
+      __alegraModalSet({
+        title: 'Soporte listo',
+        html: '<div class="small text-muted">Se encontró el PDF del radicado.</div>',
+        showRetry: false,
+        showOpen: true,
+      });
+      document.getElementById('alegraSoporteBtnOpen').onclick = () => {
+        const params = `status=no,location=no,toolbar=no,menubar=no,width=900,height=700,left=100,top=60`;
+        window.open(url, 'Soporte radicado ' + pk, params);
+        $('#alegraSoporteModal').modal('hide');
+      };
+      return;
+    }
+
+    // Missing / pending / throttled / error
+    const msg = (data && data.message) ? data.message : 'Aún no está disponible.';
+    const title = (data.status === 'throttled') ? 'Espera un momento' :
+                  (data.status === 'error') ? 'No fue posible descargar' :
+                  (data.status === 'pending') ? 'Aún no está disponible' : 'Sin soporte';
+
+    __alegraModalSet({
+      title,
+      html: '<div class="small text-muted">' + msg + '</div>',
+      showRetry: true,
+      showOpen: false,
+    });
+    document.getElementById('alegraSoporteBtnRetry').onclick = () => openFacturaSoporteModal(pk);
+  }
+</script>
+

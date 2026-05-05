@@ -125,6 +125,7 @@
 
 
 </div>
+{%include 'accounting/_alegra_soporte_modal.html'%}
 <div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenu' aria-labelledby="dropdownMenuLink"
     style="max-width: 220px;">
     <a class="dropdown-item" id='ver' href="#"><i class="far fa-file-pdf text-muted"></i>&nbsp;Soporte pago</a>
@@ -712,8 +713,8 @@
                     window.open(ruta, 'Soporte pago ' + ruta.pk, params)
                     break;
                 case "ver_rad":
-                    var ruta = resolveMediaUrl(line.soporte_radicado)
-                    window.open(ruta, 'Soporte radicado ' + ruta.pk, params)
+                    // Prefer usar modal + fetch on-demand (Alegra)
+                    openFacturaSoporteModal(line.pk_factura || line.nroradicado || line.pk || line.factura_pk || line.factura);
                     break;
                 case "ver_causacion":
                     var ruta = resolveMediaUrl(line.soporte_causacion)

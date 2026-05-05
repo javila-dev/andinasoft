@@ -137,6 +137,7 @@
     </div>
   </div>
 {%include 'accounting/radicados_internos.html'%}
+{%include 'accounting/_alegra_soporte_modal.html'%}
 <script>
     function resolveMediaUrl(pathOrUrl) {
         if (!pathOrUrl) return '';
@@ -306,21 +307,7 @@
                     })
                     break;    
                 case "ver":
-                    $.ajax({
-                        type:'GET',
-                        url:'/accounting/ajax/datafactura',
-                        data:{
-                            'pk':line.pk,
-                        },
-                        success:function(response){
-                            var legacy = (response['data']) ? JSON.parse(response['data'])[0]['fields'] : {}
-                            var ruta = resolveMediaUrl(response['soporte_radicado'] || legacy['soporte_radicado'])
-                            let params = `status=no,location=no,toolbar=no,menubar=no,
-                            width=650,height=450,left=100,top=100`;
-                            window.open(ruta,'Soporte radicado '+ruta.pk,params)
-                            tablaSinRecibir.$('tr.selected').removeClass('selected');
-                        }
-                    })
+                    openFacturaSoporteModal(line.pk);
                     break;    
                     
             }
@@ -356,21 +343,7 @@
             $('#modalHistory').modal('show')
                     break;    
                 case "ver":
-                    $.ajax({
-                        type:'GET',
-                        url:'/accounting/ajax/datafactura',
-                        data:{
-                            'pk':line.pk,
-                        },
-                        success:function(response){
-                            var legacy = (response['data']) ? JSON.parse(response['data'])[0]['fields'] : {}
-                            var ruta = resolveMediaUrl(response['soporte_radicado'] || legacy['soporte_radicado'])
-                            let params = `status=no,location=no,toolbar=no,menubar=no,
-                            width=650,height=450,left=100,top=100`;
-                            window.open(ruta,'Soporte radicado '+ruta.pk,params)
-                            tablaRecibidos.$('tr.selected').removeClass('selected');
-                        }
-                    })
+                    openFacturaSoporteModal(line.pk);
                     break;    
                     
             }

@@ -1,0 +1,1654 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Integración Alegra{% endblock %}
+
+{% block style %}
+<style>
+  /* ── Terminal log ── */
+  #logContainer {
+    background: #1a1a2e;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Lucida Console', monospace;
+    font-size: 13px;
+    padding: 14px 18px;
+    min-height: 80px;
+    max-height: 340px;
+    overflow-y: auto;
+    line-height: 1.7;
+  }
+  #logContainer .log-ts { color: #555; font-size: 11px; user-select: none; margin-right: 6px; }
+  .log-success { color: #4ec9b0; }
+  .log-error   { color: #f44747; }
+  .log-warning { color: #ce9178; }
+  .log-info    { color: #9cdcfe; }
+  .log-loading { color: #c586c0; }
+  .log-label   { color: #dcdcaa; }
+  .log-dim     { color: #666; }
+  #logContainer hr { border-color: #333; margin: 6px 0; }
+
+  /* ── Metric cards ── */
+  .metric-card { transition: box-shadow .15s, transform .15s; border: none; }
+  .metric-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.12) !important; }
+  .metric-value { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+  .metric-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; opacity: .75; margin-top: 4px; }
+
+  /* ── Documents table ── */
+  .doc-row-invalid { background: rgba(220,53,69,.05); }
+  .doc-row-failed  { background: rgba(220,53,69,.08); }
+  .doc-row-sent    { background: rgba(0,123,255,.04); }
+  .doc-row-valid   { background: rgba(40,167,69,.04); }
+  .doc-row-skipped { background: rgba(255,193,7,.04); }
+
+  .local-key {
+    font-family: 'Consolas', monospace;
+    font-size: 11.5px;
+    background: #f1f3f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .error-inline {
+    font-size: 11.5px;
+    color: #dc3545;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  /* ── Doc type tabs ── */
+  .doc-type-btn { flex: 1; border-radius: 0 !important; transition: all .15s; }
+  .doc-type-btn:first-child { border-radius: 4px 0 0 4px !important; }
+  .doc-type-btn:last-child  { border-radius: 0 4px 4px 0 !important; }
+  .doc-type-btn.active {
+    background-color: #33544b !important;
+    color: white !important;
+    border-color: #33544b !important;
+  }
+
+  /* ── Header gradient ── */
+  .alegra-header {
+    background: linear-gradient(135deg, #2d4a42 0%, #1e3330 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 22px 28px;
+    margin-bottom: 22px;
+  }
+  .alegra-header h4 { font-weight: 600; margin-bottom: 4px; }
+  .alegra-header p  { opacity: .75; font-size: .875rem; margin: 0; }
+  .badge-connected {
+    background: rgba(78,201,176,.2);
+    color: #4ec9b0;
+    border: 1px solid rgba(78,201,176,.4);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* ── Filter buttons ── */
+  .filter-btn { min-width: 76px; font-size: 12px; }
+  .filter-btn.active { font-weight: 600; }
+
+  /* ── History table ── */
+  #historyBody tr { cursor: pointer; transition: background .1s; }
+
+  /* ── JSON viewer ── */
+  .json-viewer {
+    background: #1a1a2e;
+    color: #d4d4d4;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    padding: 14px;
+    border-radius: 6px;
+    max-height: 480px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ── Spin animation ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .fa-spin-custom { animation: spin .8s linear infinite; display: inline-block; }
+
+  /* ── Card headers ── */
+  .card-header-soft {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    font-weight: 600;
+    font-size: .875rem;
+    color: #495057;
+  }
+  .card-header-dark {
+    background: #23233a;
+    color: #ccc;
+    font-size: .875rem;
+  }
+
+  /* ── Progress bar ── */
+  .send-progress { height: 4px; border-radius: 0; transition: width .3s ease; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width:1300px">
+
+  <!-- ─────────── Header ─────────── -->
+  <div class="alegra-header d-flex justify-content-between align-items-center">
+    <div>
+      <h4><i class="fas fa-sync-alt mr-2"></i>Integración Alegra</h4>
+      <p>Envío directo de documentos contables a Alegra · sin eliminar flujos existentes</p>
+    </div>
+    <div class="d-flex align-items-center" style="gap:8px">
+      <span class="badge-connected"><i class="fas fa-circle mr-1" style="font-size:8px"></i>Activo</span>
+      <a class="btn btn-sm btn-outline-light" href="/accounting/alegra/references">
+        <i class="fas fa-cog mr-1"></i>Configuración
+      </a>
+      <a class="btn btn-sm btn-outline-light" href="/accounting/alegra/webhooks/">
+        <i class="fas fa-plug mr-1"></i>Webhooks
+      </a>
+      <button class="btn btn-sm btn-outline-light" id="btnManualLink" onclick="openManualContactLink()">
+        <i class="fas fa-link mr-1"></i>Enlazar tercero
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ─────────── Config Panel ─────────── -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header card-header-soft">
+      <i class="fas fa-sliders-h mr-2 text-muted"></i>Configuración del lote
+    </div>
+    <div class="card-body pb-3">
+
+      <div id="formAlert" class="mb-3"></div>
+
+      <!-- Empresa + Proyecto -->
+      <div class="form-row mb-3">
+        <div class="col-md-5">
+          <label class="font-weight-bold" style="font-size:.85rem">
+            Empresa <span class="text-danger">*</span>
+          </label>
+          <select class="form-control" id="selEmpresa" onchange="onEmpresaChange()">
+            <option value="">— Seleccionar empresa —</option>
+            {% for e in empresas %}
+            <option value="{{ e.Nit }}">{{ e.nombre }}</option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">Solo empresas habilitadas en Alegra</small>
+        </div>
+        <div class="col-md-5">
+          <label class="font-weight-bold" style="font-size:.85rem">
+            Proyecto
+            <span id="proyectoRequired" class="text-danger" style="display:none">*</span>
+            <span id="proyectoOptional" class="text-muted" style="font-size:.8rem;font-weight:400"> (opcional para egresos)</span>
+          </label>
+          <select class="form-control" id="selProyecto">
+            <option value="">— Seleccionar proyecto —</option>
+            {% for p in proyectos %}
+            <option value="{{ p.proyecto }}">{{ p.proyecto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Tipo de documento -->
+      <div class="form-group mb-3">
+        <label class="font-weight-bold" style="font-size:.85rem">
+          Tipo de documento <span class="text-danger">*</span>
+        </label>
+        <div class="d-flex" style="gap:0">
+          <button type="button" class="btn btn-outline-secondary doc-type-btn active"
+            data-type="receipt" onclick="selectDocType(this)">
+            <i class="fas fa-receipt mr-1"></i>Recibos de caja
+          </button>
+          <button type="button" class="btn btn-outline-secondary doc-type-btn"
+            data-type="commission" onclick="selectDocType(this)">
+            <i class="fas fa-hand-holding-usd mr-1"></i>Comisiones
+          </button>
+          <button type="button" class="btn btn-outline-secondary doc-type-btn"
+            data-type="expense" onclick="selectDocType(this)">
+            <i class="fas fa-money-check-alt mr-1"></i>Egresos
+          </button>
+        </div>
+      </div>
+
+      <!-- Fechas + acciones -->
+      <div class="form-row align-items-end">
+        <div class="col-md-2">
+          <label class="font-weight-bold" style="font-size:.85rem">Fecha desde <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="fechaDesde">
+        </div>
+        <div class="col-md-2">
+          <label class="font-weight-bold" style="font-size:.85rem">Fecha hasta <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="fechaHasta">
+        </div>
+        <div class="col-md-4 mt-2 mt-md-0">
+          <div class="d-flex" style="gap:8px">
+            <button class="btn btn-primary flex-grow-1" id="btnPreview" onclick="doPreview()">
+              <i class="fas fa-eye mr-1"></i>Vista previa
+            </button>
+            <button class="btn btn-success flex-grow-1" id="btnSend" onclick="confirmSend()" disabled>
+              <i class="fas fa-paper-plane mr-1"></i>Enviar a Alegra
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─────────── Results Zone (hidden until first operation) ─────────── -->
+  <div id="resultsZone" style="display:none">
+
+    <!-- Metric Cards -->
+    <div class="row mb-4" id="metricCards">
+      <div class="col-6 col-md-3 mb-3">
+        <div class="card metric-card shadow-sm h-100" style="border-left:4px solid #6c757d">
+          <div class="card-body py-3 text-center">
+            <div class="metric-value text-dark" id="metricTotal">0</div>
+            <div class="metric-label text-muted">Total documentos</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="card metric-card shadow-sm h-100" style="border-left:4px solid #28a745">
+          <div class="card-body py-3 text-center">
+            <div class="metric-value text-success" id="metricOk">0</div>
+            <div class="metric-label text-muted" id="metricOkLabel">Válidos</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="card metric-card shadow-sm h-100" style="border-left:4px solid #dc3545">
+          <div class="card-body py-3 text-center">
+            <div class="metric-value text-danger" id="metricErr">0</div>
+            <div class="metric-label text-muted" id="metricErrLabel">Inválidos</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3 mb-3">
+        <div class="card metric-card shadow-sm h-100" style="border-left:4px solid #ffc107">
+          <div class="card-body py-3 text-center">
+            <div class="metric-value text-warning" id="metricSkipped">0</div>
+            <div class="metric-label text-muted">Omitidos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header card-header-dark d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-terminal mr-2"></i>Registro de operación</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span id="logBatchBadge" style="display:none"></span>
+          <button class="btn btn-sm" style="color:#888;background:transparent;border:1px solid #444;padding:2px 10px"
+            onclick="clearLog()" title="Limpiar">
+            <i class="fas fa-trash-alt" style="font-size:11px"></i>
+          </button>
+        </div>
+      </div>
+      <div id="logContainer"></div>
+      <!-- send progress bar (hidden) -->
+      <div id="sendProgressBar" style="display:none">
+        <div class="progress send-progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+            role="progressbar" style="width:100%"></div>
+        </div>
+      </div>
+      <!-- contact sync progress bar (hidden) -->
+      <div id="contactProgressBar" style="display:none">
+        <div class="progress send-progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+            id="contactProgressFill" role="progressbar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Documents Table -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
+        <span>
+          <i class="fas fa-file-invoice mr-2 text-muted"></i>Documentos
+          <span class="badge badge-secondary ml-1" id="docsCount">0</span>
+        </span>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary filter-btn active" data-filter="all" onclick="filterDocs(this)">Todos</button>
+          <button class="btn btn-outline-success filter-btn" data-filter="valid" onclick="filterDocs(this)">Válidos</button>
+          <button class="btn btn-outline-danger filter-btn" data-filter="invalid" onclick="filterDocs(this)">Inválidos</button>
+          <button class="btn btn-outline-primary filter-btn" data-filter="sent" onclick="filterDocs(this)">Enviados</button>
+          <button class="btn btn-outline-danger filter-btn" data-filter="failed" onclick="filterDocs(this)">Fallidos</button>
+          <button class="btn btn-outline-warning filter-btn" data-filter="skipped" onclick="filterDocs(this)">Omitidos</button>
+        </div>
+      </div>
+      <div class="table-responsive" style="max-height:520px;overflow-y:auto">
+        <table class="table table-sm table-hover mb-0" id="docsTable">
+          <thead class="thead-light">
+            <tr>
+              <th style="width:105px">Estado</th>
+              <th style="width:130px">Tipo</th>
+              <th>Clave local</th>
+              <th style="width:150px">Operación</th>
+              <th style="width:90px">ID Alegra</th>
+              <th>Error / Info</th>
+              <th style="width:60px" class="text-center">Ver</th>
+            </tr>
+          </thead>
+          <tbody id="docsBody">
+          </tbody>
+        </table>
+      </div>
+      <div class="card-footer d-flex justify-content-between align-items-center py-2" style="gap:10px">
+        <div id="docsFooter" class="text-muted" style="font-size:.8rem;display:none"></div>
+        <div class="d-flex align-items-center" style="gap:8px">
+          <button class="btn btn-sm btn-outline-primary" onclick="bulkCreateMissingContacts()" title="Crea contactos faltantes en Alegra a partir de los errores del lote">
+            <i class="fas fa-user-plus mr-1"></i>Crear terceros faltantes
+          </button>
+          <button class="btn btn-sm btn-outline-warning" onclick="showMissingInAlegra()" title="Muestra terceros que no existen en Alegra (sin duplicados)">
+            <i class="fas fa-exclamation-triangle mr-1"></i>No existen en Alegra
+          </button>
+        </div>
+        <div class="d-flex align-items-center" style="gap:8px">
+          <button class="btn btn-sm btn-outline-secondary" id="docsPrev" onclick="docsGo(-1)" disabled>←</button>
+          <small class="text-muted" id="docsPageLabel" style="font-size:.85rem">—</small>
+          <button class="btn btn-sm btn-outline-secondary" id="docsNext" onclick="docsGo(1)" disabled>→</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /resultsZone -->
+
+  <!-- ─────────── Unmatched contacts panel ─────────── -->
+  <div class="card shadow-sm mb-4" id="unmatchedPanel" style="display:none">
+    <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
+      <span>
+        <i class="fas fa-user-times mr-2 text-warning"></i>Terceros sin contacto en Alegra
+        <span class="badge badge-warning ml-1" id="unmatchedCount">0</span>
+      </span>
+      <small class="text-muted">Créalos en Alegra con el mismo número de identificación y vuelve a sincronizar</small>
+    </div>
+    <div class="table-responsive" style="max-height:300px;overflow-y:auto">
+      <table class="table table-sm mb-0">
+        <thead class="thead-light">
+          <tr>
+            <th style="width:150px">Identificación</th>
+            <th>Nombre</th>
+            <th style="width:120px">Tipo</th>
+            <th style="width:120px" class="text-center">Enlazar</th>
+          </tr>
+        </thead>
+        <tbody id="unmatchedBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ─────────── Manual link modal ─────────── -->
+  <div class="modal fade" id="linkContactModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#2d4a42;color:white;border:none">
+          <h6 class="modal-title mb-0"><i class="fas fa-link mr-2"></i>Enlazar tercero con Alegra</h6>
+          <button type="button" class="close text-white" data-dismiss="modal" style="opacity:.7">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info py-2" style="font-size:.9rem">
+            Pega el <strong>ID</strong> del tercero en Alegra (lo ves en la URL del contacto).
+          </div>
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label class="font-weight-bold" style="font-size:.85rem">Empresa</label>
+              <select class="form-control" id="linkEmpresa" onchange="updateLinkFormState()">
+                <option value="">—</option>
+                {% for e in empresas %}
+                <option value="{{ e.Nit }}">{{ e.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group col-md-6">
+              <label class="font-weight-bold" style="font-size:.85rem">Tipo</label>
+              <select class="form-control" id="linkLocalModel" onchange="updateLinkFormState()">
+                <option value="andinasoft.clientes">Cliente</option>
+                <option value="andinasoft.asesores">Asesor</option>
+                <option value="andinasoft.empresas">Empresa</option>
+                <option value="andinasoft.terceros_raw">Tercero (ID factura)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="font-weight-bold" style="font-size:.85rem">Tercero</label>
+            <div class="form-control" id="linkContactLabel" style="height:auto"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label class="font-weight-bold" style="font-size:.85rem">PK / Identificación local</label>
+              <input class="form-control" id="linkLocalPk" placeholder="Ej: 32296973" oninput="updateLinkFormState()" />
+              <small class="text-muted">Es el `pk` usado en Andinasoft (para clientes: idTercero).</small>
+            </div>
+            <div class="form-group col-md-6">
+              <label class="font-weight-bold" style="font-size:.85rem">Nombre (opcional)</label>
+              <input class="form-control" id="linkLocalName" placeholder="(se llena automático)" readonly />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="font-weight-bold" style="font-size:.85rem">Alegra ID</label>
+            <input class="form-control" id="linkAlegraId" placeholder="Ej: 1517" disabled oninput="validateAlegraId()" />
+            <small class="text-muted">Se habilita al validar el PK local.</small>
+            <div id="linkAlegraStatus" class="mt-1" style="font-size:.85rem"></div>
+          </div>
+          <div class="form-group">
+            <label class="font-weight-bold" style="font-size:.85rem">Nombre en Alegra (validación)</label>
+            <input class="form-control" id="linkAlegraName" readonly placeholder="(se llena al validar el Alegra ID)" />
+          </div>
+          <div id="linkContactAlert"></div>
+        </div>
+        <div class="modal-footer border-top-0 pt-0">
+          <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-success btn-sm" id="btnLinkContactSave" onclick="saveManualContactLink()">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────── Missing in Alegra modal ─────────── -->
+  <div class="modal fade" id="missingAlegraModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#6c4f00;color:white;border:none">
+          <h6 class="modal-title mb-0"><i class="fas fa-exclamation-triangle mr-2"></i>Terceros que no existen en Alegra</h6>
+          <button type="button" class="close text-white" data-dismiss="modal" style="opacity:.7">
+            <span>&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning py-2" style="font-size:.9rem">
+            Los siguientes terceros aparecen en documentos del lote y <strong>no existen en Alegra</strong>.
+            Créalos primero (evita duplicados) y luego vuelve a intentar.
+          </div>
+          <div class="table-responsive" style="max-height:380px;overflow-y:auto">
+            <table class="table table-sm mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th style="width:160px">Identificación</th>
+                  <th>Nombre</th>
+                  <th style="width:190px">Origen</th>
+                  <th style="width:190px">Ejemplos</th>
+                </tr>
+              </thead>
+              <tbody id="missingAlegraBody">
+                <tr><td colspan="4" class="text-muted text-center py-3">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────── Batch History ─────────── -->
+  <div class="card shadow-sm">
+    <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
+      <span><i class="fas fa-history mr-2 text-muted"></i>Lotes recientes</span>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">
+        <i class="fas fa-sync-alt mr-1"></i>Actualizar
+      </button>
+    </div>
+    <div class="table-responsive" style="max-height:360px;overflow-y:auto">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="thead-light">
+          <tr>
+            <th style="width:48px">#</th>
+            <th>Empresa</th>
+            <th>Proyecto</th>
+            <th style="width:130px">Tipo</th>
+            <th style="width:180px">Período</th>
+            <th style="width:108px">Estado</th>
+            <th class="text-center" style="width:56px">Total</th>
+            <th class="text-center" style="width:66px" title="Enviados (intentos)"><i class="fas fa-paper-plane text-primary"></i></th>
+            <th class="text-center" style="width:56px" title="OK en Alegra"><i class="fas fa-check text-success"></i></th>
+            <th class="text-center" style="width:56px" title="Enviados con error"><i class="fas fa-times text-danger"></i></th>
+            <th style="width:120px">Usuario</th>
+            <th style="width:130px">Fecha</th>
+            <th style="width:56px" class="text-center">Ver</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody">
+          <tr>
+            <td colspan="13" class="text-center text-muted py-3">
+              <i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex justify-content-end align-items-center py-2" style="gap:8px">
+      <button class="btn btn-sm btn-outline-secondary" id="histPrev" onclick="histGo(-1)" disabled>←</button>
+      <small class="text-muted" id="histPageLabel" style="font-size:.85rem">—</small>
+      <button class="btn btn-sm btn-outline-secondary" id="histNext" onclick="histGo(1)" disabled>→</button>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ─────────── Detail Modal ─────────── -->
+<div class="modal fade" id="detailModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#2d4a42;color:white;border:none">
+        <h6 class="modal-title mb-0" id="detailModalTitle">
+          <i class="fas fa-file-code mr-2"></i>Detalle del documento
+        </h6>
+        <button type="button" class="close text-white" data-dismiss="modal" style="opacity:.7">
+          <span>&times;</span>
+        </button>
+      </div>
+      <div class="modal-body pt-3">
+        <ul class="nav nav-tabs mb-3" id="detailTabs">
+          <li class="nav-item">
+            <a class="nav-link" id="tabErrorLink" data-toggle="tab" href="#tabError">
+              <i class="fas fa-exclamation-circle text-danger mr-1"></i>Error
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="tabLocalLink" data-toggle="tab" href="#tabLocal">
+              <i class="fas fa-landmark text-muted mr-1"></i>Andinasoft
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="tabPayloadLink" data-toggle="tab" href="#tabPayload">
+              <i class="fas fa-code text-muted mr-1"></i>Payload
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="tabResponseLink" data-toggle="tab" href="#tabResponse">
+              <i class="fas fa-reply text-muted mr-1"></i>Respuesta Alegra
+            </a>
+          </li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane" id="tabError">
+            <div id="detailError" class="json-viewer"></div>
+          </div>
+          <div class="tab-pane" id="tabLocal">
+            <div id="detailLocal" class="json-viewer"></div>
+          </div>
+          <div class="tab-pane" id="tabPayload">
+            <div id="detailPayload" class="json-viewer"></div>
+          </div>
+          <div class="tab-pane" id="tabResponse">
+            <div id="detailResponse" class="json-viewer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-top-0 pt-0">
+        <small class="text-muted mr-auto" id="detailLocalKey"></small>
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── Confirm Send Modal ─────────── -->
+<div class="modal fade" id="confirmSendModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header border-bottom-0">
+        <h6 class="modal-title"><i class="fas fa-paper-plane mr-2 text-success"></i>Confirmar envío a Alegra</h6>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body pt-0">
+        <div class="alert alert-warning py-2 mb-3" style="font-size:.875rem">
+          <i class="fas fa-exclamation-triangle mr-2"></i>
+          Esta acción crea registros contables reales en Alegra. Los documentos ya enviados no se reenviarán.
+        </div>
+        <div id="confirmSendDetails"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnConfirmSend" onclick="doSend()">
+          <i class="fas fa-paper-plane mr-1"></i>Sí, enviar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+/* ────────────────────────────────────────────────
+   ALEGRA DASHBOARD  ·  main JS
+──────────────────────────────────────────────── */
+const CSRF  = '{{ csrf_token }}';
+const API = {
+  preview:      '/accounting/alegra/preview',
+  send:         '/accounting/alegra/send',
+  batches:      '/accounting/alegra/batches/',
+  contactSync:  '/accounting/alegra/contact-sync',
+  contactLink:  '/accounting/alegra/contact-link',
+  contactLookupLocal: '/accounting/alegra/contact-link/lookup-local',
+  contactValidateAlegra: '/accounting/alegra/contact-link/validate-alegra',
+  bulkCreateContacts: '/accounting/alegra/contacts/bulk-create-from-batch',
+  missingInAlegra: '/accounting/alegra/contacts/missing-in-alegra-from-batch',
+  refSync:      '/accounting/alegra/reference-sync',
+};
+
+// ── State ──────────────────────────────────────
+let currentDocType = 'receipt';
+let allDocs = [];
+let lastUnmatched = [];
+let currentBatchId = null;
+let docsFilter = 'all';
+let docsPage = 1;
+const DOCS_PER_PAGE = 25;
+
+let historyBatches = [];
+let historyPage = 1;
+const HISTORY_PER_PAGE = 12;
+
+// ── Config maps ────────────────────────────────
+const DOC_LABELS = {
+  receipt:    'Recibos de caja',
+  commission: 'Comisiones',
+  expense:    'Egresos',
+};
+
+const STATUS_CFG = {
+  pending:    { label: 'Pendiente',     cls: 'secondary', icon: 'clock' },
+  valid:      { label: 'Válido',        cls: 'success',   icon: 'check-circle' },
+  invalid:    { label: 'Inválido',      cls: 'danger',    icon: 'times-circle' },
+  sent:       { label: 'Enviado',       cls: 'primary',   icon: 'paper-plane' },
+  failed:     { label: 'Fallido',       cls: 'danger',    icon: 'exclamation-circle' },
+  skipped:    { label: 'Omitido',       cls: 'warning',   icon: 'forward' },
+  processing: { label: 'Procesando',    cls: 'info',      icon: 'spinner' },
+  preview:    { label: 'Vista previa',  cls: 'info',      icon: 'eye' },
+  done:       { label: 'Completado',    cls: 'success',   icon: 'check-double' },
+  partial:    { label: 'Parcial',       cls: 'warning',   icon: 'adjust' },
+};
+
+const OP_LABELS = {
+  'incomePayments__createIncomePayment': 'Pago ingreso',
+  'accounting__createJournal':           'Asiento contable',
+  'POST /bills':                         'Doc. soporte',
+  'POST /payments':                      'Pago egreso',
+};
+
+// ── Log helpers ────────────────────────────────
+function ts() {
+  return new Date().toLocaleTimeString('es-CO', { hour12: false });
+}
+
+function log(type, msg) {
+  const color = {
+    success: '#4ec9b0', error: '#f44747', warning: '#ce9178',
+    info: '#9cdcfe', loading: '#c586c0', label: '#dcdcaa', dim: '#555',
+  }[type] || '#d4d4d4';
+  const icon = {
+    success: '✓', error: '✗', warning: '⚠', info: '→',
+    loading: '⟳', label: '●', dim: '·',
+  }[type] || '·';
+  $('#logContainer').append(
+    `<div style="color:${color}"><span class="log-ts">[${ts()}]</span>${icon} ${msg}</div>`
+  );
+  const el = document.getElementById('logContainer');
+  el.scrollTop = el.scrollHeight;
+}
+
+function logSep() {
+  $('#logContainer').append('<hr>');
+}
+
+function clearLog() { $('#logContainer').empty(); }
+
+// ── Form helpers ───────────────────────────────
+function selectDocType(btn) {
+  $('.doc-type-btn').removeClass('active');
+  $(btn).addClass('active');
+  currentDocType = $(btn).data('type');
+  const needProj = currentDocType !== 'expense';
+  $('#proyectoRequired').toggle(needProj);
+  $('#proyectoOptional').toggle(!needProj);
+}
+
+function onEmpresaChange() { loadHistory(); }
+
+function getPayload() {
+  return {
+    empresa:       $('#selEmpresa').val(),
+    proyecto:      $('#selProyecto').val() || null,
+    document_type: currentDocType,
+    fecha_desde:   $('#fechaDesde').val(),
+    fecha_hasta:   $('#fechaHasta').val(),
+  };
+}
+
+function validatePayload(p) {
+  if (!p.empresa) return warn('Selecciona una empresa.');
+  if (currentDocType !== 'expense' && !p.proyecto) return warn('Este tipo de documento requiere un proyecto.');
+  if (!p.fecha_desde || !p.fecha_hasta) return warn('Las fechas son obligatorias.');
+  if (p.fecha_desde > p.fecha_hasta)    return warn('La fecha desde no puede ser mayor que la fecha hasta.');
+  return true;
+}
+
+function warn(msg) {
+  $('#formAlert').html(
+    `<div class="alert alert-danger alert-dismissible fade show py-2 mb-0" style="font-size:.875rem">
+      <i class="fas fa-exclamation-circle mr-2"></i>${escHtml(msg)}
+      <button type="button" class="close py-1" data-dismiss="alert"><span>&times;</span></button>
+    </div>`
+  );
+  return false;
+}
+
+// ── Badges / labels ────────────────────────────
+function statusBadge(status) {
+  const cfg = STATUS_CFG[status] || { label: status, cls: 'secondary', icon: 'circle' };
+  return `<span class="badge badge-${cfg.cls}" style="font-size:11px">
+            <i class="fas fa-${cfg.icon} mr-1"></i>${cfg.label}
+          </span>`;
+}
+
+function opLabel(op) {
+  if (!op) return '<span class="text-muted">—</span>';
+  const l = OP_LABELS[op];
+  if (l) return `<small>${escHtml(l)}</small>`;
+  return `<code style="font-size:10px">${escHtml(op)}</code>`;
+}
+
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Metrics ────────────────────────────────────
+function updateMetrics(batch, mode) {
+  $('#metricTotal').text(batch.total_documents);
+  if (mode === 'preview') {
+    $('#metricOk').text(batch.success_count);
+    $('#metricErr').text(batch.error_count);
+    $('#metricSkipped').text(0);
+    $('#metricOkLabel').text('Válidos');
+    $('#metricErrLabel').text('Inválidos');
+  } else {
+    $('#metricOk').text(batch.success_count);
+    $('#metricErr').text(batch.error_count);
+    $('#metricSkipped').text((batch.summary || {}).skipped || 0);
+    $('#metricOkLabel').text('Enviados');
+    $('#metricErrLabel').text('Fallidos');
+  }
+}
+
+// ── Documents table ────────────────────────────
+function renderDocuments(docs) {
+  allDocs = docs;
+  $('#docsCount').text(docs.length);
+  docsPage = 1;
+  docsFilter = ($('.filter-btn.active').data('filter') || 'all');
+  renderDocsPage();
+}
+
+function getFilteredDocs() {
+  const f = docsFilter || 'all';
+  if (f === 'all') return allDocs.slice();
+  return allDocs.filter(d => d.status === f);
+}
+
+function renderDocsPage() {
+  const filtered = getFilteredDocs();
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total / DOCS_PER_PAGE));
+  docsPage = Math.max(1, Math.min(docsPage, pages));
+  const start = (docsPage - 1) * DOCS_PER_PAGE;
+  const pageDocs = filtered.slice(start, start + DOCS_PER_PAGE);
+  buildDocRows(pageDocs);
+
+  $('#docsPageLabel').text(`Página ${docsPage} / ${pages} · ${total} item(s)`);
+  $('#docsPrev').prop('disabled', docsPage <= 1);
+  $('#docsNext').prop('disabled', docsPage >= pages);
+}
+
+function docsGo(delta) {
+  docsPage = docsPage + (delta || 0);
+  renderDocsPage();
+}
+
+function buildDocRows(docs) {
+  const tbody = $('#docsBody').empty();
+  if (!docs.length) {
+    tbody.append('<tr><td colspan="7" class="text-center text-muted py-3">Sin documentos</td></tr>');
+    $('#docsFooter').hide();
+    return;
+  }
+  docs.forEach((doc, idx) => {
+    const rowCls = { invalid:'doc-row-invalid', failed:'doc-row-failed',
+                     sent:'doc-row-sent', valid:'doc-row-valid', skipped:'doc-row-skipped' }[doc.status] || '';
+
+    const errorCell = doc.error
+      ? `<span class="error-inline" title="${escHtml(doc.error)}">${escHtml(doc.error)}</span>`
+      : '<span class="text-muted" style="font-size:12px">—</span>';
+
+    const alegraId = doc.alegra_id
+      ? `<code style="font-size:11px">${escHtml(doc.alegra_id)}</code>`
+      : '<span class="text-muted">—</span>';
+
+    // Use a stable index into allDocs for the detail modal.
+    const globalIdx = allDocs.indexOf(doc);
+    tbody.append(`
+      <tr class="${rowCls}" data-status="${doc.status}" data-idx="${globalIdx}">
+        <td>${statusBadge(doc.status)}</td>
+        <td><small class="text-muted">${escHtml(DOC_LABELS[doc.document_type] || doc.document_type)}</small></td>
+        <td><span class="local-key" title="${escHtml(doc.local_key)}">${escHtml(doc.local_key)}</span></td>
+        <td>${opLabel(doc.alegra_operation)}</td>
+        <td>${alegraId}</td>
+        <td>${errorCell}</td>
+        <td class="text-center">
+          <button class="btn btn-xs btn-outline-secondary" style="padding:1px 8px;font-size:11px"
+            onclick="showDocDetail(${globalIdx})" title="Ver detalle">
+            <i class="fas fa-search"></i>
+          </button>
+        </td>
+      </tr>`);
+  });
+
+  const errCount = getFilteredDocs().filter(d => d.status === 'invalid' || d.status === 'failed').length;
+  if (errCount) {
+    $('#docsFooter').text(
+      `${errCount} documento(s) con error. Abre el detalle para ver el error completo y el payload.`
+    ).show();
+  } else {
+    $('#docsFooter').hide();
+  }
+}
+
+function filterDocs(btn) {
+  $('.filter-btn').removeClass('active');
+  $(btn).addClass('active');
+  docsFilter = $(btn).data('filter') || 'all';
+  docsPage = 1;
+  renderDocsPage();
+}
+
+// (applyFilter removed: now we filter in-memory + paginate)
+
+function showDocDetail(idx) {
+  const doc = allDocs[idx];
+  if (!doc) return;
+
+  $('#detailModalTitle').html(
+    `<i class="fas fa-file-code mr-2"></i>${escHtml(doc.document_type)} · ${statusBadge(doc.status)}`
+  );
+  $('#detailLocalKey').text(doc.local_key);
+
+  $('#detailError').text(doc.error || '(sin error)');
+  const local = (doc.payload || {}).__local || null;
+  $('#detailLocal').text(local ? JSON.stringify(local, null, 2) : '(sin asiento local)');
+  const payload = Object.assign({}, (doc.payload || {}));
+  delete payload.__local;
+  $('#detailPayload').text(Object.keys(payload).length ? JSON.stringify(payload, null, 2) : '(sin payload)');
+  $('#detailResponse').text(
+    Object.keys(doc.response || {}).length ? JSON.stringify(doc.response, null, 2) : '(sin respuesta)'
+  );
+
+  // Activate error tab if there's an error, otherwise payload
+  if (doc.error) {
+    $('#tabErrorLink').tab('show');
+  } else if (local) {
+    $('#tabLocalLink').tab('show');
+  } else {
+    $('#tabPayloadLink').tab('show');
+  }
+
+  $('#detailModal').modal('show');
+}
+
+// ── Preview ────────────────────────────────────
+function doPreview() {
+  const p = getPayload();
+  if (!validatePayload(p)) return;
+
+  $('#formAlert').empty();
+  $('#resultsZone').show();
+  $('#btnSend').prop('disabled', true);
+  clearLog();
+
+  log('info', `Empresa: <strong>${escHtml($('#selEmpresa option:selected').text())}</strong>`);
+  if (p.proyecto) log('info', `Proyecto: <strong>${escHtml(p.proyecto)}</strong>`);
+  log('info', `Tipo: <strong>${DOC_LABELS[p.document_type]}</strong>`);
+  log('info', `Período: <strong>${p.fecha_desde}</strong> → <strong>${p.fecha_hasta}</strong>`);
+  logSep();
+  log('loading', 'Construyendo documentos, por favor espere&hellip;');
+
+  setBusy('preview', true);
+
+  $.ajax({
+    url: API.preview, method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify(p),
+    success: onPreviewSuccess,
+    error: function(xhr) {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      logSep();
+      log('error', `Error: <strong>${escHtml(msg)}</strong>`);
+    },
+    complete: function() { setBusy('preview', false); }
+  });
+}
+
+function onPreviewSuccess(data) {
+  const batch = data.batch;
+  const docs  = data.documents;
+  currentBatchId = batch.id;
+
+  logSep();
+  log('success', `Lote <strong>#${batch.id}</strong> generado`);
+  log('info',    `Total documentos encontrados: <strong>${batch.total_documents}</strong>`);
+
+  if (batch.success_count > 0) {
+    log('success', `Válidos y listos para enviar: <strong>${batch.success_count}</strong>`);
+  }
+  if (batch.error_count > 0) {
+    log('error', `Con errores (mapeos faltantes): <strong>${batch.error_count}</strong>`);
+    docs.filter(d => d.status === 'invalid').slice(0, 6).forEach(d => {
+      log('warning',
+        `<span style="color:#888;font-size:11px">${escHtml(d.local_key)}</span>  →  ${escHtml(d.error)}`
+      );
+    });
+    if (batch.error_count > 6) {
+      log('dim', `&hellip; y ${batch.error_count - 6} inválido(s) más — ver tabla abajo`);
+    }
+  }
+
+  updateMetrics(batch, 'preview');
+  renderDocuments(docs);
+
+  $('#logBatchBadge').html(statusBadge(batch.status)).show();
+
+  if (batch.success_count > 0) {
+    logSep();
+    log('label',
+      `<strong>${batch.success_count}</strong> documento(s) listo(s). ` +
+      `Presiona <em>Enviar a Alegra</em> para continuar.`
+    );
+    $('#btnSend').prop('disabled', false);
+  } else {
+    log('warning', 'No hay documentos válidos. Revisa los mapeos en el administrador Django.');
+  }
+
+  loadHistory();
+}
+
+// ── Send ───────────────────────────────────────
+function confirmSend() {
+  const p = getPayload();
+  if (!validatePayload(p)) return;
+
+  const validN = parseInt($('#metricOk').text()) || 0;
+  $('#confirmSendDetails').html(`
+    <table class="table table-sm table-bordered mb-0" style="font-size:.875rem">
+      <tr><td class="text-muted" style="width:140px">Empresa</td>
+          <td><strong>${escHtml($('#selEmpresa option:selected').text())}</strong></td></tr>
+      <tr><td class="text-muted">Proyecto</td>
+          <td><strong>${escHtml(p.proyecto || '—')}</strong></td></tr>
+      <tr><td class="text-muted">Tipo</td>
+          <td><strong>${DOC_LABELS[currentDocType]}</strong></td></tr>
+      <tr><td class="text-muted">Período</td>
+          <td><strong>${p.fecha_desde} → ${p.fecha_hasta}</strong></td></tr>
+      <tr><td class="text-muted">Documentos válidos</td>
+          <td><strong class="text-success">${validN}</strong></td></tr>
+    </table>
+  `);
+  $('#confirmSendModal').modal('show');
+}
+
+function doSend() {
+  $('#confirmSendModal').modal('hide');
+
+  const p = Object.assign(getPayload(), { retry_failed: true });
+
+  clearLog();
+  log('loading', 'Iniciando envío a Alegra&hellip;');
+  log('info', `Empresa: <strong>${escHtml($('#selEmpresa option:selected').text())}</strong>`);
+  if (p.proyecto) log('info', `Proyecto: <strong>${escHtml(p.proyecto)}</strong>`);
+  logSep();
+  log('loading', 'Enviando documentos — esto puede tomar unos segundos&hellip;');
+
+  setBusy('send', true);
+  $('#sendProgressBar').show();
+
+  $.ajax({
+    url: API.send, method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify(p),
+    success: onSendSuccess,
+    error: function(xhr) {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      logSep();
+      log('error', `Error: <strong>${escHtml(msg)}</strong>`);
+    },
+    complete: function() {
+      setBusy('send', false);
+      $('#sendProgressBar').hide();
+    }
+  });
+}
+
+function onSendSuccess(data) {
+  const batch = data.batch;
+  const docs  = data.documents;
+  const sum   = batch.summary || {};
+
+  logSep();
+  log('success', `Lote <strong>#${batch.id}</strong> procesado`);
+
+  if (batch.success_count > 0) log('success', `Enviados exitosamente: <strong>${batch.success_count}</strong>`);
+  if (batch.error_count > 0) {
+    log('error', `Fallidos: <strong>${batch.error_count}</strong>`);
+    docs.filter(d => d.status === 'failed').slice(0, 5).forEach(d => {
+      log('warning',
+        `<span style="color:#888;font-size:11px">${escHtml(d.local_key)}</span>  →  ${escHtml(d.error)}`
+      );
+    });
+    if (batch.error_count > 5) log('dim', `&hellip; y ${batch.error_count - 5} fallido(s) más`);
+  }
+  if (sum.skipped > 0) log('dim', `Omitidos (ya estaban enviados): <strong>${sum.skipped}</strong>`);
+
+  logSep();
+  const finalMsg = {
+    done:    ['success', '¡Todos los documentos enviados exitosamente!'],
+    partial: ['warning', 'Envío parcial — algunos documentos fallaron. Revisa la tabla.'],
+    failed:  ['error',   'El envío falló. Revisa los errores en la tabla.'],
+  }[batch.status] || ['info', `Estado: ${batch.status}`];
+  log(finalMsg[0], `<strong>${finalMsg[1]}</strong>`);
+
+  $('#logBatchBadge').html(statusBadge(batch.status)).show();
+  updateMetrics(batch, 'send');
+  renderDocuments(docs);
+  loadHistory();
+}
+
+// ── Contact sync ───────────────────────────────
+function doContactSync() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { warn('Selecciona una empresa primero.'); return; }
+
+  $('#resultsZone').show();
+  clearLog();
+  log('loading', 'Iniciando sincronización de contactos (con progreso real)…');
+  log('info', 'Primero cargamos contactos de Alegra y luego recorremos terceros locales por tandas.');
+
+  setBusy('contactSync', true);
+  $('#contactProgressBar').show();
+  $('#contactProgressFill').css('width', '0%');
+
+  function renderProgress(data) {
+    if (data.phase === 'alegra' || data.stage === 'alegra') {
+      // During Alegra loading, show progress text and animate bar.
+      $('#contactProgressFill').css('width', '25%');
+      const t = data.alegra_type ? ` (${escHtml(data.alegra_type)})` : '';
+      log('dim', `Cargando contactos de Alegra${t}… <strong>${data.alegra_loaded}</strong> cargados`);
+      return;
+    }
+    const pct = Math.max(0, Math.min(100, data.percent || 0));
+    $('#contactProgressFill').css('width', pct + '%');
+    log('dim', `Progreso: <strong>${pct}%</strong> (${data.processed}/${data.total_local}) · etapa: <strong>${escHtml(data.stage || '')}</strong>`);
+  }
+
+  function finish(data) {
+    logSep();
+    log('success', `Contactos en Alegra: <strong>${data.alegra_total}</strong>`);
+    log('success', `Mapeos nuevos: <strong>${data.mapped_new}</strong>`);
+    if (data.mapped_updated > 0) log('info', `Mapeos actualizados: <strong>${data.mapped_updated}</strong>`);
+    if (data.unmatched_count > 0) {
+      log('warning', `Sin match en Alegra: <strong>${data.unmatched_count}</strong> terceros locales`);
+      (data.unmatched || []).slice(0, 8).forEach(u => {
+        log('dim',
+          `<span style="color:#888;font-size:11px">${escHtml(u.identification)}</span> &nbsp;` +
+          `<span style="color:#ce9178">${escHtml(u.name)}</span> &nbsp;` +
+          `<span style="color:#555;font-size:10px">${escHtml(u.model)}</span>`
+        );
+      });
+      if (data.unmatched_count > 8) log('dim', `&hellip; y ${data.unmatched_count - 8} más sin match`);
+      logSep();
+      log('label', 'Para los sin match: créalos en Alegra con el mismo número de identificación y vuelve a sincronizar.');
+    } else {
+      logSep();
+      log('success', '¡Todos los terceros locales tienen contacto en Alegra!');
+    }
+    renderUnmatched(data.unmatched || []);
+    $('#contactProgressFill').css('width', '100%');
+    setTimeout(() => $('#contactProgressBar').hide(), 800);
+    setBusy('contactSync', false);
+  }
+
+  function step() {
+    $.ajax({
+      url: API.contactSync, method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ empresa, action: 'step', chunk_size: 300 }),
+      success: function(data) {
+        renderProgress(data);
+        if (data.status === 'done') return finish(data);
+        setTimeout(step, 50);
+      },
+      error: function(xhr) {
+        const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+        logSep();
+        log('error', `Error en sincronización: <strong>${escHtml(msg)}</strong>`);
+        $('#contactProgressBar').hide();
+        setBusy('contactSync', false);
+      }
+    });
+  }
+
+  // Start (loads Alegra contacts and initializes progress)
+  $.ajax({
+    url: API.contactSync, method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ empresa, action: 'start' }),
+    success: function(data) {
+      log('info', 'Iniciando carga de contactos de Alegra…');
+      renderProgress(data);
+      step();
+    },
+    error: function(xhr) {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      logSep();
+      log('error', `Error en sincronización: <strong>${escHtml(msg)}</strong>`);
+      $('#contactProgressBar').hide();
+      setBusy('contactSync', false);
+    }
+  });
+}
+
+function renderUnmatched(unmatched) {
+  if (!unmatched.length) {
+    $('#unmatchedPanel').hide();
+    return;
+  }
+  lastUnmatched = unmatched.slice();
+  const tbody = $('#unmatchedBody').empty();
+  unmatched.forEach((u, idx) => {
+    tbody.append(`
+      <tr>
+        <td><code style="font-size:11px">${escHtml(u.identification)}</code></td>
+        <td>${escHtml(u.name)}</td>
+        <td><small class="text-muted">${escHtml(u.model.replace('andinasoft.',''))}</small></td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-success" style="padding:2px 10px;font-size:12px"
+            onclick="openManualContactLink(${idx})">
+            Enlazar
+          </button>
+        </td>
+      </tr>`);
+  });
+  $('#unmatchedCount').text(unmatched.length);
+  $('#unmatchedPanel').show();
+}
+
+function openManualContactLink(idx) {
+  const empresaSel = $('#selEmpresa').val();
+  const u = (idx !== undefined && idx !== null) ? lastUnmatched[idx] : null;
+  $('#linkContactAlert').empty();
+  $('#linkAlegraId').val('');
+  $('#linkAlegraName').val('');
+  $('#linkAlegraStatus').empty();
+  $('#btnLinkContactSave').prop('disabled', true);
+  $('#linkEmpresa').val(empresaSel || '');
+
+  if (u) {
+    $('#linkLocalModel').val(u.model);
+    $('#linkLocalPk').val(String(u.pk)).trigger('input');
+    $('#linkLocalName').val(u.name || '');
+    $('#linkContactModal').data('payload', {
+      empresa: empresaSel,
+      local_model: u.model,
+      local_pk: String(u.pk),
+      name: u.name,
+      identification: u.identification,
+    });
+    $('#linkContactLabel').html(
+      `<div><strong>${escHtml(u.name)}</strong></div>
+       <div><small class="text-muted">${escHtml(u.model)} · ${escHtml(u.identification)} · pk=${escHtml(u.pk)}</small></div>`
+    );
+  } else {
+    $('#linkLocalPk').val('');
+    $('#linkLocalName').val('');
+    $('#linkAlegraStatus').empty();
+    $('#linkContactModal').data('payload', {});
+    $('#linkContactLabel').html('<small class="text-muted">Ingresa los datos abajo.</small>');
+  }
+  $('#linkContactModal').modal('show');
+}
+
+function saveManualContactLink() {
+  const p = $('#linkContactModal').data('payload') || {};
+  const empresa = ($('#linkEmpresa').val() || '').trim();
+  const local_model = ($('#linkLocalModel').val() || (p.local_model || '')).trim();
+  const local_pk = ($('#linkLocalPk').val() || (p.local_pk || '')).trim();
+  const name = ($('#linkLocalName').val() || (p.name || '')).trim();
+  const alegra_id = ($('#linkAlegraId').val() || '').trim();
+  if (!empresa) {
+    $('#linkContactAlert').html('<div class="alert alert-danger py-2 mb-0">Empresa es requerida.</div>');
+    return;
+  }
+  if (!local_model || !local_pk) {
+    $('#linkContactAlert').html('<div class="alert alert-danger py-2 mb-0">Tipo y PK local son requeridos.</div>');
+    return;
+  }
+  if (!alegra_id) {
+    $('#linkContactAlert').html('<div class="alert alert-danger py-2 mb-0">Alegra ID es requerido.</div>');
+    return;
+  }
+  $('#btnLinkContactSave').prop('disabled', true).text('Guardando…');
+  $.ajax({
+    url: API.contactLink,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      empresa,
+      local_model,
+      local_pk,
+      alegra_id,
+      name,
+    }),
+  }).done(() => {
+    $('#linkContactModal').modal('hide');
+    log('success', `Tercero enlazado manualmente: <strong>${escHtml(local_pk)}</strong> → Alegra ID <strong>${escHtml(alegra_id)}</strong>`);
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    $('#linkContactAlert').html(`<div class="alert alert-danger py-2 mb-0">Error: ${escHtml(msg)}</div>`);
+  }).always(() => {
+    $('#btnLinkContactSave').prop('disabled', false).text('Guardar');
+  });
+}
+
+// Debounced validations for manual link modal
+let _linkLocalLookupTimer = null;
+let _linkAlegraValidateTimer = null;
+let _linkLocalLookupXhr = null;
+let _linkAlegraValidateXhr = null;
+let _linkLastLocalKey = null;
+let _linkLastAlegraKey = null;
+
+function updateLinkFormState() {
+  $('#linkContactAlert').empty();
+  $('#btnLinkContactSave').prop('disabled', true);
+  $('#linkAlegraId').prop('disabled', true);
+  $('#linkAlegraName').val('');
+  $('#linkAlegraStatus').empty();
+  const empresa = ($('#linkEmpresa').val() || '').trim();
+  const local_model = ($('#linkLocalModel').val() || '').trim();
+  const local_pk = ($('#linkLocalPk').val() || '').trim();
+
+  if (!empresa || !local_model || !local_pk) return;
+
+  const key = `${empresa}::${local_model}::${local_pk}`;
+  if (_linkLastLocalKey === key && ($('#linkLocalName').val() || '').trim()) {
+    $('#linkAlegraId').prop('disabled', false);
+    return;
+  }
+
+  _linkLastLocalKey = key;
+  if (_linkLocalLookupTimer) clearTimeout(_linkLocalLookupTimer);
+  _linkLocalLookupTimer = setTimeout(() => {
+    if (_linkLocalLookupXhr && _linkLocalLookupXhr.readyState !== 4) {
+      try { _linkLocalLookupXhr.abort(); } catch (_) {}
+    }
+    _linkLocalLookupXhr = $.get(
+      `${API.contactLookupLocal}?local_model=${encodeURIComponent(local_model)}&local_pk=${encodeURIComponent(local_pk)}`
+    )
+      .done(data => {
+        // Only apply if current inputs still match
+        const nowKey = `${($('#linkEmpresa').val() || '').trim()}::${($('#linkLocalModel').val() || '').trim()}::${($('#linkLocalPk').val() || '').trim()}`;
+        if (nowKey !== key) return;
+        $('#linkLocalName').val(data.name || '');
+        $('#linkAlegraId').prop('disabled', false);
+      })
+      .fail(() => {
+        const nowKey = `${($('#linkEmpresa').val() || '').trim()}::${($('#linkLocalModel').val() || '').trim()}::${($('#linkLocalPk').val() || '').trim()}`;
+        if (nowKey !== key) return;
+        $('#linkLocalName').val('');
+        $('#linkContactAlert').html('<div class="alert alert-danger py-2 mb-0">No existe ese PK en Andinasoft.</div>');
+      });
+  }, 400);
+}
+
+function validateAlegraId() {
+  $('#linkContactAlert').empty();
+  $('#btnLinkContactSave').prop('disabled', true);
+  $('#linkAlegraName').val('');
+  $('#linkAlegraStatus').empty();
+  const empresa = ($('#linkEmpresa').val() || '').trim();
+  const local_model = ($('#linkLocalModel').val() || '').trim();
+  const local_pk = ($('#linkLocalPk').val() || '').trim();
+  const alegra_id = ($('#linkAlegraId').val() || '').trim();
+  if (!empresa || !local_model || !local_pk || !alegra_id) return;
+
+  const key = `${empresa}::${local_model}::${local_pk}::${alegra_id}`;
+  if (_linkLastAlegraKey === key && ($('#linkAlegraName').val() || '').trim()) {
+    $('#btnLinkContactSave').prop('disabled', false);
+    return;
+  }
+
+  _linkLastAlegraKey = key;
+  if (_linkAlegraValidateTimer) clearTimeout(_linkAlegraValidateTimer);
+  _linkAlegraValidateTimer = setTimeout(() => {
+    $('#linkAlegraStatus').html('<span class="text-muted"><i class="fas fa-spinner fa-spin-custom mr-1"></i>Validando en Alegra…</span>');
+    if (_linkAlegraValidateXhr && _linkAlegraValidateXhr.readyState !== 4) {
+      try { _linkAlegraValidateXhr.abort(); } catch (_) {}
+    }
+    _linkAlegraValidateXhr = $.get(
+      `${API.contactValidateAlegra}?empresa=${encodeURIComponent(empresa)}&local_model=${encodeURIComponent(local_model)}&local_pk=${encodeURIComponent(local_pk)}&alegra_id=${encodeURIComponent(alegra_id)}`
+    )
+      .done(data => {
+        const nowKey = `${($('#linkEmpresa').val() || '').trim()}::${($('#linkLocalModel').val() || '').trim()}::${($('#linkLocalPk').val() || '').trim()}::${($('#linkAlegraId').val() || '').trim()}`;
+        if (nowKey !== key) return;
+        const a = data.alegra || {};
+        $('#linkAlegraName').val(a.name ? `${a.name} (${a.identification || ''})` : '');
+        $('#linkAlegraStatus').html('<span class="text-success"><i class="fas fa-check-circle mr-1"></i>Disponible (no está usado en esta empresa)</span>');
+        $('#btnLinkContactSave').prop('disabled', false);
+      })
+      .fail(xhr => {
+        const nowKey = `${($('#linkEmpresa').val() || '').trim()}::${($('#linkLocalModel').val() || '').trim()}::${($('#linkLocalPk').val() || '').trim()}::${($('#linkAlegraId').val() || '').trim()}`;
+        if (nowKey !== key) return;
+        if (xhr.status === 409) {
+          const info = (xhr.responseJSON || {}).conflict_with || {};
+          $('#linkContactAlert').html(`<div class="alert alert-danger py-2 mb-0">Ese Alegra ID ya está enlazado a ${escHtml(info.local_model || '')} pk=${escHtml(info.local_pk || '')}.</div>`);
+          $('#linkAlegraStatus').html(`<span class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i>En uso en esta empresa: ${escHtml(info.local_model || '')} pk=${escHtml(info.local_pk || '')}</span>`);
+          return;
+        }
+        const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+        $('#linkContactAlert').html(`<div class="alert alert-danger py-2 mb-0">Error validando Alegra: ${escHtml(msg)}</div>`);
+        $('#linkAlegraStatus').html('<span class="text-danger"><i class="fas fa-times-circle mr-1"></i>No se pudo validar en Alegra</span>');
+      });
+  }, 450);
+}
+
+// ── Reference sync ─────────────────────────────
+function doReferenceSync() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { warn('Selecciona una empresa primero.'); return; }
+
+  $('#resultsZone').show();
+  clearLog();
+  log('loading', 'Conectando con Alegra para obtener datos de referencia&hellip;');
+  log('info', 'Consultando: bancos, categorías, centros de costo, numeraciones&hellip;');
+
+  setBusy('refSync', true);
+
+  $.ajax({
+    url: API.refSync, method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ empresa }),
+    success: function(data) {
+      logSep();
+      log('success', 'Sincronización completada');
+      if (data.banks)        log('info', `Bancos encontrados: <strong>${(data.banks||[]).length}</strong>`);
+      if (data.categories)   log('info', `Categorías: <strong>${(data.categories||[]).length}</strong>`);
+      if (data.cost_centers) log('info', `Centros de costo: <strong>${(data.cost_centers||[]).length}</strong>`);
+      if (data.numerations)  log('info', `Numeraciones: <strong>${(data.numerations||[]).length}</strong>`);
+      logSep();
+      log('label', 'Usa estos IDs para completar los mapeos en el panel de administración Django.');
+    },
+    error: function(xhr) {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      logSep();
+      log('error', `Error en sincronización: <strong>${escHtml(msg)}</strong>`);
+    },
+    complete: function() { setBusy('refSync', false); }
+  });
+}
+
+// ── Batch history ──────────────────────────────
+function loadHistory() {
+  const empresa = $('#selEmpresa').val();
+  const url = API.batches + (empresa ? `?empresa=${encodeURIComponent(empresa)}` : '');
+
+  $.get(url, function(data) {
+    historyBatches = data.batches || [];
+    historyPage = 1;
+    renderHistory();
+  }).fail(function() {
+    $('#historyBody').html(
+      '<tr><td colspan="13" class="text-center text-danger py-3"><i class="fas fa-exclamation-circle mr-2"></i>Error cargando historial</td></tr>'
+    );
+  });
+}
+
+function renderHistory() {
+  const tbody = $('#historyBody').empty();
+  const total = (historyBatches || []).length;
+  if (!total) {
+    tbody.append('<tr><td colspan="13" class="text-center text-muted py-3">No hay lotes registrados</td></tr>');
+    $('#histPageLabel').text('—');
+    $('#histPrev').prop('disabled', true);
+    $('#histNext').prop('disabled', true);
+    return;
+  }
+  const pages = Math.max(1, Math.ceil(total / HISTORY_PER_PAGE));
+  historyPage = Math.max(1, Math.min(historyPage, pages));
+  const start = (historyPage - 1) * HISTORY_PER_PAGE;
+  const items = historyBatches.slice(start, start + HISTORY_PER_PAGE);
+
+  $('#histPageLabel').text(`Página ${historyPage} / ${pages} · ${total} item(s)`);
+  $('#histPrev').prop('disabled', historyPage <= 1);
+  $('#histNext').prop('disabled', historyPage >= pages);
+
+  items.forEach(b => {
+    const sum = b.summary || {};
+    const skipped = parseInt(sum.skipped || 0) || 0;
+    const sentAttempts = (b.status === 'preview' || b.status === 'pending')
+      ? '—'
+      : Math.max(0, (parseInt(b.total_documents || 0) || 0) - skipped);
+    const okAlegra = (b.status === 'preview' || b.status === 'pending') ? '—' : (parseInt(b.success_count || 0) || 0);
+    const sentError = (b.status === 'preview' || b.status === 'pending')
+      ? '—'
+      : Math.max(0, (parseInt(sentAttempts || 0) || 0) - (parseInt(okAlegra || 0) || 0));
+
+    const totalCell = (b.status === 'preview' || b.status === 'pending')
+      ? `<small>${b.total_documents}</small>`
+      : `<small>
+          <span class="font-weight-bold">${b.total_documents}</span>
+          <span class="text-muted" style="font-size:11px">
+            (<span class="text-primary" title="Enviados (intentos)">Env ${sentAttempts}</span>
+            · <span class="text-success" title="OK en Alegra">OK ${okAlegra}</span>
+            · <span class="text-danger" title="Enviados con error">Err ${sentError}</span>)
+          </span>
+        </small>`;
+    const createdBy = (b.created_by || '').trim() || '—';
+    tbody.append(`
+      <tr onclick="loadBatchDetail(${b.id})" title="Ver lote #${b.id}">
+        <td><small class="text-muted">#${b.id}</small></td>
+        <td><small>${escHtml(b.empresa_nombre || b.empresa)}</small></td>
+        <td><small>${escHtml(b.proyecto || '—')}</small></td>
+        <td><small>${escHtml(DOC_LABELS[b.document_type] || b.document_type)}</small></td>
+        <td><small style="font-family:monospace">${b.fecha_desde} → ${b.fecha_hasta}</small></td>
+        <td>${statusBadge(b.status)}</td>
+        <td class="text-center">${totalCell}</td>
+        <td class="text-center"><small class="font-weight-bold text-primary">${sentAttempts}</small></td>
+        <td class="text-center"><small class="font-weight-bold text-success">${okAlegra}</small></td>
+        <td class="text-center"><small class="font-weight-bold text-danger">${sentError}</small></td>
+        <td><small class="text-muted">${escHtml(createdBy)}</small></td>
+        <td><small class="text-muted">${escHtml(b.created_at)}</small></td>
+        <td class="text-center">
+          <button class="btn btn-xs btn-outline-secondary" style="padding:1px 8px;font-size:11px"
+            onclick="event.stopPropagation();loadBatchDetail(${b.id})">
+            <i class="fas fa-search"></i>
+          </button>
+        </td>
+      </tr>`);
+  });
+}
+
+function histGo(delta) {
+  historyPage = historyPage + (delta || 0);
+  renderHistory();
+}
+
+function loadBatchDetail(batchId) {
+  $.get(`${API.batches}${batchId}`, function(data) {
+    const batch = data.batch;
+    const docs  = data.documents;
+    currentBatchId = batch.id;
+
+    // Mirror form to match this batch
+    if (batch.empresa)       $('#selEmpresa').val(batch.empresa);
+    if (batch.proyecto)      $('#selProyecto').val(batch.proyecto);
+    if (batch.document_type) {
+      currentDocType = batch.document_type;
+      $('.doc-type-btn').removeClass('active');
+      $(`.doc-type-btn[data-type="${batch.document_type}"]`).addClass('active');
+    }
+    $('#fechaDesde').val(batch.fecha_desde);
+    $('#fechaHasta').val(batch.fecha_hasta);
+
+    $('#resultsZone').show();
+    clearLog();
+    log('info', `Cargando lote <strong>#${batch.id}</strong>`);
+    log('info', `Estado: <strong>${(STATUS_CFG[batch.status]||{}).label || batch.status}</strong>`);
+    log('info', `Total: <strong>${batch.total_documents}</strong> documentos`);
+    if (batch.success_count) log('success', `Exitosos: <strong>${batch.success_count}</strong>`);
+    if (batch.error_count)   log('error',   `Con error: <strong>${batch.error_count}</strong>`);
+
+    $('#logBatchBadge').html(statusBadge(batch.status)).show();
+    updateMetrics(batch, batch.status === 'preview' ? 'preview' : 'send');
+    renderDocuments(docs);
+
+    if (batch.status === 'preview' && batch.success_count > 0) {
+      $('#btnSend').prop('disabled', false);
+      log('label', 'Puedes enviar este lote a Alegra desde el botón de arriba.');
+    }
+
+    $('html,body').animate({ scrollTop: $('#resultsZone').offset().top - 70 }, 350);
+  }).fail(function() {
+    log('error', 'No se pudo cargar el detalle del lote.');
+  });
+}
+
+function bulkCreateMissingContacts() {
+  if (!currentBatchId) {
+    warn('Primero genera o abre un lote (vista previa).');
+    return;
+  }
+  const missing = (allDocs || []).filter(d => d.status === 'invalid' && (d.error || '').includes('tipo "contact"')).length;
+  if (!missing) {
+    warn('Este lote no tiene errores por contacto faltante.');
+    return;
+  }
+  logSep();
+  log('loading', `Creando terceros faltantes en Alegra (lote <strong>#${currentBatchId}</strong>)…`);
+  $.ajax({
+    url: API.bulkCreateContacts,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ batch_id: currentBatchId }),
+  }).done(res => {
+    log('success', `Candidatos: <strong>${res.candidates}</strong>`);
+    if (res.found_existing) log('info', `Ya existían en Alegra: <strong>${res.found_existing}</strong>`);
+    if (res.created) log('success', `Creados en Alegra: <strong>${res.created}</strong>`);
+    log('success', `Mapeos creados: <strong>${res.mapped}</strong>`);
+    if (res.skipped_already_mapped) log('dim', `Omitidos (ya mapeados): <strong>${res.skipped_already_mapped}</strong>`);
+    if ((res.errors || []).length) {
+      log('warning', `Errores: <strong>${res.errors.length}</strong> (ver primeros 5)`);
+      (res.errors || []).slice(0, 5).forEach(e => {
+        log('warning', `${escHtml(e.local_model)} pk=${escHtml(e.local_pk)} → ${escHtml(e.error)}`);
+      });
+    } else {
+      log('success', 'Sin errores creando terceros.');
+    }
+    logSep();
+    log('label', 'Ahora vuelve a correr “Vista previa” para validar el lote.');
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    log('error', `Error creando terceros: <strong>${escHtml(msg)}</strong>`);
+  });
+}
+
+function showMissingInAlegra() {
+  if (!currentBatchId) {
+    warn('Primero genera o abre un lote (vista previa).');
+    return;
+  }
+  $('#missingAlegraBody').html('<tr><td colspan="4" class="text-muted text-center py-3">Cargando…</td></tr>');
+  $('#missingAlegraModal').modal('show');
+  $.get(`${API.missingInAlegra}?batch_id=${encodeURIComponent(currentBatchId)}`)
+    .done(res => {
+      const items = res.missing || [];
+      if (!items.length) {
+        $('#missingAlegraBody').html('<tr><td colspan="4" class="text-success text-center py-3">No hay terceros faltantes en Alegra para este lote.</td></tr>');
+        return;
+      }
+      const rows = items.map(it => {
+        const refs = (it.refs || []).slice(0, 3).map(r => `${escHtml(r.source_model || '')}:${escHtml(String(r.source_pk || ''))}`).join('<br/>');
+        const origin = escHtml(it.local_model || '');
+        const name = escHtml(it.name || '');
+        const ident = escHtml(it.identification || '');
+        return `
+          <tr>
+            <td style="font-family:monospace">${ident}</td>
+            <td>${name || '<span class="text-muted">—</span>'}</td>
+            <td><small class="text-muted">${origin}</small></td>
+            <td><small class="text-muted">${refs || '—'}</small></td>
+          </tr>`;
+      }).join('');
+      $('#missingAlegraBody').html(rows);
+      logSep();
+      log('warning', `Los siguientes terceros no existen en Alegra (sin duplicados): <strong>${items.length}</strong>. Créalos primero y vuelve a intentar.`);
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      $('#missingAlegraBody').html(`<tr><td colspan="4" class="text-danger text-center py-3">Error: ${escHtml(msg)}</td></tr>`);
+    });
+}
+
+// ── Busy state ─────────────────────────────────
+function setBusy(op, busy) {
+  const cfgs = {
+    preview:      ['btnPreview',      '<i class="fas fa-eye mr-1"></i>Vista previa',                     '<i class="fas fa-spinner fa-spin mr-1"></i>Calculando&hellip;'],
+    send:         ['btnSend',         '<i class="fas fa-paper-plane mr-1"></i>Enviar a Alegra',           '<i class="fas fa-spinner fa-spin mr-1"></i>Enviando&hellip;'],
+    contactSync:  ['btnContactSync',  '<i class="fas fa-users mr-1"></i>Sincronizar contactos',           '<i class="fas fa-spinner fa-spin mr-1"></i>Sincronizando&hellip;'],
+    refSync:      ['btnRefSync',      '<i class="fas fa-database mr-1"></i>Sincronizar referencias',      '<i class="fas fa-spinner fa-spin mr-1"></i>Sincronizando&hellip;'],
+  };
+  const [btnId, idleHtml, busyHtml] = cfgs[op] || [];
+  if (!btnId) return;
+  $('#' + btnId).prop('disabled', busy).html(busy ? busyHtml : idleHtml);
+}
+
+// ── Init ───────────────────────────────────────
+$(function() {
+  // Default dates = current month
+  const today = new Date();
+  const fmt   = d => d.toISOString().split('T')[0];
+  $('#fechaDesde').val(fmt(new Date(today.getFullYear(), today.getMonth(), 1)));
+  $('#fechaHasta').val(fmt(new Date(today.getFullYear(), today.getMonth() + 1, 0)));
+
+  // Set initial proyectoRequired visibility
+  selectDocType($('.doc-type-btn[data-type="receipt"]')[0]);
+
+  loadHistory();
+});
+</script>
+{% endblock %}

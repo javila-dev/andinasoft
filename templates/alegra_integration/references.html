@@ -1,0 +1,1824 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Referencias Alegra{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width:1300px">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-0"><i class="fas fa-database mr-2"></i>Referencias Alegra</h4>
+      <small class="text-muted">Ver datos en Alegra y los mapeos guardados por empresa</small>
+    </div>
+    <div>
+      <a class="btn btn-sm btn-outline-primary mr-1" href="/accounting/alegra/webhooks/">
+        <i class="fas fa-plug mr-1"></i>Webhooks
+      </a>
+      <a class="btn btn-sm btn-outline-secondary" href="/accounting/alegra/">
+        <i class="fas fa-arrow-left mr-1"></i>Volver al dashboard
+      </a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="form-row align-items-end">
+        <div class="col-md-6">
+          <label class="font-weight-bold" style="font-size:.85rem">Empresa <span class="text-danger">*</span></label>
+          <select class="form-control" id="selEmpresa">
+            <option value="">— Seleccionar empresa —</option>
+            {% for e in empresas %}
+            <option value="{{ e.Nit }}">{{ e.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6 mt-2 mt-md-0">
+          <div class="btn-group btn-group-sm" role="group" aria-label="sync">
+            <button class="btn btn-outline-primary" onclick="loadRef('banks')">
+              <i class="fas fa-university mr-1"></i>Bancos
+            </button>
+            <button class="btn btn-outline-primary" onclick="loadRef('categories')">
+              <i class="fas fa-list mr-1"></i>Categorías
+            </button>
+            <button class="btn btn-outline-primary" onclick="loadRef('cost_centers')">
+              <i class="fas fa-bullseye mr-1"></i>Centros de costo
+            </button>
+            <button class="btn btn-outline-primary" onclick="loadRef('number_templates')">
+              <i class="fas fa-hashtag mr-1"></i>Numeraciones
+            </button>
+            <button class="btn btn-outline-secondary" onclick="ensureContactSyncLoaded()">
+              <i class="fas fa-users mr-1"></i>Contactos
+            </button>
+            <button class="btn btn-outline-success" onclick="ensureReceiptConfigLoaded()">
+              <i class="fas fa-receipt mr-1"></i>Recibos
+            </button>
+            <button class="btn btn-outline-success" onclick="ensureExpenseDefaultsLoaded()">
+              <i class="fas fa-coins mr-1"></i>Egresos
+            </button>
+          </div>
+          <small class="text-muted d-block mt-1">Cada botón sincroniza y muestra solo ese tipo</small>
+        </div>
+      </div>
+      <div id="alertBox" class="mt-3"></div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3" id="contactSyncCard" style="display:none">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <strong><i class="fas fa-users mr-2 text-muted"></i>Contactos · Sincronización</strong>
+      <button class="btn btn-sm btn-outline-secondary" onclick="ensureContactSyncLoaded()">
+        <i class="fas fa-sync-alt mr-1"></i>Actualizar vista
+      </button>
+    </div>
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center" style="gap:10px;flex-wrap:wrap">
+        <div class="text-muted" style="font-size:.9rem">
+          Sincroniza contactos de Alegra y crea mapeos por identificación (NIT/Cédula).
+        </div>
+        <button class="btn btn-primary" id="btnContactSyncRun" onclick="doContactSyncRefs()">
+          <i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos
+        </button>
+      </div>
+
+      <div class="mt-3" id="contactSyncProgressBar" style="display:none">
+        <div class="progress" style="height:6px">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+               id="contactSyncProgressFill" role="progressbar" style="width:0%"></div>
+        </div>
+        <small class="text-muted d-block mt-2" id="contactSyncProgressText">—</small>
+      </div>
+
+      <div class="mt-3" id="contactSyncSummary" style="display:none"></div>
+
+      <div class="mt-3" id="contactSyncUnmatchedWrap" style="display:none">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <strong style="font-size:.9rem">Terceros sin match en Alegra</strong>
+          <small class="text-muted" id="contactSyncUnmatchedCount">0</small>
+        </div>
+        <div class="table-responsive" style="max-height:280px;overflow-y:auto">
+          <table class="table table-sm mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:160px">Identificación</th>
+                <th>Nombre</th>
+                <th style="width:220px">Tipo</th>
+              </tr>
+            </thead>
+            <tbody id="contactSyncUnmatchedBody"></tbody>
+          </table>
+        </div>
+        <small class="text-muted d-block mt-2">
+          Tip: si existe en Alegra con dígito de verificación, debería matchear automáticamente.
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3" id="receiptConfigCard" style="display:none">
+    <div class="card-header bg-light">
+      <strong><i class="fas fa-receipt mr-2 text-muted"></i>Recibos de caja · Configuración</strong>
+      <small class="text-muted ml-2">Configura lo necesario para enviar recibos desde este proyecto</small>
+    </div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="col-md-6">
+          <label class="font-weight-bold" style="font-size:.85rem">Proyecto</label>
+          <select class="form-control" id="selReceiptProject">
+            <option value="">— (empresa) —</option>
+            {% for p in proyectos %}
+            <option value="{{ p.proyecto }}">{{ p.proyecto }}</option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">Selecciona el proyecto que vas a configurar</small>
+        </div>
+      </div>
+
+      <div class="form-row align-items-end mt-3">
+        <div class="col-md-5">
+          <label class="font-weight-bold" style="font-size:.85rem">Cuenta “Anticipo de clientes” en Alegra</label>
+          <div style="position:relative">
+            <input class="form-control" id="txtReceiptAdvancePick" placeholder="Escribe para buscar (ej. anticipo, clientes, 2805…)" autocomplete="off" />
+            <input type="hidden" id="selReceiptAdvanceId" />
+            <div id="receiptAdvanceMenu"
+                 class="list-group shadow-sm"
+                 style="display:none;position:absolute;z-index:20;width:100%;max-height:260px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <small class="text-muted" id="receiptAdvanceCurrent">Actual: —</small>
+        </div>
+        <div class="col-md-4">
+          <label class="font-weight-bold" style="font-size:.85rem">Numeración del recibo en Alegra</label>
+          <select class="form-control" id="selReceiptTemplate">
+            <option value="">— seleccionar —</option>
+          </select>
+          <small class="text-muted" id="receiptTemplateCurrent">Actual: —</small>
+          <div class="mt-2">
+            <small class="text-muted d-block" style="font-size:.85rem">
+              ¿No la ves en la lista? Pega el ID de la numeración (lo ves en la URL en Alegra).
+            </small>
+            <div class="d-flex" style="gap:6px;align-items:center">
+              <input class="form-control form-control-sm" id="txtReceiptTemplateManual"
+                     placeholder="Ej: 01KQCVZ0FXWNDFWWVD8MN8N3G8" />
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="useReceiptTemplateManual()">
+                Usar
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearReceiptTemplateManual()">
+                Limpiar
+              </button>
+            </div>
+            <small class="text-muted d-block mt-1" id="receiptTemplateManualHint" style="font-size:.8rem;display:none"></small>
+          </div>
+        </div>
+        <div class="col-md-3 mt-2 mt-md-0">
+          <button type="button" class="btn btn-success w-100" id="btnSaveReceiptConfig" onclick="return saveReceiptConfig(event)">
+            <i class="fas fa-save mr-1"></i>Guardar configuración
+          </button>
+        </div>
+      </div>
+
+      <small class="text-muted d-block mt-2">
+        Sugerencia: elige proyecto, selecciona cuenta y numeración, y guarda.
+      </small>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3" id="expenseDefaultsCard" style="display:none">
+    <div class="card-header bg-light">
+      <strong><i class="fas fa-coins mr-2 text-muted"></i>Egresos · Cuentas por defecto</strong>
+      <small class="text-muted ml-2">Si falta una cuenta específica, se usa esta cuenta por defecto</small>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info py-2" style="font-size:.9rem">
+        Configura las <strong>interfaces</strong> (conceptos) de tu empresa: cada concepto puede ir a una cuenta distinta en Alegra.
+        Las cuentas por defecto se usan solo como respaldo si alguna interfaz queda sin configurar.
+      </div>
+
+      <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong style="font-size:.9rem">Interfaces (conceptos) por empresa</strong>
+            <small class="text-muted" id="interfacesCount">0</small>
+          </div>
+          <div class="table-responsive" style="max-height:420px;overflow:auto">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th style="width:70px">ID</th>
+                  <th>Concepto</th>
+                  <th style="width:130px">Cuenta</th>
+                  <th style="width:250px">Cuenta en Alegra</th>
+                </tr>
+              </thead>
+              <tbody id="interfacesBody">
+                <tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <small class="text-muted d-block mt-2" style="font-size:.85rem">
+            CXP usa <code>crédito 1</code>. Anticipos usa <code>débito 1</code>.
+          </small>
+
+          <hr class="my-3"/>
+
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong style="font-size:.9rem">Intercompany (entre empresas)</strong>
+            <small class="text-muted" id="intercoCount">0</small>
+          </div>
+          <div class="table-responsive" style="max-height:380px;overflow:auto">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th style="width:75px">ID</th>
+                  <th style="width:160px">Desde</th>
+                  <th style="width:160px">Hacia</th>
+                  <th style="width:130px">CxC (desde)</th>
+                  <th style="width:260px">Cuenta Alegra (CxC)</th>
+                  <th style="width:130px">CxP (hacia)</th>
+                  <th style="width:260px">Cuenta Alegra (CxP)</th>
+                </tr>
+              </thead>
+              <tbody id="intercoBody">
+                <tr><td colspan="7" class="text-center text-muted py-3">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <small class="text-muted d-block mt-2" style="font-size:.85rem">
+            Se crean 2 journals: en la empresa que paga (banco vs CxC) y en la empresa origen (concepto CXP vs CxP).
+          </small>
+      </div>
+
+      <hr class="my-3"/>
+
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong style="font-size:.9rem">Numeraciones (opcional)</strong>
+        <small class="text-muted">Si no configuras, Alegra asigna automáticamente</small>
+      </div>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Egresos (Pagos) · Numeración</label>
+          <select class="form-control" id="selNumExpensePayment"><option value="">Cargando…</option></select>
+          <div class="mt-2">
+            <small class="text-muted d-block" style="font-size:.85rem">O pega el ID manual</small>
+            <div class="d-flex" style="gap:6px">
+              <input class="form-control form-control-sm" id="txtNumExpensePaymentManual" placeholder="ID numeración en Alegra" />
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="useManualNum('expense_payment')">Usar</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearManualNum('expense_payment')">Limpiar</button>
+            </div>
+            <small class="text-muted d-block mt-1" id="hintNumExpensePayment" style="font-size:.8rem;display:none"></small>
+          </div>
+          <small class="text-muted" id="curNumExpensePayment">Actual: —</small>
+        </div>
+
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Anticipos · Numeración</label>
+          <select class="form-control" id="selNumExpenseAnticipo"><option value="">Cargando…</option></select>
+          <div class="mt-2">
+            <small class="text-muted d-block" style="font-size:.85rem">O pega el ID manual</small>
+            <div class="d-flex" style="gap:6px">
+              <input class="form-control form-control-sm" id="txtNumExpenseAnticipoManual" placeholder="ID numeración en Alegra" />
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="useManualNum('expense_anticipo')">Usar</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearManualNum('expense_anticipo')">Limpiar</button>
+            </div>
+            <small class="text-muted d-block mt-1" id="hintNumExpenseAnticipo" style="font-size:.8rem;display:none"></small>
+          </div>
+          <small class="text-muted" id="curNumExpenseAnticipo">Actual: —</small>
+        </div>
+
+        <!-- Transferencias no requieren numeración: se usa el endpoint dedicado en Alegra -->
+
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Intercompany · Numeración (Journal)</label>
+          <select class="form-control" id="selNumInterco"><option value="">Cargando…</option></select>
+          <div class="mt-2">
+            <small class="text-muted d-block" style="font-size:.85rem">O pega el ID manual</small>
+            <div class="d-flex" style="gap:6px">
+              <input class="form-control form-control-sm" id="txtNumIntercoManual" placeholder="ID numeración contable" />
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="useManualNum('interco_journal')">Usar</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearManualNum('interco_journal')">Limpiar</button>
+            </div>
+            <small class="text-muted d-block mt-1" id="hintNumInterco" style="font-size:.8rem;display:none"></small>
+          </div>
+          <small class="text-muted" id="curNumInterco">Actual: —</small>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end mb-3">
+        <button class="btn btn-success" id="btnSaveExpenseNums" type="button" onclick="return saveExpenseNumerations(event)">
+          <i class="fas fa-save mr-1"></i>Guardar numeraciones
+        </button>
+      </div>
+
+      <div class="card border-0 bg-light">
+        <div class="card-body">
+          <strong style="font-size:.9rem">Respaldo (opcional)</strong>
+          <small class="text-muted d-block mb-2">Solo se usa si una interfaz no tiene cuenta en Alegra</small>
+
+          <div class="form-row">
+            <div class="form-group col-md-6">
+              <label class="font-weight-bold" style="font-size:.85rem">Cuenta por defecto para CXP (Pagos)</label>
+              <div style="position:relative">
+                <input class="form-control" id="txtDefaultCxpPick" placeholder="Busca cuenta en Alegra (ej. proveedores, 2335…)" autocomplete="off" />
+                <input type="hidden" id="selDefaultCxpId" />
+                <div id="defaultCxpMenu"
+                     class="list-group shadow-sm"
+                     style="display:none;position:absolute;z-index:20;width:100%;max-height:260px;overflow:auto;margin-top:4px"></div>
+              </div>
+              <small class="text-muted" id="defaultCxpCurrent">Actual: —</small>
+            </div>
+
+            <div class="form-group col-md-6">
+              <label class="font-weight-bold" style="font-size:.85rem">Cuenta por defecto para Anticipos</label>
+              <div style="position:relative">
+                <input class="form-control" id="txtDefaultAntPick" placeholder="Busca cuenta en Alegra (ej. anticipos, 1330…)" autocomplete="off" />
+                <input type="hidden" id="selDefaultAntId" />
+                <div id="defaultAntMenu"
+                     class="list-group shadow-sm"
+                     style="display:none;position:absolute;z-index:20;width:100%;max-height:260px;overflow:auto;margin-top:4px"></div>
+              </div>
+              <small class="text-muted" id="defaultAntCurrent">Actual: —</small>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end">
+            <button type="button" class="btn btn-success" id="btnSaveExpenseDefaults" onclick="return saveExpenseDefaults(event)">
+              <i class="fas fa-save mr-1"></i>Guardar respaldo
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="mainRefsTables">
+  <div class="row">
+    <div class="col-lg-6 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light">
+          <strong><i class="fas fa-building mr-2 text-muted"></i>En Andinasoft (cuentas)</strong>
+          <span class="badge badge-secondary ml-2" id="localCount">0</span>
+          <small class="text-muted ml-2" id="localTitle">—</small>
+        </div>
+        <div class="table-responsive" style="max-height:560px;overflow:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:80px">ID</th>
+                <th>Cuenta</th>
+                <th style="width:220px">Alegra</th>
+              </tr>
+            </thead>
+            <tbody id="localBody">
+              <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa y un tipo</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer text-muted" style="font-size:.8rem">
+          Para <strong>Bancos</strong>, enlaza cada cuenta local con el <strong>ID</strong> de banco/cuenta en Alegra y guarda.
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light">
+          <strong><i class="fas fa-cloud-download-alt mr-2 text-muted"></i>En Alegra</strong>
+          <span class="badge badge-secondary ml-2" id="remoteCount">0</span>
+          <small class="text-muted ml-2" id="remoteTitle">—</small>
+        </div>
+        <div class="table-responsive" style="max-height:560px;overflow:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:90px">ID</th>
+                <th>Nombre / Descripción</th>
+                <th style="width:120px">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="remoteBody">
+              <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa y un tipo</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12 mb-3">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">
+          <strong><i class="fas fa-map mr-2 text-muted"></i>Mapeos en la BD</strong>
+          <span class="badge badge-secondary ml-2" id="mapCount">0</span>
+          <small class="text-muted ml-2" id="mapTitle">—</small>
+        </div>
+        <div class="table-responsive" style="max-height:420px;overflow:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:220px">Tipo</th>
+                <th>Local</th>
+                <th style="width:120px">Alegra ID</th>
+                <th style="width:170px">Actualizado</th>
+                <th style="width:90px" class="text-center">Activo</th>
+              </tr>
+            </thead>
+            <tbody id="mapBody">
+              <tr><td colspan="5" class="text-center text-muted py-3">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer text-muted" style="font-size:.8rem">
+          Estos mapeos son por <strong>empresa</strong>. Si falta alguno, créalo/ajústalo en Django Admin.
+        </div>
+      </div>
+    </div>
+  </div>
+  </div><!-- /mainRefsTables -->
+
+</div>
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+const API = {
+  refs: '/accounting/alegra/references/data',
+  maps: '/accounting/alegra/references/mappings',
+  interfaces: '/accounting/alegra/references/interfaces',
+  intercompany: '/accounting/alegra/references/intercompany',
+  local: '/accounting/alegra/references/local-accounts',
+  saveBank: '/accounting/alegra/references/save-bank-mapping',
+  saveCategory: '/accounting/alegra/references/save-category-mapping',
+  saveNumeration: '/accounting/alegra/references/save-numeration-mapping',
+  catSearch: '/accounting/alegra/references/categories/search',
+  contactSync: '/accounting/alegra/contact-sync',
+};
+const CSRF = '{{ csrf_token }}';
+
+function escHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showAlert(kind, msg) {
+  const cls = kind === 'error' ? 'danger' : (kind === 'success' ? 'success' : 'info');
+  $('#alertBox').html(
+    `<div class="alert alert-${cls} py-2 mb-0" style="font-size:.9rem">${msg}</div>`
+  );
+}
+
+function mappingTypeFor(refType) {
+  return {
+    banks: 'bank_account',
+    categories: 'category',
+    cost_centers: 'cost_center',
+    number_templates: 'numeration',
+  }[refType] || '';
+}
+
+let currentRefType = null;
+let remoteBanksIndex = [];
+let pendingLocalAccounts = null;
+let pendingBankMappings = null;
+let remoteCategoriesIndex = [];
+let remoteReceiptTemplates = [];
+let receiptAdvanceSearchTimer = null;
+let receiptAdvanceSearchXhr = null;
+let receiptAdvanceById = {};
+let defaultCxpSearchTimer = null;
+let defaultCxpSearchXhr = null;
+let defaultCxpById = {};
+let defaultAntSearchTimer = null;
+let defaultAntSearchXhr = null;
+let defaultAntById = {};
+let interfaceSearchTimer = null;
+let interfaceSearchXhr = null;
+let interfacePickById = {};
+let _activeInterfacePick = null; // {menuSel, hiddenSel, inputSel, byIdRef}
+let intercoPickById = {};
+let _activeIntercoPick = null; // {menuSel, hiddenSel, inputSel, empresaSel}
+let intercoSearchTimer = null;
+let intercoSearchXhr = null;
+let expenseNumberTemplatesOut = [];
+let expenseJournalNumerations = [];
+
+function buildAlegraOptionsForCategories() {
+  const opts = ['<option value="">— seleccionar —</option>'];
+  (remoteCategoriesIndex || []).forEach(c => {
+    const id = c.id || '';
+    const code = c.code || '';
+    const name = c.name || c.description || '';
+    const label = code ? `${code} · ${name} (id ${id})` : `${name} (id ${id})`;
+    opts.push(`<option value="${escHtml(id)}">${escHtml(label)}</option>`);
+  });
+  return opts.join('');
+}
+
+function buildReceiptAdvanceMenu(categories) {
+  const rows = [];
+  (categories || []).forEach(c => {
+    const id = c.id || '';
+    if (!id) return;
+    const code = c.code || '';
+    const name = c.name || c.description || '';
+    const label = code ? `${code} · ${name}` : `${name}`;
+    rows.push(
+      `<button type="button" class="list-group-item list-group-item-action py-2"
+               data-id="${escHtml(String(id))}" data-label="${escHtml(label)}">
+         <div style="font-size:.9rem">${escHtml(label)}</div>
+         <div class="text-muted" style="font-size:.78rem">ID ${escHtml(String(id))}</div>
+       </button>`
+    );
+  });
+  return rows.join('') || '<div class="list-group-item text-muted py-2">Sin resultados</div>';
+}
+
+function buildAlegraOptionsForBanks() {
+  const opts = ['<option value="">— seleccionar —</option>'];
+  (remoteBanksIndex || []).forEach(b => {
+    const id = b.id || '';
+    const name = b.name || b.description || '';
+    opts.push(`<option value="${escHtml(id)}">${escHtml(id)} · ${escHtml(name)}</option>`);
+  });
+  return opts.join('');
+}
+
+function renderRemote(refType, payload) {
+  const body = $('#remoteBody').empty();
+  let items = [];
+
+  if (refType === 'banks') items = payload.banks || [];
+  if (refType === 'categories') items = payload.categories || [];
+  if (refType === 'cost_centers') items = payload.cost_centers || [];
+  if (refType === 'number_templates') {
+    const nt = payload.number_templates || {};
+    items = [];
+    Object.keys(nt).forEach(k => {
+      (nt[k] || []).forEach(x => items.push(Object.assign({__docType: k}, x)));
+    });
+  }
+
+  $('#remoteCount').text(items.length);
+  $('#remoteTitle').text(refType);
+
+  if (refType === 'banks') {
+    remoteBanksIndex = items.slice();
+    // If we already loaded local accounts + mappings, re-render now that options exist.
+    if (pendingLocalAccounts && pendingBankMappings) {
+      renderLocalAccountsForBanks(pendingLocalAccounts, pendingBankMappings);
+    }
+  } else {
+    remoteBanksIndex = [];
+  }
+
+  if (refType === 'categories') {
+    remoteCategoriesIndex = items.slice();
+    // Receipt config uses search-input now; keep index for current-value labels.
+    if ($('#receiptConfigCard').is(':visible')) {
+      loadReceiptAdvanceCurrent();
+    }
+  } else {
+    remoteCategoriesIndex = [];
+  }
+
+  if (refType === 'number_templates') {
+    const nt = payload.number_templates || {};
+    // Show all templates (all documentType). Previously we only showed transactionIn.
+    remoteReceiptTemplates = items.slice();
+    if ($('#receiptConfigCard').is(':visible')) {
+      $('#selReceiptTemplate').html(buildAlegraOptionsForReceiptTemplates());
+      loadReceiptTemplateCurrent();
+    }
+  } else {
+    remoteReceiptTemplates = [];
+  }
+
+  if (!items.length) {
+    body.append('<tr><td colspan="3" class="text-center text-muted py-3">Sin datos</td></tr>');
+    return;
+  }
+
+  items.forEach(it => {
+    const id = it.id || it.code || '';
+    const code = it.code || '';
+    const name = it.name || it.description || it.number || it.prefix || '(sin nombre)';
+    const status = it.status || it.state || (it.__docType ? it.__docType : '—');
+    const label = (code && refType === 'categories') ? `${code} · ${name}` : name;
+    body.append(
+      `<tr>
+        <td><code style="font-size:11px">${escHtml(id)}</code></td>
+        <td>${escHtml(label)}</td>
+        <td><small class="text-muted">${escHtml(status)}</small></td>
+      </tr>`
+    );
+  });
+}
+
+function renderMappings(refType, payload) {
+  const body = $('#mapBody').empty();
+  const items = payload.mappings || [];
+  $('#mapCount').text(items.length);
+  $('#mapTitle').text(mappingTypeFor(refType) || '—');
+
+  if (!items.length) {
+    body.append('<tr><td colspan="5" class="text-center text-muted py-3">Sin mapeos</td></tr>');
+    return;
+  }
+
+  items.forEach(m => {
+    const local = (m.local_code || m.local_pk || m.local_model || '').trim() || '—';
+    const active = m.active ? 'Sí' : 'No';
+    body.append(
+      `<tr>
+        <td><small class="text-muted">${escHtml(m.mapping_type)}</small></td>
+        <td>
+          <div><code style="font-size:11px">${escHtml(local)}</code></div>
+          ${m.description ? `<small class="text-muted">${escHtml(m.description)}</small>` : ''}
+        </td>
+        <td><code style="font-size:11px">${escHtml(m.alegra_id)}</code></td>
+        <td><small class="text-muted">${escHtml(m.updated_at || '')}</small></td>
+        <td class="text-center"><small class="text-muted">${escHtml(active)}</small></td>
+      </tr>`
+    );
+  });
+}
+
+function renderLocalAccountsForBanks(localAccounts, mappings) {
+  const body = $('#localBody').empty();
+  $('#localTitle').text('banks');
+  $('#localCount').text((localAccounts || []).length);
+
+  const byLocalPk = {};
+  (mappings || []).forEach(m => {
+    if (String(m.local_pk || '') !== '') byLocalPk[String(m.local_pk)] = m;
+  });
+
+  const optionsHtml = buildAlegraOptionsForBanks();
+
+  if (!localAccounts || !localAccounts.length) {
+    body.append('<tr><td colspan="3" class="text-center text-muted py-3">No hay cuentas locales activas para esta empresa</td></tr>');
+    return;
+  }
+
+  localAccounts.forEach(acc => {
+    const localPk = String(acc.idcuenta);
+    const existing = byLocalPk[localPk];
+    const selected = existing ? String(existing.alegra_id) : '';
+    const cuentaLabel = acc.cuentabanco || '(sin nombre)';
+    const badge = acc.es_caja ? '<span class="badge badge-info ml-1">caja</span>' : '';
+    body.append(
+      `<tr data-local="${escHtml(localPk)}">
+        <td><code style="font-size:11px">${escHtml(localPk)}</code></td>
+        <td>
+          ${escHtml(cuentaLabel)} ${badge}
+          ${acc.nro_cuentacontable ? `<div><small class="text-muted">contable: ${escHtml(acc.nro_cuentacontable)}</small></div>` : ''}
+        </td>
+        <td>
+          <div class="d-flex" style="gap:6px;align-items:center">
+            <select class="form-control form-control-sm alegra-select" style="min-width:200px">
+              ${optionsHtml}
+            </select>
+            <button class="btn btn-sm btn-success" onclick="saveBankMapping('${escHtml(localPk)}', this)">
+              Guardar
+            </button>
+          </div>
+          ${existing ? `<small class="text-muted">Guardado: ${escHtml(existing.alegra_id)} · ${escHtml(existing.updated_at || '')}</small>` : '<small class="text-muted">Sin mapear</small>'}
+        </td>
+      </tr>`
+    );
+    const row = body.find(`tr[data-local="${localPk.replace(/"/g,'&quot;')}"]`);
+    row.find('select.alegra-select').val(selected);
+  });
+}
+
+function saveBankMapping(localPk, btnEl) {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  const row = $(btnEl).closest('tr');
+  const alegraId = row.find('select.alegra-select').val();
+  if (!alegraId) { showAlert('error', 'Selecciona un banco de Alegra primero.'); return; }
+
+  $(btnEl).prop('disabled', true).text('Guardando…');
+  $.ajax({
+    url: API.saveBank,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ empresa, local_idcuenta: localPk, alegra_id: alegraId }),
+  }).done(() => {
+    showAlert('success', 'Mapeo guardado.');
+    // refresh mappings panel
+    const mapType = mappingTypeFor('banks');
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=${encodeURIComponent(mapType)}`)
+      .done(data => renderMappings('banks', data));
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `Error guardando: <strong>${escHtml(msg)}</strong>`);
+  }).always(() => {
+    $(btnEl).prop('disabled', false).text('Guardar');
+  });
+}
+
+function buildAlegraOptionsForReceiptTemplates() {
+  const opts = ['<option value="">— seleccionar —</option>'];
+  const list = (remoteReceiptTemplates || []).slice();
+  // Put the common type first for receipts
+  list.sort((a, b) => {
+    const da = String(a.documentType || a.__docType || '');
+    const db = String(b.documentType || b.__docType || '');
+    const wa = (da === 'transactionIn') ? 0 : 1;
+    const wb = (db === 'transactionIn') ? 0 : 1;
+    if (wa !== wb) return wa - wb;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+  list.forEach(t => {
+    const id = t.id || '';
+    const name = t.name || '';
+    const prefix = t.prefix || '';
+    const next = (t.nextNumber != null ? String(t.nextNumber) : (t.nextInvoiceNumber != null ? String(t.nextInvoiceNumber) : ''));
+    const docType = t.documentType || t.__docType || t.type || '';
+    const typeLabel = docType ? ` · ${docType}` : '';
+    const label = `${name}${prefix ? ` · ${prefix}` : ''}${next ? ` · next ${next}` : ''}${typeLabel} (id ${id})`;
+    opts.push(`<option value="${escHtml(id)}">${escHtml(label)}</option>`);
+  });
+  return opts.join('');
+}
+
+function loadReceiptAdvanceCurrent() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  const proyecto = $('#selReceiptProject').val() || '';
+  const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_code=receipt_client_advance` +
+            (proyecto ? `&proyecto=${encodeURIComponent(proyecto)}&include_null=1` : '');
+  $.get(q)
+    .done(data => {
+      const m = (data.mappings || [])[0];
+      if (m) {
+        const scope = m.proyecto ? `proyecto=${m.proyecto}` : 'empresa';
+        $('#receiptAdvanceCurrent').text(`Actual (${scope}): ${m.alegra_id} · ${m.description || ''}`);
+        const val = String(m.alegra_id);
+        $('#txtReceiptAdvancePick').val((m.description || '').trim() || `ID ${val}`);
+        $('#selReceiptAdvanceId').val(val);
+      } else {
+        $('#receiptAdvanceCurrent').text('Actual: —');
+      }
+    });
+}
+
+function loadReceiptTemplateCurrent() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  const proyecto = $('#selReceiptProject').val() || '';
+  const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=numeration&local_code=receipt_cash` +
+            (proyecto ? `&proyecto=${encodeURIComponent(proyecto)}&include_null=1` : '');
+  $.get(q)
+    .done(data => {
+      const m = (data.mappings || [])[0];
+      $('#receiptTemplateManualHint').hide().text('');
+      if (m) {
+        const scope = m.proyecto ? `proyecto=${m.proyecto}` : 'empresa';
+        $('#receiptTemplateCurrent').text(`Actual (${scope}): ${m.alegra_id} · ${m.description || ''}`);
+        const val = String(m.alegra_id);
+        // Do not inject saved values into the dropdown; show it only in "Actual".
+        if ($('#selReceiptTemplate option[value="' + val.replace(/"/g,'&quot;') + '"]').length) {
+          $('#selReceiptTemplate').val(val);
+          $('#txtReceiptTemplateManual').val('');
+        } else {
+          $('#selReceiptTemplate').val('');
+          // If it's not in the list, show it as manual by default so user can keep it.
+          $('#txtReceiptTemplateManual').val(val);
+          $('#receiptTemplateManualHint').show().text('Esta numeración está guardada pero no aparece en la lista; se usará por ID manual.');
+        }
+      } else {
+        $('#receiptTemplateCurrent').text('Actual: —');
+        $('#txtReceiptTemplateManual').val('');
+      }
+    });
+}
+
+function ensureReceiptConfigLoaded() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  $('#receiptConfigCard').show();
+  $('#contactSyncCard').hide();
+  $('#expenseDefaultsCard').hide();
+  $('#mainRefsTables').hide();
+  showAlert('info', '1) Elige el proyecto. 2) Busca y guarda la cuenta “Anticipo de clientes”. 3) Guarda la numeración del recibo.');
+  $('#txtReceiptAdvancePick').val('');
+  $('#selReceiptAdvanceId').val('');
+  $('#receiptAdvanceMenu').hide().empty();
+  loadReceiptAdvanceCurrent();
+  $('#selReceiptTemplate').html('<option value="">Cargando numeraciones…</option>');
+  $('#txtReceiptTemplateManual').val('');
+  $('#receiptTemplateManualHint').hide().text('');
+  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=journal_numerations`)
+    .done(data => {
+      remoteReceiptTemplates = (data.journal_numerations || []).slice();
+      $('#selReceiptTemplate').html(buildAlegraOptionsForReceiptTemplates());
+      loadReceiptTemplateCurrent();
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      $('#selReceiptTemplate').html('<option value="">— seleccionar —</option>');
+      showAlert('error', `No se pudieron cargar las numeraciones: <strong>${escHtml(msg)}</strong>`);
+    });
+}
+
+function searchReceiptAdvanceInline(query) {
+  const empresa = $('#selEmpresa').val();
+  const q = (query || '').trim();
+  if (!empresa) return;
+  if (q.length < 2) { $('#receiptAdvanceMenu').hide().empty(); return; }
+
+  if (receiptAdvanceSearchTimer) clearTimeout(receiptAdvanceSearchTimer);
+  receiptAdvanceSearchTimer = setTimeout(() => {
+    if (receiptAdvanceSearchXhr && receiptAdvanceSearchXhr.readyState !== 4) {
+      try { receiptAdvanceSearchXhr.abort(); } catch (_) {}
+    }
+    receiptAdvanceSearchXhr = $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const cats = data.categories || [];
+        receiptAdvanceById = {};
+        cats.forEach(c => { if (c && c.id != null) receiptAdvanceById[String(c.id)] = c; });
+        // Keep remote table in sync (optional visual)
+        renderRemote('categories', { categories: cats });
+        $('#receiptAdvanceMenu').html(buildReceiptAdvanceMenu(cats)).show();
+      })
+      .fail(() => {
+        $('#receiptAdvanceMenu').hide().empty();
+      });
+  }, 350);
+}
+
+function useReceiptTemplateManual() {
+  const v = ($('#txtReceiptTemplateManual').val() || '').trim();
+  if (!v) {
+    $('#receiptTemplateManualHint').hide().text('');
+    return;
+  }
+  // Prefer manual value over dropdown; clear dropdown selection.
+  $('#selReceiptTemplate').val('');
+  $('#receiptTemplateManualHint').show().text('Se usará esta numeración por ID manual al guardar.');
+}
+
+function clearReceiptTemplateManual() {
+  $('#txtReceiptTemplateManual').val('');
+  $('#receiptTemplateManualHint').hide().text('');
+}
+
+function saveReceiptConfig(ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+
+  const proyecto = $('#selReceiptProject').val() || '';
+  const accountId = ($('#selReceiptAdvanceId').val() || '').trim();
+  const manualId = ($('#txtReceiptTemplateManual').val() || '').trim();
+  const templateId = manualId || ($('#selReceiptTemplate').val() || '').trim();
+
+  if (!accountId) { showAlert('error', 'Selecciona la cuenta “Anticipo de clientes”.'); return; }
+  if (!templateId) { showAlert('error', 'Selecciona la numeración del recibo o pega el ID manual.'); return; }
+
+  const c = receiptAdvanceById[String(accountId)] || null;
+  const accountLabel = c
+    ? ((c.code ? `${c.code} · ` : '') + (c.name || c.description || '') + ` (id ${c.id})`)
+    : ($('#txtReceiptAdvancePick').val() || `id ${accountId}`);
+  const templateLabel = manualId ? `Manual: ${manualId}` : $('#selReceiptTemplate option:selected').text();
+
+  showAlert('info', 'Guardando configuración…');
+  $('#btnSaveReceiptConfig').prop('disabled', true).text('Guardando…');
+
+  $.ajax({
+    url: API.saveCategory,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      empresa,
+      proyecto,
+      local_code: 'receipt_client_advance',
+      alegra_id: accountId,
+      description: accountLabel,
+    }),
+  }).done(() => {
+    $.ajax({
+      url: API.saveNumeration,
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        empresa,
+        proyecto,
+        local_code: 'receipt_cash',
+        alegra_id: templateId,
+        description: templateLabel,
+      }),
+    }).done(() => {
+      showAlert('success', 'Configuración guardada.');
+      loadReceiptAdvanceCurrent();
+      loadReceiptTemplateCurrent();
+    }).fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      showAlert('error', `No se pudo guardar la numeración: <strong>${escHtml(msg)}</strong>`);
+    }).always(() => {
+      $('#btnSaveReceiptConfig').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar configuración');
+    });
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `No se pudo guardar la cuenta: <strong>${escHtml(msg)}</strong>`);
+    $('#btnSaveReceiptConfig').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar configuración');
+  });
+
+  return false;
+}
+
+function loadExpenseDefaultsCurrent() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_code=default_cxp`)
+    .done(data => {
+      const m = (data.mappings || [])[0];
+      $('#defaultCxpCurrent').text(m ? `Actual: ${m.alegra_id} · ${m.description || ''}` : 'Actual: —');
+    });
+  $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_code=default_anticipo`)
+    .done(data => {
+      const m = (data.mappings || [])[0];
+      $('#defaultAntCurrent').text(m ? `Actual: ${m.alegra_id} · ${m.description || ''}` : 'Actual: —');
+    });
+}
+
+function ensureExpenseDefaultsLoaded() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  $('#expenseDefaultsCard').show();
+  $('#receiptConfigCard').hide();
+  $('#contactSyncCard').hide();
+  $('#mainRefsTables').hide();
+  showAlert('info', 'Configura las interfaces (conceptos) y enlázalas con una cuenta en Alegra.');
+  $('#txtDefaultCxpPick').val('');
+  $('#selDefaultCxpId').val('');
+  $('#defaultCxpMenu').hide().empty();
+  $('#txtDefaultAntPick').val('');
+  $('#selDefaultAntId').val('');
+  $('#defaultAntMenu').hide().empty();
+  loadExpenseDefaultsCurrent();
+  loadInterfacesForEmpresa();
+  loadIntercompanyForEmpresa();
+  loadExpenseNumerationOptions();
+  loadExpenseNumerationsCurrent();
+}
+
+function loadExpenseNumerationOptions() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  // Payments (out): use number templates transactionOut
+  $('#selNumExpensePayment').html('<option value="">Cargando…</option>');
+  $('#selNumExpenseAnticipo').html('<option value="">Cargando…</option>');
+  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`)
+    .done(data => {
+      const nt = data.number_templates || {};
+      expenseNumberTemplatesOut = (nt.transactionOut || []).slice();
+      const opts = ['<option value="">— seleccionar —</option>'];
+      expenseNumberTemplatesOut.forEach(t => {
+        const id = t.id || '';
+        const name = t.name || t.prefix || t.resolutionNumber || '';
+        if (!id) return;
+        opts.push(`<option value="${escHtml(String(id))}">${escHtml(`${name} (id ${id})`)}</option>`);
+      });
+      $('#selNumExpensePayment').html(opts.join(''));
+      $('#selNumExpenseAnticipo').html(opts.join(''));
+    })
+    .fail(() => {
+      $('#selNumExpensePayment').html('<option value="">— seleccionar —</option>');
+      $('#selNumExpenseAnticipo').html('<option value="">— seleccionar —</option>');
+    });
+
+  // Journals numerations (solo intercompany)
+  $('#selNumInterco').html('<option value="">Cargando…</option>');
+  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=journal_numerations`)
+    .done(data => {
+      expenseJournalNumerations = (data.journal_numerations || []).slice();
+      const opts = ['<option value="">— seleccionar —</option>'];
+      expenseJournalNumerations.forEach(x => {
+        const id = x.id || '';
+        const name = x.name || x.prefix || '';
+        const t = x.type ? ` · ${x.type}` : '';
+        if (!id) return;
+        opts.push(`<option value="${escHtml(String(id))}">${escHtml(`${name}${t} (id ${id})`)}</option>`);
+      });
+      $('#selNumInterco').html(opts.join(''));
+    })
+    .fail(() => {
+      $('#selNumInterco').html('<option value="">— seleccionar —</option>');
+    });
+}
+
+function loadExpenseNumerationsCurrent() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  const codes = [
+    ['expense_payment', '#curNumExpensePayment', '#selNumExpensePayment', '#txtNumExpensePaymentManual', '#hintNumExpensePayment'],
+    ['expense_anticipo', '#curNumExpenseAnticipo', '#selNumExpenseAnticipo', '#txtNumExpenseAnticipoManual', '#hintNumExpenseAnticipo'],
+    ['interco_journal', '#curNumInterco', '#selNumInterco', '#txtNumIntercoManual', '#hintNumInterco'],
+  ];
+  codes.forEach(([code, curSel, selSel, manualSel, hintSel]) => {
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=numeration&local_code=${encodeURIComponent(code)}`)
+      .done(data => {
+        const m = (data.mappings || [])[0];
+        $(hintSel).hide().text('');
+        if (m) {
+          $(curSel).text(`Actual: ${m.alegra_id} · ${m.description || ''}`);
+          const val = String(m.alegra_id);
+          if ($(selSel + ' option[value="' + val.replace(/"/g,'&quot;') + '"]').length) {
+            $(selSel).val(val);
+            $(manualSel).val('');
+          } else {
+            $(selSel).val('');
+            $(manualSel).val(val);
+            $(hintSel).show().text('Está guardada pero no aparece en la lista; se usará por ID manual.');
+          }
+        } else {
+          $(curSel).text('Actual: —');
+          $(manualSel).val('');
+          $(selSel).val('');
+        }
+      });
+  });
+}
+
+function useManualNum(code) {
+  const map = {
+    expense_payment: ['#selNumExpensePayment', '#txtNumExpensePaymentManual', '#hintNumExpensePayment'],
+    expense_anticipo: ['#selNumExpenseAnticipo', '#txtNumExpenseAnticipoManual', '#hintNumExpenseAnticipo'],
+    interco_journal: ['#selNumInterco', '#txtNumIntercoManual', '#hintNumInterco'],
+  }[code];
+  if (!map) return;
+  const [selSel, txtSel, hintSel] = map;
+  const v = ($(txtSel).val() || '').trim();
+  if (!v) { $(hintSel).hide().text(''); return; }
+  $(selSel).val('');
+  $(hintSel).show().text('Se usará esta numeración por ID manual al guardar.');
+}
+
+function clearManualNum(code) {
+  const map = {
+    expense_payment: ['#txtNumExpensePaymentManual', '#hintNumExpensePayment'],
+    expense_anticipo: ['#txtNumExpenseAnticipoManual', '#hintNumExpenseAnticipo'],
+    interco_journal: ['#txtNumIntercoManual', '#hintNumInterco'],
+  }[code];
+  if (!map) return;
+  const [txtSel, hintSel] = map;
+  $(txtSel).val('');
+  $(hintSel).hide().text('');
+}
+
+function saveExpenseNumerations(ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return false; }
+
+  const pairs = [
+    ['expense_payment', ($('#txtNumExpensePaymentManual').val() || '').trim() || ($('#selNumExpensePayment').val() || '').trim(), $('#selNumExpensePayment option:selected').text()],
+    ['expense_anticipo', ($('#txtNumExpenseAnticipoManual').val() || '').trim() || ($('#selNumExpenseAnticipo').val() || '').trim(), $('#selNumExpenseAnticipo option:selected').text()],
+    ['interco_journal', ($('#txtNumIntercoManual').val() || '').trim() || ($('#selNumInterco').val() || '').trim(), $('#selNumInterco option:selected').text()],
+  ];
+
+  const toSave = pairs.filter(p => p[1]);
+  if (!toSave.length) { showAlert('info', 'No hay numeraciones para guardar.'); return false; }
+
+  $('#btnSaveExpenseNums').prop('disabled', true).text('Guardando…');
+  showAlert('info', 'Guardando numeraciones…');
+
+  const saveOne = (idx) => {
+    if (idx >= toSave.length) {
+      $('#btnSaveExpenseNums').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar numeraciones');
+      showAlert('success', 'Numeraciones guardadas.');
+      loadExpenseNumerationsCurrent();
+      return;
+    }
+    const [code, id, label] = toSave[idx];
+    $.ajax({
+      url: API.saveNumeration,
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        empresa,
+        local_code: code,
+        alegra_id: id,
+        description: (label || id),
+      }),
+    }).done(() => saveOne(idx + 1))
+      .fail(xhr => {
+        const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+        showAlert('error', `No se pudo guardar ${escHtml(code)}: <strong>${escHtml(msg)}</strong>`);
+        $('#btnSaveExpenseNums').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar numeraciones');
+      });
+  };
+  saveOne(0);
+  return false;
+}
+
+function loadIntercompanyForEmpresa() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  $('#intercoBody').html('<tr><td colspan="7" class="text-center text-muted py-3">Cargando…</td></tr>');
+  $.get(`${API.intercompany}?empresa=${encodeURIComponent(empresa)}`)
+    .done(data => {
+      const rels = data.relations || [];
+      $('#intercoCount').text(rels.length);
+      if (!rels.length) {
+        $('#intercoBody').html('<tr><td colspan="7" class="text-center text-muted py-3">No hay relaciones intercompany.</td></tr>');
+        return;
+      }
+
+      // Fetch existing mappings for intercompany relations (both sides).
+      const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_model=${encodeURIComponent('accounting.cuentas_intercompanias')}`;
+      $.get(q).done(mapData => {
+        const maps = mapData.mappings || [];
+        const byKey = {};
+        maps.forEach(m => {
+          const key = `${m.local_pk}::${m.local_code}`;
+          byKey[key] = m;
+        });
+        renderIntercoRows(rels, byKey);
+      }).fail(() => renderIntercoRows(rels, {}));
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      $('#intercoBody').html(`<tr><td colspan="7" class="text-center text-danger py-3">Error: ${escHtml(msg)}</td></tr>`);
+    });
+}
+
+function renderIntercoRows(rels, mapByKey) {
+  const body = $('#intercoBody').empty();
+  (rels || []).forEach(r => {
+    const id = String(r.id || '');
+    const desde = String(r.empresa_desde || '');
+    const hacia = String(r.empresa_hacia || '');
+    const cxc = String(r.cuenta_por_cobrar || '');
+    const cxp = String(r.cuenta_por_pagar || '');
+
+    const keyCxc = `${id}::interco_cxc:${hacia}`;
+    const keyCxp = `${id}::interco_cxp:${desde}`;
+    const mCxc = mapByKey[keyCxc] || null;
+    const mCxp = mapByKey[keyCxp] || null;
+
+    const inputCxc = `icCxcPick_${id}`;
+    const hiddenCxc = `icCxcId_${id}`;
+    const menuCxc = `icCxcMenu_${id}`;
+
+    const inputCxp = `icCxpPick_${id}`;
+    const hiddenCxp = `icCxpId_${id}`;
+    const menuCxp = `icCxpMenu_${id}`;
+
+    body.append(`
+      <tr data-interco-id="${escHtml(id)}" data-desde="${escHtml(desde)}" data-hacia="${escHtml(hacia)}">
+        <td><code style="font-size:11px">${escHtml(id)}</code></td>
+        <td><small>${escHtml(desde)}<br/><span class="text-muted">${escHtml(r.empresa_desde_nombre || '')}</span></small></td>
+        <td><small>${escHtml(hacia)}<br/><span class="text-muted">${escHtml(r.empresa_hacia_nombre || '')}</span></small></td>
+        <td style="font-family:monospace">${escHtml(cxc || '—')}</td>
+        <td>
+          <div style="position:relative">
+            <input class="form-control form-control-sm interco-pick" id="${escHtml(inputCxc)}"
+                   placeholder="${mCxc ? escHtml(mCxc.description || mCxc.alegra_id) : 'Buscar en Alegra…'}"
+                   autocomplete="off"
+                   data-hidden="#${escHtml(hiddenCxc)}" data-menu="#${escHtml(menuCxc)}" data-empresa="${escHtml(desde)}"/>
+            <input type="hidden" id="${escHtml(hiddenCxc)}" value="${mCxc ? escHtml(mCxc.alegra_id) : ''}" />
+            <div id="${escHtml(menuCxc)}" class="list-group shadow-sm interco-menu"
+                 style="display:none;position:absolute;z-index:40;width:100%;max-height:220px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <div class="d-flex justify-content-end mt-1">
+            <button class="btn btn-xs btn-outline-success btn-save-interco" type="button" style="padding:1px 8px;font-size:11px" data-side="cxc">
+              Guardar
+            </button>
+          </div>
+        </td>
+        <td style="font-family:monospace">${escHtml(cxp || '—')}</td>
+        <td>
+          <div style="position:relative">
+            <input class="form-control form-control-sm interco-pick" id="${escHtml(inputCxp)}"
+                   placeholder="${mCxp ? escHtml(mCxp.description || mCxp.alegra_id) : 'Buscar en Alegra…'}"
+                   autocomplete="off"
+                   data-hidden="#${escHtml(hiddenCxp)}" data-menu="#${escHtml(menuCxp)}" data-empresa="${escHtml(hacia)}"/>
+            <input type="hidden" id="${escHtml(hiddenCxp)}" value="${mCxp ? escHtml(mCxp.alegra_id) : ''}" />
+            <div id="${escHtml(menuCxp)}" class="list-group shadow-sm interco-menu"
+                 style="display:none;position:absolute;z-index:40;width:100%;max-height:220px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <div class="d-flex justify-content-end mt-1">
+            <button class="btn btn-xs btn-outline-success btn-save-interco" type="button" style="padding:1px 8px;font-size:11px" data-side="cxp">
+              Guardar
+            </button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+}
+
+function startIntercoPick($input, query) {
+  const empresa = String($input.data('empresa') || '').trim();
+  const q = (query || '').trim();
+  const menuSel = String($input.data('menu') || '');
+  const hiddenSel = String($input.data('hidden') || '');
+  if (!empresa || !menuSel || !hiddenSel) return;
+  if (q.length < 2) { $(menuSel).hide().empty(); return; }
+  _activeIntercoPick = { menuSel, hiddenSel, inputSel: '#' + $input.attr('id'), empresaSel: empresa };
+  if (intercoSearchTimer) clearTimeout(intercoSearchTimer);
+  intercoSearchTimer = setTimeout(() => {
+    if (intercoSearchXhr && intercoSearchXhr.readyState !== 4) { try { intercoSearchXhr.abort(); } catch (_) {} }
+    intercoSearchXhr = $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const cats = data.categories || [];
+        intercoPickById = {};
+        cats.forEach(c => { if (c && c.id != null) intercoPickById[String(c.id)] = c; });
+        $(menuSel).html(buildReceiptAdvanceMenu(cats)).show();
+      })
+      .fail(xhr => {
+        const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error consultando Alegra';
+        $(menuSel).html(`<div class="list-group-item text-danger py-2">Error: ${escHtml(msg)}</div>`).show();
+        showAlert('error', `No se pudieron cargar cuentas de Alegra para <strong>${escHtml(empresa)}</strong>: ${escHtml(msg)}`);
+      });
+  }, 350);
+}
+
+function saveIntercoMapping($row, side) {
+  const relId = String($row.data('interco-id') || '');
+  const desde = String($row.data('desde') || '');
+  const hacia = String($row.data('hacia') || '');
+  if (!relId || !desde || !hacia) return;
+
+  const $btn = $(side === 'cxc' ? $row.find('button.btn-save-interco[data-side="cxc"]').first() : $row.find('button.btn-save-interco[data-side="cxp"]').first());
+  const $input = side === 'cxc'
+    ? $row.find('input.interco-pick[data-empresa="' + desde + '"]').first()
+    : $row.find('input.interco-pick[data-empresa="' + hacia + '"]').first();
+  const hiddenSel = String($input.data('hidden') || '');
+  const alegraId = (hiddenSel ? $(hiddenSel).val() : '').trim();
+  if (!alegraId) { showAlert('error', 'Selecciona una cuenta de Alegra antes de guardar.'); return; }
+
+  const empresaTarget = side === 'cxc' ? desde : hacia;
+  const localCode = side === 'cxc' ? `interco_cxc:${hacia}` : `interco_cxp:${desde}`;
+  const c = intercoPickById[String(alegraId)] || null;
+  const label = c ? ((c.code ? `${c.code} · ` : '') + (c.name || c.description || '') + ` (id ${c.id})`) : `id ${alegraId}`;
+
+  $btn.prop('disabled', true).text('Guardando…');
+  $.ajax({
+    url: API.saveCategory,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      empresa: empresaTarget,
+      local_model: 'accounting.cuentas_intercompanias',
+      local_pk: relId,
+      local_code: localCode,
+      alegra_id: alegraId,
+      description: label,
+    }),
+  }).done(() => {
+    showAlert('success', 'Intercompany guardado.');
+    loadIntercompanyForEmpresa();
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `No se pudo guardar: <strong>${escHtml(msg)}</strong>`);
+  }).always(() => {
+    $btn.prop('disabled', false).text('Guardar');
+  });
+}
+function loadInterfacesForEmpresa() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  $('#interfacesBody').html('<tr><td colspan="4" class="text-center text-muted py-3">Cargando…</td></tr>');
+  $.get(`${API.interfaces}?empresa=${encodeURIComponent(empresa)}`)
+    .done(data => {
+      const items = data.interfaces || [];
+      $('#interfacesCount').text(items.length);
+      if (!items.length) {
+        $('#interfacesBody').html('<tr><td colspan="4" class="text-center text-muted py-3">No hay interfaces para esta empresa.</td></tr>');
+        return;
+      }
+
+      // Fetch existing mappings for these interfaces (best-effort, capped).
+      const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_model=${encodeURIComponent('accounting.info_interfaces')}`;
+      $.get(q).done(mapData => {
+        const maps = mapData.mappings || [];
+        const byKey = {};
+        maps.forEach(m => {
+          const key = `${m.local_pk}::${m.local_code}`;
+          byKey[key] = m;
+        });
+        renderInterfacesRows(items, byKey);
+      }).fail(() => {
+        renderInterfacesRows(items, {});
+      });
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      $('#interfacesBody').html(`<tr><td colspan="4" class="text-center text-danger py-3">Error: ${escHtml(msg)}</td></tr>`);
+    });
+}
+
+function renderInterfacesRows(items, mapByKey) {
+  const body = $('#interfacesBody').empty();
+  (items || []).forEach(it => {
+    const id = String(it.id || '');
+    const desc = it.descripcion || '';
+    // Determine which local account field is relevant.
+    // Heuristic: if cuenta_credito_1 exists -> treat as CXP (credit 1), else if debito_1 exists -> anticipo.
+    const isCxp = !!(it.cuenta_credito_1 || '').trim();
+    const localAccount = isCxp ? (it.cuenta_credito_1 || '') : (it.cuenta_debito_1 || '');
+    const localCode = isCxp ? 'cxp_credito_1' : 'anticipo_debito_1';
+    const key = `${id}::${localCode}`;
+    const m = mapByKey[key] || null;
+    const current = m ? `${m.alegra_id} · ${m.description || ''}` : '—';
+
+    const inputId = `ifPick_${id}_${localCode}`;
+    const hiddenId = `ifAlegra_${id}_${localCode}`;
+    const menuId = `ifMenu_${id}_${localCode}`;
+
+    body.append(`
+      <tr data-if-id="${escHtml(id)}" data-if-code="${escHtml(localCode)}">
+        <td><code style="font-size:11px">${escHtml(id)}</code></td>
+        <td>
+          <div style="font-size:.9rem">${escHtml(desc)}</div>
+          <div class="text-muted" style="font-size:.78rem">Tipo: ${escHtml(it.tipo_doc || '—')} · Actual: ${escHtml(current)}</div>
+        </td>
+        <td style="font-family:monospace">${escHtml(localAccount || '—')}</td>
+        <td>
+          <div style="position:relative">
+            <input class="form-control form-control-sm interface-pick" id="${escHtml(inputId)}"
+                   placeholder="Buscar en Alegra…" autocomplete="off"
+                   data-hidden="#${escHtml(hiddenId)}" data-menu="#${escHtml(menuId)}"/>
+            <input type="hidden" id="${escHtml(hiddenId)}" />
+            <div id="${escHtml(menuId)}" class="list-group shadow-sm interface-menu"
+                 style="display:none;position:absolute;z-index:30;width:100%;max-height:240px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <div class="d-flex justify-content-end mt-1">
+            <button class="btn btn-xs btn-outline-success btn-save-interface" type="button" style="padding:1px 8px;font-size:11px">
+              Guardar
+            </button>
+          </div>
+        </td>
+      </tr>
+    `);
+  });
+}
+
+function startInterfacePick($input, query) {
+  const empresa = $('#selEmpresa').val();
+  const q = (query || '').trim();
+  if (!empresa) return;
+  const menuSel = String($input.data('menu') || '');
+  const hiddenSel = String($input.data('hidden') || '');
+  if (!menuSel || !hiddenSel) return;
+
+  if (q.length < 2) { $(menuSel).hide().empty(); return; }
+
+  _activeInterfacePick = { menuSel, hiddenSel, inputSel: '#' + $input.attr('id') };
+
+  if (interfaceSearchTimer) clearTimeout(interfaceSearchTimer);
+  interfaceSearchTimer = setTimeout(() => {
+    if (interfaceSearchXhr && interfaceSearchXhr.readyState !== 4) { try { interfaceSearchXhr.abort(); } catch (_) {} }
+    interfaceSearchXhr = $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const cats = data.categories || [];
+        interfacePickById = {};
+        cats.forEach(c => { if (c && c.id != null) interfacePickById[String(c.id)] = c; });
+        $(menuSel).html(buildReceiptAdvanceMenu(cats)).show();
+      })
+      .fail(() => $(menuSel).hide().empty());
+  }, 350);
+}
+
+function saveInterfaceMapping($row) {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  const interfaceId = String($row.data('if-id') || '');
+  const localCode = String($row.data('if-code') || '');
+  const $input = $row.find('input.interface-pick').first();
+  const hiddenSel = String($input.data('hidden') || '');
+  const alegraId = (hiddenSel ? $(hiddenSel).val() : '').trim();
+  if (!interfaceId || !localCode) return;
+  if (!alegraId) { showAlert('error', 'Selecciona una cuenta de Alegra antes de guardar.'); return; }
+
+  const c = interfacePickById[String(alegraId)] || null;
+  const label = c ? ((c.code ? `${c.code} · ` : '') + (c.name || c.description || '') + ` (id ${c.id})`) : `id ${alegraId}`;
+
+  const $btn = $row.find('button.btn-save-interface').first();
+  $btn.prop('disabled', true).text('Guardando…');
+  $.ajax({
+    url: API.saveCategory,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      empresa,
+      local_model: 'accounting.info_interfaces',
+      local_pk: interfaceId,
+      local_code: localCode,
+      alegra_id: alegraId,
+      description: label,
+    }),
+  }).done(() => {
+    showAlert('success', 'Interfaz guardada.');
+    loadInterfacesForEmpresa();
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `No se pudo guardar: <strong>${escHtml(msg)}</strong>`);
+  }).always(() => {
+    $btn.prop('disabled', false).text('Guardar');
+  });
+}
+function searchDefaultAccountInline(kind, query) {
+  const empresa = $('#selEmpresa').val();
+  const q = (query || '').trim();
+  if (!empresa) return;
+  if (q.length < 2) {
+    if (kind === 'cxp') $('#defaultCxpMenu').hide().empty();
+    else $('#defaultAntMenu').hide().empty();
+    return;
+  }
+
+  const setTimer = (t) => { if (kind === 'cxp') defaultCxpSearchTimer = t; else defaultAntSearchTimer = t; };
+  const getTimer = () => (kind === 'cxp' ? defaultCxpSearchTimer : defaultAntSearchTimer);
+  const setXhr = (x) => { if (kind === 'cxp') defaultCxpSearchXhr = x; else defaultAntSearchXhr = x; };
+  const getXhr = () => (kind === 'cxp' ? defaultCxpSearchXhr : defaultAntSearchXhr);
+
+  const timer = getTimer();
+  if (timer) clearTimeout(timer);
+  setTimer(setTimeout(() => {
+    const prev = getXhr();
+    if (prev && prev.readyState !== 4) { try { prev.abort(); } catch (_) {} }
+    const xhr = $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const cats = data.categories || [];
+        const byId = {};
+        cats.forEach(c => { if (c && c.id != null) byId[String(c.id)] = c; });
+        if (kind === 'cxp') {
+          defaultCxpById = byId;
+          $('#defaultCxpMenu').html(buildReceiptAdvanceMenu(cats)).show();
+        } else {
+          defaultAntById = byId;
+          $('#defaultAntMenu').html(buildReceiptAdvanceMenu(cats)).show();
+        }
+      })
+      .fail(() => {
+        if (kind === 'cxp') $('#defaultCxpMenu').hide().empty();
+        else $('#defaultAntMenu').hide().empty();
+      });
+    setXhr(xhr);
+  }, 350));
+}
+
+function saveExpenseDefaults(ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return false; }
+  const cxpId = ($('#selDefaultCxpId').val() || '').trim();
+  const antId = ($('#selDefaultAntId').val() || '').trim();
+  if (!cxpId || !antId) { showAlert('error', 'Selecciona ambas cuentas (CXP y Anticipos).'); return false; }
+
+  const cxp = defaultCxpById[String(cxpId)] || null;
+  const ant = defaultAntById[String(antId)] || null;
+  const cxpLabel = cxp ? ((cxp.code ? `${cxp.code} · ` : '') + (cxp.name || cxp.description || '') + ` (id ${cxp.id})`) : `id ${cxpId}`;
+  const antLabel = ant ? ((ant.code ? `${ant.code} · ` : '') + (ant.name || ant.description || '') + ` (id ${ant.id})`) : `id ${antId}`;
+
+  showAlert('info', 'Guardando cuentas por defecto…');
+  $('#btnSaveExpenseDefaults').prop('disabled', true).text('Guardando…');
+
+  $.ajax({
+    url: API.saveCategory,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ empresa, local_code: 'default_cxp', alegra_id: cxpId, description: cxpLabel }),
+  }).done(() => {
+    $.ajax({
+      url: API.saveCategory,
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ empresa, local_code: 'default_anticipo', alegra_id: antId, description: antLabel }),
+    }).done(() => {
+      showAlert('success', 'Cuentas por defecto guardadas.');
+      loadExpenseDefaultsCurrent();
+    }).fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      showAlert('error', `No se pudo guardar Anticipos: <strong>${escHtml(msg)}</strong>`);
+    }).always(() => {
+      $('#btnSaveExpenseDefaults').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar cuentas por defecto');
+    });
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `No se pudo guardar CXP: <strong>${escHtml(msg)}</strong>`);
+    $('#btnSaveExpenseDefaults').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar cuentas por defecto');
+  });
+  return false;
+}
+
+function ensureContactSyncLoaded() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  $('#contactSyncCard').show();
+  $('#receiptConfigCard').hide();
+  $('#expenseDefaultsCard').hide();
+  $('#mainRefsTables').hide();
+  showAlert('info', 'Presiona “Sincronizar contactos”. Este proceso puede tardar unos minutos.');
+  $('#contactSyncSummary').hide().empty();
+  $('#contactSyncUnmatchedWrap').hide();
+  $('#contactSyncUnmatchedBody').empty();
+  $('#contactSyncUnmatchedCount').text('0');
+}
+
+function renderContactSyncUnmatched(unmatched) {
+  const body = $('#contactSyncUnmatchedBody').empty();
+  const items = unmatched || [];
+  $('#contactSyncUnmatchedCount').text(`${items.length}`);
+  if (!items.length) {
+    body.append('<tr><td colspan="3" class="text-center text-muted py-3">—</td></tr>');
+    return;
+  }
+  items.slice(0, 300).forEach(u => {
+    body.append(
+      `<tr>
+        <td><code style="font-size:11px">${escHtml(u.identification || '')}</code></td>
+        <td>${escHtml(u.name || '')}</td>
+        <td><small class="text-muted">${escHtml(u.model || '')} · pk=${escHtml(u.pk || '')}</small></td>
+      </tr>`
+    );
+  });
+}
+
+function doContactSyncRefs() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  $('#btnContactSyncRun').prop('disabled', true).text('Sincronizando…');
+  $('#contactSyncProgressBar').show();
+  $('#contactSyncProgressFill').css('width', '0%');
+  $('#contactSyncProgressText').text('Iniciando…');
+  $('#contactSyncSummary').hide().empty();
+  $('#contactSyncUnmatchedWrap').hide();
+
+  function step(action) {
+    return $.ajax({
+      url: API.contactSync,
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ empresa, action: action || 'step', chunk_size: 300 }),
+    });
+  }
+
+  step('start').done(() => {
+    function loop() {
+      step('step').done(data => {
+        if (data.phase === 'alegra' || data.stage === 'alegra') {
+          $('#contactSyncProgressFill').css('width', '25%');
+          const t = data.alegra_type ? ` (${data.alegra_type})` : '';
+          $('#contactSyncProgressText').html(`Cargando contactos de Alegra${escHtml(t)}… <strong>${data.alegra_loaded}</strong>`);
+        } else {
+          const pct = Math.max(0, Math.min(100, data.percent || 0));
+          $('#contactSyncProgressFill').css('width', pct + '%');
+          $('#contactSyncProgressText').html(`Progreso: <strong>${pct}%</strong> (${data.processed}/${data.total_local})`);
+        }
+
+        if (data.status === 'done') {
+          $('#contactSyncProgressFill').css('width', '100%');
+          $('#contactSyncProgressText').text('Completado.');
+          $('#contactSyncSummary').show().html(
+            `<div class="alert alert-success py-2 mb-0" style="font-size:.9rem">
+              Contactos en Alegra: <strong>${data.alegra_total}</strong> ·
+              mapeos nuevos: <strong>${data.mapped_new}</strong> ·
+              mapeos actualizados: <strong>${data.mapped_updated}</strong> ·
+              sin match: <strong>${data.unmatched_count}</strong>
+            </div>`
+          );
+          if ((data.unmatched_count || 0) > 0) {
+            $('#contactSyncUnmatchedWrap').show();
+            renderContactSyncUnmatched(data.unmatched || []);
+          }
+          $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
+          setTimeout(() => $('#contactSyncProgressBar').hide(), 900);
+          return;
+        }
+        setTimeout(loop, 50);
+      }).fail(xhr => {
+        const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+        showAlert('error', `Error sincronizando contactos: <strong>${escHtml(msg)}</strong>`);
+        $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
+        $('#contactSyncProgressBar').hide();
+      });
+    }
+    loop();
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `Error iniciando sync: <strong>${escHtml(msg)}</strong>`);
+    $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
+    $('#contactSyncProgressBar').hide();
+  });
+}
+
+function loadRef(refType) {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  currentRefType = refType;
+
+  $('#receiptConfigCard').hide();
+  $('#contactSyncCard').hide();
+  $('#mainRefsTables').show();
+
+  showAlert('info', 'Consultando Alegra y cargando mapeos…');
+  $('#remoteBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>');
+  $('#mapBody').html('<tr><td colspan="2" class="text-center text-muted py-3">Cargando…</td></tr>');
+  $('#localBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>');
+
+  const mapType = mappingTypeFor(refType);
+
+  if (refType !== 'banks') {
+    pendingLocalAccounts = null;
+    pendingBankMappings = null;
+  }
+
+  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=${encodeURIComponent(refType)}`)
+    .done(data => {
+      renderRemote(refType, data);
+      showAlert('success', 'Datos de Alegra cargados.');
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      showAlert('error', `Error consultando Alegra: <strong>${escHtml(msg)}</strong>`);
+      $('#remoteBody').html('<tr><td colspan="3" class="text-center text-danger py-3">Error</td></tr>');
+    });
+
+  $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=${encodeURIComponent(mapType)}`)
+    .done(data => {
+      renderMappings(refType, data);
+      if (refType === 'banks') {
+        // also load local accounts for mapping UI
+        $.get(`${API.local}?empresa=${encodeURIComponent(empresa)}`)
+          .done(localData => {
+            pendingLocalAccounts = localData.local_accounts || [];
+            pendingBankMappings = data.mappings || [];
+            // If remote banks not loaded yet, we'll render once they arrive.
+            if (remoteBanksIndex && remoteBanksIndex.length) {
+              renderLocalAccountsForBanks(pendingLocalAccounts, pendingBankMappings);
+            } else {
+              $('#localBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando bancos de Alegra…</td></tr>');
+            }
+          })
+          .fail(() => $('#localBody').html('<tr><td colspan="3" class="text-center text-danger py-3">Error</td></tr>'));
+      } else {
+        $('#localCount').text('0');
+        $('#localTitle').text(refType);
+        $('#localBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Disponible para Bancos. (Podemos habilitar para otros tipos también.)</td></tr>');
+      }
+    })
+    .fail(() => $('#mapBody').html('<tr><td colspan="2" class="text-center text-danger py-3">Error</td></tr>'));
+}
+
+// Auto-load receipt configuration when selecting company (optional UX)
+$('#selEmpresa').on('change', function() {
+  $('#receiptConfigCard').hide();
+  $('#contactSyncCard').hide();
+  $('#expenseDefaultsCard').hide();
+  $('#mainRefsTables').show();
+});
+
+$('#selReceiptProject').on('change', function() {
+  if ($('#receiptConfigCard').is(':visible')) {
+    loadReceiptAdvanceCurrent();
+    loadReceiptTemplateCurrent();
+  }
+});
+
+$('#txtReceiptAdvancePick').on('input', function() {
+  const v = ($(this).val() || '').trim();
+  searchReceiptAdvanceInline(v);
+  // Clear selection until user picks an option
+  $('#selReceiptAdvanceId').val('');
+});
+
+// Select from search menu
+$('#receiptAdvanceMenu').on('click', 'button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id) return;
+  $('#selReceiptAdvanceId').val(id);
+  $('#txtReceiptAdvancePick').val(label);
+  $('#receiptAdvanceMenu').hide();
+});
+
+// Hide menu when clicking outside
+$(document).on('click', function(ev) {
+  const $t = $(ev.target);
+  if ($t.closest('#receiptAdvanceMenu').length) return;
+  if ($t.closest('#txtReceiptAdvancePick').length) return;
+  $('#receiptAdvanceMenu').hide();
+});
+
+// ── Default accounts (expenses) pickers ──────────
+$('#txtDefaultCxpPick').on('input', function() {
+  const v = ($(this).val() || '').trim();
+  searchDefaultAccountInline('cxp', v);
+  $('#selDefaultCxpId').val('');
+});
+$('#defaultCxpMenu').on('click', 'button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id) return;
+  $('#selDefaultCxpId').val(id);
+  $('#txtDefaultCxpPick').val(label);
+  $('#defaultCxpMenu').hide();
+});
+
+$('#txtDefaultAntPick').on('input', function() {
+  const v = ($(this).val() || '').trim();
+  searchDefaultAccountInline('ant', v);
+  $('#selDefaultAntId').val('');
+});
+$('#defaultAntMenu').on('click', 'button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id) return;
+  $('#selDefaultAntId').val(id);
+  $('#txtDefaultAntPick').val(label);
+  $('#defaultAntMenu').hide();
+});
+
+// Hide default menus when clicking outside
+$(document).on('click', function(ev) {
+  const $t = $(ev.target);
+  if ($t.closest('#defaultCxpMenu').length) return;
+  if ($t.closest('#txtDefaultCxpPick').length) return;
+  if ($t.closest('#defaultAntMenu').length) return;
+  if ($t.closest('#txtDefaultAntPick').length) return;
+  $('#defaultCxpMenu').hide();
+  $('#defaultAntMenu').hide();
+});
+
+// ── Interfaces mapping (event delegation) ─────────
+$(document).on('input', 'input.interface-pick', function() {
+  const $inp = $(this);
+  const v = ($inp.val() || '').trim();
+  // Clear selection until user picks an option
+  const hiddenSel = String($inp.data('hidden') || '');
+  if (hiddenSel) $(hiddenSel).val('');
+  startInterfacePick($inp, v);
+});
+
+$(document).on('click', '.interface-menu button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id || !_activeInterfacePick) return;
+  $(_activeInterfacePick.hiddenSel).val(id);
+  $(_activeInterfacePick.inputSel).val(label);
+  $(_activeInterfacePick.menuSel).hide();
+});
+
+$(document).on('click', 'button.btn-save-interface', function() {
+  const $row = $(this).closest('tr[data-if-id]');
+  if (!$row.length) return;
+  saveInterfaceMapping($row);
+});
+
+// Hide interface menus when clicking outside
+$(document).on('click', function(ev) {
+  const $t = $(ev.target);
+  if ($t.closest('.interface-menu').length) return;
+  if ($t.closest('input.interface-pick').length) return;
+  $('.interface-menu').hide();
+});
+
+// ── Intercompany mapping (event delegation) ───────
+$(document).on('input', 'input.interco-pick', function() {
+  const $inp = $(this);
+  const v = ($inp.val() || '').trim();
+  const hiddenSel = String($inp.data('hidden') || '');
+  if (hiddenSel) $(hiddenSel).val('');
+  startIntercoPick($inp, v);
+});
+
+$(document).on('click', '.interco-menu button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id || !_activeIntercoPick) return;
+  $(_activeIntercoPick.hiddenSel).val(id);
+  $(_activeIntercoPick.inputSel).val(label);
+  $(_activeIntercoPick.menuSel).hide();
+});
+
+$(document).on('click', 'button.btn-save-interco', function() {
+  const $row = $(this).closest('tr[data-interco-id]');
+  if (!$row.length) return;
+  const side = String($(this).data('side') || '');
+  saveIntercoMapping($row, side);
+});
+
+$(document).on('click', function(ev) {
+  const $t = $(ev.target);
+  if ($t.closest('.interco-menu').length) return;
+  if ($t.closest('input.interco-pick').length) return;
+  $('.interco-menu').hide();
+});
+</script>
+{% endblock %}
+

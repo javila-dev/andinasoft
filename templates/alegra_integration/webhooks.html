@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Alegra · Webhooks{% endblock %}
+
+{% block style %}
+<style>
+  .whk-header {
+    background: linear-gradient(135deg, #2d4a42 0%, #1e3330 100%);
+    color: white;
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .whk-path {
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    background: rgba(0,0,0,.25);
+    padding: 8px 12px;
+    border-radius: 6px;
+    word-break: break-all;
+  }
+  .json-viewer {
+    background: #1a1a2e;
+    color: #d4d4d4;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    padding: 14px;
+    border-radius: 6px;
+    max-height: 360px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .log-ok { color: #28a745; font-weight: 600; }
+  .log-fail { color: #dc3545; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width:960px">
+
+  <div class="whk-header d-flex justify-content-between align-items-center flex-wrap">
+    <div>
+      <h4 class="mb-1"><i class="fas fa-plug mr-2"></i>Suscripción webhooks Alegra</h4>
+      <p class="mb-0 small" style="opacity:.85">Por empresa · credenciales desde <code>empresas.alegra_token</code></p>
+    </div>
+    <a class="btn btn-sm btn-outline-light" href="/accounting/alegra/"><i class="fas fa-arrow-left mr-1"></i>Dashboard Alegra</a>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header font-weight-bold" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+      Nueva suscripción
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-3">
+        Indica el <strong>host</strong> (puedes pegar también <code>https://…</code>; se usa solo el host).
+        Alegra exige la URL del webhook <strong>sin</strong> <code>http://</code> ni <code>https://</code>; nosotros enviamos <code>host + ruta</code> y en la respuesta verás <code>callback_url_https</code> para probar en el navegador.
+      </p>
+      <div class="whk-path mb-3">
+        <span class="text-white-50">ej. ibex-daring-molly.ngrok-free.app</span><strong class="text-warning">{{ webhook_ingest_suffix }}</strong>
+      </div>
+
+      <div id="whkAlert"></div>
+
+      <div class="form-row">
+        <div class="col-md-5 mb-3">
+          <label class="font-weight-bold small">Empresa <span class="text-danger">*</span></label>
+          <select class="form-control" id="whkEmpresa">
+            <option value="">— Seleccionar —</option>
+            {% for e in empresas %}
+            <option value="{{ e.Nit }}" {% if e.Nit == selected_empresa %}selected{% endif %}>{{ e.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 mb-3">
+          <label class="font-weight-bold small">Evento <span class="text-danger">*</span></label>
+          <select class="form-control" id="whkEvent">
+            {% for ev in webhook_events %}
+            <option value="{{ ev }}" {% if ev == 'new-bill' %}selected{% endif %}>{{ ev }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-12 mb-3">
+          <label class="font-weight-bold small">Dominio base <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="whkDomain" placeholder="ibex-daring-molly.ngrok-free.app"
+                 value="ibex-daring-molly.ngrok-free.app">
+          <small class="text-muted">Host sin path. También acepta URL completa; el protocolo no se envía a Alegra.</small>
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary" id="whkBtnSubscribe">
+        <i class="fas fa-paper-plane mr-1"></i>Suscribir en Alegra
+      </button>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+      <span>Respuesta Alegra (última acción)</span>
+    </div>
+    <div class="card-body">
+      <div id="whkLastResponse" class="json-viewer text-muted">Aún no hay respuesta en esta sesión.</div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4 border-info">
+    <div class="card-header font-weight-bold bg-light border-bottom">
+      <i class="fas fa-info-circle text-info mr-2"></i>Qué hace cada parte
+    </div>
+    <div class="card-body small text-muted">
+      <p class="mb-2"><strong>Suscribir</strong> arriba llama a la API de Alegra <code>POST /webhooks/subscriptions</code> y solo <em>registra</em> la URL de tu túnel; no crea facturas ni envía datos de negocio.</p>
+      <p class="mb-0"><strong>Cuando ocurre un evento</strong>, Alegra hace <code>POST</code> a la URL registrada (host + <code>{{ webhook_ingest_suffix }}</code> + <code>?empresa=&lt;NIT&gt;</code> al suscribir desde aquí). El cuerpo se guarda en <strong>Recepciones</strong> y, si el JSON es válido, se crea o actualiza <code>accounting.Facturas</code> (ver <code>alegra_integration/webhook_bills.py</code>).</p>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+      <span>Recepciones desde Alegra (POST a ingesta)</span>
+      <a class="btn btn-sm btn-outline-dark" href="/admin/alegra_integration/alegrawebhookinboundlog/" target="_blank" rel="noopener">
+        <i class="fas fa-database mr-1"></i>Admin (JSON completo)
+      </a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0" style="font-size:13px">
+          <thead class="thead-light">
+            <tr>
+              <th>Id</th>
+              <th>Fecha</th>
+              <th>Método</th>
+              <th>Origen</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in inbound_logs %}
+            <tr>
+              <td>{{ row.pk }}</td>
+              <td nowrap>{{ row.created_at|date:"d/m/Y H:i:s" }}</td>
+              <td><code>{{ row.http_method }}</code></td>
+              <td><small>{{ row.remote_addr|default:"—" }}</small></td>
+              <td><a class="btn btn-sm btn-outline-secondary py-0" href="/admin/alegra_integration/alegrawebhookinboundlog/{{ row.pk }}/change/" target="_blank" rel="noopener">Ver payload</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="text-center text-muted py-4">Aún no hay POST desde Alegra. Crea o edita una factura de compra en Alegra tras suscribir <code>new-bill</code>.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4 border-warning">
+    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#fff8e1;border-bottom:1px solid #ffe8a1;">
+      <span>Suscripciones activas en Alegra (listar / eliminar)</span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="whkBtnRefreshSubscriptions">
+        <i class="fas fa-sync-alt mr-1"></i>Actualizar
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0" style="font-size:13px">
+          <thead class="thead-light">
+            <tr>
+              <th>Evento</th>
+              <th>URL</th>
+              <th>ID</th>
+              <th class="text-right">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="whkSubscriptionsBody">
+            <tr>
+              <td colspan="4" class="text-center text-muted py-3">Selecciona una empresa para cargar suscripciones.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center flex-wrap" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+      <span>Suscripciones (llamadas a la API de Alegra)</span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="whkBtnReload">
+        <i class="fas fa-sync-alt mr-1"></i>Recargar con empresa seleccionada
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0" style="font-size:13px">
+          <thead class="thead-light">
+            <tr>
+              <th>Fecha</th>
+              <th>Evento</th>
+              <th>HTTP</th>
+              <th>OK</th>
+              <th>URL callback</th>
+            </tr>
+          </thead>
+          <tbody id="whkLogBody">
+            {% for row in initial_logs %}
+            <tr>
+              <td nowrap>{{ row.created_at|date:"d/m/Y H:i" }}</td>
+              <td><code>{{ row.event }}</code></td>
+              <td>{{ row.response_status|default:"—" }}</td>
+              <td class="{% if row.success %}log-ok{% else %}log-fail{% endif %}">{% if row.success %}Sí{% else %}No{% endif %}</td>
+              <td style="max-width:280px;word-break:break-all;"><small>{{ row.callback_url }}</small></td>
+            </tr>
+            {% empty %}
+            <tr id="whkLogEmpty">
+              <td colspan="5" class="text-center text-muted py-4">Sin registros. Elige empresa y recarga, o suscribe arriba.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+const CSRF = '{{ csrf_token }}';
+const SUBSCRIBE_URL = '/accounting/alegra/webhooks/subscribe';
+const CONSOLE_URL = '/accounting/alegra/webhooks/';
+const SUBSCRIPTIONS_LIST_URL = '/accounting/alegra/webhooks/subscriptions';
+const SUBSCRIPTIONS_DELETE_URL = '/accounting/alegra/webhooks/subscriptions/delete';
+
+function showAlert(type, html) {
+  const el = document.getElementById('whkAlert');
+  const cls = type === 'danger' ? 'alert-danger' : (type === 'success' ? 'alert-success' : 'alert-info');
+  el.innerHTML = '<div class="alert ' + cls + ' mb-0">' + html + '</div>';
+}
+function clearAlert() { document.getElementById('whkAlert').innerHTML = ''; }
+
+function prettyJson(obj) {
+  try { return JSON.stringify(obj, null, 2); } catch (e) { return String(obj); }
+}
+
+document.getElementById('whkBtnSubscribe').addEventListener('click', async function () {
+  clearAlert();
+  const empresa = document.getElementById('whkEmpresa').value.trim();
+  const event = document.getElementById('whkEvent').value.trim();
+  const domain = document.getElementById('whkDomain').value.trim();
+  if (!empresa) { showAlert('danger', 'Selecciona una empresa.'); return; }
+  if (!domain) { showAlert('danger', 'Indica el dominio base.'); return; }
+
+  const btn = this;
+  btn.disabled = true;
+  try {
+    const res = await fetch(SUBSCRIBE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ empresa, event, domain }),
+    });
+    const data = await res.json().catch(() => ({}));
+    document.getElementById('whkLastResponse').textContent = prettyJson(data);
+
+    if (!res.ok) {
+      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status));
+      return;
+    }
+
+    const ok = data.success ? 'Suscripción registrada en Alegra (revisa <code>subscription</code> en la respuesta).' : 'Alegra respondió pero indica error (revisa JSON).';
+    showAlert(data.success ? 'success' : 'danger', ok);
+
+    prependLogRow(data);
+  } catch (e) {
+    showAlert('danger', 'Fallo de red: ' + e);
+    document.getElementById('whkLastResponse').textContent = String(e);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function prependLogRow(data) {
+  const tbody = document.getElementById('whkLogBody');
+  const empty = document.getElementById('whkLogEmpty');
+  if (empty) empty.remove();
+  const tr = document.createElement('tr');
+  const ok = data.success;
+  const status = (data.status_code != null) ? data.status_code : '—';
+  const ev = document.getElementById('whkEvent').value;
+  const url = data.callback_url_https || data.callback_url || '';
+  const now = new Date();
+  const ds = ('0' + now.getDate()).slice(-2) + '/' + ('0' + (now.getMonth() + 1)).slice(-2) + '/' + now.getFullYear() + ' ' +
+    ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+  tr.innerHTML =
+    '<td nowrap>' + ds + '</td>' +
+    '<td><code>' + ev + '</code></td>' +
+    '<td>' + status + '</td>' +
+    '<td class="' + (ok ? 'log-ok' : 'log-fail') + '">' + (ok ? 'Sí' : 'No') + '</td>' +
+    '<td style="max-width:280px;word-break:break-all;"><small>' + url + '</small></td>';
+  tbody.insertBefore(tr, tbody.firstChild);
+}
+
+document.getElementById('whkBtnReload').addEventListener('click', function () {
+  const empresa = document.getElementById('whkEmpresa').value.trim();
+  if (!empresa) { showAlert('danger', 'Selecciona empresa para filtrar el historial.'); return; }
+  window.location = CONSOLE_URL + '?empresa=' + encodeURIComponent(empresa);
+});
+
+document.getElementById('whkBtnRefreshSubscriptions').addEventListener('click', function () {
+  clearAlert();
+  loadSubscriptions();
+});
+
+// --- Suscripciones activas en Alegra (fuente de verdad) ---
+function setSubscriptionsLoading() {
+  const el = document.getElementById('whkSubscriptionsBody');
+  if (!el) return;
+  el.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Cargando…</td></tr>';
+}
+
+function renderSubscriptions(subs) {
+  const tbody = document.getElementById('whkSubscriptionsBody');
+  if (!tbody) return;
+  if (!subs || !subs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin suscripciones activas.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = subs.map(s => {
+    const id = (s.id || '').toString();
+    const ev = (s.event || '').toString();
+    const url = (s.url || '').toString();
+    return (
+      '<tr>' +
+      '<td><code>' + ev + '</code></td>' +
+      '<td style="max-width:320px;word-break:break-all;"><small>' + url + '</small></td>' +
+      '<td><code>' + id + '</code></td>' +
+      '<td class="text-right">' +
+        '<button type="button" class="btn btn-sm btn-outline-danger py-0" data-subscription-id="' + id + '">Eliminar</button>' +
+      '</td>' +
+      '</tr>'
+    );
+  }).join('');
+}
+
+async function loadSubscriptions() {
+  const empresa = document.getElementById('whkEmpresa').value.trim();
+  if (!empresa) { return; }
+  setSubscriptionsLoading();
+  try {
+    const res = await fetch(SUBSCRIPTIONS_LIST_URL + '?empresa=' + encodeURIComponent(empresa), { method: 'GET' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      renderSubscriptions([]);
+      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status));
+      return;
+    }
+    renderSubscriptions((data && data.subscriptions) ? data.subscriptions : []);
+  } catch (e) {
+    renderSubscriptions([]);
+    showAlert('danger', 'Fallo de red al listar suscripciones: ' + e);
+  }
+}
+
+document.addEventListener('click', async function (ev) {
+  const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-subscription-id]') : null;
+  if (!btn) return;
+  const empresa = document.getElementById('whkEmpresa').value.trim();
+  const subscription_id = (btn.getAttribute('data-subscription-id') || '').trim();
+  if (!empresa || !subscription_id) return;
+
+  btn.disabled = true;
+  try {
+    const res = await fetch(SUBSCRIPTIONS_DELETE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ empresa, subscription_id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status));
+      return;
+    }
+    showAlert('success', 'Suscripción eliminada en Alegra: <code>' + subscription_id + '</code>');
+    await loadSubscriptions();
+  } catch (e) {
+    showAlert('danger', 'Fallo de red al eliminar suscripción: ' + e);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('whkEmpresa').addEventListener('change', function () {
+  // limpiar alert para no confundir al cambiar de empresa
+  clearAlert();
+  loadSubscriptions();
+});
+
+// Carga inicial si viene empresa en querystring (selected_empresa)
+loadSubscriptions();
+</script>
+{% endblock %}
