@@ -51,6 +51,8 @@ class empresas(models.Model):
     representante_legal=models.CharField(max_length=255)
     cc_replegal=models.CharField(max_length=255)
     logo=models.ImageField(upload_to='logos_empresas', storage=PUBLIC_MEDIA_STORAGE)
+    alegra_enabled=models.BooleanField(default=False)
+    alegra_token=models.CharField(max_length=1024,null=True,blank=True)
     
     def __str__(self):
         return self.nombre.upper()
@@ -204,6 +206,11 @@ class clientes(models.Model):
         verbose_name = 'Cliente'
         verbose_name_plural = 'Clientes'
         
+    def __str__(self):
+        if self.nombrecompleto:
+            return f'{self.nombrecompleto} ({self.idTercero})'
+        return str(self.idTercero)
+
     def tipo_documento_str(self):
         tipos = {
             '13':  'Cédula de ciudadanía',
