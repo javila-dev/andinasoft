@@ -31,6 +31,9 @@ from django.db.models.fields.files import FileField, ImageField
 
 
 _HASHED_STATIC_RE = re.compile(r"^(?P<prefix>.+)\.[0-9a-f]{6,64}(?P<suffix>\.[^./]+)$")
+_STATIC_URL_TOKEN_RE = re.compile(
+    r"""(?P<prefix>url\(\s*['"]?|['"])(?P<url>(?:https?:)?//[^'")\s]+|/static/[^'")\s]+)(?P<suffix>['"]?\s*\)|['"])"""
+)
 
 
 def _unhashed_static_key(static_key):
@@ -85,8 +88,11 @@ def link_callback(uri, rel):
     parsed = urlparse(uri)
     candidate = parsed.path if parsed.scheme else uri
 
-    if candidate.startswith(settings.STATIC_URL):
-        static_key = candidate.replace(settings.STATIC_URL, "", 1)
+    if candidate.startswith(settings.STATIC_URL) or candidate.startswith("/static/"):
+        if candidate.startswith(settings.STATIC_URL):
+            static_key = candidate.replace(settings.STATIC_URL, "", 1)
+        else:
+            static_key = candidate.lstrip("/").replace("static/", "", 1)
         static_path = _resolve_static_path(static_key)
         if static_path:
             return static_path
@@ -130,6 +136,36 @@ def pdf_gen(template_path,context,filename,):
     return output
 
 
+def _replace_static_urls_with_file_urls(html):
+    """
+    WeasyPrint may treat absolute paths like /static/... as filesystem paths.
+    Replace /static/... tokens with file://<resolved_static_path> when possible.
+    """
+    if not html:
+        return html
+
+    def _replace(match):
+        raw_url = match.group("url")
+        parsed = urlparse(raw_url)
+        candidate = parsed.path if parsed.scheme else raw_url
+
+        if not candidate.startswith(settings.STATIC_URL) and not candidate.startswith("/static/"):
+            return match.group(0)
+
+        if candidate.startswith(settings.STATIC_URL):
+            static_key = candidate.replace(settings.STATIC_URL, "", 1)
+        else:
+            static_key = candidate.lstrip("/").replace("static/", "", 1)
+
+        static_path = _resolve_static_path(static_key)
+        if not static_path or not os.path.exists(static_path):
+            return match.group(0)
+
+        return f"{match.group('prefix')}file://{static_path}{match.group('suffix')}"
+
+    return _STATIC_URL_TOKEN_RE.sub(_replace, html)
+
+
 def weasy_url_fetcher(url):
     if default_url_fetcher is None:
         raise RuntimeError("WeasyPrint no está instalado.")
@@ -138,8 +174,11 @@ def weasy_url_fetcher(url):
     if parsed.scheme == 'file':
         candidate = parsed.path
 
-    if candidate.startswith(settings.STATIC_URL):
-        static_key = candidate.replace(settings.STATIC_URL, "", 1)
+    if candidate.startswith(settings.STATIC_URL) or candidate.startswith("/static/"):
+        if candidate.startswith(settings.STATIC_URL):
+            static_key = candidate.replace(settings.STATIC_URL, "", 1)
+        else:
+            static_key = candidate.lstrip("/").replace("static/", "", 1)
         static_path = _resolve_static_path(static_key)
         if static_path and os.path.exists(static_path):
             mime_type = mimetypes.guess_type(static_path)[0]
@@ -174,6 +213,7 @@ def pdf_gen_weasy(template_path, context, filename):
         raise RuntimeError("WeasyPrint no está instalado.")
     template = get_template(template_path)
     html = template.render(context)
+    html = _replace_static_urls_with_file_urls(html)
     file_dir = settings.MEDIA_ROOT + f'/tmp/{filename}'
     os.makedirs(settings.MEDIA_ROOT + '/tmp', exist_ok=True)
 
