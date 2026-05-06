@@ -3,6 +3,8 @@ import mimetypes
 import os
 import tempfile
 from urllib.parse import urlparse
+import re
+from io import BytesIO
 import numpy_financial as npf
 #import pytesseract
 from django.template.loader import get_template
@@ -10,6 +12,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
 from django.contrib.staticfiles import finders
+from django.contrib.staticfiles.storage import staticfiles_storage
 from xhtml2pdf import pisa
 try:
     from weasyprint import HTML, default_url_fetcher
@@ -27,26 +30,54 @@ from django.db.models.fields.files import FileField, ImageField
 
 
 
+_HASHED_STATIC_RE = re.compile(r"^(?P<prefix>.+)\.[0-9a-f]{6,64}(?P<suffix>\.[^./]+)$")
+
+
+def _unhashed_static_key(static_key):
+    match = _HASHED_STATIC_RE.match(static_key or "")
+    if not match:
+        return None
+    return f"{match.group('prefix')}{match.group('suffix')}"
+
+
 def _resolve_static_path(static_key):
     cleaned_key = (static_key or "").lstrip("/")
+    candidates = [cleaned_key]
+    unhashed_key = _unhashed_static_key(cleaned_key)
+    if unhashed_key and unhashed_key not in candidates:
+        candidates.append(unhashed_key)
 
-    if getattr(settings, "STATIC_ROOT", None):
-        candidate = os.path.join(settings.STATIC_ROOT, cleaned_key)
-        if os.path.exists(candidate):
-            return candidate
+    for key in candidates:
+        if getattr(settings, "STATIC_ROOT", None):
+            candidate = os.path.join(settings.STATIC_ROOT, key)
+            if os.path.exists(candidate):
+                return candidate
 
-    for static_dir in getattr(settings, "STATICFILES_DIRS", []):
-        candidate = os.path.join(static_dir, cleaned_key)
-        if os.path.exists(candidate):
-            return candidate
+        for static_dir in getattr(settings, "STATICFILES_DIRS", []):
+            candidate = os.path.join(static_dir, key)
+            if os.path.exists(candidate):
+                return candidate
 
-    found = finders.find(cleaned_key)
-    if isinstance(found, (list, tuple)):
-        for item in found:
-            if item and os.path.exists(item):
-                return item
-        return found[0] if found else None
-    return found
+        found = finders.find(key)
+        if isinstance(found, (list, tuple)):
+            for item in found:
+                if item and os.path.exists(item):
+                    return item
+            if found:
+                return found[0]
+        elif found:
+            return found
+
+    # Manifest storages can map hashed names to original names.
+    for key in candidates:
+        try:
+            path = staticfiles_storage.path(key)
+            if path and os.path.exists(path):
+                return path
+        except Exception:
+            pass
+
+    return None
 
 
 def link_callback(uri, rel):
@@ -113,6 +144,17 @@ def weasy_url_fetcher(url):
         if static_path and os.path.exists(static_path):
             mime_type = mimetypes.guess_type(static_path)[0]
             return {"file_obj": open(static_path, "rb"), "mime_type": mime_type}
+        # If the static file isn't available locally (e.g. collectstatic not run),
+        # avoid trying to open "/static/..." as a filesystem path.
+        ext = os.path.splitext(static_key)[1].lower()
+        if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}:
+            # 1x1 transparent PNG
+            transparent_png = (
+                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+                b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+                b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+            )
+            return {"file_obj": BytesIO(transparent_png), "mime_type": "image/png"}
 
     if candidate.startswith(settings.MEDIA_URL):
         media_key = candidate.replace(settings.MEDIA_URL, "", 1)
