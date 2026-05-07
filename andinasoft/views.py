@@ -4155,6 +4155,7 @@ def acciones_venta(request,proyecto,contrato):
                     formapago=datos_recaudo.formapago
                     if str(proyecto).strip().lower() == 'oasis':
                         from types import SimpleNamespace
+                        import os
                         import shutil
 
                         filename = f'{proyecto}_reciboNR_{recibo}.pdf'
@@ -4185,7 +4186,10 @@ def acciones_venta(request,proyecto,contrato):
                         }
 
                         result = pdf_gen_weasy('pdf/Oasis/recibo_nr.html', context_nr, filename)
-                        shutil.copyfile(result.get('root'), ruta)
+                        src = result.get('root')
+                        dst = ruta
+                        if src and dst and os.path.abspath(src) != os.path.abspath(dst):
+                            shutil.copyfile(src, dst)
                         dir_download = settings.DIR_DOWNLOADS + filename
                         return JsonResponse({'instance': dir_download}, status=200)
 
