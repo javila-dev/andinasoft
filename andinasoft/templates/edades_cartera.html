@@ -58,20 +58,20 @@
                 </tr>
             </thead>
             <tbody>
-                {%for adj in adjudicaciones%}{%if adj.presupuesto.total_pendiente >= 0%}<tr>
-                    <td>{{adj.info.pk}}</td>
-                    <td>{{adj.info.extra_info.Nombre.upper}}</td>
-                    <td>{{adj.info.extra_info.tipo_cartera}}</td>
-                    <td>{{adj.info.gestor_cartera}}</td>
-                    <td class="text-center">{{adj.presupuesto.dias_mora}}</td>
-                    <td class="text-center">{{adj.presupuesto.ultimo_pago|date:"d/m/Y"}}</td>
-                    <td class="text-right">{{adj.presupuesto.por_vencer}}</td>
-                    <td class="text-right">{{adj.presupuesto.lt30}}</td>
-                    <td class="text-right">{{adj.presupuesto.lt60}}</td>
-                    <td class="text-right">{{adj.presupuesto.lt90}}</td>
-                    <td class="text-right">{{adj.presupuesto.lt120}}</td>
-                    <td class="text-right">{{adj.presupuesto.gt120}}</td>
-                    <td class="text-right">{{adj.presupuesto.total_pendiente}}</td>
+                {%for adj in adjudicaciones%}{%if adj.total_pendiente >= 0%}<tr>
+                    <td>{{adj.adj}}</td>
+                    <td>{{adj.cliente|upper}}</td>
+                    <td>{{adj.cartera}}</td>
+                    <td>{{adj.gestor}}</td>
+                    <td class="text-center">{{adj.dias_mora}}</td>
+                    <td class="text-center">{{adj.ultimo_pago|date:"d/m/Y"}}</td>
+                    <td class="text-right">{{adj.por_vencer}}</td>
+                    <td class="text-right">{{adj.lt30}}</td>
+                    <td class="text-right">{{adj.lt60}}</td>
+                    <td class="text-right">{{adj.lt90}}</td>
+                    <td class="text-right">{{adj.lt120}}</td>
+                    <td class="text-right">{{adj.gt120}}</td>
+                    <td class="text-right">{{adj.total_pendiente}}</td>
                 </tr>{%endif%}{%endfor%}
             </tbody>
         </table>
