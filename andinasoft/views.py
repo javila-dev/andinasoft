@@ -4153,6 +4153,42 @@ def acciones_venta(request,proyecto,contrato):
                     cdresid_t1=str(datos_t1.ciudad)
                     cel_t1=str(datos_t1.celular1)
                     formapago=datos_recaudo.formapago
+                    if str(proyecto).strip().lower() == 'oasis':
+                        from types import SimpleNamespace
+                        import shutil
+
+                        filename = f'{proyecto}_reciboNR_{recibo}.pdf'
+                        titulares = []
+                        if datos_t1:
+                            titulares.append(SimpleNamespace(nombrecompleto=datos_t1.nombrecompleto, pk=getattr(datos_t1, 'idTercero', datos_t1.pk)))
+                        if datos_t2 not in (None, [], ''):
+                            titulares.append(SimpleNamespace(nombrecompleto=datos_t2.nombrecompleto, pk=getattr(datos_t2, 'idTercero', datos_t2.pk)))
+                        if datos_t3 not in (None, [], ''):
+                            titulares.append(SimpleNamespace(nombrecompleto=datos_t3.nombrecompleto, pk=getattr(datos_t3, 'idTercero', datos_t3.pk)))
+                        if datos_t4 not in (None, [], ''):
+                            titulares.append(SimpleNamespace(nombrecompleto=datos_t4.nombrecompleto, pk=getattr(datos_t4, 'idTercero', datos_t4.pk)))
+
+                        context_nr = {
+                            'recibo': SimpleNamespace(
+                                recibo=recibo,
+                                fecha=str(fecha),
+                                contrato=contrato,
+                                concepto=concepto,
+                                formapago=formapago,
+                                valor=valor,
+                                usuario=str(request.user),
+                            ),
+                            'ctr': SimpleNamespace(
+                                titulares=titulares,
+                                inmueble=str(datos_inmueble),
+                            )
+                        }
+
+                        result = pdf_gen_weasy('pdf/Oasis/recibo_nr.html', context_nr, filename)
+                        shutil.copyfile(result.get('root'), ruta)
+                        dir_download = settings.DIR_DOWNLOADS + filename
+                        return JsonResponse({'instance': dir_download}, status=200)
+
                     pdf.Recibo_caja(proyecto=proyecto,
                                     ruta=ruta,
                                     nroRecibo=recibo,

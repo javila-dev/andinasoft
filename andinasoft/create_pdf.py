@@ -6614,13 +6614,15 @@ class GenerarPDF():
                      'Alttum Collection':'',
                      'Sotavento':'./resources/Sotavento/Recibo-de-Caja-Sotavento.png',
                      'Carmelo Reservado':'./resources/Carmelo Reservado/recibo de caja.png',
-                     'Casas de Verano':'./resources/Casas de Verano/recibo de caja.png'}
+                     'Casas de Verano':'./resources/Casas de Verano/recibo de caja.png',
+                     'Oasis':'./resources/Recibo-de-Caja-SandVille.png'}
       story=[]
       frames_pag1=[]
      # Imagen base del doc
       frame_base=Frame(0,0,210*mm,297*mm)
       frames_pag1.append(frame_base)
-      pagina1=Image(proyecto_dict[proyecto],width=210*mm,height=150*mm)
+      recibo_base_path = proyecto_dict.get(proyecto) or './resources/Recibo-de-Caja-SandVille.png'
+      pagina1=Image(recibo_base_path,width=210*mm,height=150*mm)
       story.append(pagina1)
       story.append(FrameBreak())
       
