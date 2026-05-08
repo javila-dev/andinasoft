@@ -6748,13 +6748,31 @@ def edades_cartera(request,proyecto):
         base_qs.values('idadjudicacion')
         .annotate(
             dias_mora=Max('diasmora'),
-            por_vencer=Coalesce(Sum(Case(When(diasmora__lte=0, then=F('cuota')), default=Value(0), output_field=DecimalField())), Value(0)),
-            lt30=Coalesce(Sum(Case(When(diasmora__gt=0, diasmora__lte=30, then=F('cuota')), default=Value(0), output_field=DecimalField())), Value(0)),
-            lt60=Coalesce(Sum(Case(When(diasmora__gt=30, diasmora__lte=60, then=F('cuota')), default=Value(0), output_field=DecimalField())), Value(0)),
-            lt90=Coalesce(Sum(Case(When(diasmora__gt=60, diasmora__lte=90, then=F('cuota')), default=Value(0), output_field=DecimalField())), Value(0)),
-            lt120=Coalesce(Sum(Case(When(diasmora__gt=90, diasmora__lte=120, then=F('cuota')), default=Value(0), output_field=DecimalField())), Value(0)),
-            gt120=Coalesce(Sum(Case(When(diasmora__gt=120, then=F('cuota')), default=Value(0), output_field=DecimalField())), Value(0)),
-            total_pendiente=Coalesce(Sum('cuota'), Value(0)),
+            por_vencer=Coalesce(
+                Sum(Case(When(diasmora__lte=0, then=F('cuota')), default=Value(0), output_field=DecimalField())),
+                Value(0, output_field=DecimalField()),
+            ),
+            lt30=Coalesce(
+                Sum(Case(When(diasmora__gt=0, diasmora__lte=30, then=F('cuota')), default=Value(0), output_field=DecimalField())),
+                Value(0, output_field=DecimalField()),
+            ),
+            lt60=Coalesce(
+                Sum(Case(When(diasmora__gt=30, diasmora__lte=60, then=F('cuota')), default=Value(0), output_field=DecimalField())),
+                Value(0, output_field=DecimalField()),
+            ),
+            lt90=Coalesce(
+                Sum(Case(When(diasmora__gt=60, diasmora__lte=90, then=F('cuota')), default=Value(0), output_field=DecimalField())),
+                Value(0, output_field=DecimalField()),
+            ),
+            lt120=Coalesce(
+                Sum(Case(When(diasmora__gt=90, diasmora__lte=120, then=F('cuota')), default=Value(0), output_field=DecimalField())),
+                Value(0, output_field=DecimalField()),
+            ),
+            gt120=Coalesce(
+                Sum(Case(When(diasmora__gt=120, then=F('cuota')), default=Value(0), output_field=DecimalField())),
+                Value(0, output_field=DecimalField()),
+            ),
+            total_pendiente=Coalesce(Sum('cuota'), Value(0, output_field=DecimalField())),
         )
     )
 
