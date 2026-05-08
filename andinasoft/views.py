@@ -180,6 +180,18 @@ def _tmp_download_url(filename):
     return settings.DIR_DOWNLOADS + filename
 
 
+def _file_response_from_pdf_root(root_path, *, filename):
+    """
+    pdf_gen/pdf_gen_weasy may return a storage key as `root` (e.g. tmp/<file>.pdf) when using default_storage.
+    Fall back to local filesystem when `root` is a real path.
+    """
+    root_str = str(root_path or "")
+    normalized = root_str.replace("\\", "/")
+    if normalized.startswith("tmp/"):
+        return FileResponse(default_storage.open(root_str, "rb"), as_attachment=True, filename=filename)
+    return FileResponse(open(root_str, "rb"), as_attachment=True, filename=filename)
+
+
 INVENTARIO_IMPORT_COLUMNS = [
     'idinmueble',
     'etapa',
@@ -2778,7 +2790,7 @@ def lista_recaudos(request):
                     
                     file = pdf.get('root')
                                             
-                    return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                    return _file_response_from_pdf_root(file, filename=filename)
                 
             if request.POST.get('boton-modificar-fecha') or request.POST.get('boton-modificar-consec'):
                 if not check_perms(request,('andinasoft.change_recaudos_general',),raise_exception=False):
@@ -4518,7 +4530,7 @@ def acciones_venta(request,proyecto,contrato):
                         
                         file = pdf.get('root')
                                                 
-                        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                        return _file_response_from_pdf_root(file, filename=filename)
                     elif proyecto=='Tesoro Escondido':
                         porcDerecho=f'{(datos_inmueble.areaprivada*100/datos_inmueble.area_mz):.2f}'
                         pdf.ExportPromesaBugambilias(nro_contrato=nro_contrato,
@@ -4772,7 +4784,7 @@ def acciones_venta(request,proyecto,contrato):
                         
                         file = pdf.get('root')
                                                 
-                        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                        return _file_response_from_pdf_root(file, filename=filename)
                     elif proyecto == 'Casas de Verano' or proyecto == 'Oasis':
                         context = {
                             'proyecto':proyecto,
@@ -4792,7 +4804,7 @@ def acciones_venta(request,proyecto,contrato):
                         
                         file = pdf.get('root')
                                                 
-                        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                        return _file_response_from_pdf_root(file, filename=filename)
                     else:
                         mensaje='El proyecto seleccionado no tiene formato de promesa asignado'
                         titulo='Error'
@@ -5238,7 +5250,7 @@ def acciones_venta(request,proyecto,contrato):
                         
                         file = pdf.get('root')
                                                 
-                        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                        return _file_response_from_pdf_root(file, filename=filename)
                     
                     elif proyecto=='Carmelo Reservado':
                         
@@ -5256,7 +5268,7 @@ def acciones_venta(request,proyecto,contrato):
                         
                         file = pdf.get('root')
                                                 
-                        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                        return _file_response_from_pdf_root(file, filename=filename)
                     elif proyecto=='Casas de Verano':
                         
                         context = {
@@ -5273,7 +5285,7 @@ def acciones_venta(request,proyecto,contrato):
                         
                         file = pdf.get('root')
                                                 
-                        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+                        return _file_response_from_pdf_root(file, filename=filename)
                     
                     else:
                         alerta=True
