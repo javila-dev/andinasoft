@@ -2,6 +2,7 @@
 {%load crispy_forms_tags%}
 {%load extras%}
 {%load l10n%}
+{%load humanize%}
 {%load static%}
 
 {%block title%}Edades {{proyecto}}{%endblock%}
@@ -36,7 +37,7 @@
     <h3 class='section-title text-center text-white'>Edades de cartera {{proyecto}} <br><small>{{periodo}}</small></h3>
 
     <div class="table-responsive">
-        <table id="tableedades" class="table table-sm" style="font-size: x-small;">
+        <table id="tableedades" class="table table-sm" style="font-size: 12px;">
             <thead>
                 <tr class="text-center">
                     <th rowspan="2">ADJ</th>
@@ -65,13 +66,13 @@
                     <td>{{adj.gestor}}</td>
                     <td class="text-center">{{adj.dias_mora}}</td>
                     <td class="text-center">{{adj.ultimo_pago|date:"d/m/Y"}}</td>
-                    <td class="text-right">{{adj.por_vencer}}</td>
-                    <td class="text-right">{{adj.lt30}}</td>
-                    <td class="text-right">{{adj.lt60}}</td>
-                    <td class="text-right">{{adj.lt90}}</td>
-                    <td class="text-right">{{adj.lt120}}</td>
-                    <td class="text-right">{{adj.gt120}}</td>
-                    <td class="text-right">{{adj.total_pendiente}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.por_vencer|floatformat:0|intcomma}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.lt30|floatformat:0|intcomma}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.lt60|floatformat:0|intcomma}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.lt90|floatformat:0|intcomma}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.lt120|floatformat:0|intcomma}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.gt120|floatformat:0|intcomma}}</td>
+                    <td class="text-right" style="white-space:nowrap;">{{adj.total_pendiente|floatformat:0|intcomma}}</td>
                 </tr>{%endif%}{%endfor%}
             </tbody>
         </table>
