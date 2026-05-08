@@ -1859,14 +1859,14 @@ def _guardar_recaudo(
         except (egresos_banco.DoesNotExist, ValueError):
             pass  # Si no se encuentra el movimiento, continuar sin error
 
-    context_updates['ruta_recibo'] = settings.DIR_DOWNLOADS + filename
+    context_updates['ruta_recibo'] = _tmp_download_url(filename)
     context_updates['nro_recibo'] = nro_recibo
     context_updates['grabado'] = True
     context_updates['alerta'] = True
     context_updates['titulo'] = '¡Listo!'
     context_updates['mensaje'] = 'Descarga el recibo aquí'
     context_updates['link'] = True
-    context_updates['ruta_link'] = settings.DIR_DOWNLOADS + filename
+    context_updates['ruta_link'] = _tmp_download_url(filename)
     context_updates['redireccion'] = True
     context_updates['redirect'] = f'/tesoreria/adjudicaciones/{proyecto}'
     processed_tokens.append(form_token)
@@ -4210,7 +4210,7 @@ def acciones_venta(request,proyecto,contrato):
                         dst = ruta
                         if src and dst and os.path.abspath(src) != os.path.abspath(dst):
                             shutil.copyfile(src, dst)
-                        dir_download = settings.DIR_DOWNLOADS + filename
+                        dir_download = result.get('url') or _tmp_download_url(filename)
                         return JsonResponse({'instance': dir_download}, status=200)
 
                     pdf.Recibo_caja(proyecto=proyecto,
@@ -4225,7 +4225,7 @@ def acciones_venta(request,proyecto,contrato):
                                     telefono=cel_t1,
                                     formapag=formapago,
                                     user=request.user)
-                    dir_download=settings.DIR_DOWNLOADS+f'{proyecto}_reciboNR_{recibo}.pdf'
+                    dir_download=_tmp_download_url(f'{proyecto}_reciboNR_{recibo}.pdf')
                     return JsonResponse({'instance':dir_download},status=200)
                 elif tipo=='actualizar_fecha':
                     check_perms(request,('andinasoft.delete_ventas_nuevas',))
@@ -5328,7 +5328,7 @@ def acciones_venta(request,proyecto,contrato):
                         mensaje='Descarga el Recibo aqui'
                         titulo='¡Listo!'
                         link=True
-                        ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_reciboNR_{recibo}.pdf'     
+                        ruta_link=_tmp_download_url(f'{proyecto}_reciboNR_{recibo}.pdf')     
                 if request.POST.get('impTerminosAlttum'):
                     beneficiarios = request.POST.get('beneficiarios')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_Terminos y condiciones alttum_contrato_{contrato}.pdf'
