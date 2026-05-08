@@ -11,6 +11,7 @@ from django.template.loader import get_template
 from django.conf import settings
 from django.http import HttpResponse
 from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 from django.contrib.staticfiles import finders
 from django.contrib.staticfiles.storage import staticfiles_storage
 from xhtml2pdf import pisa
@@ -117,11 +118,27 @@ def pdf_gen(template_path,context,filename,):
     # find the template and render it.
     template = get_template(template_path)
     html = template.render(context)
+    storage_key = f"tmp/{filename}".lstrip("/")
+
+    if getattr(settings, "USE_S3_MEDIA", False):
+        output_bytes = BytesIO()
+        pisa_status = pisa.CreatePDF(html, dest=output_bytes, link_callback=link_callback)
+        if pisa_status.err:
+            return HttpResponse('We had some errors <pre>' + html + '</pre>')
+        output_bytes.seek(0)
+        if default_storage.exists(storage_key):
+            default_storage.delete(storage_key)
+        default_storage.save(storage_key, ContentFile(output_bytes.read()))
+        output = {
+            'url': default_storage.url(storage_key),
+            'root': storage_key,
+        }
+        return output
+
     file_dir = settings.MEDIA_ROOT + f'/tmp/{filename}'
     os.makedirs(settings.MEDIA_ROOT + '/tmp', exist_ok=True)
     with open(file_dir, "w+b") as output_file:
-        pisa_status = pisa.CreatePDF(
-           html, dest=output_file, link_callback=link_callback)
+        pisa_status = pisa.CreatePDF(html, dest=output_file, link_callback=link_callback)
     # if error then show some funy view
     if pisa_status.err:
        return HttpResponse('We had some errors <pre>' + html + '</pre>')
@@ -214,6 +231,24 @@ def pdf_gen_weasy(template_path, context, filename):
     template = get_template(template_path)
     html = template.render(context)
     html = _replace_static_urls_with_file_urls(html)
+    storage_key = f"tmp/{filename}".lstrip("/")
+
+    if getattr(settings, "USE_S3_MEDIA", False):
+        output_bytes = BytesIO()
+        HTML(
+            string=html,
+            base_url=settings.BASE_DIR,
+            url_fetcher=weasy_url_fetcher
+        ).write_pdf(target=output_bytes)
+        output_bytes.seek(0)
+        if default_storage.exists(storage_key):
+            default_storage.delete(storage_key)
+        default_storage.save(storage_key, ContentFile(output_bytes.read()))
+        return {
+            'url': default_storage.url(storage_key),
+            'root': storage_key,
+        }
+
     file_dir = settings.MEDIA_ROOT + f'/tmp/{filename}'
     os.makedirs(settings.MEDIA_ROOT + '/tmp', exist_ok=True)
 
@@ -223,12 +258,10 @@ def pdf_gen_weasy(template_path, context, filename):
         url_fetcher=weasy_url_fetcher
     ).write_pdf(target=file_dir)
 
-    output = {
+    return {
         'url': settings.MEDIA_URL + f'tmp/{filename}',
         'root': settings.MEDIA_ROOT + f'/tmp/{filename}'
     }
-
-    return output
 
 def get_text_from_file(file_path):
     
