@@ -36,6 +36,17 @@ _STATIC_URL_TOKEN_RE = re.compile(
     r"""(?P<prefix>url\(\s*['"]?|['"])(?P<url>(?:https?:)?//[^'")\s]+|/static/[^'")\s]+)(?P<suffix>['"]?\s*\)|['"])"""
 )
 
+def _should_use_storage_for_tmp():
+    """
+    In prod (LIVE) we often serve media from storages even if USE_S3_MEDIA is misconfigured.
+    Prefer writing tmp PDFs to default_storage whenever bucket settings are present.
+    """
+    if getattr(settings, "USE_S3_MEDIA", False):
+        return True
+    if getattr(settings, "LIVE", False) and getattr(settings, "AWS_STORAGE_BUCKET_NAME", None):
+        return True
+    return False
+
 
 def _unhashed_static_key(static_key):
     match = _HASHED_STATIC_RE.match(static_key or "")
@@ -120,7 +131,7 @@ def pdf_gen(template_path,context,filename,):
     html = template.render(context)
     storage_key = f"tmp/{filename}".lstrip("/")
 
-    if getattr(settings, "USE_S3_MEDIA", False):
+    if _should_use_storage_for_tmp():
         output_bytes = BytesIO()
         pisa_status = pisa.CreatePDF(html, dest=output_bytes, link_callback=link_callback)
         if pisa_status.err:
@@ -233,7 +244,7 @@ def pdf_gen_weasy(template_path, context, filename):
     html = _replace_static_urls_with_file_urls(html)
     storage_key = f"tmp/{filename}".lstrip("/")
 
-    if getattr(settings, "USE_S3_MEDIA", False):
+    if _should_use_storage_for_tmp():
         output_bytes = BytesIO()
         HTML(
             string=html,

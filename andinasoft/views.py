@@ -160,6 +160,26 @@ def _save_workbook_with_dirs(book, path):
     book.save(path)
 
 
+def _should_use_storage_for_tmp():
+    if getattr(settings, "USE_S3_MEDIA", False):
+        return True
+    if getattr(settings, "LIVE", False) and getattr(settings, "AWS_STORAGE_BUCKET_NAME", None):
+        return True
+    return False
+
+
+def _tmp_download_url(filename):
+    filename = str(filename or "").strip()
+    if not filename:
+        return ""
+    if _should_use_storage_for_tmp():
+        try:
+            return default_storage.url(f"tmp/{filename}".lstrip("/"))
+        except Exception:
+            pass
+    return settings.DIR_DOWNLOADS + filename
+
+
 INVENTARIO_IMPORT_COLUMNS = [
     'idinmueble',
     'etapa',
@@ -5137,11 +5157,18 @@ def acciones_venta(request,proyecto,contrato):
                                         nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
                                         nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
                                         diaPagare=dia_contrato,mesPagare=str(mes_contrato),añoPagare=año_contrato,ciudad='Monteria',ruta=ruta)
+                    elif proyecto == 'Oasis':
+                        context_pagare = {
+                            'proyecto': proyecto,
+                            'ctr': obj_ctr,
+                        }
+                        filename = f'{proyecto}_pagare_{contrato}.pdf'
+                        pdf_file = pdf_gen_weasy(f'pdf/{proyecto}/pagare.html', context_pagare, filename)
                     alerta=True
                     mensaje='Descarga el Pagaré aqui'
                     titulo='¡Listo!'
                     link=True
-                    ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_pagare_{contrato}.pdf'
+                    ruta_link=_tmp_download_url(f'{proyecto}_pagare_{contrato}.pdf')
                 if request.POST.get('impVerificacion'):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_verificacion_{contrato}.pdf'
                     parametro=obj_parametro.get(descripcion='formasVerificacionManual')
@@ -5158,7 +5185,7 @@ def acciones_venta(request,proyecto,contrato):
                         mensaje='Descarga la verificacion aqui'
                         titulo='¡Listo!'
                         link=True
-                        ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_verificacion_{contrato}.pdf'
+                        ruta_link=_tmp_download_url(f'{proyecto}_verificacion_{contrato}.pdf')
                     elif proyecto=='Tesoro Escondido':
                         pdf.VerificacionTerranova(ruta=ruta,nombreT1=nombre_t1,nombreT2=nombre_t2,nombreT3=nombre_t3,nombreT4=nombre_t4,
                                                 ccTitular1=cc_t1,ccTitular2=cc_t2,ccTitular3=cc_t3,ccTitular4=cc_t4,lote=lote,manzana=manzana,
@@ -5169,7 +5196,7 @@ def acciones_venta(request,proyecto,contrato):
                         mensaje='Descarga la verificacion aqui'
                         titulo='¡Listo!'
                         link=True
-                        ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_verificacion_{contrato}.pdf'
+                        ruta_link=_tmp_download_url(f'{proyecto}_verificacion_{contrato}.pdf')
                     elif proyecto=='Sotavento':
                         pdf.VerificacionSotavento(ruta=ruta,nombreT1=nombre_t1,nombreT2=nombre_t2,nombreT3=nombre_t3,nombreT4=nombre_t4,
                                                 ccTitular1=cc_t1,ccTitular2=cc_t2,ccTitular3=cc_t3,ccTitular4=cc_t4,lote=lote,manzana=manzana,
@@ -5180,7 +5207,22 @@ def acciones_venta(request,proyecto,contrato):
                         mensaje='Descarga la verificacion aqui'
                         titulo='¡Listo!'
                         link=True
-                        ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_verificacion_{contrato}.pdf'
+                        ruta_link=_tmp_download_url(f'{proyecto}_verificacion_{contrato}.pdf')
+                    elif proyecto == 'Oasis':
+                        context_ver = {
+                            'proyecto': proyecto,
+                            'ctr': obj_ctr,
+                            'fecha_escritura': datetime.date.today(),
+                            'meses_entrega': 24,
+                            'oficina': 'Medellín',
+                        }
+                        filename = f'{proyecto}_verificacion_{contrato}.pdf'
+                        pdf_file = pdf_gen_weasy(f'pdf/{proyecto}/verificacion.html', context_ver, filename)
+                        alerta = True
+                        mensaje = 'Descarga la verificación aquí'
+                        titulo = '¡Listo!'
+                        link = True
+                        ruta_link = _tmp_download_url(filename)
                     elif proyecto=='Perla del Mar':
                         context = {
                             'proyecto':proyecto,
@@ -7850,7 +7892,7 @@ def promesas(request,proyecto):
                     mensaje_alerta='Descarga el Pagaré aqui'
                     titulo_alerta='¡Listo!'
                     link=True
-                    ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_pagare_{adj}.pdf'
+                    ruta_link=_tmp_download_url(f'{proyecto}_pagare_{adj}.pdf')
 
     if request.is_ajax():
         if request.method == 'GET':
@@ -9471,7 +9513,15 @@ def acciones_venta_fractal(request):
                         'ctr':obj_venta,
                     }
                     filename = f'{venta}_verificacion_{proyecto}.pdf'
-                    pdf = pdf_gen(f'pdf/{proyecto}/verificacion.html',context,filename)
+                    if proyecto == 'Oasis':
+                        context.update({
+                            'fecha_escritura': datetime.date.today(),
+                            'meses_entrega': 24,
+                            'oficina': 'Medellín',
+                        })
+                        pdf = pdf_gen_weasy(f'pdf/{proyecto}/verificacion.html', context, filename)
+                    else:
+                        pdf = pdf_gen(f'pdf/{proyecto}/verificacion.html', context, filename)
                     
                 elif tipodoc == 'sagrilaft':
                     obj_venta = ventas_nuevas.objects.using(proyecto).get(pk=venta)
@@ -9492,7 +9542,10 @@ def acciones_venta_fractal(request):
                         'ctr':obj_venta,
                     }
                     filename = f'{venta}_pagare_{proyecto}.pdf'
-                    pdf = pdf_gen(f'pdf/{proyecto}/pagare.html',context,filename)
+                    if proyecto == 'Oasis':
+                        pdf = pdf_gen_weasy(f'pdf/{proyecto}/pagare.html', context, filename)
+                    else:
+                        pdf = pdf_gen(f'pdf/{proyecto}/pagare.html', context, filename)
                 
                 elif tipodoc == 'alttum':
                     obj_venta = ventas_nuevas.objects.using(proyecto).get(pk=venta)
