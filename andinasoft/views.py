@@ -4228,12 +4228,10 @@ def acciones_venta(request,proyecto,contrato):
                         result = pdf_gen_weasy('pdf/Oasis/recibo_nr.html', context_nr, filename)
                         src = result.get('root')
                         dst = ruta
-                        # When we write PDFs to default_storage, `root` can be a storage key (e.g. tmp/<file>.pdf),
-                        # not a local filesystem path. In that case, skip copying to MEDIA_ROOT.
-                        if src and dst:
-                            normalized_src = str(src).replace("\\", "/")
-                            if not normalized_src.startswith("tmp/") and os.path.abspath(src) != os.path.abspath(dst):
-                                shutil.copyfile(src, dst)
+                        # `root` may be a storage key (tmp/...) or any non-local path; never shutil.copyfile unless
+                        # `src` is a real file on disk (avoids FileNotFoundError when PDF lives in default_storage).
+                        if src and dst and os.path.isfile(src) and os.path.abspath(src) != os.path.abspath(dst):
+                            shutil.copyfile(src, dst)
                         dir_download = result.get('url') or _tmp_download_url(filename)
                         return JsonResponse({'instance': dir_download}, status=200)
 
