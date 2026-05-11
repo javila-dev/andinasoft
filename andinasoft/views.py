@@ -4195,8 +4195,6 @@ def acciones_venta(request,proyecto,contrato):
                     formapago=datos_recaudo.formapago
                     if str(proyecto).strip().lower() == 'oasis':
                         from types import SimpleNamespace
-                        import os
-                        import shutil
 
                         filename = f'{proyecto}_reciboNR_{recibo}.pdf'
                         titulares = []
@@ -4226,12 +4224,7 @@ def acciones_venta(request,proyecto,contrato):
                         }
 
                         result = pdf_gen_weasy('pdf/Oasis/recibo_nr.html', context_nr, filename)
-                        src = result.get('root')
-                        dst = ruta
-                        # `root` may be a storage key (tmp/...) or any non-local path; never shutil.copyfile unless
-                        # `src` is a real file on disk (avoids FileNotFoundError when PDF lives in default_storage).
-                        if src and dst and os.path.isfile(src) and os.path.abspath(src) != os.path.abspath(dst):
-                            shutil.copyfile(src, dst)
+                        # PDF puede quedar solo en storages; no copiar a DIR_EXPORT (evita FileNotFoundError con root=tmp/...).
                         dir_download = result.get('url') or _tmp_download_url(filename)
                         return JsonResponse({'instance': dir_download}, status=200)
 
