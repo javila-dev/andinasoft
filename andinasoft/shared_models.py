@@ -643,6 +643,35 @@ class Recaudos_general(models.Model):
             
         return valor
     
+    def titulares_lista(self):
+        """
+        Titulares reales de la adjudicación (solo con id).
+        Usado por pdf/Oasis/recibo.html (impresión / solicitud de recibos).
+        """
+        adj = self.info_adj()
+        return adj.titulares2()
+
+    def detalle_pago(self):
+        """
+        Agregados de capital e intereses del recibo (tabla recaudos).
+        Usado por pdf/Oasis/recibo.html para el desglose del pago.
+        """
+        db_name = self._state.db
+        rec_det = (
+            Recaudos.objects.using(db_name)
+            .filter(recibo=self.numrecibo)
+            .aggregate(
+                cap=Sum('capital'),
+                intcte=Sum('interescte'),
+                intmora=Sum('interesmora'),
+            )
+        )
+        return {
+            'capital': rec_det.get('cap'),
+            'interescte': rec_det.get('intcte'),
+            'interesmora': rec_det.get('intmora'),
+        }
+
     def interfaz_contabilidad(self):
         db_name = self._state.db
         adj = self.info_adj()
