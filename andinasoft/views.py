@@ -4207,6 +4207,7 @@ def acciones_venta(request,proyecto,contrato):
                         if datos_t4 not in (None, [], ''):
                             titulares.append(SimpleNamespace(nombrecompleto=datos_t4.nombrecompleto, pk=getattr(datos_t4, 'idTercero', datos_t4.pk)))
 
+                        # recibo_nr.html usa {% with ctr=recibo.infocontrato %} (titulares, inmueble).
                         context_nr = {
                             'recibo': SimpleNamespace(
                                 recibo=recibo,
@@ -4216,11 +4217,11 @@ def acciones_venta(request,proyecto,contrato):
                                 formapago=formapago,
                                 valor=valor,
                                 usuario=str(request.user),
+                                infocontrato=SimpleNamespace(
+                                    titulares=titulares,
+                                    inmueble=str(datos_inmueble),
+                                ),
                             ),
-                            'ctr': SimpleNamespace(
-                                titulares=titulares,
-                                inmueble=str(datos_inmueble),
-                            )
                         }
 
                         result = pdf_gen_weasy('pdf/Oasis/recibo_nr.html', context_nr, filename)
