@@ -1842,7 +1842,11 @@ def _guardar_recaudo(
         'recibo': obj_recibo
     }
 
-    pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc, filename)
+    # Oasis receipts are rendered with WeasyPrint.
+    if proyecto == 'Oasis':
+        pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context_rc, filename)
+    else:
+        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc, filename)
 
     file = pdf.get('root')
 
@@ -2786,7 +2790,11 @@ def lista_recaudos(request):
                         'recibo':obj_recibo
                     }
                                         
-                    pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
+                    # Oasis receipts are rendered with WeasyPrint.
+                    if proyecto == 'Oasis':
+                        pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
+                    else:
+                        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
                     
                     file = pdf.get('root')
                                             
@@ -9576,7 +9584,11 @@ def acciones_venta_fractal(request):
                     context = {
                         'recibo':obj_recibo
                     }
-                    pdf = pdf_gen(f'pdf/{proyecto}/recibo.html',context,filename)
+                    # Oasis receipts are rendered with WeasyPrint.
+                    if proyecto == 'Oasis':
+                        pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
+                    else:
+                        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html',context,filename)
                     
                 elif tipodoc == 'estadocuenta':
                     obj_adj = Adjudicacion.objects.using(proyecto).get(pk=venta)
@@ -9851,7 +9863,11 @@ def acciones_venta_fractal(request):
                     'recibo':obj_recibo
                 }
                                     
-                pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
+                # Oasis receipts are rendered with WeasyPrint.
+                if proyecto == 'Oasis':
+                    pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
+                else:
+                    pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
                 
                 ruta_link=pdf.get('url')
 
@@ -10082,7 +10098,11 @@ def ajustar_al_peso(request):
                 'recibo':obj_recibo
             }
                                 
-            pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc,filename)
+            # Oasis receipts are rendered with WeasyPrint.
+            if proyecto == 'Oasis':
+                pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context_rc, filename)
+            else:
+                pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context_rc,filename)
             
             file = pdf.get('url')
             
@@ -10108,11 +10128,14 @@ def imprimir_recibos(request):
             'recibo':obj_recibo
         }
                             
-        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
+        # Oasis receipts are rendered with WeasyPrint.
+        if proyecto == 'Oasis':
+            pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
+        else:
+            pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
         
         file = pdf.get('root')
-                                
-        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+        return _file_response_from_pdf_root(file, filename=filename)
 
      
 Ajax_URL = [

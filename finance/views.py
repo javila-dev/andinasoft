@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
 from andina.decorators import check_perms, group_perm_required
 from andinasoft.create_pdf import GenerarPDF
-from andinasoft.utilities import Utilidades, pdf_gen
+from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy
 from andinasoft.models import clientes, proyectos
 from andinasoft.shared_models import Recaudos_general, Vista_Adjudicacion
 from finance.models import recibos_internos
@@ -586,7 +586,11 @@ def imprimir_recibo(request):
             'recibo':obj_recibo
         }
 
-        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
+        # Oasis receipts are rendered with WeasyPrint.
+        if proyecto == 'Oasis':
+            pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
+        else:
+            pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
 
         file = pdf.get('root')
 
