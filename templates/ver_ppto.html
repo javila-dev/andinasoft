@@ -31,6 +31,12 @@
     <input class='btn btn-primary float-right mr-3' type='submit' name='btnExportar' value='Exportar'>
     </h4>
     </form>
+    {%if sp_error%}
+    <div class="alert alert-warning mt-3" role="alert">
+        <strong>Atención:</strong> Existen datos de presupuesto para este periodo pero el procedimiento <code>informe_cartera</code> no retornó resultados.
+        {%if sp_error_msg%}<br><small>Error: {{sp_error_msg}}</small>{%endif%}
+    </div>
+    {%endif%}
     <br/>
     <div class='table-responsive'>
         <table class="stripe row-border compact nowrap" style="width:100%" id='tabla-presupuesto'>

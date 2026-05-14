@@ -6685,12 +6685,24 @@ def presupuesto_cartera(request,proyecto,periodo):
                                         fechaoperacion=datetime.date.today(),edad=cuota.edad)
         
         if request.POST.get('btnExportar'):
-            usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',))
-            if usuario_administrador:
-                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
-            else:
-                gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
-                contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
+            usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
+            sp_error_msg=''
+            try:
+                if usuario_administrador:
+                    contenido_ppto=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)'))
+                else:
+                    gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
+                    contenido_ppto=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")'))
+            except (DBInternalError, Exception) as e:
+                contenido_ppto=[]
+                sp_error_msg=str(e)
+            if not contenido_ppto:
+                context['proyecto']=proyecto
+                context['periodo']=periodo
+                context['informe']=[]
+                context['sp_error']=True
+                context['sp_error_msg']=sp_error_msg
+                return render(request,'ver_ppto.html',context)
             book=openpyxl.Workbook()
             sheet=book.active
             encabezados=['Adjudicacion','Cliente','Estado','Origen','Venta Mes','Tipo Cartera','Edad',
@@ -6722,15 +6734,22 @@ def presupuesto_cartera(request,proyecto,periodo):
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
     
     usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
-    if usuario_administrador:
-        obj_informe=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)')
-    else:
-        gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
-        obj_informe=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")')
+    sp_error_msg=''
+    try:
+        if usuario_administrador:
+            obj_informe=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)'))
+        else:
+            gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
+            obj_informe=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")'))
+    except (DBInternalError, Exception) as e:
+        obj_informe=[]
+        sp_error_msg=str(e)
+    datos_existen=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo).exists()
     context['proyecto']=proyecto
     context['periodo']=periodo
     context['informe']=obj_informe
-    context['periodo']=f'{periodo}'
+    context['sp_error']=len(obj_informe)==0 and datos_existen
+    context['sp_error_msg']=sp_error_msg
             
     return render(request,'ver_ppto.html',context)
 
@@ -6746,21 +6765,27 @@ def ver_presupuesto(request,proyecto):
             mes=request.POST.get('periodomes')
             dia=calendar.monthrange(int(año),int(mes))[1]
             periodo=f'{año}{mes}'
-            fecha_hasta=datetime.datetime.strptime(f"{año}-{mes}-{dia}","%Y-%m-%d")
-            stmt=f'CALL ver_presupuesto("{fecha_hasta}","")'
-            obj_verpresupuesto=saldos_adj.objects.using(proyecto).raw(stmt)
-            obj_nuevoppto=PresupuestoCartera.objects.using(proyecto)
-            for cuota in obj_verpresupuesto:
-                obj_nuevoppto.create(id_ppto=cuota.id,periodo=periodo,idadjudicacion=cuota.adj,cliente=cuota.cliente,
-                                     tipocta=cuota.tipocta,ncta=cuota.nrocta,idcta=cuota.idcta,tipocartera=cuota.tipocartera,
-                                     fecha=cuota.fechacta,capital=cuota.saldocapital,interes=cuota.saldointcte,cuota=cuota.saldocuota,
-                                     diasmora=cuota.diasmora,mora=cuota.saldomora,asesor=cuota.asesor,usuario=request.user,
-                                     fechaoperacion=datetime.date.today(),edad=cuota.edad)
-            context['alerta']=True
-            context['mensaje']=f'El presupuesto del proyecto {proyecto} para el periodo {periodo} ha sido cargado'
-            context['titulo_alerta']='¡Listo!'
-            context['redireccion']=True
-            context['redirect']=f'/cartera/ver_presupuesto/{proyecto}/{año}{mes}'
+            existe_periodo=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo).exists()
+            if existe_periodo:
+                context['alerta']=True
+                context['mensaje']=f'Ya existen datos para el periodo {periodo}. Elimine el periodo primero o use la opción "Ver" para consultar el presupuesto existente.'
+                context['titulo_alerta']='Error'
+            else:
+                fecha_hasta=datetime.datetime.strptime(f"{año}-{mes}-{dia}","%Y-%m-%d")
+                stmt=f'CALL ver_presupuesto("{fecha_hasta}","")'
+                obj_verpresupuesto=saldos_adj.objects.using(proyecto).raw(stmt)
+                obj_nuevoppto=PresupuestoCartera.objects.using(proyecto)
+                for cuota in obj_verpresupuesto:
+                    obj_nuevoppto.create(id_ppto=cuota.id,periodo=periodo,idadjudicacion=cuota.adj,cliente=cuota.cliente,
+                                         tipocta=cuota.tipocta,ncta=cuota.nrocta,idcta=cuota.idcta,tipocartera=cuota.tipocartera,
+                                         fecha=cuota.fechacta,capital=cuota.saldocapital,interes=cuota.saldointcte,cuota=cuota.saldocuota,
+                                         diasmora=cuota.diasmora,mora=cuota.saldomora,asesor=cuota.asesor,usuario=request.user,
+                                         fechaoperacion=datetime.date.today(),edad=cuota.edad)
+                context['alerta']=True
+                context['mensaje']=f'El presupuesto del proyecto {proyecto} para el periodo {periodo} ha sido cargado'
+                context['titulo_alerta']='¡Listo!'
+                context['redireccion']=True
+                context['redirect']=f'/cartera/ver_presupuesto/{proyecto}/{año}{mes}'
         if request.POST.get('btnEliminar'):
             check_perms(request,('andinasoft.delete_presupuestocartera',))
             año=request.POST.get('periodoaño')
