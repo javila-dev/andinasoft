@@ -286,50 +286,16 @@ def adjudicacion_estado_cuenta(
         return {'error': 'Error consultando la adjudicación.', 'detail': str(exc)}
 
     try:
-        from andinasoft.shared_models import PlanPagos
+        from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 
-        today = datetime.date.today()
-        next_30_days = today + datetime.timedelta(days=30)
+        context, err_ec = build_estado_cuenta_context(proyecto, adj, user)
+        if err_ec:
+            return {'error': err_ec}
 
-        # Misma lógica que ajax_print_estado_cuenta en andinasoft/views.py:8458
-        cuotas_a_la_fecha = PlanPagos.objects.using(proyecto).filter(
-            adj=adj, fecha__lte=today
-        ).order_by('fecha')
-
-        cuotas_futuras = PlanPagos.objects.using(proyecto).filter(
-            adj=adj, fecha__gt=today, fecha__lte=next_30_days
-        ).order_by('fecha')
-
-        cuotas_vencidas = []
-        total_cuotas_vencidas = {'valor': 0, 'intereses_mora': 0, 'total': 0}
-
-        for q in cuotas_a_la_fecha:
-            pendiente = q.pendiente()
-            if pendiente.get('total', 0) > 0:
-                mora = q.mora()
-                cuotas_vencidas.append({
-                    'fecha': q.fecha,
-                    'idcta': q.pk.split('ADJ')[0],
-                    'pendiente': pendiente,
-                    'mora': mora,
-                })
-                total_cuotas_vencidas['valor'] += pendiente.get('total')
-                total_cuotas_vencidas['intereses_mora'] += mora.get('valor')
-                total_cuotas_vencidas['total'] += pendiente.get('total') + mora.get('valor')
-
-        total_proximo_30dias = sum(
-            float(q.cuota or 0) for q in cuotas_futuras
-        )
-
-        context = {
-            'adj': obj_adj,
-            'cuotas_a_la_fecha': cuotas_vencidas,
-            'cuotas_futuras': cuotas_futuras,
-            'user': user,
-            'now': datetime.datetime.now(),
-            'totals': total_cuotas_vencidas,
-            'recaudador': _RECAUDADOR.get(proyecto),
-        }
+        cuotas_vencidas = context['cuotas_a_la_fecha']
+        total_cuotas_vencidas = context['totals']
+        cuotas_futuras = context['cuotas_futuras']
+        total_proximo_30dias = sum(float(q.cuota or 0) for q in cuotas_futuras)
 
         filename = f'Estado_de_cuenta_{adj}_{proyecto}.pdf'
         logger.info("[DEBUG adjudicacion_estado_cuenta] generando PDF: %s", filename)
@@ -352,7 +318,7 @@ def adjudicacion_estado_cuenta(
         pdf_url = settings.DIR_DOWNLOADS + quote(filename)
 
         # Construir resumen para el agente
-        titulares_obj = obj_adj.titulares()
+        titulares_obj = context['adj'].titulares
         titulares_nombres = []
         for t in titulares_obj.values():
             if t:
@@ -374,7 +340,7 @@ def adjudicacion_estado_cuenta(
                 'total_capital_vencido': float(total_cuotas_vencidas['valor'] or 0),
                 'total_mora': float(total_cuotas_vencidas['intereses_mora'] or 0),
                 'total_a_pagar': float(total_cuotas_vencidas['total'] or 0),
-                'cuotas_proximas_count': cuotas_futuras.count(),
+                'cuotas_proximas_count': len(cuotas_futuras),
                 'total_proximo_30dias': round(total_proximo_30dias, 2),
             }
         }

@@ -4,17 +4,10 @@ from django.http import FileResponse
 from django.shortcuts import redirect
 from django.core.files.storage import default_storage
 
-from andinasoft.shared_models import Adjudicacion, PlanPagos
+from andinasoft.shared_models import Adjudicacion
+from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.utilities import pdf_gen
 
-
-RECAUDADOR_POR_PROYECTO = {
-    'Tesoro Escondido': 'STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4',
-    'Vegas de Venecia': 'STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4',
-    'Perla del Mar': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-    'Sandville Beach': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-    'Carmelo Reservado': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-}
 
 STATEMENT_TEMPLATE_BY_PROJECT = {
     'Fractal': 'pdf/Fractal/statement_of_account.html',
@@ -70,51 +63,15 @@ def download_business_document(project_alias, adj_id, document_id):
 
 
 def build_account_statement_response(project_alias, adj_id, actor_label='Portal clientes'):
-    adj = Adjudicacion.objects.using(project_alias).filter(pk=adj_id).first()
-    if not adj:
+    context, err_ec = build_estado_cuenta_context(project_alias, adj_id, actor_label)
+    if err_ec or not context:
         return None
 
-    today = datetime.date.today()
-    next_30_days = today + datetime.timedelta(days=30)
-    cuotas_a_la_fecha = PlanPagos.objects.using(project_alias).filter(adj=adj_id, fecha__lte=today).order_by('fecha')
-    cuotas_futuras = PlanPagos.objects.using(project_alias).filter(
-        adj=adj_id,
-        fecha__gt=today,
-        fecha__lte=next_30_days,
-    ).order_by('fecha')
-
-    cuotas_vencidas = []
-    total_cuotas_vencidas = {
-        'valor': 0,
-        'intereses_mora': 0,
-        'total': 0,
-    }
-
-    for cuota in cuotas_a_la_fecha:
-        pendiente = cuota.pendiente()
-        if pendiente.get('total', 0) > 0:
-            mora = cuota.mora()
-            cuotas_vencidas.append({
-                'fecha': cuota.fecha,
-                'idcta': cuota.pk.split('ADJ')[0],
-                'pendiente': pendiente,
-                'mora': mora,
-            })
-            total_cuotas_vencidas['valor'] += pendiente.get('total', 0)
-            total_cuotas_vencidas['intereses_mora'] += mora.get('valor', 0)
-            total_cuotas_vencidas['total'] += pendiente.get('total', 0) + mora.get('valor', 0)
-
-    template_path = STATEMENT_TEMPLATE_BY_PROJECT.get(project_alias, 'pdf/statement_of_account.html')
+    template_path = STATEMENT_TEMPLATE_BY_PROJECT.get(
+        project_alias, 'pdf/statement_of_account.html'
+    )
     filename = f'Estado_de_cuenta_{adj_id}_{project_alias}.pdf'.replace(' ', '_')
-    pdf = pdf_gen(template_path, {
-        'adj': adj,
-        'cuotas_a_la_fecha': cuotas_vencidas,
-        'cuotas_futuras': cuotas_futuras,
-        'user': actor_label,
-        'now': datetime.datetime.now(),
-        'totals': total_cuotas_vencidas,
-        'recaudador': RECAUDADOR_POR_PROYECTO.get(project_alias),
-    }, filename)
+    pdf = pdf_gen(template_path, context, filename)
 
     ruta = pdf.get('root')
     if not ruta:

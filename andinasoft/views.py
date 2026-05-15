@@ -40,6 +40,7 @@ from andinasoft.shared_models import timeline,seguimientos, Inmuebles, ventas_nu
 from andinasoft.shared_models import VerificacionOperaciones, DescuentosCondicionados, PlanPagos, DescuentosCondicionados, formas_pago
 from andinasoft.shared_models import Promesas, PresupuestoCartera, Parametros_Operaciones, EntregaManzanas, Pqrs
 from andinasoft.informe_cartera_orm import informe_cartera_rows
+from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
@@ -3533,70 +3534,20 @@ def detalle_adjudicacion(request,proyecto,adj):
             resumen_pagos=detalle_recaudos.order_by('fecha','recibo')
             
             if request.POST.get('impEstadodeCuenta'):
-                
-                obj_adj = Adjudicacion.objects.using(proyecto).get(pk=adj)
-                today = datetime.date.today()
-                next_30_days = today+ datetime.timedelta(days=30)
-                cuotas_a_la_fecha = PlanPagos.objects.using(proyecto).filter(adj=adj, fecha__lte=today).order_by('fecha')
-                cuotas_futuras = PlanPagos.objects.using(proyecto).filter(
-                    adj=adj, fecha__gt=today,fecha__lte = next_30_days).order_by('fecha')
-                
-                cuotas_vencidas = []
-                
-                total_cuotas_vencidas = {
-                    'valor': 0,
-                    'intereses_mora':0,
-                    'total': 0
-                }
-                
-                recaudador = {
-                    'Tesoro Escondido': 'STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4',
-                    'Vegas de Venecia': 'STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4',
-                    'Perla del Mar': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-                    'Sandville Beach': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-                    'Carmelo Reservado': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9', 
-                }
-                
-                for q in cuotas_a_la_fecha:
-                    pendiente = q.pendiente()
-                    if pendiente.get('total', 0) > 0:
-                        mora = q.mora()
-                        cuotas_vencidas.append({
-                            'fecha':q.fecha,
-                            'idcta': q.pk.split('ADJ')[0],
-                            'pendiente':pendiente,
-                            'mora':mora,
-                        })
-                        total_cuotas_vencidas['valor'] += pendiente.get('total')
-                        total_cuotas_vencidas['intereses_mora'] += mora.get('valor')
-                        total_cuotas_vencidas['total'] += pendiente.get('total') + mora.get('valor')
-
-
-                context = {
-                    'adj':obj_adj,
-                    'cuotas_a_la_fecha': cuotas_vencidas,
-                    'cuotas_futuras':cuotas_futuras,
-                    'user': request.user,
-                    'now': datetime.datetime.now(),
-                    'totals': total_cuotas_vencidas,
-                    'recaudador': recaudador.get(proyecto)
-                }
-                
-                
-                filename = f'Estado_de_cuenta_{adj}_{proyecto}.pdf'
-                        
-                            
-                pdf = pdf_gen(f'pdf/statement_of_account.html',context,filename)
-                
-                ruta = pdf.get('root')
-                                        
-                ruta_link=pdf.get('url')
-                
-                dir_link = ruta_link
-                alerta=True
-                titulo='¡Ya puedes descargar tu documento!'
-                mensaje='Puedes descargarlo aqui'
-                link=True
+                context, err_ec = build_estado_cuenta_context(proyecto, adj, request.user)
+                if err_ec:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = err_ec
+                else:
+                    filename = f'Estado_de_cuenta_{adj}_{proyecto}.pdf'
+                    pdf = pdf_gen('pdf/statement_of_account.html', context, filename)
+                    ruta_link = pdf.get('url')
+                    dir_link = ruta_link
+                    alerta = True
+                    titulo = '¡Ya puedes descargar tu documento!'
+                    mensaje = 'Puedes descargarlo aqui'
+                    link = True
                 
             if request.POST.get('impResumenPagos'):
                 ruta=settings.DIR_EXPORT+f'{proyecto}_resumencredito_{adj}.pdf'
@@ -9024,66 +8975,13 @@ def ajax_print_estado_cuenta(request):
     if request.method == 'GET':
         proyecto = request.GET.get('proyecto')
         adj = request.GET.get('adj')
-        
-        obj_adj = Adjudicacion.objects.using(proyecto).get(pk=adj)
-        today = datetime.date.today()
-        next_30_days = today+ datetime.timedelta(days=30)
-        cuotas_a_la_fecha = PlanPagos.objects.using(proyecto).filter(adj=adj, fecha__lte=today).order_by('fecha')
-        cuotas_futuras = PlanPagos.objects.using(proyecto).filter(
-            adj=adj, fecha__gt=today,fecha__lte = next_30_days).order_by('fecha')
-        
-        cuotas_vencidas = []
-        
-        total_cuotas_vencidas = {
-             'valor': 0,
-             'intereses_mora':0,
-             'total': 0
-        }
-        
-        recaudador = {
-            'Tesoro Escondido': 'STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4',
-            'Vegas de Venecia': 'STATUS COMERCIALIZADORA S.A.S. NIT: 901018375-4',
-            'Perla del Mar': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-            'Sandville Beach': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9',
-            'Carmelo Reservado': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9', 
-        }
-        
-        for q in cuotas_a_la_fecha:
-            pendiente = q.pendiente()
-            if pendiente.get('total', 0) > 0:
-                mora = q.mora()
-                cuotas_vencidas.append({
-                    'fecha':q.fecha,
-                    'idcta': q.pk.split('ADJ')[0],
-                    'pendiente':pendiente,
-                    'mora':mora,
-                })
-                total_cuotas_vencidas['valor'] += pendiente.get('total')
-                total_cuotas_vencidas['intereses_mora'] += mora.get('valor')
-                total_cuotas_vencidas['total'] += pendiente.get('total') + mora.get('valor')
-
-
-        context = {
-            'adj':obj_adj,
-            'cuotas_a_la_fecha': cuotas_vencidas,
-            'cuotas_futuras':cuotas_futuras,
-            'user': request.user,
-            'now': datetime.datetime.now(),
-            'totals': total_cuotas_vencidas,
-            'recaudador': recaudador.get(proyecto)
-        }
-        
-        
+        context, err_ec = build_estado_cuenta_context(proyecto, adj, request.user)
+        if err_ec:
+            return HttpResponse(err_ec, status=404)
         filename = f'Estado_de_cuenta_{adj}_{proyecto}.pdf'
-                
-                    
-        pdf = pdf_gen(f'pdf/statement_of_account.html',context,filename)
-        
+        pdf = pdf_gen('pdf/statement_of_account.html', context, filename)
         ruta = pdf.get('root')
-                                
-        ruta_link=pdf.get('url')
-        
-        return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
+        return FileResponse(open(ruta, 'rb'), as_attachment=True, filename=filename)
 
 def print_documents(request,proyecto):
     if request.method == 'GET':
@@ -9630,51 +9528,14 @@ def acciones_venta_fractal(request):
                         pdf = pdf_gen(f'pdf/{proyecto}/recibo.html',context,filename)
                     
                 elif tipodoc == 'estadocuenta':
-                    obj_adj = Adjudicacion.objects.using(proyecto).get(pk=venta)
-                    today = datetime.date.today()
-                    next_30_days = today+ datetime.timedelta(days=30)
-                    cuotas_a_la_fecha = PlanPagos.objects.using(proyecto).filter(adj=venta, fecha__lte=today).order_by('fecha')
-                    cuotas_futuras = PlanPagos.objects.using(proyecto).filter(
-                        adj=venta, fecha__gt=today,fecha__lte = next_30_days).order_by('fecha')
-                    
-                    cuotas_vencidas = []
-                    
-                    total_cuotas_vencidas = {
-                        'valor': 0,
-                        'intereses_mora':0,
-                        'total': 0
-                    }
-                    
-                    for q in cuotas_a_la_fecha:
-                        pendiente = q.pendiente()
-                        if pendiente.get('total', 0) > 0:
-                            mora = q.mora()
-                            cuotas_vencidas.append({
-                                'fecha':q.fecha,
-                                'idcta': q.pk.split('ADJ')[0],
-                                'pendiente':pendiente,
-                                'mora':mora,
-                            })
-                            total_cuotas_vencidas['valor'] += pendiente.get('total')
-                            total_cuotas_vencidas['intereses_mora'] += mora.get('valor')
-                            total_cuotas_vencidas['total'] += pendiente.get('total') + mora.get('valor')
-                    
-                    
-                    context = {
-                        'adj':obj_adj,
-                        'cuotas_a_la_fecha': cuotas_vencidas,
-                        'cuotas_futuras':cuotas_futuras,
-                        'user': request.user,
-                        'now': datetime.datetime.now(),
-                        'totals': total_cuotas_vencidas,
-                        'recaudador': 'ANDINA CONCEPTOS INMOBILIARIOS S.A.S. NIT: 900993044-9'
-                    }
-                    
-                    
+                    context, err_ec = build_estado_cuenta_context(proyecto, venta, request.user)
+                    if err_ec:
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': {'class': 'danger', 'text': err_ec},
+                        }, status=404)
                     filename = f'Estado_de_cuenta_{venta}_{proyecto}.pdf'
-                            
-                                
-                    pdf = pdf_gen(f'pdf/Fractal/statement_of_account.html',context,filename)
+                    pdf = pdf_gen('pdf/Fractal/statement_of_account.html', context, filename)
                 
                 
                 ruta = pdf.get('root')
