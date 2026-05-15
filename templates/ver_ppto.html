@@ -31,10 +31,16 @@
     <input class='btn btn-primary float-right mr-3' type='submit' name='btnExportar' value='Exportar'>
     </h4>
     </form>
-    {%if sp_error%}
+    {%if gestor_filtro_vacio%}
+    <div class="alert alert-info mt-3" role="alert">
+        <strong>Sin filas para su usuario:</strong> el informe llama a <code>informe_cartera</code> filtrando por el nombre del gestor
+        <strong>{{gestor_nombre}}</strong> (nombre y apellido del usuario en Django). Hay datos de presupuesto en el periodo, pero ninguna fila coincide con ese filtro.
+        Revise que el campo <em>Asesor</em> en presupuesto coincida exactamente con ese texto, o pida el permiso <code>change_presupuestocartera</code> para ver el proyecto completo.
+    </div>
+    {%elif sp_error%}
     <div class="alert alert-warning mt-3" role="alert">
-        <strong>Atención:</strong> Existen datos de presupuesto para este periodo pero el procedimiento <code>informe_cartera</code> no retornó resultados.
-        {%if sp_error_msg%}<br><small>Error: {{sp_error_msg}}</small>{%endif%}
+        <strong>Atención:</strong> Existen datos de presupuesto para este periodo pero <code>informe_cartera</code> no devolvió filas (vista de administrador, sin filtro por gestor).
+        {%if sp_error_msg%}<br><small>Error: {{sp_error_msg}}</small>{%else%}<br><small>Revise en la misma base del proyecto el resultado de <code>CALL informe_cartera("{{periodo}}",NULL)</code>.</small>{%endif%}
     </div>
     {%endif%}
     <br/>

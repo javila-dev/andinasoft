@@ -6700,8 +6700,18 @@ def presupuesto_cartera(request,proyecto,periodo):
                 context['proyecto']=proyecto
                 context['periodo']=periodo
                 context['informe']=[]
-                context['sp_error']=True
+                context['sp_error']=False
+                context['gestor_filtro_vacio']=False
                 context['sp_error_msg']=sp_error_msg
+                datos_existen=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo).exists()
+                if datos_existen:
+                    if sp_error_msg:
+                        context['sp_error']=True
+                    elif usuario_administrador:
+                        context['sp_error']=True
+                    else:
+                        context['gestor_filtro_vacio']=True
+                        context['gestor_nombre']=f'{request.user.first_name} {request.user.last_name}'.upper()
                 return render(request,'ver_ppto.html',context)
             book=openpyxl.Workbook()
             sheet=book.active
@@ -6748,7 +6758,17 @@ def presupuesto_cartera(request,proyecto,periodo):
     context['proyecto']=proyecto
     context['periodo']=periodo
     context['informe']=obj_informe
-    context['sp_error']=len(obj_informe)==0 and datos_existen
+    context['sp_error']=False
+    context['gestor_filtro_vacio']=False
+    if len(obj_informe)==0 and datos_existen:
+        if sp_error_msg:
+            context['sp_error']=True
+            context['sp_error_msg']=sp_error_msg
+        elif usuario_administrador:
+            context['sp_error']=True
+        else:
+            context['gestor_filtro_vacio']=True
+            context['gestor_nombre']=f'{request.user.first_name} {request.user.last_name}'.upper()
     context['sp_error_msg']=sp_error_msg
             
     return render(request,'ver_ppto.html',context)
@@ -10189,17 +10209,16 @@ def handler500(request, *args, **argv):
 
 def check_perms(request,perms:list,raise_exception=True):
     user=request.user
-    permissions=user.get_all_permissions()
-    permissions_granted=0
-    permissions_required=len(perms)
+    if not user.is_active:
+        if raise_exception:
+            raise PermissionDenied
+        return False
     for perm in perms:
-        if perm in permissions:
-            permissions_granted+=1
-    if permissions_granted==permissions_required:
-        return True
-    if raise_exception:
-        raise PermissionDenied
-    return False
+        if not user.has_perm(perm):
+            if raise_exception:
+                raise PermissionDenied
+            return False
+    return True
 
 def check_groups(request,groups:list,raise_exception=True):
     if request.user.is_superuser:
