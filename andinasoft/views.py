@@ -10,7 +10,6 @@ from django.contrib.auth.decorators import permission_required, user_passes_test
 from django.contrib.auth.models import User
 from django.db.models import Avg, Max, Min, Sum, Q, OuterRef, Subquery, DecimalField, Exists, Value, Case, When, F
 from django.db import connections, transaction
-from django.db.utils import InternalError as DBInternalError
 from django.db.models.functions import Coalesce
 from django.core import serializers
 from django.forms import ValidationError
@@ -40,6 +39,7 @@ from andinasoft.shared_models import Recaudos, consecutivos, Recaudos_general, A
 from andinasoft.shared_models import timeline,seguimientos, Inmuebles, ventas_nuevas, RecaudosNoradicados, Pagocomision
 from andinasoft.shared_models import VerificacionOperaciones, DescuentosCondicionados, PlanPagos, DescuentosCondicionados, formas_pago
 from andinasoft.shared_models import Promesas, PresupuestoCartera, Parametros_Operaciones, EntregaManzanas, Pqrs
+from andinasoft.informe_cartera_orm import informe_cartera_rows
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
@@ -6640,6 +6640,14 @@ def inventario_admin(request,proyecto):
     }
     return render(request,'inv_admin.html',context)
 
+def _fetch_informe_cartera(proyecto, periodo, gestor_param):
+    """
+    Informe de cartera por periodo (equivalente a CALL informe_cartera).
+
+    La lógica vive en `informe_cartera_orm` (ORM + mismas reglas que el SP).
+    """
+    return informe_cartera_rows(proyecto, periodo, gestor_param)
+
 @group_perm_required(('andinasoft.view_presupuestocartera',),raise_exception=True)
 def presupuesto_cartera(request,proyecto,periodo):
     check_project(request,proyecto)
@@ -6686,16 +6694,11 @@ def presupuesto_cartera(request,proyecto,periodo):
         
         if request.POST.get('btnExportar'):
             usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
-            sp_error_msg=''
-            try:
-                if usuario_administrador:
-                    contenido_ppto=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)'))
-                else:
-                    gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
-                    contenido_ppto=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")'))
-            except (DBInternalError, Exception) as e:
-                contenido_ppto=[]
-                sp_error_msg=str(e)
+            if usuario_administrador:
+                contenido_ppto, sp_error_msg = _fetch_informe_cartera(proyecto, periodo, None)
+            else:
+                gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
+                contenido_ppto, sp_error_msg = _fetch_informe_cartera(proyecto, periodo, gestor)
             if not contenido_ppto:
                 context['proyecto']=proyecto
                 context['periodo']=periodo
@@ -6744,16 +6747,11 @@ def presupuesto_cartera(request,proyecto,periodo):
             return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
     
     usuario_administrador=check_perms(request,('andinasoft.change_presupuestocartera',),raise_exception=False)
-    sp_error_msg=''
-    try:
-        if usuario_administrador:
-            obj_informe=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}",NULL)'))
-        else:
-            gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
-            obj_informe=list(Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{periodo}","{gestor}")'))
-    except (DBInternalError, Exception) as e:
-        obj_informe=[]
-        sp_error_msg=str(e)
+    if usuario_administrador:
+        obj_informe, sp_error_msg = _fetch_informe_cartera(proyecto, periodo, None)
+    else:
+        gestor=f'{request.user.first_name} {request.user.last_name}'.upper()
+        obj_informe, sp_error_msg = _fetch_informe_cartera(proyecto, periodo, gestor)
     datos_existen=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo).exists()
     context['proyecto']=proyecto
     context['periodo']=periodo
@@ -7526,7 +7524,7 @@ def reporte_cartera(request,proyecto,año):
     sheet=book.get_sheet_by_name('Resumen x Periodo')
     agrupador={}
     for mes in range(1,13):
-        contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{año}{mes:02d}",NULL)')
+        contenido_ppto, _ = informe_cartera_rows(proyecto, f'{año}{mes:02d}', None)
         for fila in contenido_ppto:
             grupo=str(mes)+'-'+fila.tipocartera+'-'+fila.edad
             if grupo not in agrupador:
@@ -8831,7 +8829,7 @@ def graph_cartera_anual(request,proyecto):
         año=request.POST.get('periodoaño')
         agrupador={}
         for mes in range(1,13):
-            contenido_ppto=Adjudicacion.objects.using(proyecto).raw(f'CALL informe_cartera("{año}{mes:02d}",NULL)')
+            contenido_ppto, _ = informe_cartera_rows(proyecto, f'{año}{mes:02d}', None)
             for fila in contenido_ppto:
                 grupo=str(mes)+'-'+fila.tipocartera+'-'+fila.edad
                 if grupo not in agrupador:
@@ -10014,16 +10012,11 @@ def cartera_month_results(request):
         book=openpyxl.load_workbook("resources/excel_formats/Bonos_cartera.xlsx")
         failed_projects = []
         for proyecto in lista_proyectos:
-            try:
-                contenido_ppto = list(
-                    Adjudicacion.objects.using(proyecto.proyecto).raw(
-                        f'CALL informe_cartera("{periodo}",NULL)'
-                    )
-                )
-            except DBInternalError as exc:
-                failed_projects.append((proyecto.proyecto, str(exc)))
+            contenido_ppto, err_msg = informe_cartera_rows(proyecto.proyecto, periodo, None)
+            if err_msg:
+                failed_projects.append((proyecto.proyecto, err_msg))
                 continue
-            
+
             sheet=book[proyecto.proyecto]
             encabezados=['Adjudicacion','Cliente','Estado','Origen','Venta Mes','Tipo Cartera','Edad',
                             'Cuota Mes','Recaudo Mes','Cuotas Vencidas','Recaudo Vencido','Presupuesto Total','Recaudo Presupuestado',
