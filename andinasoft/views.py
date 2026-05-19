@@ -5266,19 +5266,18 @@ def acciones_venta(request,proyecto,contrato):
                         file_dir = f'{settings.MEDIA_ROOT}/soportes_recibos/ventas_nuevas/{proyecto}/'
                         file_key = _to_storage_key(f'{file_dir}{name_doc}.{typedoc}')
                         upload_docs(soporte,file_dir,name_doc,typedoc)
-                        RecaudosNoradicados.objects.using(proyecto).create(recibo=obj_consecutivo.consecutivo,
+                        nrorecibo = obj_consecutivo.consecutivo
+                        RecaudosNoradicados.objects.using(proyecto).create(recibo=nrorecibo,
                                                                         contrato=contrato,
                                                                         fecha=today,
                                                                         concepto=concepto,
                                                                         valor=valor,
                                                                         formapago=formapago,
                                                                         soportepago=file_key)
-                        recibo=RecaudosNoradicados.objects.using(proyecto).aggregate(Max('recibo'))
-                        recibo=recibo['recibo__max']
-                        nrorecibo = obj_consecutivo.consecutivo
-                        obj_consecutivo.consecutivo+=1
+                        obj_consecutivo.consecutivo += 1
                         obj_consecutivo.save()
-                        ruta=settings.DIR_EXPORT+f'{proyecto}_reciboNR_{recibo}.pdf'
+                        recibo_filename = f'{proyecto}_reciboNR_{nrorecibo}.pdf'
+                        ruta = settings.DIR_EXPORT + recibo_filename
                         pdf.Recibo_caja(proyecto=proyecto,
                                         ruta=ruta,
                                         nroRecibo=nrorecibo,
@@ -5291,11 +5290,18 @@ def acciones_venta(request,proyecto,contrato):
                                         telefono=cel_t1,
                                         formapag=formapago,
                                         user=request.user)
+                        if _should_use_storage_for_tmp() and os.path.isfile(ruta):
+                            from django.core.files.base import ContentFile
+                            storage_key = f'tmp/{recibo_filename}'
+                            with open(ruta, 'rb') as pdf_file:
+                                if default_storage.exists(storage_key):
+                                    default_storage.delete(storage_key)
+                                default_storage.save(storage_key, ContentFile(pdf_file.read()))
                         alerta=True
                         mensaje='Descarga el Recibo aqui'
                         titulo='¡Listo!'
                         link=True
-                        ruta_link=_tmp_download_url(f'{proyecto}_reciboNR_{recibo}.pdf')     
+                        ruta_link=_tmp_download_url(recibo_filename)     
                 if request.POST.get('impTerminosAlttum'):
                     beneficiarios = request.POST.get('beneficiarios')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_Terminos y condiciones alttum_contrato_{contrato}.pdf'
