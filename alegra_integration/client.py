@@ -384,6 +384,9 @@ class AlegraMCPClient:
                 'creditNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'creditNote'}),
                 'debitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'debitNote'}),
                 'incomeDebitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'incomeDebitNote'}),
+                # Colombia — documento soporte de proveedor (POST /bills)
+                'supportDocument': self._rest_list_all('/number-templates', extra_params={'documentType': 'supportDocument'}),
+                'bill': self._rest_list_all('/number-templates', extra_params={'documentType': 'bill'}),
             },
         }
 

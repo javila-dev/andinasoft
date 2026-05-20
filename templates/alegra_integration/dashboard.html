@@ -215,10 +215,19 @@
             <i class="fas fa-hand-holding-usd mr-1"></i>Comisiones
           </button>
           <button type="button" class="btn btn-outline-secondary doc-type-btn"
+            data-type="gtt" onclick="selectDocType(this)">
+            <i class="fas fa-comments-dollar mr-1"></i>GTT
+          </button>
+          <button type="button" class="btn btn-outline-secondary doc-type-btn"
             data-type="expense" onclick="selectDocType(this)">
             <i class="fas fa-money-check-alt mr-1"></i>Egresos
           </button>
         </div>
+        <small class="text-muted d-block mt-1" id="gttDocHint" style="display:none">
+          GTT aprobados del proyecto en el rango de fechas; cada línea se envía como
+          <a href="https://developer.alegra.com/reference/post_bills" target="_blank" rel="noopener">documento soporte</a>
+          (Colombia). Configura numeración en <a href="/accounting/alegra/references">Referencias → GTT</a>.
+        </small>
       </div>
 
       <!-- Fechas + acciones -->
@@ -667,6 +676,7 @@ let currentBatchStatus = null;
 const DOC_LABELS = {
   receipt:    'Recibos de caja',
   commission: 'Comisiones',
+  gtt:        'GTT',
   expense:    'Egresos',
 };
 
@@ -725,6 +735,7 @@ function selectDocType(btn) {
   const needProj = currentDocType !== 'expense';
   $('#proyectoRequired').toggle(needProj);
   $('#proyectoOptional').toggle(!needProj);
+  $('#gttDocHint').toggle(currentDocType === 'gtt');
 }
 
 function onEmpresaChange() { loadHistory(); }

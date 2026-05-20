@@ -12,6 +12,7 @@ Documentos cubiertos:
 
 - **Recibos de caja** por proyecto desde `andinasoft.shared_models.Recaudos_general` (se envían como comprobante contable).
 - **Comisiones** por proyecto desde `andinasoft.shared_models.Pagocomision` (internos: comprobante; externos: documento soporte).
+- **GTT** por proyecto desde `andinasoft.Gtt` / `Detalle_gtt` (solo aprobados; cada línea → documento soporte).
 - **Pagos/Egresos** por empresa desde modelos de `accounting` (pagos a facturas/categorías).
 
 Idea central: **no** mandar códigos contables legacy directamente. Alegra opera con IDs internos (banco, categoría/cuenta, contacto, centro de costo, numeración, retención, factura, etc.). Por eso existe una capa de mapeo (`AlegraMapping`) y un resolver (`MappingResolver`).
@@ -367,7 +368,8 @@ Codigos usados:
 
 - `receipt_cash`
 - `commission_journal`
-- `support_document`
+- `support_document` (comisiones externas)
+- `gtt_support_document` (GTT → documento soporte; configurar en Referencias → GTT)
 - `expense_payment`, `expense_anticipo` (numeración opcional en `POST /payments`)
 - `interco_journal` (numeración opcional en journals intercompany: pagos y transferencias entre empresas)
 
@@ -523,6 +525,35 @@ Categoria de gasto:
 Retencion:
 
 - `commission_retefuente`
+
+### GTT
+
+Fuente:
+
+- `andinasoft.Gtt` con `estado=Aprobado`, `proyecto=<pk>`, periodo que solapa el rango `fecha_desde`..`fecha_hasta` del lote.
+- `andinasoft.Detalle_gtt` por cada línea con `valor > 0` (asesor externo).
+
+Builder:
+
+- `GttBuilder` → `GttSupportDocumentBuilder`
+
+Operacion:
+
+- REST `POST /bills` (documento soporte Colombia; ver [post_bills](https://developer.alegra.com/reference/post_bills))
+
+Payload:
+
+- `date` / `dueDate` — `Gtt.fecha_hasta`
+- `provider` — asesor (contacto proveedor)
+- `numberTemplate.id` — mapeo `gtt_support_document` (numeración tipo documento soporte en Alegra)
+- `purchases.categories` — cuenta de gasto (`gtt_expense` por proyecto; fallback `COMISIONES` / `cuenta_capital`)
+- Mapeo `gtt_cxp` (cuenta por pagar, obligatorio por proyecto; referencia en preview `__local`)
+- `costCenter` opcional
+
+Configuracion UI:
+
+- Dashboard Alegra: tipo **GTT**, empresa + proyecto + rango de fechas.
+- **Referencias** (`/accounting/alegra/references` → botón **GTT**): por **proyecto**, numeración `gtt_support_document`, `gtt_expense` (gasto) y `gtt_cxp` (cuenta por pagar).
 
 ## Egresos
 

@@ -312,7 +312,9 @@ def references_mappings(request):
         if not empresa_id:
             return JsonResponse({'detail': 'Empresa requerida'}, status=400)
 
-        qs = AlegraMapping.objects.filter(empresa_id=empresa_id).order_by('mapping_type', 'local_model', 'local_pk', 'local_code')
+        qs = AlegraMapping.objects.filter(empresa_id=empresa_id).order_by(
+            'mapping_type', 'local_model', 'local_pk', 'local_code', '-proyecto_id', '-updated_at',
+        )
         if mapping_type:
             qs = qs.filter(mapping_type=mapping_type)
         if proyecto_id:

@@ -84,11 +84,13 @@ class AlegraSyncBatch(models.Model):
 
     DOC_RECEIPT = 'receipt'
     DOC_COMMISSION = 'commission'
+    DOC_GTT = 'gtt'
     DOC_EXPENSE = 'expense'
 
     DOCUMENT_TYPES = (
         (DOC_RECEIPT, 'Recibos de caja'),
         (DOC_COMMISSION, 'Comisiones'),
+        (DOC_GTT, 'GTT'),
         (DOC_EXPENSE, 'Egresos'),
     )
 

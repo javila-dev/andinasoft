@@ -96,6 +96,85 @@ JOURNAL_11 = {
 }
 
 
+# Journal 28 (nómina): misma cuenta 22050501 en muchos conceptos; solo «Salarios por pagar».
+def _nomina_credit(name, ident, name_client, credit):
+    return {
+        'type': 'category',
+        'name': name,
+        'debit': 0,
+        'credit': credit,
+        'client': {
+            'identification': ident,
+            'name': name_client,
+            'accounting': {'debtToPay': {'code': '22050501', 'categoryRule': {'key': 'DEBTS_TO_PAY_PROVIDERS'}}},
+        },
+    }
+
+
+# Journal 9 — pago retención DIAN; solo pasivo 23x (sin CxP 22x en créditos).
+JOURNAL_9_IMPUESTOS = {
+    'id': '9',
+    'date': '2026-05-14',
+    'observations': 'RETENCION 2-2026',
+    'total': 3518000,
+    'client': {
+        'identification': '800197268',
+        'name': 'DIRECCIÓN DE IMPUESTOS Y ADUAN',
+    },
+    'entries': [
+        {
+            'type': 'category',
+            'name': 'Retencion en la fuente por pagar',
+            'debit': 3377000,
+            'credit': 0,
+            'client': {
+                'identification': '800197268',
+                'name': 'DIRECCIÓN DE IMPUESTOS Y ADUAN',
+                'accounting': {'debtToPay': {'code': '23450501'}},
+            },
+        },
+        {
+            'type': 'category',
+            'name': 'Intereses',
+            'debit': 141000,
+            'credit': 0,
+            'client': {
+                'identification': '800197268',
+                'name': 'DIRECCIÓN DE IMPUESTOS Y ADUAN',
+                'accounting': {'debtToPay': {'code': '23450501'}},
+            },
+        },
+        {
+            'type': 'category',
+            'name': 'Retencion en la fuente por pagar',
+            'debit': 0,
+            'credit': 3518000,
+            'client': {
+                'identification': '800197268',
+                'name': 'DIRECCIÓN DE IMPUESTOS Y ADUAN',
+                'accounting': {'debtToPay': {'code': '23450501'}},
+            },
+        },
+    ],
+}
+
+
+JOURNAL_28_NOMINA = {
+    'id': '28',
+    'date': '2026-05-15',
+    'observations': 'Nómina del 1 al 15 de mayo del 2026',
+    'total': 22797594,
+    'entries': [
+        _nomina_credit('Anticipos comisiones a trabajadores', '8130000', 'HAROLD LEANDR TANGARIFE POSADA', 2452754),
+        _nomina_credit('Fondos de cesantías y/o pensiones', '800037800', 'PROTECCIÓN S.A', 162513),
+        _nomina_credit('Salarios por pagar', '8130000', 'HAROLD LEANDR TANGARIFE POSADA', 1285039),
+        _nomina_credit('Anticipos comisiones a trabajadores', '1037588511', 'JUAN SEBASTIAN BRICEÑO GOMEZ', 4728406),
+        _nomina_credit('Salarios por pagar', '1037588511', 'JUAN SEBASTIAN BRICEÑO GOMEZ', 2985313),
+        _nomina_credit('Salarios por pagar', '1017232868', 'LAURA CRISTINA ALVAREZ BARRIEN', 910679),
+    ],
+}
+
+
 class JournalCxpTests(SimpleTestCase):
     def test_journal_7_una_cxp_sin_retencion(self):
         lineas = extraer_lineas_cxp(JOURNAL_7)
@@ -122,3 +201,30 @@ class JournalCxpTests(SimpleTestCase):
         self.assertEqual(r['id_tercero'], '901018375')
         self.assertIn('COMISION', r['descripcion'].upper())
         self.assertEqual(len(r['pago_detallado']), 3)
+
+    def test_journal_28_nomina_solo_salarios_por_pagar(self):
+        lineas = extraer_lineas_cxp(JOURNAL_28_NOMINA)
+        self.assertEqual(len(lineas), 3)
+        total = sum(x['valor'] for x in lineas)
+        self.assertEqual(total, 1285039 + 2985313 + 910679)
+        for row in lineas:
+            for ln in row['lineas']:
+                self.assertIn('salario', (ln.get('name') or '').lower())
+
+    def test_journal_28_nomina_radicado(self):
+        r = parsear_journal_para_radicado(JOURNAL_28_NOMINA)
+        self.assertEqual(r['valor'], 5181031)
+        self.assertEqual(r['cantidad_terceros'], 3)
+        self.assertNotEqual(r['valor'], JOURNAL_28_NOMINA['total'])
+
+    def test_journal_9_impuestos_cxp_dian(self):
+        lineas = extraer_lineas_cxp(JOURNAL_9_IMPUESTOS)
+        self.assertEqual(len(lineas), 1)
+        self.assertEqual(lineas[0]['id_tercero'], '800197268')
+        self.assertEqual(lineas[0]['valor'], 3518000)
+
+    def test_journal_9_impuestos_radicado(self):
+        r = parsear_journal_para_radicado(JOURNAL_9_IMPUESTOS)
+        self.assertEqual(r['valor'], 3518000)
+        self.assertEqual(r['id_tercero'], '800197268')
+        self.assertIn('RETENCION', r['nro_factura'].upper())

@@ -22,17 +22,22 @@ class MappingResolver:
         # These mappings are global per company account in Alegra; do not scope them by project.
         if mapping_type in (AlegraMapping.CONTACT, AlegraMapping.PAYMENT_METHOD):
             qs = qs.filter(proyecto__isnull=True)
-        elif mapping_type == AlegraMapping.NUMERATION and local_code.startswith('receipt_'):
-            # Receipt numbering can vary per project, with optional fallback to company default.
+        elif mapping_type == AlegraMapping.NUMERATION and (
+            local_code.startswith('receipt_') or local_code == 'gtt_support_document'
+        ):
+            # Receipt / GTT numbering can vary per project, with optional fallback to company default.
             if self.proyecto:
                 qs = qs.filter(Q(proyecto=self.proyecto) | Q(proyecto__isnull=True))
             else:
                 qs = qs.filter(proyecto__isnull=True)
         elif mapping_type == AlegraMapping.NUMERATION:
             qs = qs.filter(proyecto__isnull=True)
-        elif mapping_type == AlegraMapping.CATEGORY and local_code == 'receipt_client_advance':
-            # This one is project-specific (each project can credit a different account),
-            # but we allow fallback to company-level default when present.
+        elif mapping_type == AlegraMapping.CATEGORY and local_code in (
+            'receipt_client_advance',
+            'gtt_cxp',
+            'gtt_expense',
+        ):
+            # Project-specific category with optional company-level fallback.
             if self.proyecto:
                 qs = qs.filter(Q(proyecto=self.proyecto) | Q(proyecto__isnull=True))
             else:

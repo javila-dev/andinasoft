@@ -6,7 +6,7 @@ from accounting.models import Anticipos, Facturas, Pagos, cuentas_intercompanias
 from alegra_integration.exceptions import AlegraBuildError
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.models import AlegraDocument, AlegraMapping
-from andinasoft.models import asesores, clientes, cuentas_pagos, empresas
+from andinasoft.models import Detalle_gtt, Gtt, asesores, clientes, cuentas_pagos, empresas
 from andinasoft.shared_models import Recaudos, consecutivos, formas_pago
 
 
@@ -459,6 +459,121 @@ class ExternalCommissionSupportDocumentBuilder:
             local_key=f'commission:external:{self.proyecto.pk}:{commission.id_pago}',
             payload=payload,
         )
+
+
+class GttSupportDocumentBuilder:
+    """
+    Documento soporte (Colombia) por línea de GTT aprobado — POST /bills.
+    Numeración: mapeo numeration / local_code gtt_support_document (tipo documento soporte en Alegra).
+    """
+
+    def __init__(self, empresa, proyecto, resolver=None):
+        self.empresa = empresa
+        self.proyecto = proyecto
+        self.resolver = resolver or MappingResolver(empresa, proyecto)
+
+    def _expense_category_id(self):
+        """Cuenta de gasto (línea en purchases.categories del documento soporte)."""
+        mapped = self.resolver.get(AlegraMapping.CATEGORY, local_code='gtt_expense', required=False)
+        if mapped:
+            return mapped
+        doc = consecutivos.objects.using(self.proyecto.pk).get(documento='COMISIONES')
+        return self.resolver.category_for_code(doc.cuenta_capital)
+
+    def _cxp_category_id(self):
+        """Cuenta por pagar (mapeo por proyecto; contrapartida en el asiento de Alegra)."""
+        return self.resolver.get(AlegraMapping.CATEGORY, local_code='gtt_cxp', required=True)
+
+    def build(self, detalle, gtt, asesor):
+        value = _money(detalle.valor)
+        if value <= 0:
+            raise AlegraBuildError('La línea GTT no tiene valor positivo.')
+        if getattr(asesor, 'tipo_asesor', None) != 'Externo':
+            raise AlegraBuildError(f'El asesor {asesor.pk} no es externo (GTT solo aplica a externos).')
+
+        provider_id = self.resolver.contact_for_asesor(asesor.pk)
+        cost_center_id = self.resolver.cost_center_for_project(required=False)
+        numeration_id = self.resolver.numeration('gtt_support_document')
+        expense_category = self._expense_category_id()
+        cxp_category = self._cxp_category_id()
+        bill_date = _date(gtt.fecha_hasta)
+        desc = (
+            f'GTT {asesor.nombre} {self.proyecto.pk} '
+            f'{gtt.fecha_desde}..{gtt.fecha_hasta}'
+        )[:500]
+
+        payload = {
+            'date': bill_date,
+            'dueDate': bill_date,
+            'provider': {'id': provider_id},
+            'numberTemplate': {'id': numeration_id},
+            'observations': desc,
+            'purchases': {
+                'categories': [
+                    {
+                        'id': expense_category,
+                        'quantity': 1,
+                        'price': value,
+                        'observations': f'GTT {self.proyecto.pk} GTT#{gtt.pk} linea {detalle.pk}'.strip(),
+                    }
+                ]
+            },
+        }
+        if cost_center_id:
+            payload['costCenter'] = {'id': cost_center_id}
+
+        payload['__local'] = {
+            'gtt_expense_category_id': expense_category,
+            'gtt_cxp_category_id': cxp_category,
+        }
+
+        return BuiltDocument(
+            document_type='gtt_support',
+            operation='POST /bills',
+            transport=AlegraDocument.ALEGRA_REST,
+            source_model='andinasoft.Detalle_gtt',
+            source_pk=detalle.pk,
+            local_key=f'gtt:{self.proyecto.pk}:{gtt.pk}:{detalle.pk}',
+            payload=payload,
+        )
+
+    def local_payload(self, detalle, gtt, asesor):
+        return {
+            'tipo': 'gtt_documento_soporte',
+            'proyecto': getattr(self.proyecto, 'pk', None),
+            'gtt_id': getattr(gtt, 'pk', None),
+            'fecha_desde': _date(getattr(gtt, 'fecha_desde', None)),
+            'fecha_hasta': _date(getattr(gtt, 'fecha_hasta', None)),
+            'asesor': {'id': getattr(asesor, 'pk', None), 'nombre': getattr(asesor, 'nombre', None)},
+            'valor': _money(getattr(detalle, 'valor', 0)),
+            'gtt_expense_category_id': self._expense_category_id(),
+            'gtt_cxp_category_id': self._cxp_category_id(),
+        }
+
+
+class GttBuilder:
+    def __init__(self, empresa, proyecto):
+        self.empresa = empresa
+        self.proyecto = proyecto
+        self.resolver = MappingResolver(empresa, proyecto)
+        self._line_builder = GttSupportDocumentBuilder(empresa, proyecto, self.resolver)
+
+    def build(self, detalle):
+        gtt = detalle.gtt
+        if (gtt.proyecto or '').strip() != str(self.proyecto.pk).strip():
+            raise AlegraBuildError('El GTT no pertenece al proyecto seleccionado.')
+        if (gtt.estado or '').strip().lower() != 'aprobado':
+            raise AlegraBuildError(f'El GTT {gtt.pk} no está aprobado (estado={gtt.estado}).')
+        try:
+            asesor = detalle.asesor
+        except Exception:
+            raise AlegraBuildError(f'No existe asesor para la línea GTT {detalle.pk}.')
+        return self._line_builder.build(detalle, gtt, asesor)
+
+    def local_payload(self, detalle):
+        gtt = detalle.gtt
+        asesor = detalle.asesor
+        return self._line_builder.local_payload(detalle, gtt, asesor)
 
 
 class ExpensePaymentBuilder:

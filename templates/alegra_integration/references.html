@@ -3,6 +3,45 @@
 
 {% block title %}Referencias Alegra{% endblock %}
 
+{% block style %}
+<style>
+  .refs-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px 20px;
+  }
+  .refs-toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  .refs-toolbar-label {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6c757d;
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .refs-section-btn.active {
+    font-weight: 600;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+  }
+  @media (max-width: 767.98px) {
+    .refs-toolbar-group { flex: 1 1 100%; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4" style="max-width:1300px">
 
@@ -22,10 +61,10 @@
   </div>
 
   <div class="card shadow-sm mb-3">
-    <div class="card-body">
-      <div class="form-row align-items-end">
-        <div class="col-md-6">
-          <label class="font-weight-bold" style="font-size:.85rem">Empresa <span class="text-danger">*</span></label>
+    <div class="card-body pb-2">
+      <div class="row align-items-end">
+        <div class="col-md-4 col-lg-3 mb-3 mb-md-0">
+          <label class="font-weight-bold mb-1" style="font-size:.85rem">Empresa <span class="text-danger">*</span></label>
           <select class="form-control" id="selEmpresa">
             <option value="">— Seleccionar empresa —</option>
             {% for e in empresas %}
@@ -33,34 +72,37 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-6 mt-2 mt-md-0">
-          <div class="btn-group btn-group-sm" role="group" aria-label="sync">
-            <button class="btn btn-outline-primary" onclick="loadRef('banks')">
-              <i class="fas fa-university mr-1"></i>Bancos
-            </button>
-            <button class="btn btn-outline-primary" onclick="loadRef('categories')">
-              <i class="fas fa-list mr-1"></i>Categorías
-            </button>
-            <button class="btn btn-outline-primary" onclick="loadRef('cost_centers')">
-              <i class="fas fa-bullseye mr-1"></i>Centros de costo
-            </button>
-            <button class="btn btn-outline-primary" onclick="loadRef('number_templates')">
-              <i class="fas fa-hashtag mr-1"></i>Numeraciones
-            </button>
-            <button class="btn btn-outline-secondary" onclick="ensureContactSyncLoaded()">
-              <i class="fas fa-users mr-1"></i>Contactos
-            </button>
-            <button class="btn btn-outline-success" onclick="ensureReceiptConfigLoaded()">
-              <i class="fas fa-receipt mr-1"></i>Recibos
-            </button>
-            <button class="btn btn-outline-success" onclick="ensureExpenseDefaultsLoaded()">
-              <i class="fas fa-coins mr-1"></i>Egresos
-            </button>
+        <div class="col-md-8 col-lg-9 mb-3 mb-md-0">
+          <label class="font-weight-bold mb-2 d-block" style="font-size:.85rem">Sección a configurar</label>
+          <div class="refs-toolbar" role="navigation" aria-label="Secciones de referencias Alegra">
+            <div class="refs-toolbar-group">
+              <span class="refs-toolbar-label">Catálogo</span>
+              <button type="button" class="btn btn-sm btn-outline-primary refs-section-btn" data-refs-section="banks" onclick="loadRef('banks')">
+                <i class="fas fa-university mr-1"></i>Bancos
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary refs-section-btn" data-refs-section="contacts" onclick="ensureContactSyncLoaded()">
+                <i class="fas fa-users mr-1"></i>Contactos
+              </button>
+            </div>
+            <div class="refs-toolbar-group">
+              <span class="refs-toolbar-label">Envíos</span>
+              <button type="button" class="btn btn-sm btn-outline-success refs-section-btn" data-refs-section="receipt" onclick="ensureReceiptConfigLoaded()">
+                <i class="fas fa-receipt mr-1"></i>Recibos
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-success refs-section-btn" data-refs-section="expense" onclick="ensureExpenseDefaultsLoaded()">
+                <i class="fas fa-coins mr-1"></i>Egresos
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-success refs-section-btn" data-refs-section="gtt" onclick="ensureGttConfigLoaded()">
+                <i class="fas fa-comments-dollar mr-1"></i>GTT
+              </button>
+            </div>
           </div>
-          <small class="text-muted d-block mt-1">Cada botón sincroniza y muestra solo ese tipo</small>
+          <small class="text-muted d-block mt-2" style="font-size:.8rem">
+            Elige la empresa y abre la sección que vas a revisar o guardar.
+          </small>
         </div>
       </div>
-      <div id="alertBox" class="mt-3"></div>
+      <div id="alertBox" class="mt-1"></div>
     </div>
   </div>
 
@@ -179,6 +221,71 @@
       <small class="text-muted d-block mt-2">
         Sugerencia: elige proyecto, selecciona cuenta y numeración, y guarda.
       </small>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3" id="gttConfigCard" style="display:none">
+    <div class="card-header bg-light">
+      <strong><i class="fas fa-comments-dollar mr-2 text-muted"></i>GTT · Documento soporte (Colombia)</strong>
+      <small class="text-muted ml-2">Por proyecto · <code>POST /bills</code></small>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-3">
+        Por <strong>proyecto</strong>: numeración documento soporte, cuenta de <strong>gasto</strong>
+        (va en <code>purchases.categories</code>) y cuenta por <strong>pagar</strong> (contrapartida en Alegra).
+      </p>
+      <div class="form-row">
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Proyecto <span class="text-danger">*</span></label>
+          <select class="form-control" id="selGttProject">
+            <option value="">— Seleccionar proyecto —</option>
+            {% for p in proyectos %}
+            <option value="{{ p.proyecto }}">{{ p.proyecto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Numeración documento soporte</label>
+          <select class="form-control" id="selGttSupportNumeration">
+            <option value="">— seleccionar —</option>
+          </select>
+          <small class="text-muted d-block" id="curGttSupportNumeration">Actual: —</small>
+          <div class="mt-2">
+            <input class="form-control form-control-sm" id="txtGttSupportNumerationManual"
+                   placeholder="ID manual (numeración en Alegra)" />
+            <small class="text-muted d-block mt-1" id="hintGttSupportNumeration" style="font-size:.8rem;display:none"></small>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Cuenta de gasto en Alegra</label>
+          <div style="position:relative">
+            <input class="form-control" id="txtGttExpensePick" placeholder="Buscar (ej. comisiones, 5295…)" autocomplete="off" />
+            <input type="hidden" id="selGttExpenseId" />
+            <div id="gttExpenseMenu"
+                 class="list-group shadow-sm"
+                 style="display:none;position:absolute;z-index:20;width:100%;max-height:260px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <small class="text-muted d-block" id="curGttExpense">Actual: — (si vacío, usa cuenta de comisiones del proyecto)</small>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Cuenta por pagar en Alegra</label>
+          <div style="position:relative">
+            <input class="form-control" id="txtGttCxpPick" placeholder="Buscar (ej. proveedores, 2335…)" autocomplete="off" />
+            <input type="hidden" id="selGttCxpId" />
+            <div id="gttCxpMenu"
+                 class="list-group shadow-sm"
+                 style="display:none;position:absolute;z-index:20;width:100%;max-height:260px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <small class="text-muted d-block" id="curGttCxp">Actual: —</small>
+        </div>
+      </div>
+      <div class="d-flex justify-content-end">
+        <button type="button" class="btn btn-success" id="btnSaveGttConfig" onclick="return saveGttConfig(event)">
+          <i class="fas fa-save mr-1"></i>Guardar configuración GTT
+        </button>
+      </div>
     </div>
   </div>
 
@@ -349,7 +456,7 @@
     </div>
   </div>
 
-  <div id="mainRefsTables">
+  <div id="mainRefsTables" style="display:none">
   <div class="row">
     <div class="col-lg-6 mb-3">
       <div class="card shadow-sm h-100">
@@ -466,6 +573,10 @@ function showAlert(kind, msg) {
   );
 }
 
+function clearAlert() {
+  $('#alertBox').empty();
+}
+
 function mappingTypeFor(refType) {
   return {
     banks: 'bank_account',
@@ -473,6 +584,45 @@ function mappingTypeFor(refType) {
     cost_centers: 'cost_center',
     number_templates: 'numeration',
   }[refType] || '';
+}
+
+let activeRefsSection = null;
+const REFS_PANELS = {
+  banks: '#mainRefsTables',
+  contacts: '#contactSyncCard',
+  receipt: '#receiptConfigCard',
+  expense: '#expenseDefaultsCard',
+  gtt: '#gttConfigCard',
+};
+
+function showRefsSection(section) {
+  activeRefsSection = section || null;
+  Object.values(REFS_PANELS).forEach(sel => $(sel).hide());
+  if (section && REFS_PANELS[section]) {
+    $(REFS_PANELS[section]).show();
+  }
+  $('.refs-section-btn').removeClass('active');
+  if (section) {
+    $(`.refs-section-btn[data-refs-section="${section}"]`).addClass('active');
+  }
+}
+
+function reloadActiveRefsSection() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) {
+    showRefsSection(null);
+    return;
+  }
+  if (!activeRefsSection) return;
+  const loaders = {
+    banks: () => loadRef('banks'),
+    contacts: ensureContactSyncLoaded,
+    receipt: ensureReceiptConfigLoaded,
+    expense: ensureExpenseDefaultsLoaded,
+    gtt: ensureGttConfigLoaded,
+  };
+  const fn = loaders[activeRefsSection];
+  if (fn) fn();
 }
 
 let currentRefType = null;
@@ -795,13 +945,291 @@ function loadReceiptTemplateCurrent() {
     });
 }
 
+function filterSupportDocumentTemplates(templates) {
+  const list = (templates || []).slice();
+  const isSupport = (t) => {
+    const type = String((t && t.type) || '').toLowerCase();
+    const name = String((t && t.name) || (t && t.prefix) || '').toLowerCase();
+    return type.includes('soporte') || type.includes('support')
+      || name.includes('soporte') || name.includes('documento soporte');
+  };
+  const filtered = list.filter(isSupport);
+  return filtered.length ? filtered : list;
+}
+
+function buildSupportNumerationOptions(templates) {
+  const opts = ['<option value="">— seleccionar —</option>'];
+  filterSupportDocumentTemplates(templates).forEach(t => {
+    const id = t.id || '';
+    if (!id) return;
+    const label = (t.name || t.prefix || t.resolutionNumber || ('id ' + id));
+    const typeHint = t.type ? ` · ${t.type}` : '';
+    opts.push(`<option value="${escHtml(String(id))}">${escHtml(`${label}${typeHint} (id ${id})`)}</option>`);
+  });
+  return opts.join('');
+}
+
+function loadSupportNumerationTemplates() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return $.Deferred().reject().promise();
+  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`)
+    .then(data => {
+      const nt = data.number_templates || {};
+      const pools = [...(nt.supportDocument || []), ...(nt.bill || [])];
+      const seen = {};
+      const merged = [];
+      pools.forEach(t => {
+        const id = String((t && t.id) || '');
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        merged.push(t);
+      });
+      return merged;
+    });
+}
+
+function pickScopedMapping(mappings, proyecto) {
+  const list = mappings || [];
+  if (!list.length) return null;
+  if (proyecto) {
+    const exact = list.find(m => String(m.proyecto || '') === String(proyecto));
+    if (exact) return exact;
+  }
+  return list.find(m => !m.proyecto) || list[0];
+}
+
+function applyScopedNumerationMapping(code, proyecto, curSel, selSel, manualSel, hintSel) {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=numeration&local_code=${encodeURIComponent(code)}` +
+    (proyecto ? `&proyecto=${encodeURIComponent(proyecto)}&include_null=1` : '');
+  $.get(q)
+    .done(data => {
+      const m = pickScopedMapping(data.mappings, proyecto);
+      $(hintSel).hide().text('');
+      if (m) {
+        const scope = m.proyecto ? `proyecto=${m.proyecto}` : 'empresa';
+        $(curSel).text(`Actual (${scope}): ${m.alegra_id} · ${m.description || ''}`);
+        const val = String(m.alegra_id);
+        if ($(selSel + ` option[value="${val.replace(/"/g, '&quot;')}"]`).length) {
+          $(selSel).val(val);
+          $(manualSel).val('');
+        } else {
+          $(selSel).val('');
+          $(manualSel).val(val);
+          $(hintSel).show().text('Guardada por ID manual (no aparece en la lista).');
+        }
+      } else {
+        $(curSel).text('Actual: —');
+        $(manualSel).val('');
+        $(selSel).val('');
+      }
+    });
+}
+
+function loadGttExpenseCurrent() {
+  const empresa = $('#selEmpresa').val();
+  const proyecto = $('#selGttProject').val() || '';
+  if (!empresa) return;
+  const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_code=gtt_expense` +
+    (proyecto ? `&proyecto=${encodeURIComponent(proyecto)}&include_null=1` : '');
+  $.get(q)
+    .done(data => {
+      const m = pickScopedMapping(data.mappings, proyecto);
+      if (m) {
+        const scope = m.proyecto ? `proyecto=${m.proyecto}` : 'empresa';
+        $('#curGttExpense').text(`Actual (${scope}): ${m.alegra_id} · ${m.description || ''}`);
+        const val = String(m.alegra_id);
+        $('#selGttExpenseId').val(val);
+        $('#txtGttExpensePick').val((m.description || '').trim() || `ID ${val}`);
+      } else {
+        $('#curGttExpense').text('Actual: — (si vacío, usa cuenta de comisiones del proyecto)');
+        $('#selGttExpenseId').val('');
+        $('#txtGttExpensePick').val('');
+      }
+    });
+}
+
+function loadGttCxpCurrent() {
+  const empresa = $('#selEmpresa').val();
+  const proyecto = $('#selGttProject').val() || '';
+  if (!empresa) return;
+  const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_code=gtt_cxp` +
+    (proyecto ? `&proyecto=${encodeURIComponent(proyecto)}&include_null=1` : '');
+  $.get(q)
+    .done(data => {
+      const m = pickScopedMapping(data.mappings, proyecto);
+      if (m) {
+        const scope = m.proyecto ? `proyecto=${m.proyecto}` : 'empresa';
+        $('#curGttCxp').text(`Actual (${scope}): ${m.alegra_id} · ${m.description || ''}`);
+        const val = String(m.alegra_id);
+        $('#selGttCxpId').val(val);
+        $('#txtGttCxpPick').val((m.description || '').trim() || `ID ${val}`);
+      } else {
+        $('#curGttCxp').text('Actual: —');
+        $('#selGttCxpId').val('');
+        $('#txtGttCxpPick').val('');
+      }
+    });
+}
+
+function loadGttMappingsCurrent() {
+  const proyecto = $('#selGttProject').val() || '';
+  applyScopedNumerationMapping(
+    'gtt_support_document', proyecto,
+    '#curGttSupportNumeration', '#selGttSupportNumeration',
+    '#txtGttSupportNumerationManual', '#hintGttSupportNumeration'
+  );
+  loadGttExpenseCurrent();
+  loadGttCxpCurrent();
+}
+
+function ensureGttConfigLoaded() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  showRefsSection('gtt');
+  showAlert('info', 'Elige el proyecto y configura numeración, cuenta de gasto y cuenta por pagar.');
+
+  $('#selGttSupportNumeration').html('<option value="">Cargando…</option>');
+  loadSupportNumerationTemplates()
+    .done(templates => {
+      $('#selGttSupportNumeration').html(buildSupportNumerationOptions(templates));
+      loadGttMappingsCurrent();
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      $('#selGttSupportNumeration').html('<option value="">— seleccionar —</option>');
+      showAlert('error', `No se pudieron cargar numeraciones: <strong>${escHtml(msg)}</strong>`);
+    });
+}
+
+let gttExpenseSearchTimer = null;
+function searchGttExpenseInline(query) {
+  const empresa = $('#selEmpresa').val();
+  const q = (query || '').trim();
+  if (!empresa || q.length < 2) { $('#gttExpenseMenu').hide().empty(); return; }
+  if (gttExpenseSearchTimer) clearTimeout(gttExpenseSearchTimer);
+  gttExpenseSearchTimer = setTimeout(() => {
+    $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const cats = data.categories || [];
+        const items = cats.map(c => {
+          const id = c.id;
+          const label = `${c.code ? c.code + ' · ' : ''}${c.name || c.description || ''} (id ${id})`;
+          return `<button type="button" class="list-group-item list-group-item-action py-1" data-id="${escHtml(String(id))}" data-label="${escHtml(label)}">${escHtml(label)}</button>`;
+        }).join('');
+        $('#gttExpenseMenu').html(items || '<div class="list-group-item text-muted">Sin resultados</div>').show();
+      })
+      .fail(() => $('#gttExpenseMenu').hide().empty());
+  }, 350);
+}
+
+let gttCxpSearchTimer = null;
+function searchGttCxpInline(query) {
+  const empresa = $('#selEmpresa').val();
+  const q = (query || '').trim();
+  if (!empresa || q.length < 2) { $('#gttCxpMenu').hide().empty(); return; }
+  if (gttCxpSearchTimer) clearTimeout(gttCxpSearchTimer);
+  gttCxpSearchTimer = setTimeout(() => {
+    $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const cats = data.categories || [];
+        const items = cats.map(c => {
+          const id = c.id;
+          const label = `${c.code ? c.code + ' · ' : ''}${c.name || c.description || ''} (id ${id})`;
+          return `<button type="button" class="list-group-item list-group-item-action py-1" data-id="${escHtml(String(id))}" data-label="${escHtml(label)}">${escHtml(label)}</button>`;
+        }).join('');
+        $('#gttCxpMenu').html(items || '<div class="list-group-item text-muted">Sin resultados</div>').show();
+      })
+      .fail(() => $('#gttCxpMenu').hide().empty());
+  }, 350);
+}
+
+function saveGttConfig(ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const empresa = $('#selEmpresa').val();
+  const proyecto = ($('#selGttProject').val() || '').trim();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return false; }
+  if (!proyecto) { showAlert('error', 'Selecciona un proyecto para guardar la configuración GTT.'); return false; }
+
+  const numerationId = ($('#txtGttSupportNumerationManual').val() || '').trim()
+    || ($('#selGttSupportNumeration').val() || '').trim();
+  const expenseId = ($('#selGttExpenseId').val() || '').trim();
+  const expenseLabel = ($('#txtGttExpensePick').val() || '').trim();
+  const cxpId = ($('#selGttCxpId').val() || '').trim();
+  const cxpLabel = ($('#txtGttCxpPick').val() || '').trim();
+
+  if (!numerationId) { showAlert('error', 'Indica la numeración documento soporte.'); return false; }
+  if (!cxpId) { showAlert('error', 'Indica la cuenta por pagar en Alegra.'); return false; }
+
+  const numerationLabel = $('#selGttSupportNumeration option:selected').text() || numerationId;
+
+  $('#btnSaveGttConfig').prop('disabled', true).text('Guardando…');
+  showAlert('info', `Guardando GTT para proyecto <strong>${escHtml(proyecto)}</strong>…`);
+
+  $.ajax({
+    url: API.saveNumeration,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      empresa,
+      proyecto,
+      local_code: 'gtt_support_document',
+      alegra_id: numerationId,
+      description: numerationLabel,
+    }),
+  }).done(() => {
+    const saveExpense = expenseId
+      ? $.ajax({
+          url: API.saveCategory,
+          method: 'POST',
+          contentType: 'application/json',
+          headers: { 'X-CSRFToken': CSRF },
+          data: JSON.stringify({
+            empresa,
+            proyecto,
+            local_code: 'gtt_expense',
+            alegra_id: expenseId,
+            description: expenseLabel || expenseId,
+          }),
+        })
+      : $.Deferred().resolve().promise();
+    saveExpense.done(() => $.ajax({
+      url: API.saveCategory,
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        empresa,
+        proyecto,
+        local_code: 'gtt_cxp',
+        alegra_id: cxpId,
+        description: cxpLabel || cxpId,
+      }),
+    }).done(() => {
+      showAlert('success', `Configuración GTT guardada para <strong>${escHtml(proyecto)}</strong>.`);
+      loadGttMappingsCurrent();
+    }).fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      showAlert('error', `No se pudo guardar cuenta por pagar: <strong>${escHtml(msg)}</strong>`);
+    })).fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      showAlert('error', `No se pudo guardar cuenta de gasto: <strong>${escHtml(msg)}</strong>`);
+    });
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `No se pudo guardar numeración: <strong>${escHtml(msg)}</strong>`);
+  }).always(() => {
+    $('#btnSaveGttConfig').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar configuración GTT');
+  });
+  return false;
+}
+
 function ensureReceiptConfigLoaded() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
-  $('#receiptConfigCard').show();
-  $('#contactSyncCard').hide();
-  $('#expenseDefaultsCard').hide();
-  $('#mainRefsTables').hide();
+  showRefsSection('receipt');
   showAlert('info', '1) Elige el proyecto. 2) Busca y guarda la cuenta “Anticipo de clientes”. 3) Guarda la numeración del recibo.');
   $('#txtReceiptAdvancePick').val('');
   $('#selReceiptAdvanceId').val('');
@@ -949,10 +1377,7 @@ function loadExpenseDefaultsCurrent() {
 function ensureExpenseDefaultsLoaded() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
-  $('#expenseDefaultsCard').show();
-  $('#receiptConfigCard').hide();
-  $('#contactSyncCard').hide();
-  $('#mainRefsTables').hide();
+  showRefsSection('expense');
   showAlert('info', 'Configura las interfaces (conceptos) y enlázalas con una cuenta en Alegra.');
   $('#txtDefaultCxpPick').val('');
   $('#selDefaultCxpId').val('');
@@ -1518,10 +1943,7 @@ function saveExpenseDefaults(ev) {
 function ensureContactSyncLoaded() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
-  $('#contactSyncCard').show();
-  $('#receiptConfigCard').hide();
-  $('#expenseDefaultsCard').hide();
-  $('#mainRefsTables').hide();
+  showRefsSection('contacts');
   showAlert('info', 'Presiona “Sincronizar contactos”. Este proceso puede tardar unos minutos.');
   $('#contactSyncSummary').hide().empty();
   $('#contactSyncUnmatchedWrap').hide();
@@ -1621,10 +2043,7 @@ function loadRef(refType) {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
   currentRefType = refType;
-
-  $('#receiptConfigCard').hide();
-  $('#contactSyncCard').hide();
-  $('#mainRefsTables').show();
+  showRefsSection('banks');
 
   showAlert('info', 'Consultando Alegra y cargando mapeos…');
   $('#remoteBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>');
@@ -1675,12 +2094,45 @@ function loadRef(refType) {
     .fail(() => $('#mapBody').html('<tr><td colspan="2" class="text-center text-danger py-3">Error</td></tr>'));
 }
 
-// Auto-load receipt configuration when selecting company (optional UX)
 $('#selEmpresa').on('change', function() {
-  $('#receiptConfigCard').hide();
-  $('#contactSyncCard').hide();
-  $('#expenseDefaultsCard').hide();
-  $('#mainRefsTables').show();
+  clearAlert();
+  if (!$(this).val()) {
+    showRefsSection(null);
+    return;
+  }
+  reloadActiveRefsSection();
+});
+
+$('#selGttProject').on('change', function() {
+  if ($('#gttConfigCard').is(':visible')) {
+    loadGttMappingsCurrent();
+  }
+});
+
+$('#txtGttExpensePick').on('input', function() {
+  searchGttExpenseInline(($(this).val() || '').trim());
+  $('#selGttExpenseId').val('');
+});
+$('#gttExpenseMenu').on('click', 'button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id) return;
+  $('#selGttExpenseId').val(id);
+  $('#txtGttExpensePick').val(label);
+  $('#gttExpenseMenu').hide().empty();
+});
+
+$('#txtGttCxpPick').on('input', function() {
+  searchGttCxpInline(($(this).val() || '').trim());
+  $('#selGttCxpId').val('');
+});
+$('#gttCxpMenu').on('click', 'button[data-id]', function() {
+  const id = String($(this).data('id') || '');
+  const label = String($(this).data('label') || '');
+  if (!id) return;
+  $('#selGttCxpId').val(id);
+  $('#txtGttCxpPick').val(label);
+  $('#gttCxpMenu').hide().empty();
 });
 
 $('#selReceiptProject').on('change', function() {

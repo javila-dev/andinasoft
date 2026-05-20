@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_date
 from django.core.cache import cache
 
 from accounting.models import Anticipos, Pagos, transferencias_companias
-from alegra_integration.builders import CommissionBuilder, ExpensePaymentBuilder, ReceiptPaymentBuilder
+from alegra_integration.builders import CommissionBuilder, ExpensePaymentBuilder, GttBuilder, ReceiptPaymentBuilder
 from alegra_integration.client import AlegraMCPClient
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 from alegra_integration.models import (
@@ -19,7 +19,7 @@ from alegra_integration.models import (
     AlegraSyncBatch,
     AlegraWebhookSubscriptionLog,
 )
-from andinasoft.models import asesores, clientes, empresas, proyectos
+from andinasoft.models import Detalle_gtt, Gtt, asesores, clientes, empresas, proyectos
 from andinasoft.shared_models import Pagocomision, Recaudos_general
 
 
@@ -961,7 +961,7 @@ class AlegraIntegrationService:
             raise AlegraConfigurationError('fecha_desde no puede ser mayor que fecha_hasta.')
         empresa = empresas.objects.get(pk=empresa_id)
         proyecto = None
-        if document_type in (AlegraSyncBatch.DOC_RECEIPT, AlegraSyncBatch.DOC_COMMISSION):
+        if document_type in (AlegraSyncBatch.DOC_RECEIPT, AlegraSyncBatch.DOC_COMMISSION, AlegraSyncBatch.DOC_GTT):
             if not proyecto_id:
                 raise AlegraConfigurationError('Este tipo de documento requiere proyecto.')
             proyecto = proyectos.objects.get(pk=proyecto_id)
@@ -984,6 +984,24 @@ class AlegraIntegrationService:
             results = []
             for commission in commissions:
                 results.extend(self._safe_build(builder, commission))
+            return results
+
+        if document_type == AlegraSyncBatch.DOC_GTT:
+            builder = GttBuilder(empresa, proyecto)
+            gtt_ids = Gtt.objects.filter(
+                proyecto=proyecto.pk,
+                estado__iexact='Aprobado',
+                fecha_hasta__gte=desde,
+                fecha_desde__lte=hasta,
+            ).values_list('pk', flat=True)
+            detalles = (
+                Detalle_gtt.objects.filter(gtt_id__in=gtt_ids, valor__gt=0)
+                .select_related('gtt', 'asesor')
+                .order_by('gtt__fecha_hasta', 'gtt_id', 'pk')
+            )
+            results = []
+            for detalle in detalles:
+                results.extend(self._safe_build(builder, detalle))
             return results
 
         builder = ExpensePaymentBuilder(empresa)

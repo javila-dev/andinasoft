@@ -8,6 +8,7 @@ from django.test import SimpleTestCase
 from alegra_integration.builders import (
     CommissionBuilder,
     ExternalCommissionSupportDocumentBuilder,
+    GttSupportDocumentBuilder,
     InternalCommissionAdvanceBuilder,
     ReceiptPaymentBuilder,
 )
@@ -201,8 +202,37 @@ class BuilderTests(SimpleTestCase):
 
         self.assertEqual(built.operation, 'POST /bills')
         self.assertEqual(built.payload['provider']['id'], 'adviser-222')
-        self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-529505')
+        self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-gtt-expense')
+        self.assertEqual(built.payload['__local']['gtt_cxp_category_id'], 'cat-gtt-cxp')
         self.assertEqual(built.payload['retentions'][0]['id'], 'ret-commission_retefuente')
+
+    @patch('alegra_integration.builders.consecutivos')
+    def test_gtt_builds_support_document(self, consecutivos):
+        def _get(*a, **kw):
+            code = kw.get('local_code', '')
+            return {
+                'gtt_expense': 'cat-gtt-expense',
+                'gtt_cxp': 'cat-gtt-cxp',
+            }.get(code, 'mapped-id')
+        self.resolver.get = _get
+        asesor = SimpleNamespace(pk='333', nombre='ASESOR GTT', tipo_asesor='Externo')
+        gtt = SimpleNamespace(
+            pk=10,
+            proyecto='Oasis',
+            fecha_desde=datetime.date(2026, 4, 1),
+            fecha_hasta=datetime.date(2026, 4, 7),
+            estado='Aprobado',
+        )
+        detalle = SimpleNamespace(pk=55, valor=112500, gtt=gtt, asesor=asesor)
+
+        built = GttSupportDocumentBuilder(self.empresa, self.proyecto, self.resolver).build(detalle, gtt, asesor)
+
+        self.assertEqual(built.operation, 'POST /bills')
+        self.assertEqual(built.document_type, 'gtt_support')
+        self.assertEqual(built.payload['provider']['id'], 'adviser-333')
+        self.assertEqual(built.payload['numberTemplate'], {'id': 'num-gtt_support_document'})
+        self.assertEqual(built.payload['purchases']['categories'][0]['price'], 112500.0)
+        self.assertEqual(built.local_key, 'gtt:Oasis:10:55')
 
 
 class BillPdfExtractionTests(SimpleTestCase):
