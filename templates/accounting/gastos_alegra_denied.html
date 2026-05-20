@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Sin permiso{% endblock %}
+{% block content %}
+<div class="container py-5">
+  <div class="alert alert-warning">
+    <h5>Sin permiso</h5>
+    <p>{{ mensaje|default:"No tiene permiso para acceder a esta pantalla." }}</p>
+    <a href="/accounting/principal" class="btn btn-sm btn-primary">Volver</a>
+  </div>
+</div>
+{% endblock %}

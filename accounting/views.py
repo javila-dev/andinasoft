@@ -37,6 +37,20 @@ from andinasoft.utilities import get_text_from_file, pdf_gen, Utilidades
 from andinasoft.handlers_functions import envio_notificacion
 from accounting.models_alttum import Pagos_facturas, Anticipos_hotels as anticipos_hotels
 from accounting import forms
+from accounting.gasto_aprobacion import alegra_sin_aprobacion_q
+from accounting.gasto_aprobacion_views import (
+    gastos_alegra_asignar,
+    gastos_alegra_aprobar,
+    ajax_gastos_alegra_pendientes_asignar,
+    ajax_gastos_alegra_pendientes_aprobar,
+    ajax_gastos_alegra_aprobadores,
+    ajax_gastos_alegra_asignar,
+    ajax_gastos_alegra_aprobar,
+    ajax_gastos_alegra_crear,
+    ajax_gastos_alegra_journal_preview,
+    ajax_gastos_alegra_bill_preview,
+    ajax_gastos_alegra_journal_detalle_radicado,
+)
 from decimal import Decimal, InvalidOperation
 from apis.nominapp.nominapp_api import period
 from dateutil import relativedelta
@@ -1356,7 +1370,8 @@ def radicar_factura(request):
                 fechafactura=fecha_factura,idtercero=id_tercero,
                 fechavenc=fecha_vencimiento,nombretercero=nombre_tercero,
                 oficina=oficina,valor=valor,soporte_radicado=soporte,
-                descripcion=descripcion
+                descripcion=descripcion,
+                **Facturas.kwargs_gasto_no_aplica(),
             )
             action = f'Radicó la factura {nro_factura}'
             
@@ -1452,7 +1467,8 @@ def causar_factura(request):
                     cuenta_por_pagar=obj_cxp,fechacausa=fecha,origen='Interno',
                     oficina = oficina,soporte_radicado=soporte,secuencia_cxp=1,
                     soporte_causacion = soporte_causacion, proyecto_rel=proyecto_ascociado,
-                    centro_costo = centro_costo
+                    centro_costo = centro_costo,
+                    **Facturas.kwargs_gasto_no_aplica(),
                 )
                 
                 
@@ -1532,11 +1548,12 @@ def pagar_factura(request):
     sin_recibir_mde = 0
     sin_recibir_mtr = 0
 
+    bloqueados_alegra = Facturas.objects.filter(alegra_sin_aprobacion_q()).values_list('pk', flat=True)
     pendientes_qs = info_facturas.objects.filter(
         ubicacion='Contabilidad'
     ).exclude(
         Q(causacion__isnull=True) | Q(causacion__exact='')
-    )
+    ).exclude(radicado__in=bloqueados_alegra)
     pendientes_por_oficina = pendientes_qs.values('oficina').annotate(total=Count('radicado'))
     for row in pendientes_por_oficina:
         oficina = row.get('oficina')
@@ -2897,10 +2914,11 @@ def ajax_info_facturas(request):
             
             
             if oficina:
+                bloqueados_alegra = Facturas.objects.filter(alegra_sin_aprobacion_q()).values_list('pk', flat=True)
                 obj_facturas = info_facturas.objects.filter(
                     oficina=oficina,
                     ubicacion=ubicacion
-                )
+                ).exclude(radicado__in=bloqueados_alegra)
                 if causado:
                     obj_facturas = obj_facturas.exclude(Q(causacion__isnull=True) | Q(causacion__exact=''))
                 if tesoreria:
@@ -3045,6 +3063,12 @@ def ajax_registrar_causacion(request):
             centro_costo = request.POST.get('centro_costo')
             
             obj_radicado = Facturas.objects.get(pk=radicado)
+            if obj_radicado.origen == 'Alegra' and not obj_radicado.gasto_aprobado:
+                return JsonResponse({
+                    'title': 'No permitido',
+                    'msj': 'El gasto Alegra debe ser asignado y aprobado antes de causar.',
+                    'class': 'alert-danger',
+                }, status=400)
             obj_radicado.nrocausa = nro_causacion
             obj_radicado.fechacausa = fecha
             obj_radicado.pago_neto = pagoneto.replace('.','')
@@ -3121,6 +3145,10 @@ def ajax_asociar_pago_radicado(request):
             empresa = request.POST.get('empresa')
             cuenta = request.POST.get('cuenta')
             obj_fact = Facturas.objects.get(pk=radicado)
+            if obj_fact.origen == 'Alegra' and not obj_fact.gasto_aprobado:
+                return JsonResponse({
+                    'detail': 'El gasto Alegra debe ser aprobado antes de registrar el pago.',
+                }, status=400)
             obj_empresa = empresas.objects.get(pk=empresa)
             obj_cuenta = cuentas_pagos.objects.get(pk=cuenta)
             
@@ -3199,9 +3227,9 @@ def ajax_lista_facturas(request):
                 })
 
             if oficina == 'TODAS':
-                base_qs = Facturas.objects.all()
+                base_qs = Facturas.objects.filter(Facturas.filtro_alegra_operable())
             else:
-                base_qs = Facturas.objects.filter(oficina=oficina)
+                base_qs = Facturas.objects.filter(oficina=oficina).filter(Facturas.filtro_alegra_operable())
             filtered_qs = base_qs
 
             if search_val:
@@ -6827,6 +6855,17 @@ def api_upload_movements(request):
 
 urls = [
     path('alegra/', include('alegra_integration.urls')),
+    path('gastos-alegra/asignar/', gastos_alegra_asignar),
+    path('gastos-alegra/aprobar/', gastos_alegra_aprobar),
+    path('ajax/gastos-alegra/pendientes-asignar', ajax_gastos_alegra_pendientes_asignar),
+    path('ajax/gastos-alegra/pendientes-aprobar', ajax_gastos_alegra_pendientes_aprobar),
+    path('ajax/gastos-alegra/aprobadores', ajax_gastos_alegra_aprobadores),
+    path('ajax/gastos-alegra/crear', ajax_gastos_alegra_crear),
+    path('ajax/gastos-alegra/journal-preview', ajax_gastos_alegra_journal_preview),
+    path('ajax/gastos-alegra/bill-preview', ajax_gastos_alegra_bill_preview),
+    path('ajax/gastos-alegra/journal-detalle-radicado', ajax_gastos_alegra_journal_detalle_radicado),
+    path('ajax/gastos-alegra/asignar', ajax_gastos_alegra_asignar),
+    path('ajax/gastos-alegra/aprobar', ajax_gastos_alegra_aprobar),
     path('principal',principal),
     path('movements',movimientos),
     path('upload-movements',upload_movements),

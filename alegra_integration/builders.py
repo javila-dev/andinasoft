@@ -22,6 +22,14 @@ def _nonzero(value):
     return Decimal(value or 0) != 0
 
 
+def _empresa_pk(value):
+    if value is None:
+        return ''
+    if hasattr(value, 'pk'):
+        return str(value.pk).strip()
+    return str(value).strip()
+
+
 class BuiltDocument:
     def __init__(
         self,
@@ -68,6 +76,50 @@ class ReceiptPaymentBuilder:
         self.proyecto = proyecto
         self.resolver = MappingResolver(empresa, proyecto)
 
+    def _cuenta_empresa_id(self, cuenta):
+        if not cuenta:
+            return ''
+        return _empresa_pk(getattr(cuenta, 'nit_empresa_id', None))
+
+    def _resolve_interco_cxc_for_bank(self, empresa_origen_id, empresa_banco_id):
+        """
+        Recibo en empresa origen con forma de pago en banco de otra empresa:
+        débito a CxC intercompany (la contraparte tiene el efectivo).
+        """
+        rel_b_to_a = cuentas_intercompanias.objects.filter(
+            empresa_desde_id=empresa_banco_id,
+            empresa_hacia_id=empresa_origen_id,
+        ).first()
+        rel_a_to_b = cuentas_intercompanias.objects.filter(
+            empresa_desde_id=empresa_origen_id,
+            empresa_hacia_id=empresa_banco_id,
+        ).first()
+        if not rel_b_to_a or not rel_a_to_b:
+            raise AlegraBuildError(
+                f'No existe configuración intercompany para recibo entre {empresa_banco_id} (banco) '
+                f'y {empresa_origen_id} (proyecto).'
+            )
+
+        interco_cxc = None
+        cxc_code = ''
+        for rel in (rel_a_to_b, rel_b_to_a):
+            if rel is rel_a_to_b:
+                cxc_code = str(getattr(rel, 'cuenta_por_cobrar', '') or '').strip() or cxc_code
+                interco_cxc = self.resolver.get(
+                    AlegraMapping.CATEGORY,
+                    local_model='accounting.cuentas_intercompanias',
+                    local_pk=str(rel.pk),
+                    local_code=f'interco_cxc:{empresa_banco_id}',
+                    required=False,
+                ) or interco_cxc
+            if interco_cxc:
+                break
+        if not interco_cxc:
+            if not cxc_code:
+                raise AlegraBuildError('La relación intercompany no tiene cuenta_por_cobrar configurada.')
+            interco_cxc = self.resolver.category_for_code(cxc_code)
+        return interco_cxc
+
     def build(self, receipt):
         if receipt.valor <= 0:
             raise AlegraBuildError('El recibo no tiene valor positivo.')
@@ -83,42 +135,16 @@ class ReceiptPaymentBuilder:
         if not titular_id:
             raise AlegraBuildError(f'El recibo {receipt.numrecibo} no tiene tercero/titular identificable.')
 
-        # Some resolver stubs/tests expose numeration(document_code) without kwargs.
-        # Real MappingResolver supports `required`, but we keep this call positional and treat missing mapping as optional.
-        try:
-            numeration_id = self.resolver.numeration('receipt_cash')
-        except Exception:
-            numeration_id = None
+        numeration_id = self.resolver.numeration('receipt_cash')
         cost_center_id = self.resolver.cost_center_for_project(required=False)
 
         fp = formas_pago.objects.using(self.proyecto.pk).filter(descripcion=receipt.formapago).first()
-        # Payment method (Alegra enum) should not block preview; fallback by account type.
-        payment_method = self.resolver.payment_method(receipt.formapago or 'default', required=False)
+        cuenta = None
         if fp and getattr(fp, 'cuenta_asociada_id', None):
-            # IMPORTANT: `formas_pago` lives in the project DB, but `cuentas_pagos` lives in the main DB.
-            # Avoid dereferencing fp.cuenta_asociada (would query the wrong DB).
+            # `formas_pago` vive en la BD del proyecto; `cuentas_pagos` en la BD principal.
             cuenta = cuentas_pagos.objects.filter(pk=fp.cuenta_asociada_id).first()
-            if cuenta:
-                if not payment_method:
-                    payment_method = 'cash' if getattr(cuenta, 'es_caja', False) else 'transfer'
-                bank_account_id = self.resolver.bank_account_for_account(cuenta)
-            else:
-                if not payment_method:
-                    payment_method = 'transfer'
-                bank_account_id = self.resolver.get(
-                    AlegraMapping.BANK_ACCOUNT,
-                    local_code=f'{self.proyecto.pk}:{receipt.formapago or "default"}',
-                )
-        else:
-            if not payment_method:
-                payment_method = 'transfer'
-            bank_account_id = self.resolver.get(
-                AlegraMapping.BANK_ACCOUNT,
-                local_code=f'{self.proyecto.pk}:{receipt.formapago or "default"}',
-            )
 
-        # Build a journal (POST /journals) so we can split credit per titular and attach a client per line,
-        # and so we can use "Numeraciones contables" (idNumeration) from Alegra.
+        # POST /journals: super asiento — débito banco/caja o CxC interco, créditos anticipo por titular.
         total = Decimal(receipt.valor or 0).quantize(Decimal('0.01'))
         if total <= 0:
             raise AlegraBuildError('El recibo no tiene valor positivo.')
@@ -142,17 +168,32 @@ class ReceiptPaymentBuilder:
             titular_name = ''
         titular_name = (titular_name or '').upper().strip()
 
-        desc = f'RECIBO {receipt.numrecibo} {self.proyecto.pk} {titular_name}'.strip()
+        adj_ref = (getattr(receipt, 'idadjudicacion', None) or '').strip()
+        if not adj_ref and adj is not None:
+            adj_ref = str(getattr(adj, 'pk', '') or '').strip()
+
+        desc_parts = [f'RECIBO {receipt.numrecibo}', str(self.proyecto.pk)]
+        if adj_ref:
+            desc_parts.append(f'ADJ {adj_ref}')
+        if titular_name:
+            desc_parts.append(titular_name)
+        desc = ' '.join(desc_parts).strip()
         concepto = (receipt.concepto or '').strip()
         observations = desc if not concepto else f'{desc} - {concepto}'
+        fecha_pago = _date(getattr(receipt, 'fecha_pago', None))
+        if fecha_pago:
+            observations = f'{observations} · F.pago {fecha_pago}'.strip()
 
-        # Debit account: bank/cash category from payment form's associated local account, when available.
-        debit_account = None
-        if fp and getattr(fp, 'cuenta_asociada_id', None):
-            cuenta = cuentas_pagos.objects.filter(pk=fp.cuenta_asociada_id).first()
-            if cuenta and getattr(cuenta, 'nro_cuentacontable', None):
-                debit_account = self.resolver.category_for_code(cuenta.nro_cuentacontable)
-        if not debit_account:
+        empresa_origen_id = _empresa_pk(self.empresa)
+        empresa_banco_id = self._cuenta_empresa_id(cuenta)
+        debit_interco = bool(cuenta and empresa_banco_id and empresa_banco_id != empresa_origen_id)
+
+        if debit_interco:
+            debit_account = self._resolve_interco_cxc_for_bank(empresa_origen_id, empresa_banco_id)
+            observations = f'{observations} · INTERCO banco {empresa_banco_id}'.strip()
+        elif cuenta and getattr(cuenta, 'nro_cuentacontable', None):
+            debit_account = self.resolver.category_for_code(cuenta.nro_cuentacontable)
+        else:
             debit_account = self.resolver.get(
                 AlegraMapping.CATEGORY,
                 local_code=f'bank_category:{self.proyecto.pk}:{receipt.formapago or "default"}',
@@ -168,11 +209,14 @@ class ReceiptPaymentBuilder:
         if remainder != 0:
             amounts[0] = (amounts[0] + remainder).quantize(Decimal('0.01'))
 
+        debit_client_id = self.resolver.contact_for_cliente(titular_ids[0])
         entries = [
             {
                 'id': debit_account,
                 'description': desc[:255],
                 'debit': float(total),
+                'credit': 0,
+                'client': str(debit_client_id),
             }
         ]
         for t_id, amt in zip(titular_ids, amounts):
@@ -181,22 +225,22 @@ class ReceiptPaymentBuilder:
                 {
                     'id': credit_account,
                     'description': desc[:255],
+                    'debit': 0,
                     'credit': float(amt),
-                    'client': {'id': client_id},
+                    'client': str(client_id),
                 }
             )
         if cost_center_id:
             for e in entries:
                 e['costCenter'] = {'id': cost_center_id}
-
         payload = {
-            'date': _date(receipt.fecha_pago or receipt.fecha),
+            'numberTemplate': str(numeration_id),
+            'date': _date(receipt.fecha),
             'reference': f'RC-{self.proyecto.pk}-{receipt.numrecibo}',
             'observations': observations[:500],
+            'status': 'open',
             'entries': entries,
         }
-        if numeration_id:
-            payload['idNumeration'] = numeration_id
 
         return BuiltDocument(
             document_type='receipt',
@@ -238,14 +282,19 @@ class ReceiptPaymentBuilder:
         if remainder != 0:
             amounts[0] = (amounts[0] + remainder).quantize(Decimal('0.01'))
 
-        # Try to get local bank accounting code (nro_cuentacontable) via formas_pago -> cuentas_pagos.
         debit_code = None
+        debit_interco = False
+        empresa_banco_id = ''
         try:
             fp = formas_pago.objects.using(self.proyecto.pk).filter(descripcion=getattr(receipt, 'formapago', None)).first()
+            cuenta = None
             if fp and getattr(fp, 'cuenta_asociada_id', None):
                 cuenta = cuentas_pagos.objects.filter(pk=fp.cuenta_asociada_id).first()
-                if cuenta and getattr(cuenta, 'nro_cuentacontable', None):
-                    debit_code = str(cuenta.nro_cuentacontable)
+            empresa_origen_id = _empresa_pk(self.empresa)
+            empresa_banco_id = self._cuenta_empresa_id(cuenta)
+            debit_interco = bool(cuenta and empresa_banco_id and empresa_banco_id != empresa_origen_id)
+            if cuenta and getattr(cuenta, 'nro_cuentacontable', None) and not debit_interco:
+                debit_code = str(cuenta.nro_cuentacontable)
         except Exception:
             debit_code = None
 
@@ -260,12 +309,15 @@ class ReceiptPaymentBuilder:
         return {
             'tipo': 'recibo_caja',
             'proyecto': getattr(self.proyecto, 'pk', None),
+            'idadjudicacion': (getattr(receipt, 'idadjudicacion', None) or '').strip() or None,
             'numrecibo': getattr(receipt, 'numrecibo', None),
             'fecha': _date(getattr(receipt, 'fecha', None)),
             'fecha_pago': _date(getattr(receipt, 'fecha_pago', None)),
             'forma_pago': getattr(receipt, 'formapago', None),
-            'debit_account_code': debit_code,  # contable local si existe
-            'credit_account_config': 'receipt_client_advance',  # se configura en UI (Anticipo clientes)
+            'debit_account_code': debit_code,
+            'debit_intercompany': debit_interco,
+            'empresa_banco': empresa_banco_id or None,
+            'credit_account_config': 'receipt_client_advance',
             'concepto': getattr(receipt, 'concepto', None),
             'titulares': [
                 {'id': tid, 'valor': float(amt)}

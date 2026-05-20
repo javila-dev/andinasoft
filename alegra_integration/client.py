@@ -244,6 +244,19 @@ class AlegraMCPClient:
             path = f'{path}?fields={fields}'
         return self.rest('GET', path)
 
+    def get_journal(self, journal_id, *, fields=None):
+        """
+        GET /journals/{id} — opcionalmente ?fields=numberTemplate,type para ver numeración/tipo.
+        Referencia: https://developer.alegra.com/reference/journalscreate
+        """
+        jid = str(journal_id or '').strip()
+        if not jid:
+            raise AlegraConfigurationError('journal_id es requerido para get_journal.')
+        path = f'/journals/{jid}'
+        if fields:
+            path = f'{path}?fields={fields}'
+        return self.rest('GET', path)
+
     def post_webhooks_subscription(self, event, url):
         """
         POST /webhooks/subscriptions — crea suscripción; devuelve (status_code, body_json)

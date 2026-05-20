@@ -1,0 +1,550 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Accounting | Asignar gastos Alegra{% endblock %}
+{% block style %}
+<style>
+  #tablaPendientes { font-size: 11px; }
+  #tablaPendientes thead th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    padding: 0.35rem 0.3rem;
+    vertical-align: middle;
+  }
+  #tablaPendientes tbody td {
+    padding: 0.3rem 0.35rem;
+    vertical-align: middle;
+  }
+  #tablaPendientes .col-c { text-align: center; }
+  #tablaPendientes .col-desc {
+    text-align: left;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #tablaPendientes .col-prov {
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #tablaPendientes .col-emp {
+    max-width: 110px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #tablaPendientes .col-alegra {
+    max-width: 72px;
+    white-space: nowrap;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 10px;
+  }
+  #tablaPendientes .btn-xs { font-size: 10px; padding: 0.1rem 0.35rem; }
+  #comentarioContable { min-height: 80px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid py-4" style="max-width:1200px">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="fas fa-tasks mr-2"></i>Asignar gastos Alegra</h4>
+    <a class="btn btn-sm btn-outline-secondary" href="/accounting/alegra/webhooks/">Webhooks Alegra</a>
+  </div>
+  <p class="text-muted small">Radicados Alegra pendientes de oficina y aprobador (webhook o <strong>manual</strong>, p. ej. journal sin webhook). Tras asignar, el aprobador los verá en <a href="/accounting/gastos-alegra/aprobar/">Aprobar gastos</a>.</p>
+
+  <div id="alertBox"></div>
+
+  <div class="form-row mb-3">
+    <div class="col-md-4">
+      <label class="small font-weight-bold">Empresa</label>
+      <select id="filtroEmpresa" class="form-control form-control-sm">
+        <option value="">Todas (Alegra)</option>
+        {% for e in empresas %}
+        <option value="{{ e.Nit }}">{{ e.nombre }} ({{ e.Nit }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-5 d-flex align-items-end flex-wrap">
+      <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btnNuevoRadicado">
+        <i class="fas fa-plus mr-1"></i>Nuevo radicado
+      </button>
+      <button type="button" class="btn btn-sm btn-primary mb-1" id="btnReload">Actualizar</button>
+    </div>
+  </div>
+
+  <div class="table-responsive bg-white shadow rounded p-2">
+    <table id="tablaPendientes" class="table table-sm table-hover w-100">
+      <thead>
+        <tr>
+          <th class="col-c">Rad</th>
+          <th class="col-c col-alegra">Id Alegra</th>
+          <th class="col-c col-emp">Empresa</th>
+          <th class="col-c col-prov">Proveedor</th>
+          <th class="col-desc">Descripción</th>
+          <th class="col-c">Factura</th>
+          <th class="col-c">Fecha</th>
+          <th class="col-c">Valor</th>
+          <th class="col-c"></th>
+        </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalCrear" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo radicado Alegra (manual)</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2">Seleccione empresa e id del journal y pulse <strong>Consultar</strong> para precargar. Luego revise datos, PDF, oficina y aprobador.</p>
+        <div class="border rounded bg-light p-2 mb-3">
+          <div class="form-row align-items-end">
+            <div class="form-group col-md-5 mb-2">
+              <label class="font-weight-bold small mb-0">Empresa <span class="text-danger">*</span></label>
+              <select id="crearEmpresa" class="form-control form-control-sm" required>
+                <option value="">—</option>
+                {% for e in empresas %}
+                <option value="{{ e.Nit }}">{{ e.nombre }} ({{ e.Nit }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group col-md-3 mb-2">
+              <label class="font-weight-bold small mb-0">Id journal <span class="text-danger">*</span></label>
+              <input type="text" id="crearRefAlegra" class="form-control form-control-sm text-right input-solo-digitos"
+                     inputmode="numeric" pattern="[0-9]+" maxlength="20" required placeholder="Ej. 11">
+            </div>
+            <div class="form-group col-md-4 mb-2">
+              <button type="button" class="btn btn-sm btn-info btn-block" id="btnCrearJournalConsult">
+                <i class="fas fa-cloud-download-alt mr-1"></i>Consultar
+              </button>
+            </div>
+          </div>
+          <div id="crearJournalStatus" class="small text-muted"></div>
+          <div id="crearCxpBox" class="d-none mt-2">
+            <span class="small font-weight-bold">CxP detectadas (pasivo orden 2)</span>
+            <div class="table-responsive mt-1">
+              <table class="table table-sm table-bordered mb-0" id="tablaCrearCxp">
+                <thead><tr><th>CC/NIT</th><th>Tercero</th><th class="text-right">Valor</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-12">
+            <label class="font-weight-bold small">Nº factura / referencia <span class="text-danger">*</span></label>
+            <input type="text" id="crearNroFactura" class="form-control form-control-sm" maxlength="255" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="font-weight-bold small">NIT / CC <span class="text-danger">*</span></label>
+            <input type="text" id="crearIdTercero" class="form-control form-control-sm text-right input-solo-digitos"
+                   inputmode="numeric" pattern="[0-9]+" maxlength="20" required placeholder="Solo números">
+          </div>
+          <div class="form-group col-md-8">
+            <label class="font-weight-bold small">Proveedor <span class="text-danger">*</span></label>
+            <input type="text" id="crearNombreTercero" class="form-control form-control-sm" maxlength="255" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="font-weight-bold small">Fecha factura <span class="text-danger">*</span></label>
+            <input type="date" id="crearFechaFactura" class="form-control form-control-sm" required>
+          </div>
+          <div class="form-group col-md-4">
+            <label class="font-weight-bold small">Fecha vencimiento <span class="text-danger">*</span></label>
+            <input type="date" id="crearFechaVenc" class="form-control form-control-sm" required>
+          </div>
+          <div class="form-group col-md-4">
+            <label class="font-weight-bold small">Valor <span class="text-danger">*</span></label>
+            <input type="text" id="crearValor" class="form-control form-control-sm text-right" inputmode="numeric" autocomplete="off" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="font-weight-bold small">Descripción</label>
+          <textarea id="crearDescripcion" class="form-control form-control-sm" rows="2" maxlength="255"></textarea>
+        </div>
+        <input type="hidden" id="crearJournalDetalle" value="">
+        <p id="crearJournalDetalleHint" class="small text-info d-none mb-2"></p>
+        <div class="form-group">
+          <label class="font-weight-bold small">Soporte PDF <span class="text-danger">*</span></label>
+          <input type="file" id="crearSoporte" class="form-control-file form-control-sm" accept=".pdf,application/pdf" required>
+        </div>
+        <hr>
+        <div class="form-row">
+          <div class="form-group col-md-4">
+            <label class="font-weight-bold small">Oficina <span class="text-danger">*</span></label>
+            <select id="crearOficina" class="form-control form-control-sm" required>
+              <option value="">—</option>
+              <option value="MONTERIA">MONTERIA</option>
+              <option value="MEDELLIN">MEDELLIN</option>
+            </select>
+          </div>
+          <div class="form-group col-md-8">
+            <label class="font-weight-bold small">Aprobador <span class="text-danger">*</span></label>
+            <select id="crearAprobador" class="form-control form-control-sm" required>
+              <option value="">Seleccione empresa primero</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group mb-0">
+          <label class="font-weight-bold small">Comentario para el aprobador</label>
+          <textarea id="crearComentario" class="form-control form-control-sm" maxlength="2000" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnConfirmarCrear">Crear y asignar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalAsignar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Asignar radicado #<span id="lblRad"></span></h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2" id="resumenRad"></p>
+        <div class="form-group">
+          <label class="font-weight-bold small">Oficina <span class="text-danger">*</span></label>
+          <select id="selOficina" class="form-control">
+            <option value="">—</option>
+            <option value="MONTERIA">MONTERIA</option>
+            <option value="MEDELLIN">MEDELLIN</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="font-weight-bold small">Aprobador <span class="text-danger">*</span></label>
+          <select id="selAprobador" class="form-control">
+            <option value="">Cargando…</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="font-weight-bold small">Comentario para el aprobador</label>
+          <textarea id="comentarioContable" class="form-control" maxlength="2000" placeholder="Opcional"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="btnConfirmarAsignar">Guardar asignación</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block js %}
+<script>
+const CSRF = '{{ csrf_token }}';
+let tabla, radicadoActual = null, empresaRad = '';
+function showAlert(type, html) {
+  $('#alertBox').html('<div class="alert alert-' + type + ' alert-dismissible fade show">' + html +
+    '<button type="button" class="close" data-dismiss="alert">&times;</button></div>');
+}
+
+function loadAprobadores(empresa, $select) {
+  $select.html('<option value="">Cargando…</option>');
+  if (!empresa) {
+    $select.html('<option value="">Seleccione empresa primero</option>');
+    return $.Deferred().resolve();
+  }
+  return $.get('/accounting/ajax/gastos-alegra/aprobadores', { empresa: empresa })
+    .done(function(data) {
+      const opts = (data.aprobadores || []).map(function(a) {
+        return '<option value="' + a.id + '">' + a.label + '</option>';
+      }).join('');
+      $select.html(opts ? '<option value="">— seleccionar —</option>' + opts : '<option value="">Sin aprobadores en admin</option>');
+    })
+    .fail(function(xhr) {
+      $select.html('<option value="">Error</option>');
+      showAlert('danger', (xhr.responseJSON || {}).detail || 'Error cargando aprobadores');
+    });
+}
+
+function parseMoneyInput(val) {
+  var n = parseInt(String(val || '').replace(/[^\d]/g, ''), 10);
+  return isNaN(n) ? 0 : n;
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function cellTruncado(text, maxLen) {
+  var full = String(text || '').trim();
+  if (!full) return '<span class="text-muted">—</span>';
+  var esc = escapeHtml(full);
+  if (full.length <= maxLen) return '<span title="' + esc + '">' + esc + '</span>';
+  return '<span title="' + esc + '">' + escapeHtml(full.slice(0, maxLen)) + '…</span>';
+}
+
+function loadTable() {
+  const empresa = $('#filtroEmpresa').val() || '';
+  let url = '/accounting/ajax/gastos-alegra/pendientes-asignar';
+  if (empresa) url += '?empresa=' + encodeURIComponent(empresa);
+  tabla.ajax.url(url).load();
+}
+
+function resetFormCrear() {
+  $('#crearEmpresa, #crearNroFactura, #crearIdTercero, #crearNombreTercero, #crearDescripcion, #crearRefAlegra').val('');
+  $('#crearValor').val('');
+  $('#crearOficina').val('');
+  $('#crearComentario').val('');
+  $('#crearSoporte').val('');
+  $('#crearJournalDetalle').val('');
+  $('#crearJournalDetalleHint').addClass('d-none').text('');
+  $('#crearJournalStatus').text('');
+  $('#crearCxpBox').addClass('d-none');
+  $('#tablaCrearCxp tbody').empty();
+  $('#crearAprobador').html('<option value="">Seleccione empresa primero</option>');
+  const today = new Date().toISOString().slice(0, 10);
+  $('#crearFechaFactura').val(today);
+  $('#crearFechaVenc').val(today);
+  const filtro = $('#filtroEmpresa').val();
+  if (filtro) $('#crearEmpresa').val(filtro);
+}
+
+function aplicarRadicadoDesdeJournal(r) {
+  $('#crearRefAlegra').val(r.referencia_alegra || r.journal_id || '');
+  $('#crearNroFactura').val(r.nro_factura || '');
+  $('#crearIdTercero').val(r.id_tercero || '');
+  $('#crearNombreTercero').val(r.nombre_tercero || '');
+  $('#crearFechaFactura').val(r.fecha_factura || '');
+  $('#crearFechaVenc').val(r.fecha_vencimiento || '');
+  $('#crearDescripcion').val(r.descripcion || '');
+  $('#crearValor').val(Number(r.valor || 0).toLocaleString('es-CO'));
+  $('#crearJournalDetalle').val('');
+  $('#crearJournalDetalleHint').addClass('d-none').text('');
+  if (r.pago_detallado && r.pago_detallado.length) {
+    $('#crearJournalDetalle').val(JSON.stringify(r.pago_detallado));
+    $('#crearJournalDetalleHint').removeClass('d-none').text(
+      'Pago detallado: ' + r.pago_detallado.length + ' tercero(s) al pagar en tesorería.'
+    );
+    const rows = r.pago_detallado.map(function(line) {
+      return '<tr><td>' + line.id_tercero + '</td><td>' + line.nombre_tercero +
+        '</td><td class="text-right">' + Number(line.valor).toLocaleString('es-CO') + '</td></tr>';
+    }).join('');
+    $('#tablaCrearCxp tbody').html(rows);
+    $('#crearCxpBox').removeClass('d-none');
+  } else {
+    $('#crearCxpBox').addClass('d-none');
+    $('#tablaCrearCxp tbody').empty();
+  }
+}
+
+$(function() {
+  tabla = $('#tablaPendientes').DataTable({
+    ajax: {
+      url: '/accounting/ajax/gastos-alegra/pendientes-asignar',
+      dataSrc: 'data',
+      error: function(xhr) {
+        var msg = (xhr.responseJSON || {}).detail || ('Error ' + xhr.status + ' al cargar la lista');
+        showAlert('danger', msg);
+      }
+    },
+    columns: [
+      { data: 'pk', className: 'col-c' },
+      { data: 'alegra_id', className: 'col-c col-alegra', render: function(v, t, row) {
+        var id = (v || '').trim();
+        if (!id) return '<span class="text-muted">—</span>';
+        var full = escapeHtml(row.alegra_bill_id || id);
+        return '<code title="' + full + '">' + escapeHtml(id) + '</code>';
+      }},
+      { data: 'empresa_nombre', className: 'col-c col-emp', render: function(v) { return cellTruncado(v, 18); } },
+      { data: 'nombretercero', className: 'col-c col-prov', render: function(v) { return cellTruncado(v, 22); } },
+      { data: 'descripcion', className: 'col-desc', orderable: false, render: function(v) { return cellTruncado(v, 55); } },
+      { data: 'nrofactura', className: 'col-c', render: function(v) { return cellTruncado(v, 14); } },
+      { data: 'fechafactura', className: 'col-c' },
+      { data: 'valor', className: 'col-c text-nowrap', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
+      { data: null, className: 'col-c text-nowrap', orderable: false, render: function(d, t, row) {
+        return '<button class="btn btn-xs btn-outline-primary btn-asignar" data-pk="' + row.pk + '">Asignar</button> ' +
+               '<button class="btn btn-xs btn-outline-secondary btn-soporte" data-pk="' + row.pk + '">PDF</button>';
+      }}
+    ],
+    order: [[0, 'desc']],
+    autoWidth: false,
+    scrollX: true,
+    language: { url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Spanish.json' }
+  });
+
+  $('#btnReload').on('click', loadTable);
+  $('#filtroEmpresa').on('change', loadTable);
+
+  function consultarJournalEnModal() {
+    const empresa = ($('#crearEmpresa').val() || '').trim();
+    const journalId = ($('#crearRefAlegra').val() || '').trim();
+    if (!empresa || !journalId || !/^\d+$/.test(journalId)) {
+      $('#crearJournalStatus').html('<span class="text-warning">Empresa e id journal (solo dígitos) son obligatorios.</span>');
+      return;
+    }
+    const $btn = $('#btnCrearJournalConsult').prop('disabled', true);
+    $('#crearJournalStatus').text('Consultando Alegra…');
+    $('#crearCxpBox').addClass('d-none');
+    $.get('/accounting/ajax/gastos-alegra/journal-preview', {
+      empresa: empresa,
+      journal_id: journalId
+    })
+      .done(function(data) {
+        if (data.radicado_error) {
+          $('#crearJournalStatus').html('<span class="text-danger">' + data.radicado_error + '</span>');
+          return;
+        }
+        if (!data.radicado) {
+          $('#crearJournalStatus').html('<span class="text-danger">No se pudo mapear el journal.</span>');
+          return;
+        }
+        const r = data.radicado;
+        aplicarRadicadoDesdeJournal(r);
+        $('#crearJournalStatus').html(
+          '<span class="text-success">Comprobante #' + journalId + ' — ' +
+          r.cantidad_terceros + ' CxP, total $' + Number(r.valor).toLocaleString('es-CO') +
+          '</span>'
+        );
+        loadAprobadores(empresa, $('#crearAprobador'));
+      })
+      .fail(function(xhr) {
+        const detail = (xhr.responseJSON || {}).detail || ('Error ' + xhr.status);
+        $('#crearJournalStatus').html('<span class="text-danger">' + detail + '</span>');
+      })
+      .always(function() { $btn.prop('disabled', false); });
+  }
+
+  $('#btnCrearJournalConsult').on('click', consultarJournalEnModal);
+  $('#crearRefAlegra').on('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      consultarJournalEnModal();
+    }
+  });
+
+  $('#btnNuevoRadicado').on('click', function() {
+    resetFormCrear();
+    $('#modalCrear').modal('show');
+    const emp = $('#crearEmpresa').val();
+    if (emp) loadAprobadores(emp, $('#crearAprobador'));
+  });
+
+  $('#crearEmpresa').on('change', function() {
+    loadAprobadores($(this).val(), $('#crearAprobador'));
+  });
+
+  $('#btnConfirmarCrear').on('click', function() {
+    const file = $('#crearSoporte')[0].files[0];
+    if (!$('#crearEmpresa').val() || !$('#crearNroFactura').val() ||
+        !/^\d+$/.test($('#crearIdTercero').val().trim()) ||
+        !$('#crearNombreTercero').val() || !$('#crearFechaFactura').val() || !$('#crearFechaVenc').val() ||
+        !parseMoneyInput($('#crearValor').val()) || !/^\d+$/.test($('#crearRefAlegra').val().trim()) ||
+        !$('#crearOficina').val() || !$('#crearAprobador').val() || !file) {
+      showAlert('warning', 'Complete todos los campos obligatorios (incl. ref. Alegra y PDF).');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('empresa', $('#crearEmpresa').val());
+    fd.append('nro_factura', $('#crearNroFactura').val());
+    fd.append('id_tercero', $('#crearIdTercero').val());
+    fd.append('nombre_tercero', $('#crearNombreTercero').val());
+    fd.append('fecha_factura', $('#crearFechaFactura').val());
+    fd.append('fecha_vencimiento', $('#crearFechaVenc').val());
+    fd.append('valor', String(parseMoneyInput($('#crearValor').val())));
+    fd.append('descripcion', $('#crearDescripcion').val());
+    fd.append('referencia_alegra', $('#crearRefAlegra').val());
+    const jd = $('#crearJournalDetalle').val();
+    if (jd) fd.append('alegra_journal_detalle', jd);
+    fd.append('oficina', $('#crearOficina').val());
+    fd.append('aprobador_id', $('#crearAprobador').val());
+    fd.append('comentario_contable', $('#crearComentario').val());
+    fd.append('soporte', file);
+
+    const $btn = $(this).prop('disabled', true);
+    $.ajax({
+      url: '/accounting/ajax/gastos-alegra/crear',
+      method: 'POST',
+      data: fd,
+      processData: false,
+      contentType: false,
+      headers: { 'X-CSRFToken': CSRF },
+      success: function(res) {
+        $('#modalCrear').modal('hide');
+        showAlert('success', 'Radicado #' + (res.factura && res.factura.pk) + ' creado y enviado al aprobador.');
+        loadTable();
+      },
+      error: function(xhr) {
+        showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al crear radicado');
+      },
+      complete: function() { $btn.prop('disabled', false); }
+    });
+  });
+
+  $('#tablaPendientes').on('click', '.btn-soporte', function() {
+    window.open('/accounting/ajax/datafactura?pk=' + $(this).data('pk') + '&ensure_soporte=1', '_blank');
+  });
+
+  $('#tablaPendientes').on('click', '.btn-asignar', function() {
+    const row = tabla.row($(this).closest('tr')).data();
+    radicadoActual = row.pk;
+    empresaRad = row.empresa;
+    $('#lblRad').text(row.pk);
+    $('#resumenRad').text(row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO'));
+    $('#selOficina').val('');
+    $('#comentarioContable').val('');
+    $('#modalAsignar').modal('show');
+    loadAprobadores(empresaRad, $('#selAprobador'));
+  });
+
+  $('#btnConfirmarAsignar').on('click', function() {
+    const oficina = $('#selOficina').val();
+    const aprobador_id = $('#selAprobador').val();
+    if (!oficina || !aprobador_id) {
+      showAlert('warning', 'Oficina y aprobador son obligatorios.');
+      return;
+    }
+    $.ajax({
+      url: '/accounting/ajax/gastos-alegra/asignar',
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        radicado: radicadoActual,
+        oficina: oficina,
+        aprobador_id: aprobador_id,
+        comentario_contable: $('#comentarioContable').val()
+      }),
+      success: function() {
+        $('#modalAsignar').modal('hide');
+        showAlert('success', 'Asignación guardada.');
+        loadTable();
+      },
+      error: function(xhr) {
+        showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al asignar');
+      }
+    });
+  });
+});
+</script>
+{% endblock %}
+
+{% block jsbottom %}
+<script src="{% static 'js/jquery.mask.js' %}"></script>
+<script>
+$(function() {
+  $('#crearValor').mask('#,##0', { reverse: true });
+  $('.input-solo-digitos').on('input', function() {
+    this.value = this.value.replace(/\D/g, '');
+  });
+});
+</script>
+{% endblock %}

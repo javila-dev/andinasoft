@@ -12,6 +12,7 @@ import requests
 
 from django.core.files.base import ContentFile
 
+from alegra_integration.bill_mapping import enrich_factura_from_bill_data
 from alegra_integration.client import AlegraMCPClient
 from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError
 from alegra_integration.models import AlegraBillGetLog
@@ -206,34 +207,55 @@ def _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields_str, bil
         )
 
 
-def attach_bill_pdf_from_alegra(empresa, alegra_numeric_id, factura, *, fields=None):
-    """
-    Descarga PDF desde Alegra y lo guarda en factura.soporte_radicado.
-    Retorna True si se guardó un archivo con contenido tipo PDF.
-    """
+def _fetch_bill_from_alegra(empresa, alegra_numeric_id, *, fields=None):
+    """GET /bills/{id}; retorna (bill_data, auth_header, fields_str) o (None, None, fields_str)."""
     fields = fields or DEFAULT_BILL_FIELDS
     try:
         client = AlegraMCPClient(empresa)
     except AlegraConfigurationError as exc:
-        logger.warning('Alegra PDF: %s', exc)
-        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, None, str(exc), False)
-        return False
-
-    auth_header = client.get_authorization_header()
+        logger.warning('Alegra GET bill: %s', exc)
+        _save_bill_get_snapshot(empresa, alegra_numeric_id, None, fields, None, str(exc), False)
+        return None, None, fields
 
     try:
         bill_data = client.get_bill(alegra_numeric_id, fields=fields)
     except AlegraClientError as exc:
         logger.warning('Alegra GET /bills/%s: %s', alegra_numeric_id, exc)
-        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, None, str(exc), False)
-        return False
+        _save_bill_get_snapshot(empresa, alegra_numeric_id, None, fields, None, str(exc), False)
+        return None, None, fields
 
     if not isinstance(bill_data, dict):
         _save_bill_get_snapshot(
-            empresa, alegra_numeric_id, factura, fields, {}, 'respuesta GET /bills no es objeto JSON', False
+            empresa, alegra_numeric_id, None, fields, {}, 'respuesta GET /bills no es objeto JSON', False
         )
-        return False
+        return None, client.get_authorization_header(), fields
 
+    return bill_data, client.get_authorization_header(), fields
+
+
+def sync_factura_from_alegra_bill(empresa, alegra_numeric_id, factura, *, fields=None):
+    """
+    Un GET /bills/{id}: completa campos faltantes del radicado y descarga PDF si hay URL.
+    Ver https://developer.alegra.com/reference/get_bills-id
+    """
+    bill_data, auth_header, fields_str = _fetch_bill_from_alegra(empresa, alegra_numeric_id, fields=fields)
+    result = {'enriched_fields': [], 'pdf_saved': False}
+    if not bill_data:
+        return result
+
+    try:
+        result['enriched_fields'] = enrich_factura_from_bill_data(factura, bill_data)
+    except Exception:
+        logger.exception('Fallo enrich factura_pk=%s bill=%s', factura.pk, alegra_numeric_id)
+
+    result['pdf_saved'] = _attach_pdf_from_bill_data(
+        empresa, alegra_numeric_id, factura, bill_data, auth_header, fields_str
+    )
+    return result
+
+
+def _attach_pdf_from_bill_data(empresa, alegra_numeric_id, factura, bill_data, auth_header, fields_str):
+    """Guarda PDF en soporte_radicado a partir del JSON ya obtenido."""
     pdf_url = _extract_pdf_url(bill_data)
     if not pdf_url:
         logger.info(
@@ -242,19 +264,19 @@ def attach_bill_pdf_from_alegra(empresa, alegra_numeric_id, factura, *, fields=N
             list(bill_data.keys())[:40],
         )
         _log_structure_hint(bill_data, alegra_numeric_id)
-        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, bill_data, '', False)
+        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields_str, bill_data, '', False)
         return False
 
     try:
         content = _download_bytes(pdf_url, auth_header=auth_header)
     except requests.RequestException as exc:
         logger.warning('Descarga PDF fallida %s: %s', pdf_url, exc)
-        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, bill_data, f'descarga: {exc}', False)
+        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields_str, bill_data, f'descarga: {exc}', False)
         return False
 
     if not content or len(content) < 100:
         logger.warning('Descarga PDF vacía o demasiado corta bill=%s', alegra_numeric_id)
-        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, bill_data, 'descarga vacía o corta', False)
+        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields_str, bill_data, 'descarga vacía o corta', False)
         return False
 
     if not _is_pdf_magic(content):
@@ -264,12 +286,22 @@ def attach_bill_pdf_from_alegra(empresa, alegra_numeric_id, factura, *, fields=N
             pdf_url,
             content[:12],
         )
-        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, bill_data, 'contenido no es PDF', False)
+        _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields_str, bill_data, 'contenido no es PDF', False)
         return False
 
     safe_name = re.sub(r'[^\w.\-]', '_', str(alegra_numeric_id))[:40]
     fname = f'alegra_bill_{safe_name}.pdf'
     factura.soporte_radicado.save(fname, ContentFile(content), save=True)
     logger.info('PDF Alegra guardado en Facturas.pk=%s archivo=%s', factura.pk, fname)
-    _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields, bill_data, '', True)
+    _save_bill_get_snapshot(empresa, alegra_numeric_id, factura, fields_str, bill_data, '', True)
     return True
+
+
+def attach_bill_pdf_from_alegra(empresa, alegra_numeric_id, factura, *, fields=None):
+    """
+    Descarga PDF desde Alegra y lo guarda en factura.soporte_radicado.
+    Retorna True si se guardó un archivo con contenido tipo PDF.
+    (Preferir sync_factura_from_alegra_bill para un solo GET con enrich.)
+    """
+    out = sync_factura_from_alegra_bill(empresa, alegra_numeric_id, factura, fields=fields)
+    return bool(out.get('pdf_saved'))

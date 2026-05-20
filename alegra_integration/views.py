@@ -1,4 +1,5 @@
 import json
+from urllib.parse import parse_qs
 
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -22,6 +23,10 @@ from accounting.models import cuentas_intercompanias, info_interfaces
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.client import AlegraMCPClient
 from alegra_integration.webhook_bills import process_inbound_post
+from alegra_integration.webhook_inbound_status import (
+    build_inbound_log_rows,
+    update_inbound_log_from_process_result,
+)
 
 
 @login_required
@@ -30,6 +35,18 @@ def dashboard(request):
         'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
         'proyectos': proyectos.objects.filter(activo=True).order_by('proyecto'),
     })
+
+
+def _empresa_nit_from_inbound_log(log):
+    qs = (getattr(log, 'query_string', None) or '').strip()
+    if not qs:
+        return ''
+    parsed = parse_qs(qs, keep_blank_values=False)
+    for key in ('empresa',):
+        vals = parsed.get(key) or []
+        if vals and str(vals[0]).strip():
+            return str(vals[0]).strip()
+    return ''
 
 
 @login_required
@@ -42,7 +59,10 @@ def webhooks_console(request):
             AlegraWebhookSubscriptionLog.objects.filter(empresa_id=empresa_id)
             .order_by('-created_at')[:40]
         )
-    inbound_logs = list(AlegraWebhookInboundLog.objects.order_by('-created_at')[:30])
+    inbound_logs = build_inbound_log_rows(
+        AlegraWebhookInboundLog.objects.order_by('-created_at')[:30],
+        empresa_filter=empresa_id,
+    )
     return render(request, 'alegra_integration/webhooks.html', {
         'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
         'webhook_ingest_suffix': ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX,
@@ -91,6 +111,66 @@ def webhooks_subscriptions_list(request):
 
 @login_required
 @require_http_methods(['POST'])
+def webhooks_inbound_replay(request):
+    """
+    Reprocesa un payload guardado en AlegraWebhookInboundLog (misma lógica que POST /webhooks/bills/).
+    No crea otro registro de ingesta; devuelve el resultado para depurar radicados.
+    """
+    try:
+        body = _payload(request)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+
+    log_id = body.get('log_id')
+    empresa_nit = (body.get('empresa') or '').strip()
+    try:
+        log = AlegraWebhookInboundLog.objects.get(pk=int(log_id))
+    except (AlegraWebhookInboundLog.DoesNotExist, TypeError, ValueError):
+        return JsonResponse({'detail': 'Recepción no encontrada'}, status=404)
+
+    if (log.http_method or '').upper() != 'POST':
+        return JsonResponse({'detail': 'Solo se puede reenviar recepciones POST'}, status=400)
+
+    payload = log.payload if isinstance(log.payload, dict) else {}
+    if not payload or payload.get('_json_parse_error'):
+        return JsonResponse(
+            {'detail': 'El payload guardado no es JSON válido; revisa el registro en Admin.'},
+            status=400,
+        )
+
+    if not empresa_nit:
+        from alegra_integration.webhook_inbound_status import resolve_empresa_nit_for_log
+        bill = {}
+        msg = payload.get('message')
+        if isinstance(msg, dict) and isinstance(msg.get('bill'), dict):
+            bill = msg['bill']
+        bill_id = str(bill.get('id') or '').strip()
+        empresa_nit = resolve_empresa_nit_for_log(log, '', bill_id=bill_id)
+    if not empresa_nit:
+        return JsonResponse(
+            {
+                'detail': (
+                    'Indica la empresa (NIT) en el selector «Empresa» arriba. '
+                    'En ingesta normal va en la URL: /webhooks/bills/<NIT>/'
+                ),
+            },
+            status=400,
+        )
+
+    extra = process_inbound_post(empresa_nit, payload)
+    update_inbound_log_from_process_result(log, empresa_nit, extra)
+    return JsonResponse({
+        'status': 'replayed',
+        'replayed_from_log_id': log.pk,
+        'empresa': empresa_nit,
+        'subject': payload.get('subject'),
+        'replayed_by': request.user.username,
+        **extra,
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
 def webhooks_subscriptions_delete(request):
     try:
         payload = _payload(request)
@@ -113,7 +193,7 @@ def webhooks_subscriptions_delete(request):
         return _error_response(exc, status=500)
 
 
-def _persist_alegra_webhook_inbound(request):
+def _persist_alegra_webhook_inbound(request, empresa_nit=''):
     """
     Guarda el cuerpo recibido para analizar la estructura que envía Alegra (antes de mapear a Facturas).
     """
@@ -145,15 +225,16 @@ def _persist_alegra_webhook_inbound(request):
     if truncated and isinstance(payload, dict):
         payload = {**payload, '_body_truncated': True}
 
-    AlegraWebhookInboundLog.objects.create(
+    log = AlegraWebhookInboundLog.objects.create(
         http_method=(request.method or '')[:16],
         content_type=(request.META.get('CONTENT_TYPE') or '')[:255],
         remote_addr=remote,
         query_string=(request.META.get('QUERY_STRING') or '')[:5000],
         payload=payload,
         raw_body=raw_store if payload.get('_json_parse_error') else '',
+        empresa_nit=(empresa_nit or '')[:32],
     )
-    return payload
+    return log, payload
 
 
 @csrf_exempt
@@ -171,10 +252,11 @@ def webhooks_bills_ingest(request, empresa_id=None):
     """
     if request.method in ('GET', 'HEAD'):
         return JsonResponse({'status': 'ok', 'endpoint': 'alegra-webhooks-bills'})
-    payload = _persist_alegra_webhook_inbound(request)
-    # Prefer querystring, fallback to path param (más robusto: algunos deliveries descartan query params).
-    empresa_qs = (request.GET.get('empresa') or '').strip() or (str(empresa_id or '').strip())
+    # Path /webhooks/bills/<NIT>/ (suscripción actual) o ?empresa=<NIT>.
+    empresa_qs = (str(empresa_id or '').strip()) or (request.GET.get('empresa') or '').strip()
+    log, payload = _persist_alegra_webhook_inbound(request, empresa_nit=empresa_qs)
     extra = process_inbound_post(empresa_qs, payload)
+    update_inbound_log_from_process_result(log, empresa_qs, extra)
     body = {'status': 'accepted', 'endpoint': 'alegra-webhooks-bills', **extra}
     return JsonResponse(body, status=200)
 
@@ -710,6 +792,25 @@ def send(request):
 def batch_detail(request, batch_id):
     try:
         data = AlegraIntegrationService(user=request.user).batch_detail(batch_id)
+        return JsonResponse(data)
+    except AlegraSyncBatch.DoesNotExist:
+        return JsonResponse({'detail': 'Lote no encontrado'}, status=404)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def batch_send(request, batch_id):
+    """
+    Envia un lote existente (ideal para lotes en status=preview) sin reconstruir documentos.
+    """
+    try:
+        payload = _payload(request)
+        data = AlegraIntegrationService(user=request.user).send_existing_batch(
+            batch_id=batch_id,
+            retry_failed=payload.get('retry_failed', True),
+        )
         return JsonResponse(data)
     except AlegraSyncBatch.DoesNotExist:
         return JsonResponse({'detail': 'Lote no encontrado'}, status=404)

@@ -81,6 +81,7 @@ class BuilderTests(SimpleTestCase):
             pk=9,
             valor=Decimal('102300'),
             idtercero='123',
+            idadjudicacion='ADJ-2024-001',
             numrecibo='RC-1',
             fecha=datetime.date(2026, 4, 1),
             fecha_pago=datetime.date(2026, 4, 2),
@@ -92,15 +93,70 @@ class BuilderTests(SimpleTestCase):
         built = ReceiptPaymentBuilder(self.empresa, self.proyecto).build(receipt)
 
         self.assertEqual(built.operation, 'accounting__createJournal')
-        self.assertEqual(built.payload['idNumeration'], 'num-receipt_cash')
+        self.assertEqual(built.payload['numberTemplate'], 'num-receipt_cash')
+        self.assertEqual(built.payload['status'], 'open')
         self.assertEqual(built.payload['reference'], 'RC-Oasis-RC-1')
+        self.assertIn('ADJ ADJ-2024-001', built.payload['observations'])
+        self.assertIn('F.pago 2026-04-02', built.payload['observations'])
+        self.assertEqual(built.payload['date'], '2026-04-01')
         self.assertEqual(len(built.payload['entries']), 3)
         self.assertEqual(built.payload['entries'][0]['debit'], 102300.0)
+        self.assertEqual(built.payload['entries'][0]['credit'], 0)
         self.assertEqual(built.payload['entries'][0]['id'], 'mapped-id')
+        self.assertEqual(built.payload['entries'][0]['client'], 'client-123')
         self.assertEqual(built.payload['entries'][1]['credit'], 51150.0)
-        self.assertEqual(built.payload['entries'][1]['client']['id'], 'client-123')
+        self.assertEqual(built.payload['entries'][1]['debit'], 0)
+        self.assertEqual(built.payload['entries'][1]['client'], 'client-123')
         self.assertEqual(built.payload['entries'][2]['credit'], 51150.0)
-        self.assertEqual(built.payload['entries'][2]['client']['id'], 'client-999')
+        self.assertEqual(built.payload['entries'][2]['client'], 'client-999')
+
+    @patch('alegra_integration.builders.cuentas_intercompanias')
+    @patch('alegra_integration.builders.Recaudos')
+    @patch('alegra_integration.builders.formas_pago')
+    @patch('alegra_integration.builders.cuentas_pagos')
+    @patch('alegra_integration.builders.MappingResolver')
+    @patch('alegra_integration.builders.clientes')
+    def test_receipt_intercompany_bank_uses_cxc_not_bank_mapping(
+        self, clientes_model, resolver_cls, cuentas_pagos_model, formas_pago, recaudos, interco_model,
+    ):
+        class IntercoResolver(ResolverStub):
+            def get(self, mapping_type, **kwargs):
+                local_code = kwargs.get('local_code', '')
+                if local_code == 'receipt_client_advance':
+                    return 'cat-advance'
+                if local_code == 'interco_cxc:900999111':
+                    return 'cat-interco-cxc'
+                return super().get(mapping_type, **kwargs)
+
+        resolver_cls.return_value = IntercoResolver()
+        clientes_model.objects.filter.return_value.first.return_value = SimpleNamespace(nombrecompleto='Titular')
+        cuenta = SimpleNamespace(pk=6, nro_cuentacontable='110505', nit_empresa_id=SimpleNamespace(pk='900999111'))
+        cuentas_pagos_model.objects.filter.return_value.first.return_value = cuenta
+        formas_pago.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            cuenta_asociada_id=6,
+        )
+        rel = SimpleNamespace(pk=1, cuenta_por_cobrar=13051001, cuenta_por_pagar=22051001)
+        interco_qs = Mock()
+        interco_qs.first.return_value = rel
+        interco_model.objects.filter.return_value = interco_qs
+
+        receipt = SimpleNamespace(
+            pk=10989,
+            valor=Decimal('500000'),
+            idtercero='123',
+            numrecibo='RC-99',
+            fecha=datetime.date(2026, 5, 1),
+            fecha_pago=datetime.date(2026, 5, 1),
+            formapago='TRANSFERENCIA',
+            concepto='',
+        )
+        receipt.info_adj = lambda: SimpleNamespace(idtercero1='123', idtercero2='', idtercero3='', idtercero4='')
+
+        built = ReceiptPaymentBuilder(self.empresa, self.proyecto).build(receipt)
+
+        self.assertEqual(built.payload['entries'][0]['id'], 'cat-interco-cxc')
+        self.assertIn('INTERCO banco 900999111', built.payload['observations'])
+        self.assertEqual(built.payload['entries'][1]['id'], 'cat-advance')
 
     @patch('alegra_integration.builders.asesores')
     @patch('alegra_integration.builders.consecutivos')
@@ -277,3 +333,153 @@ class ClientTests(SimpleTestCase):
 
         with self.assertRaises(AlegraClientError):
             client._handle_decoded_response(response, {'message': 'bad request'})
+
+
+class WebhookInboundLogHelpersTests(SimpleTestCase):
+    def test_radicado_status_from_stored_skip(self):
+        from types import SimpleNamespace
+        from alegra_integration.webhook_inbound_status import radicado_status_display
+
+        log = SimpleNamespace(
+            process_status='skip',
+            process_detail='missing_empresa',
+            factura_id=None,
+            empresa_nit='',
+        )
+        st = radicado_status_display(log, '', '28', 'new-bill')
+        self.assertEqual(st['kind'], 'skip')
+        self.assertIn('empresa', st['label'].lower())
+
+    def test_resolve_empresa_from_log_field(self):
+        from types import SimpleNamespace
+        from alegra_integration.webhook_inbound_status import resolve_empresa_nit_for_log
+
+        log = SimpleNamespace(empresa_nit='901018375', query_string='')
+        self.assertEqual(resolve_empresa_nit_for_log(log), '901018375')
+
+    def test_radicado_status_created(self):
+        from types import SimpleNamespace
+        from alegra_integration.webhook_inbound_status import radicado_status_display
+
+        log = SimpleNamespace(
+            process_status='ok',
+            process_detail='created',
+            factura_id=99,
+        )
+        st = radicado_status_display(log, '900123', '28', 'new-bill')
+        self.assertEqual(st['kind'], 'ok')
+        self.assertIn('99', st['label'])
+
+
+class BillMappingEnrichTests(SimpleTestCase):
+    def test_descripcion_from_items(self):
+        from alegra_integration.bill_mapping import descripcion_from_bill, map_bill_to_factura_fields
+
+        bill = {
+            'id': '28',
+            'observations': None,
+            'items': [{'name': 'Servicio mensual'}, {'name': 'IVA'}],
+            'numberTemplate': {'number': 2766},
+        }
+        self.assertEqual(descripcion_from_bill(bill), 'Servicio mensual, IVA')
+        fields = map_bill_to_factura_fields(bill)
+        self.assertEqual(fields['descripcion'], 'Servicio mensual, IVA')
+
+    def test_descripcion_from_purchases_categories_not_terms(self):
+        from alegra_integration.bill_mapping import descripcion_from_bill, bill_descripcion_candidatos
+
+        bill = {
+            'id': '28',
+            'observations': '',
+            'termsConditions': 'Autorización de numeración de documento soporte N° 18764096316941',
+            'purchases': {
+                'categories': [
+                    {'name': 'Comisiones por ventas', 'observations': 'COMISIÓN CASAS DE VERANO'},
+                ],
+            },
+        }
+        self.assertEqual(descripcion_from_bill(bill), 'COMISIÓN CASAS DE VERANO')
+        cand = bill_descripcion_candidatos(bill)
+        self.assertEqual(cand['mapeo_actual'], 'COMISIÓN CASAS DE VERANO')
+        self.assertTrue(cand['termsConditions_es_autorizacion_numeracion'])
+
+    def test_stale_descripcion_autorizacion_numeracion(self):
+        from alegra_integration.bill_mapping import is_stale_alegra_descripcion
+
+        txt = 'Autorización de numeración de documento soporte N° 18764096316941'
+        self.assertTrue(is_stale_alegra_descripcion(txt))
+        self.assertFalse(is_stale_alegra_descripcion('COMISIÓN CASAS DE VERANO'))
+
+    def test_enrich_no_overwrite_custom_descripcion(self):
+        from types import SimpleNamespace
+        from alegra_integration.bill_mapping import enrich_factura_from_bill_data
+
+        fac = SimpleNamespace(
+            descripcion='Descripción editada por contador',
+            nombretercero='Proveedor X',
+            idtercero='123',
+            valor=100,
+            pago_neto=100,
+            fechafactura=None,
+            fechavenc=None,
+            fechacausa=None,
+            nrocausa='X',
+            save=lambda update_fields=None: None,
+        )
+        bill = {
+            'id': '1',
+            'observations': 'Texto desde Alegra GET',
+            'balance': 100,
+            'date': '2026-05-15',
+            'dueDate': '2026-05-15',
+            'client': {'identification': '123', 'name': 'Proveedor X'},
+            'numberTemplate': {'number': 'DS1'},
+        }
+        updated = enrich_factura_from_bill_data(fac, bill)
+        self.assertNotIn('descripcion', updated)
+        self.assertEqual(fac.descripcion, 'Descripción editada por contador')
+
+
+class WebhookBillMappingTests(SimpleTestCase):
+    def test_valor_usa_balance_cxp_no_total_bruto(self):
+        from alegra_integration.bill_mapping import map_bill_to_factura_fields
+
+        bill = {
+            'id': '28',
+            'date': '2026-05-15',
+            'dueDate': '2026-05-15',
+            'subtotal': 65000,
+            'total': 65000,
+            'balance': 58500,
+            'client': {'identification': '42786943', 'name': 'LUZ ARLECY RESTREPO RUA'},
+            'numberTemplate': {'number': 2766},
+        }
+        fields = map_bill_to_factura_fields(bill)
+        self.assertEqual(fields['valor'], 58500)
+        self.assertEqual(fields['pago_neto'], 58500)
+
+    def test_valor_sin_balance_usa_total(self):
+        from alegra_integration.bill_mapping import map_bill_to_factura_fields
+
+        bill = {
+            'id': '1',
+            'date': '2026-05-04',
+            'total': 142456,
+            'subtotal': 139800,
+            'client': {'identification': '800144355', 'name': 'TELESENTINEL'},
+        }
+        fields = map_bill_to_factura_fields(bill)
+        self.assertEqual(fields['valor'], 142456)
+
+    def test_valor_balance_cero(self):
+        from alegra_integration.bill_mapping import map_bill_to_factura_fields
+
+        bill = {
+            'id': '9',
+            'date': '2026-05-01',
+            'total': 100000,
+            'balance': 0,
+            'client': {'identification': '1', 'name': 'X'},
+        }
+        fields = map_bill_to_factura_fields(bill)
+        self.assertEqual(fields['valor'], 0)

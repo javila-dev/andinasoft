@@ -22,8 +22,40 @@ class info_interfaces(models.Model):
         verbose_name_plural = 'Interfaces'
     
     def __str__(self):
-        return f'{self.empresa}|{self.descripcion}|{self.cuenta_credito_1}'    
-    
+        return f'{self.empresa}|{self.descripcion}|{self.cuenta_credito_1}'
+
+
+class GastoAprobador(models.Model):
+    """Usuarios autorizados para aprobar gastos Alegra (paso 2 del flujo)."""
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='gasto_aprobador_entries',
+        db_constraint=False,
+    )
+    empresa = models.ForeignKey(
+        empresas,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='gasto_aprobadores',
+        db_constraint=False,
+        help_text='Vacío = puede aprobar gastos de cualquier empresa.',
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Aprobador de gasto Alegra'
+        verbose_name_plural = 'Aprobadores de gasto Alegra'
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'empresa'], name='unique_gasto_aprobador_user_empresa'),
+        ]
+
+    def __str__(self):
+        emp = self.empresa_id or 'TODAS'
+        return f'{self.user} @ {emp}'
+
+
 class Facturas(models.Model):
     nroradicado = models.AutoField(db_column='NroRadicado', primary_key=True)
     fecharadicado = models.DateField(db_column='FechaRadica',auto_now_add=True,blank=True) 
@@ -82,6 +114,58 @@ class Facturas(models.Model):
     alegra_bill_id = models.CharField(max_length=64, null=True, blank=True, unique=True, db_index=True)
     alegra_bill_deleted = models.BooleanField(default=False)
     alegra_bill_deleted_at = models.DateTimeField(null=True, blank=True)
+    alegra_journal_detalle = models.TextField(
+        null=True,
+        blank=True,
+        help_text='JSON: líneas CxP del journal Alegra para pago detallado en tesorería.',
+    )
+
+    GASTO_APROB_PENDIENTE_ASIGNACION = 'pendiente_asignacion'
+    GASTO_APROB_PENDIENTE_APROBACION = 'pendiente_aprobacion'
+    GASTO_APROB_APROBADO = 'aprobado'
+    GASTO_APROB_NO_APLICA = 'no_aplica'
+
+    GASTO_APROBACION_ESTADO_CHOICES = (
+        (GASTO_APROB_PENDIENTE_ASIGNACION, 'Pendiente asignación'),
+        (GASTO_APROB_PENDIENTE_APROBACION, 'Pendiente aprobación'),
+        (GASTO_APROB_APROBADO, 'Aprobado'),
+        (GASTO_APROB_NO_APLICA, 'No aplica'),
+    )
+
+    gasto_aprobacion_estado = models.CharField(
+        max_length=32,
+        choices=GASTO_APROBACION_ESTADO_CHOICES,
+        default=GASTO_APROB_NO_APLICA,
+        db_index=True,
+    )
+    gasto_aprobador_asignado = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='facturas_gasto_pendiente_aprobar',
+        db_constraint=False,
+    )
+    gasto_asignado_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='facturas_gasto_asignadas',
+        db_constraint=False,
+    )
+    gasto_asignado_en = models.DateTimeField(null=True, blank=True)
+    gasto_aprobacion_comentario_contable = models.TextField(blank=True, default='', null=False)
+    gasto_aprobado = models.BooleanField(default=False, db_index=True)
+    gasto_aprobado_por = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='facturas_gasto_aprobadas',
+        db_constraint=False,
+    )
+    gasto_aprobado_en = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Factura'
@@ -92,6 +176,30 @@ class Facturas(models.Model):
     
     def __str__(self):
         return str(self.pk)
+
+    @classmethod
+    def kwargs_gasto_no_aplica(cls):
+        """Valores para radicados fuera del flujo de aprobación Alegra."""
+        return {
+            'gasto_aprobacion_estado': cls.GASTO_APROB_NO_APLICA,
+            'gasto_aprobacion_comentario_contable': '',
+            'gasto_aprobado': False,
+        }
+
+    def save(self, *args, **kwargs):
+        if self.gasto_aprobacion_comentario_contable is None:
+            self.gasto_aprobacion_comentario_contable = ''
+        if self.gasto_aprobacion_estado is None:
+            self.gasto_aprobacion_estado = self.GASTO_APROB_NO_APLICA
+        if self.gasto_aprobado is None:
+            self.gasto_aprobado = False
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def filtro_alegra_operable(cls):
+        """Excluye radicados Alegra sin aprobación de gasto."""
+        from django.db.models import Q
+        return ~Q(origen='Alegra') | Q(origen='Alegra', gasto_aprobado=True)
 
 class history_facturas(models.Model):
     idmvto = models.AutoField(primary_key=True)

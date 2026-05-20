@@ -47,9 +47,15 @@ Cada intento de suscripción queda en **`AlegraWebhookSubscriptionLog`** (`respo
 
 Cada **POST** de Alegra al endpoint de ingesta se guarda en **`AlegraWebhookInboundLog`** (`payload` JSON, `raw_body` si el JSON no parseó, IP, fecha). Consúltalo en Admin o en la tabla «Recepciones desde Alegra» de `/accounting/alegra/webhooks/`.
 
+- `POST /accounting/alegra/webhooks/inbound/replay` — JSON: `{ "log_id": <id>, "empresa": "<NIT>" }`. Reejecuta `process_inbound_post` con el payload guardado (depuración; no llama a Alegra). Requiere sesión. La empresa puede omitirse si el log trae `?empresa=` en `query_string`.
+
+En la consola webhooks, la columna **Radicado** muestra si el POST creó o encontró factura (`AlegraWebhookInboundLog.process_status` / `factura_id`). Recepciones antiguas sin esos campos se infieren buscando `Facturas.alegra_bill_id = NIT:id` (elige empresa en el filtro si la URL no traía NIT). Migración `0006_alegrawebhookinboundlog_process_fields`.
+
 **Forma del payload (new-bill):** raíz con `subject` (p. ej. `new-bill`) y `message.bill` (objeto factura de compra: `id`, fechas, `state`, `client` con `identification`/`name`, importes `subtotal`/`total`/`balance`, `numberTemplate.number`, `items`, etc.). Ejemplo anotado en el repo: [`docs/samples/alegra-webhook-new-bill-payload.json`](docs/samples/alegra-webhook-new-bill-payload.json).
 
-**PDF de la factura en Alegra:** el webhook no trae el archivo. Tras crear/actualizar el radicado, en segundo plano (tras el `commit`) se llama a `GET /bills/{id}` con `fields=url,stampFiles,stamp,attachments` (ver [get_bills-id](https://developer.alegra.com/reference/get_bills-id)), se recorre la respuesta JSON en busca de URLs `http(s)` (estructura variable por país; PDF o timbre a veces anidados), se descarga y se guarda en **`Facturas.soporte_radicado`**. Lógica en `alegra_integration/bill_pdf.py`. Si no hay una URL descargable o el binario no empieza por `%PDF`, se deja constancia en log y no se adjunta.
+**Backfill radicados existentes:** `python manage.py backfill_alegra_bill_sync --empresa=<NIT>` (opciones `--dry-run`, `--only-placeholder-desc`, `--only-missing-pdf`). Omite `alegra_bill_id` tipo `journal`.
+
+**GET /bills/{id} tras el webhook:** el payload del webhook suele venir incompleto (`observations` null, `items` vacío). Tras crear/actualizar el radicado, en segundo plano (tras el `commit`) un **solo** `GET /bills/{id}` con `fields=url,stampFiles,stamp,attachments` ([get_bills-id](https://developer.alegra.com/reference/get_bills-id)) hace dos cosas en `sync_factura_from_alegra_bill` (`bill_pdf.py` + `bill_mapping.py`): (1) **enriquecer** el radicado con datos del GET — `descripcion` desde `observations`, nombres de `items` o `termsConditions` (solo si el radicado aún tiene texto genérico tipo «Factura compra Alegra…»); actualiza también `valor`/`pago_neto` (`balance`), fechas y tercero si faltaban; **no** cambia `nrofactura` ni el flujo de aprobación; (2) **descargar PDF** a `soporte_radicado` si hay URL válida. Respuesta cruda en **`AlegraBillGetLog`** (Admin).
 
 **Adjuntos y documentación Alegra (referencia):**
 
@@ -59,7 +65,24 @@ Cada **POST** de Alegra al endpoint de ingesta se guarda en **`AlegraWebhookInbo
 
 No hay en la documentación pública de **`api/v1`** un endpoint tipo “descargar adjunto solo con `attachment_id`” aparte de la **`url`** devuelta al adjuntar o la que exponga `GET /bills/{id}` en los objetos anidados. Si en producción solo llegan identificadores sin URL, conviene capturar un JSON de ejemplo en logs y escalar con soporte Alegra; el producto **e-provider** / facturación electrónica documenta rutas distintas para archivos (p. ej. [getinvoicefile](https://e-provider-docs.alegra.com/reference/getinvoicefile)), que no son el mismo flujo que `bill_pdf.py`.
 
-**Mapeo a `accounting.Facturas`** (implementado en `alegra_integration/webhook_bills.py`): la URL de ingesta incluye `?empresa=<NIT>` al suscribir. Se guarda `alegra_bill_id = "{NIT}:{id_bill}"` para idempotencia global. Campos: `nrofactura` / `nrocausa` ← `numberTemplate.number` (o `ALEGRA-{id}`); `idtercero` / `nombretercero` ← `client.identification` / `client.name`; `valor` y `pago_neto` ← `total` o `subtotal`; `fechafactura` / `fechacausa` ← `date`; `fechavenc` ← `dueDate`; `descripcion` ← `observations` o texto por defecto; `origen` = `Alegra`. `cuenta_por_pagar`, `secuencia_cxp`, `oficina` quedan vacíos (completar después o vía otro flujo). `edit-bill` actualiza la misma fila; `delete-bill` borra si no hay `Pagos`, si no marca `alegra_bill_deleted`. Historial: usuario vía `ALEGRA_WEBHOOK_HISTORY_USERNAME` / `ALEGRA_WEBHOOK_HISTORY_USER_ID` en settings o primer usuario activo.
+**Mapeo a `accounting.Facturas`** (implementado en `alegra_integration/bill_mapping.py`, usado por `webhook_bills.py`): la URL de ingesta incluye `?empresa=<NIT>` al suscribir. Se guarda `alegra_bill_id = "{NIT}:{id_bill}"` para idempotencia global. Campos: `nrofactura` / `nrocausa` ← `numberTemplate.number` (o `ALEGRA-{id}`); `idtercero` / `nombretercero` ← `client.identification` / `client.name`; `valor` y `pago_neto` ← `balance` (saldo CxP pendiente); si no viene, `total` o `subtotal`; `fechafactura` / `fechacausa` ← `date`; `fechavenc` ← `dueDate`; `descripcion` ← `observations`, ítems del GET o texto por defecto (el GET suele traer más detalle que el webhook); `origen` = `Alegra`. `cuenta_por_pagar`, `secuencia_cxp` quedan vacíos. **`oficina`** queda vacía hasta el paso de asignación contable. `edit-bill` actualiza la misma fila; `delete-bill` borra si no hay `Pagos`, si no marca `alegra_bill_deleted`. Historial: usuario vía `ALEGRA_WEBHOOK_HISTORY_USERNAME` / `ALEGRA_WEBHOOK_HISTORY_USER_ID` en settings o primer usuario activo.
+
+### Aprobación de gastos Alegra (dos pasos)
+
+Los radicados creados por webhook (`new-bill`) entran con `gasto_aprobacion_estado=pendiente_asignacion` y `gasto_aprobado=False`. **No** aparecen en causación/tesorería hasta completar el flujo.
+
+1. **Contabilidad** (grupo Django `Contabilidad`): `/accounting/gastos-alegra/asignar/` — asigna **oficina** (MONTERIA/MEDELLIN), **aprobador** (catálogo `GastoAprobador` en Admin) y comentario opcional para el aprobador.
+2. **Aprobador designado**: `/accounting/gastos-alegra/aprobar/` — solo botón **Aprobar**; ve el comentario del contable en lectura.
+
+Tras aprobar, `gasto_aprobado=True` y el radicado sigue el flujo normal (`info_facturas`, causar, pagar). Radicados manuales (`radicarfactura`) usan `gasto_aprobacion_estado=no_aplica`.
+
+**Radicado manual (sin webhook**, p. ej. journal en Alegra): en `/accounting/gastos-alegra/asignar/` → **Nuevo radicado** — el usuario ingresa **solo el id numérico** en Alegra; el backend arma `alegra_bill_id = {NIT}:journal:{id}` (p. ej. `12345` → `901018375:journal:12345`). Incluye PDF, oficina y aprobador (`POST /accounting/ajax/gastos-alegra/crear`). Queda `origen=Alegra` y `pendiente_aprobacion`.
+
+**Radicado desde journal:** en *Nuevo radicado* → empresa + id journal + **Consultar** — `GET /accounting/ajax/gastos-alegra/journal-preview?empresa={NIT}&journal_id={id}` precarga el formulario (`radicado` con mapeo CxP). Reglas en `accounting/journal_cxp.py`: crédito > 0, tercero, pasivo **orden 2** (`code` empieza por `2`), sin retenciones/impuestos; guarda `alegra_journal_detalle` para pago detallado. `GET .../journal-detalle-radicado?radicado={pk}` devuelve ese detalle.
+
+Configurar aprobadores: Admin → **Aprobadores de gasto Alegra** (`accounting.GastoAprobador`). `empresa` vacío = todas las empresas Alegra.
+
+Enlaces desde la consola de webhooks: `/accounting/alegra/webhooks/`.
 
 En el dashboard, la tabla **Lotes recientes** muestra: **Total** con desglose `(Env · OK · Err)` donde **Err** son envíos a Alegra que no quedaron OK (`enviados − OK`); columna **Usuario** = quien generó el lote (`created_by.username`).
 
@@ -335,7 +358,7 @@ Mapeo por código funcional:
 ```text
 mapping_type = numeration
 local_code = receipt_cash
-alegra_id = <numberTemplate.id>
+alegra_id = <ID numeración contable>  # URL .../ledger/numerations/edit/{id}
 ```
 
 Codigos usados:
@@ -411,19 +434,22 @@ Operacion:
 
 - REST `POST /journals` (comprobante contable)
 
-Payload:
+Payload (formato acordado con soporte Alegra para super asiento / anticipos):
 
-- `date`
+- `numberTemplate` — ID de numeración contable (`Configuración > Contabilidad > Numeraciones contables`, mapeo `receipt_cash`)
+- `date` — siempre `Recaudos_general.fecha` (elaboración del recibo), no `fecha_pago`
 - `reference`
-- `observations`
-- `idNumeration` (según configuración del proyecto/empresa)
+- `observations` (incluye `ADJ <idadjudicacion>`, recibo, proyecto, titular; si existe `fecha_pago` interna: `· F.pago YYYY-MM-DD`)
+- `status`: `open`
 - `entries`
 
 Regla clave: el valor del recibo se **divide entre titulares de la adjudicación**.
 
-- 1 entry de **débito** (banco/caja) por el total
-- N entries de **crédito** (misma cuenta configurada “Anticipo de clientes”) divididos por titular
-- Cada crédito lleva su `client` (contacto Alegra del titular)
+- 1 entry de **débito** (banco/caja o CxC interco) por el total (`debit` + `credit: 0`, con `client` del titular principal para conciliación)
+- N entries de **crédito** (cuenta “Anticipo de clientes” habilitada como anticipo en Alegra) divididos por titular
+- Cada crédito lleva `client` como **string** (ID del contacto Alegra del titular) y `debit: 0`
+
+Si la forma de pago apunta a `cuentas_pagos` de **otra empresa** (`nit_empresa` distinto al NIT del lote), el débito no usa banco ni mapeo `bank_account`: se registra **CxC intercompany** hacia la empresa dueña del banco (`interco_cxc:<nit_banco>` en `cuentas_intercompanias`, misma lógica que egresos intercompany).
 
 La cuenta “Anticipo de clientes” se configura en la UI de Referencias por proyecto (con fallback a empresa).
 

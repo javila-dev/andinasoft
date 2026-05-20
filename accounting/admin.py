@@ -20,11 +20,22 @@ class adminConciliaciones(admin.ModelAdmin):
     list_filter = ['empresa','cuenta_asociada','usuario_crea']
     date_hierarchy = 'fecha_crea'
     
+@admin.register(models.GastoAprobador)
+class adminGastoAprobador(admin.ModelAdmin):
+    list_display = ['pk', 'user', 'empresa', 'activo']
+    list_filter = ['activo', 'empresa']
+    search_fields = ['user__username', 'user__email', 'empresa__pk']
+    autocomplete_fields = ['user']
+
+
 @admin.register(models.Facturas)
 class adminFacts(admin.ModelAdmin):
-    list_display = ['pk','fecharadicado','nombretercero','nrofactura','empresa','valor','nrocausa','fechacausa','oficina']
-    list_filter = ['empresa','oficina']
-    search_fields = ['pk','nombretercero']
+    list_display = [
+        'pk', 'fecharadicado', 'nombretercero', 'nrofactura', 'empresa', 'valor',
+        'origen', 'oficina', 'gasto_aprobacion_estado', 'gasto_aprobado',
+    ]
+    list_filter = ['empresa', 'oficina', 'origen', 'gasto_aprobacion_estado', 'gasto_aprobado']
+    search_fields = ['pk', 'nombretercero', 'nrofactura', 'alegra_bill_id']
     date_hierarchy = 'fecharadicado'
     
 @admin.register(models.info_interfaces)

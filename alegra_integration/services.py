@@ -135,6 +135,17 @@ class AlegraIntegrationService:
             proyecto_id=proyecto_id,
         )
         batch = AlegraSyncBatch.objects.get(pk=preview['batch']['id'])
+        return self._send_batch_documents(batch, retry_failed=retry_failed)
+
+    def send_existing_batch(self, *, batch_id, retry_failed=True):
+        """
+        Envia un lote ya construido en vista previa (sin reconstruir documentos).
+        Útil para: abrir un lote en preview y enviarlo directamente desde la UI.
+        """
+        batch = AlegraSyncBatch.objects.get(pk=int(batch_id))
+        return self._send_batch_documents(batch, retry_failed=retry_failed)
+
+    def _send_batch_documents(self, batch, *, retry_failed=True):
         batch.status = AlegraSyncBatch.STATUS_PROCESSING
         batch.save(update_fields=['status', 'updated_at'])
 
@@ -962,12 +973,18 @@ class AlegraIntegrationService:
         if document_type == AlegraSyncBatch.DOC_RECEIPT:
             builder = ReceiptPaymentBuilder(empresa, proyecto)
             queryset = Recaudos_general.objects.using(proyecto.pk).filter(fecha__range=(desde, hasta)).order_by('fecha', 'pk')
-            return [self._safe_build(builder, receipt) for receipt in queryset]
+            results = []
+            for receipt in queryset:
+                results.extend(self._safe_build(builder, receipt))
+            return results
 
         if document_type == AlegraSyncBatch.DOC_COMMISSION:
             builder = CommissionBuilder(empresa, proyecto)
             commissions = Pagocomision.objects.using(proyecto.pk).raw(f'CALL detalle_comisiones_fecha("{desde}","{hasta}")')
-            return [self._safe_build(builder, commission) for commission in commissions]
+            results = []
+            for commission in commissions:
+                results.extend(self._safe_build(builder, commission))
+            return results
 
         builder = ExpensePaymentBuilder(empresa)
         pagos = list(Pagos.objects.filter(empresa=empresa, fecha_pago__range=(desde, hasta)).select_related('nroradicado', 'cuenta', 'empresa'))
@@ -1057,7 +1074,20 @@ class AlegraIntegrationService:
         if doc.alegra_operation == 'incomePayments__createIncomePayment':
             return client.create_income_payment(payload)
         if doc.alegra_operation == 'accounting__createJournal':
-            return client.create_journal(payload)
+            created = client.create_journal(payload)
+            # POST /journals no siempre retorna numberTemplate/type. Hacemos GET para confirmar numeración aplicada.
+            try:
+                if isinstance(created, dict) and created.get('id'):
+                    details = client.get_journal(created.get('id'), fields='numberTemplate,type')
+                    if isinstance(details, dict):
+                        # Keep original response intact; add fetched details under a reserved key.
+                        created = dict(created)
+                        created['__fetched'] = {'journal': details}
+            except Exception as exc:
+                if isinstance(created, dict):
+                    created = dict(created)
+                    created['__fetched'] = {'error': str(exc)}
+            return created
         if doc.alegra_operation == 'POST /bills':
             return client.create_bill(payload)
         if doc.alegra_operation == 'POST /payments':
@@ -1110,6 +1140,30 @@ class AlegraIntegrationService:
         callback_url_https = f'https://{netloc}{suffix}{empresa_path}/'
 
         client = AlegraMCPClient(empresa)
+        existing = self.list_webhook_subscriptions(empresa_id=empresa_id).get('subscriptions') or []
+        same_event = [s for s in existing if (s.get('event') or '').strip() == event]
+        if same_event:
+            exact = [s for s in same_event if (s.get('url') or '').strip().rstrip('/') == callback_url_alegra.rstrip('/')]
+            if exact:
+                return {
+                    'log_id': None,
+                    'success': True,
+                    'already_subscribed': True,
+                    'status_code': 200,
+                    'callback_url': callback_url_alegra,
+                    'callback_url_https': callback_url_https,
+                    'response': {
+                        'message': 'Ya existe esta suscripción en Alegra.',
+                        'subscription': exact[0],
+                    },
+                }
+            urls = ', '.join(f"{s.get('id')}: {s.get('url')}" for s in same_event)
+            raise AlegraIntegrationError(
+                f'Ya hay {len(same_event)} webhook(s) activo(s) para "{event}" en esta empresa. '
+                f'Elimínalos en la tabla «Suscripciones activas» antes de crear otro (evita radicados duplicados). '
+                f'Actuales: {urls}'
+            )
+
         status, payload = client.post_webhooks_subscription(event, callback_url_alegra)
         if not isinstance(payload, dict):
             payload = {'raw': str(payload)}

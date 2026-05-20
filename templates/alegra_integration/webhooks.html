@@ -34,6 +34,25 @@
   }
   .log-ok { color: #28a745; font-weight: 600; }
   .log-fail { color: #dc3545; font-weight: 600; }
+  .btn-inbound-replay.is-loading {
+    pointer-events: none;
+    opacity: 0.85;
+  }
+  .whk-replay-status {
+    display: none;
+    padding: 10px 14px;
+    border-bottom: 1px solid #dee2e6;
+    background: #e8f4fd;
+    font-size: 13px;
+  }
+  .whk-replay-status.is-active { display: block; }
+  .whk-replay-status.is-error { background: #fde8e8; }
+  .whk-replay-status.is-success { background: #e8f5e9; }
+  .whk-radicado-ok { background: #d4edda; color: #155724; }
+  .whk-radicado-missing { background: #f8d7da; color: #721c24; }
+  .whk-radicado-skip { background: #fff3cd; color: #856404; }
+  .whk-radicado-error { background: #f8d7da; color: #721c24; }
+  .whk-radicado-unknown { background: #e2e3e5; color: #383d41; }
 </style>
 {% endblock %}
 
@@ -46,6 +65,13 @@
       <p class="mb-0 small" style="opacity:.85">Por empresa · credenciales desde <code>empresas.alegra_token</code></p>
     </div>
     <a class="btn btn-sm btn-outline-light" href="/accounting/alegra/"><i class="fas fa-arrow-left mr-1"></i>Dashboard Alegra</a>
+  </div>
+
+  <div class="alert alert-light border small mb-4">
+    <strong>Gastos Alegra (aprobación):</strong>
+    <a href="/accounting/gastos-alegra/asignar/">Asignar oficina y aprobador</a>
+    ·
+    <a href="/accounting/gastos-alegra/aprobar/">Aprobar gastos</a>
   </div>
 
   <div class="card shadow-sm mb-4">
@@ -108,42 +134,77 @@
       <i class="fas fa-info-circle text-info mr-2"></i>Qué hace cada parte
     </div>
     <div class="card-body small text-muted">
-      <p class="mb-2"><strong>Suscribir</strong> arriba llama a la API de Alegra <code>POST /webhooks/subscriptions</code> y solo <em>registra</em> la URL de tu túnel; no crea facturas ni envía datos de negocio.</p>
-      <p class="mb-0"><strong>Cuando ocurre un evento</strong>, Alegra hace <code>POST</code> a la URL registrada (host + <code>{{ webhook_ingest_suffix }}</code> + <code>?empresa=&lt;NIT&gt;</code> al suscribir desde aquí). El cuerpo se guarda en <strong>Recepciones</strong> y, si el JSON es válido, se crea o actualiza <code>accounting.Facturas</code> (ver <code>alegra_integration/webhook_bills.py</code>).</p>
+      <p class="mb-2"><strong>Suscribir</strong> llama a <code>POST /webhooks/subscriptions</code>. Si ya existe un <code>new-bill</code> para la empresa, hay que <strong>eliminarlo</strong> antes de registrar otro host (varios webhooks activos pueden duplicar radicados).</p>
+      <p class="mb-2"><strong>Cuando ocurre un evento</strong>, Alegra hace <code>POST</code> a la URL registrada (host + <code>{{ webhook_ingest_suffix }}&lt;NIT&gt;/</code>). Revisa <strong>Suscripciones activas en Alegra</strong> abajo (fuente de verdad). El radicado usa <code>alegra_bill_id = NIT:id</code> para no duplicar reintentos.</p>
+      <p class="mb-0"><strong>Reenviar</strong> en «Recepciones» vuelve a ejecutar el procesamiento del payload guardado (sin llamar a Alegra). La respuesta aparece en «Respuesta Alegra (última acción)» con <code>skip_reason</code>, <code>factura_pk</code>, etc.</p>
     </div>
   </div>
 
   <div class="card shadow-sm mb-4">
-    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center flex-wrap" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
       <span>Recepciones desde Alegra (POST a ingesta)</span>
-      <a class="btn btn-sm btn-outline-dark" href="/admin/alegra_integration/alegrawebhookinboundlog/" target="_blank" rel="noopener">
-        <i class="fas fa-database mr-1"></i>Admin (JSON completo)
-      </a>
+      <div class="d-flex align-items-center flex-wrap">
+        <small class="text-muted mr-2 mb-1 mb-md-0">La empresa viene del path <code>{{ webhook_ingest_suffix }}&lt;NIT&gt;/</code> (ej. <code>…/bills/901018375/</code>). Columna <strong>Radicado</strong>: resultado al procesar ese POST.</small>
+        <a class="btn btn-sm btn-outline-dark mb-1" href="/admin/alegra_integration/alegrawebhookinboundlog/" target="_blank" rel="noopener">
+          <i class="fas fa-database mr-1"></i>Admin (JSON completo)
+        </a>
+      </div>
     </div>
     <div class="card-body p-0">
+      <div id="whkReplayStatus" class="whk-replay-status" role="status" aria-live="polite"></div>
       <div class="table-responsive">
         <table class="table table-sm table-striped mb-0" style="font-size:13px">
           <thead class="thead-light">
             <tr>
               <th>Id</th>
               <th>Fecha</th>
-              <th>Método</th>
+              <th>Evento</th>
+              <th>Bill</th>
+              <th>Empresa</th>
+              <th>Radicado</th>
               <th>Origen</th>
-              <th></th>
+              <th class="text-right">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {% for row in inbound_logs %}
             <tr>
-              <td>{{ row.pk }}</td>
-              <td nowrap>{{ row.created_at|date:"d/m/Y H:i:s" }}</td>
-              <td><code>{{ row.http_method }}</code></td>
-              <td><small>{{ row.remote_addr|default:"—" }}</small></td>
-              <td><a class="btn btn-sm btn-outline-secondary py-0" href="/admin/alegra_integration/alegrawebhookinboundlog/{{ row.pk }}/change/" target="_blank" rel="noopener">Ver payload</a></td>
+              <td>{{ row.log.pk }}</td>
+              <td nowrap>{{ row.log.created_at|date:"d/m/Y H:i:s" }}</td>
+              <td>{% if row.subject %}<code>{{ row.subject }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>{% if row.bill_id %}<code>{{ row.bill_id }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td><small>{% if row.empresa_nit %}<code>{{ row.empresa_nit }}</code>{% else %}<span class="text-muted" title="Sin NIT en path ni radicado asociado">—</span>{% endif %}</small></td>
+              <td>
+                {% if row.radicado.kind == 'ok' %}
+                <span class="badge whk-radicado-ok">{{ row.radicado.label }}</span>
+                {% elif row.radicado.kind == 'missing' %}
+                <span class="badge whk-radicado-missing">{{ row.radicado.label }}</span>
+                {% elif row.radicado.kind == 'skip' %}
+                <span class="badge whk-radicado-skip">{{ row.radicado.label }}</span>
+                {% elif row.radicado.kind == 'error' %}
+                <span class="badge whk-radicado-error">{{ row.radicado.label }}</span>
+                {% elif row.radicado.kind == 'unknown' %}
+                <span class="badge whk-radicado-unknown">{{ row.radicado.label }}</span>
+                {% else %}
+                <span class="text-muted">{{ row.radicado.label }}</span>
+                {% endif %}
+                {% if row.radicado.detail %}
+                <small class="text-muted d-block" style="max-width:140px;line-height:1.2" title="{{ row.radicado.detail }}">{{ row.radicado.detail|truncatechars:40 }}</small>
+                {% endif %}
+              </td>
+              <td><small>{{ row.log.remote_addr|default:"—" }}</small></td>
+              <td class="text-right text-nowrap">
+                <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/alegra_integration/alegrawebhookinboundlog/{{ row.log.pk }}/change/" target="_blank" rel="noopener">Payload</a>
+                {% if row.payload_ok and row.log.http_method == 'POST' %}
+                <button type="button" class="btn btn-sm btn-outline-primary py-0 btn-inbound-replay" data-log-id="{{ row.log.pk }}" data-subject="{{ row.subject }}" data-bill-id="{{ row.bill_id }}" data-empresa-hint="{{ row.empresa_nit }}">
+                  <i class="fas fa-redo mr-1"></i>Reenviar
+                </button>
+                {% endif %}
+              </td>
             </tr>
             {% empty %}
             <tr>
-              <td colspan="5" class="text-center text-muted py-4">Aún no hay POST desde Alegra. Crea o edita una factura de compra en Alegra tras suscribir <code>new-bill</code>.</td>
+              <td colspan="8" class="text-center text-muted py-4">Aún no hay POST desde Alegra. Crea o edita una factura de compra en Alegra tras suscribir <code>new-bill</code>.</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -229,6 +290,7 @@ const SUBSCRIBE_URL = '/accounting/alegra/webhooks/subscribe';
 const CONSOLE_URL = '/accounting/alegra/webhooks/';
 const SUBSCRIPTIONS_LIST_URL = '/accounting/alegra/webhooks/subscriptions';
 const SUBSCRIPTIONS_DELETE_URL = '/accounting/alegra/webhooks/subscriptions/delete';
+const INBOUND_REPLAY_URL = '/accounting/alegra/webhooks/inbound/replay';
 
 function showAlert(type, html) {
   const el = document.getElementById('whkAlert');
@@ -239,6 +301,39 @@ function clearAlert() { document.getElementById('whkAlert').innerHTML = ''; }
 
 function prettyJson(obj) {
   try { return JSON.stringify(obj, null, 2); } catch (e) { return String(obj); }
+}
+
+function setReplayStatus(kind, html) {
+  const el = document.getElementById('whkReplayStatus');
+  if (!el) return;
+  el.className = 'whk-replay-status is-active' + (kind ? ' is-' + kind : '');
+  el.innerHTML = html;
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearReplayStatus() {
+  const el = document.getElementById('whkReplayStatus');
+  if (!el) return;
+  el.className = 'whk-replay-status';
+  el.innerHTML = '';
+}
+
+function setReplayButtonLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    if (!btn.dataset.replayLabel) {
+      btn.dataset.replayLabel = btn.innerHTML;
+    }
+    btn.classList.add('is-loading');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span>Reenviando…';
+  } else {
+    btn.classList.remove('is-loading');
+    btn.disabled = false;
+    if (btn.dataset.replayLabel) {
+      btn.innerHTML = btn.dataset.replayLabel;
+    }
+  }
 }
 
 document.getElementById('whkBtnSubscribe').addEventListener('click', async function () {
@@ -265,10 +360,14 @@ document.getElementById('whkBtnSubscribe').addEventListener('click', async funct
       return;
     }
 
-    const ok = data.success ? 'Suscripción registrada en Alegra (revisa <code>subscription</code> en la respuesta).' : 'Alegra respondió pero indica error (revisa JSON).';
-    showAlert(data.success ? 'success' : 'danger', ok);
+    let okMsg = data.success ? 'Suscripción registrada en Alegra (revisa <code>subscription</code> en la respuesta).' : 'Alegra respondió pero indica error (revisa JSON).';
+    if (data.already_subscribed) {
+      okMsg = 'Esa URL y evento ya estaban suscritos en Alegra; no se creó otra.';
+    }
+    showAlert(data.success ? 'success' : 'danger', okMsg);
 
     prependLogRow(data);
+    await loadSubscriptions();
   } catch (e) {
     showAlert('danger', 'Fallo de red: ' + e);
     document.getElementById('whkLastResponse').textContent = String(e);
@@ -384,6 +483,87 @@ document.addEventListener('click', async function (ev) {
     showAlert('danger', 'Fallo de red al eliminar suscripción: ' + e);
   } finally {
     btn.disabled = false;
+  }
+});
+
+document.addEventListener('click', async function (ev) {
+  const btn = ev.target && ev.target.closest ? ev.target.closest('.btn-inbound-replay') : null;
+  if (!btn || btn.disabled) return;
+  ev.preventDefault();
+
+  const logId = (btn.getAttribute('data-log-id') || '').trim();
+  const subject = (btn.getAttribute('data-subject') || '').trim();
+  const billId = (btn.getAttribute('data-bill-id') || '').trim();
+  let empresa = document.getElementById('whkEmpresa').value.trim();
+  const hint = (btn.getAttribute('data-empresa-hint') || '').trim();
+  if (!empresa && hint) {
+    empresa = hint;
+    document.getElementById('whkEmpresa').value = hint;
+  }
+  if (!empresa) {
+    const sel = document.getElementById('whkEmpresa');
+    sel.classList.add('border-danger');
+    setTimeout(function () { sel.classList.remove('border-danger'); }, 2500);
+    setReplayStatus('error', '<i class="fas fa-exclamation-circle mr-1"></i>Selecciona la <strong>empresa (NIT)</strong> en el selector de arriba antes de reenviar.');
+    showAlert('danger', 'Selecciona la empresa (NIT) en el selector de arriba antes de reenviar.');
+    sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const label = subject + (billId ? ' · bill ' + billId : '');
+  setReplayButtonLoading(btn, true);
+  setReplayStatus('', '<span class="spinner-border spinner-border-sm mr-2" role="status"></span>Reenviando recepción <strong>#' + logId + '</strong> (' + label + ') · empresa <code>' + empresa + '</code>…');
+  clearAlert();
+
+  const respEl = document.getElementById('whkLastResponse');
+  respEl.textContent = 'Procesando reenvío #' + logId + '…';
+
+  try {
+    const res = await fetch(INBOUND_REPLAY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ log_id: logId, empresa }),
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    respEl.textContent = prettyJson(data);
+    respEl.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (!res.ok) {
+      const detail = (data && data.detail) ? data.detail : ('Error HTTP ' + res.status);
+      setReplayStatus('error', '<i class="fas fa-times-circle mr-1"></i>' + detail);
+      showAlert('danger', detail);
+      return;
+    }
+
+    let msg = 'Reenvío procesado.';
+    let kind = 'success';
+    if (data.skip_reason) {
+      msg = 'No se aplicó cambio: <code>' + data.skip_reason + '</code>';
+      kind = 'error';
+    } else if (data.idempotent) {
+      msg = 'Radicado ya existía (idempotente). <code>factura_pk=' + data.factura_pk + '</code>';
+    } else if (data.created) {
+      msg = 'Radicado <strong>creado</strong>. <code>factura_pk=' + data.factura_pk + '</code>';
+    } else if (data.updated) {
+      msg = 'Radicado <strong>actualizado</strong>. <code>factura_pk=' + data.factura_pk + '</code>';
+    } else if (data.processing_error) {
+      msg = 'Error al procesar: ' + data.processing_error;
+      kind = 'error';
+    } else if (data.processed) {
+      msg = 'Procesado. Revisa el JSON en «Respuesta Alegra» arriba.';
+    }
+    setReplayStatus(kind, '<i class="fas fa-' + (kind === 'error' ? 'exclamation' : 'check') + '-circle mr-1"></i>' + msg + ' <span class="text-muted">(actualizando tabla…)</span>');
+    showAlert(kind === 'error' ? 'danger' : 'success', msg);
+    if (kind !== 'error') {
+      setTimeout(function () { window.location.reload(); }, 900);
+    }
+  } catch (e) {
+    setReplayStatus('error', '<i class="fas fa-times-circle mr-1"></i>Fallo de red: ' + e);
+    showAlert('danger', 'Fallo de red: ' + e);
+    respEl.textContent = String(e);
+  } finally {
+    setReplayButtonLoading(btn, false);
   }
 });
 

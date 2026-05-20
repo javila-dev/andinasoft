@@ -1,0 +1,306 @@
+"""Flujo de aprobación de gastos con origen Alegra."""
+import json
+import re
+
+from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+
+from accounting.models import Facturas, GastoAprobador, history_facturas
+from andina.decorators import check_groups
+from andinasoft.models import empresas
+
+
+def usuario_es_aprobador_gasto(user, empresa_id=None):
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    qs = GastoAprobador.objects.filter(user=user, activo=True)
+    if empresa_id:
+        qs = qs.filter(Q(empresa_id=empresa_id) | Q(empresa__isnull=True))
+    return qs.exists()
+
+
+def aprobadores_para_empresa(empresa_id):
+    qs = GastoAprobador.objects.filter(activo=True).filter(
+        Q(empresa_id=empresa_id) | Q(empresa__isnull=True)
+    ).select_related('user', 'empresa').order_by('user__username')
+    return qs
+
+
+def alegra_sin_aprobacion_q():
+    """Radicados Alegra que aún no pueden operarse en causación/tesorería."""
+    return Q(origen='Alegra', gasto_aprobado=False)
+
+
+def alegra_id_para_tabla(alegra_bill_id):
+    """Id visible en UI: bill numérico (28) o journal:11."""
+    raw = (alegra_bill_id or '').strip()
+    if not raw:
+        return ''
+    if ':journal:' in raw:
+        return 'journal:' + raw.rsplit(':journal:', 1)[-1]
+    if ':' in raw:
+        return raw.split(':', 1)[-1]
+    return raw
+
+
+def factura_a_dict(fac):
+    alegra_bill = fac.alegra_bill_id or ''
+    return {
+        'pk': fac.pk,
+        'nrofactura': fac.nrofactura,
+        'nombretercero': fac.nombretercero,
+        'fechafactura': fac.fechafactura.isoformat() if fac.fechafactura else '',
+        'fecharadicado': fac.fecharadicado.isoformat() if fac.fecharadicado else '',
+        'valor': fac.valor,
+        'empresa': fac.empresa_id,
+        'empresa_nombre': getattr(fac.empresa, 'nombre', '') or str(fac.empresa_id),
+        'descripcion': fac.descripcion,
+        'alegra_bill_id': alegra_bill,
+        'alegra_id': alegra_id_para_tabla(alegra_bill),
+        'oficina': fac.oficina or '',
+        'gasto_aprobacion_estado': fac.gasto_aprobacion_estado,
+        'gasto_aprobacion_comentario_contable': fac.gasto_aprobacion_comentario_contable or '',
+        'gasto_aprobador_asignado': (
+            fac.gasto_aprobador_asignado.get_full_name() or fac.gasto_aprobador_asignado.username
+        ) if fac.gasto_aprobador_asignado_id else '',
+    }
+
+
+def _validar_fechas_radicado(fecha_factura, fecha_vencimiento):
+    if fecha_vencimiento < fecha_factura:
+        raise ValueError('La fecha de vencimiento no puede ser anterior a la fecha de la factura.')
+
+
+def parse_valor_entero(valor):
+    """
+    Entero COP sin decimales. Acepta lo que envía el front (solo dígitos) o valores
+    con máscara miles ($, comas, puntos), igual que tesorería/causación.
+    """
+    if isinstance(valor, int):
+        n = valor
+    else:
+        digits = re.sub(r'\D', '', str(valor or ''))
+        if not digits:
+            raise ValueError('Valor inválido.')
+        n = int(digits)
+    if n < 0:
+        raise ValueError('El valor no puede ser negativo.')
+    if n == 0:
+        raise ValueError('El valor debe ser mayor que cero.')
+    return n
+
+
+def _validar_soporte_pdf(soporte):
+    if not soporte:
+        raise ValueError('El soporte PDF es obligatorio.')
+    name = (getattr(soporte, 'name', '') or '').lower()
+    if not name.endswith('.pdf'):
+        raise ValueError('El soporte debe ser un archivo PDF.')
+
+
+def normalizar_id_tercero(id_tercero):
+    """NIT/CC del proveedor: solo dígitos."""
+    ref = (id_tercero or '').strip()
+    if not ref:
+        raise ValueError('NIT/CC es obligatorio.')
+    if not re.fullmatch(r'\d+', ref):
+        raise ValueError('NIT/CC solo puede contener números (sin puntos, guiones ni letras).')
+    return ref[:255]
+
+
+def normalizar_alegra_bill_id(empresa_id, referencia_alegra, *, es_radicado_manual=False):
+    """
+    El usuario solo ingresa el id numérico en Alegra; el sistema arma alegra_bill_id.
+    Webhook bills: {NIT}:{id}. Radicado manual (journal sin webhook): {NIT}:journal:{id}.
+    """
+    ref = (referencia_alegra or '').strip()
+    if not ref:
+        raise ValueError('El id en Alegra es obligatorio.')
+    if not re.fullmatch(r'\d+', ref):
+        raise ValueError('Ingrese solo el número id en Alegra (sin NIT, journal: ni otros prefijos).')
+    nit = str(empresa_id).strip()
+    if es_radicado_manual:
+        alegra_id = f'{nit}:journal:{ref}'
+    else:
+        alegra_id = f'{nit}:{ref}'
+    if len(alegra_id) > 64:
+        raise ValueError('El id en Alegra es demasiado largo para esta empresa.')
+    return alegra_id
+
+
+@transaction.atomic
+def crear_radicado_gasto_alegra(
+    request,
+    *,
+    empresa_id,
+    nro_factura,
+    fecha_factura,
+    fecha_vencimiento,
+    id_tercero,
+    nombre_tercero,
+    valor,
+    descripcion,
+    soporte,
+    oficina,
+    aprobador_user_id,
+    comentario_contable='',
+    referencia_alegra,
+    alegra_journal_detalle=None,
+):
+    """
+    Radicado manual (p. ej. journal en Alegra sin webhook): origen Alegra + asignación en un paso.
+    alegra_journal_detalle: lista dicts {id_tercero, nombre_tercero, valor, vencimiento} para tesorería.
+    """
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        raise PermissionError('Solo Contabilidad puede crear radicados Alegra.')
+    try:
+        empresa = empresas.objects.get(pk=str(empresa_id).strip())
+    except empresas.DoesNotExist:
+        raise ValueError('Empresa no encontrada.')
+    if not getattr(empresa, 'alegra_enabled', False):
+        raise ValueError('La empresa no tiene Alegra habilitado.')
+
+    nro_factura = (nro_factura or '').strip()[:255]
+    id_tercero = normalizar_id_tercero(id_tercero)
+    nombre_tercero = (nombre_tercero or '').strip()[:255]
+    descripcion = (descripcion or '').strip()[:255]
+    if not nro_factura or not nombre_tercero:
+        raise ValueError('Nº factura y proveedor son obligatorios.')
+    valor = parse_valor_entero(valor)
+
+    _validar_fechas_radicado(fecha_factura, fecha_vencimiento)
+    _validar_soporte_pdf(soporte)
+
+    if Facturas.objects.filter(idtercero=id_tercero, nrofactura=nro_factura).exists():
+        raise ValueError(f'Ya existe un radicado con factura {nro_factura} para el tercero {id_tercero}.')
+
+    alegra_bill_id = normalizar_alegra_bill_id(empresa.pk, referencia_alegra, es_radicado_manual=True)
+    if Facturas.objects.filter(alegra_bill_id=alegra_bill_id).exists():
+        raise ValueError(f'Ya existe un radicado con referencia Alegra {alegra_bill_id}.')
+
+    detalle_json = None
+    if alegra_journal_detalle is not None:
+        if isinstance(alegra_journal_detalle, str):
+            detalle_json = alegra_journal_detalle.strip() or None
+        else:
+            slim = []
+            for row in alegra_journal_detalle:
+                slim.append({
+                    'id_tercero': row.get('id_tercero'),
+                    'nombre_tercero': row.get('nombre_tercero'),
+                    'valor': row.get('valor'),
+                    'vencimiento': row.get('vencimiento', 1),
+                })
+            detalle_json = json.dumps(slim, ensure_ascii=False)
+
+    fac = Facturas.objects.create(
+        empresa=empresa,
+        nrofactura=nro_factura,
+        fechafactura=fecha_factura,
+        fechavenc=fecha_vencimiento,
+        idtercero=id_tercero,
+        nombretercero=nombre_tercero,
+        descripcion=descripcion or f'Gasto Alegra manual {nro_factura}',
+        valor=valor,
+        pago_neto=valor,
+        nrocausa=nro_factura,
+        fechacausa=fecha_factura,
+        origen='Alegra',
+        alegra_bill_id=alegra_bill_id,
+        alegra_journal_detalle=detalle_json,
+        soporte_radicado=soporte,
+        gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
+        gasto_aprobacion_comentario_contable='',
+        gasto_aprobado=False,
+    )
+    history_facturas.objects.create(
+        factura=fac,
+        usuario=request.user,
+        accion=f'Radicó manualmente gasto Alegra ({alegra_bill_id})',
+        ubicacion='Contabilidad',
+    )
+    asignar_gasto_alegra(
+        request,
+        factura=fac,
+        oficina=oficina,
+        aprobador_user_id=aprobador_user_id,
+        comentario_contable=comentario_contable,
+    )
+    return fac
+
+
+def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, comentario_contable=''):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        raise PermissionError('Solo Contabilidad puede asignar aprobador y oficina.')
+    if factura.origen != 'Alegra':
+        raise ValueError('Solo aplica a radicados con origen Alegra.')
+    if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_ASIGNACION:
+        raise ValueError('El radicado no está pendiente de asignación.')
+    if oficina not in ('MONTERIA', 'MEDELLIN'):
+        raise ValueError('Oficina inválida.')
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    aprobador = User.objects.filter(pk=aprobador_user_id).first()
+    if not aprobador or not usuario_es_aprobador_gasto(aprobador, factura.empresa_id):
+        raise ValueError('El aprobador seleccionado no está autorizado para esta empresa.')
+
+    factura.oficina = oficina
+    factura.gasto_aprobador_asignado = aprobador
+    factura.gasto_asignado_por = request.user
+    factura.gasto_asignado_en = timezone.now()
+    factura.gasto_aprobacion_comentario_contable = (comentario_contable or '').strip()[:2000]
+    factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_APROBACION
+    factura.save(
+        update_fields=[
+            'oficina',
+            'gasto_aprobador_asignado',
+            'gasto_asignado_por',
+            'gasto_asignado_en',
+            'gasto_aprobacion_comentario_contable',
+            'gasto_aprobacion_estado',
+        ]
+    )
+    history_facturas.objects.create(
+        factura=factura,
+        usuario=request.user,
+        accion=(
+            f'Asignó oficina {oficina} y aprobador {aprobador.get_full_name() or aprobador.username}'
+            + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
+        )[:255],
+        ubicacion='Contabilidad',
+    )
+    return factura
+
+
+def aprobar_gasto_alegra(request, *, factura):
+    if factura.origen != 'Alegra':
+        raise ValueError('Solo aplica a radicados con origen Alegra.')
+    if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_APROBACION:
+        raise ValueError('El radicado no está pendiente de aprobación.')
+    if factura.gasto_aprobador_asignado_id != request.user.pk and not request.user.is_superuser:
+        raise PermissionError('Solo el aprobador asignado puede aprobar este gasto.')
+    if not usuario_es_aprobador_gasto(request.user, factura.empresa_id):
+        raise PermissionError('No está autorizado como aprobador de gastos.')
+
+    factura.gasto_aprobado = True
+    factura.gasto_aprobado_por = request.user
+    factura.gasto_aprobado_en = timezone.now()
+    factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_APROBADO
+    factura.save(
+        update_fields=[
+            'gasto_aprobado',
+            'gasto_aprobado_por',
+            'gasto_aprobado_en',
+            'gasto_aprobacion_estado',
+        ]
+    )
+    history_facturas.objects.create(
+        factura=factura,
+        usuario=request.user,
+        accion=f'Gasto aprobado para pago (oficina {factura.oficina})',
+        ubicacion='Contabilidad',
+    )
+    return factura

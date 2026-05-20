@@ -255,6 +255,10 @@ class AlegraWebhookInboundLog(models.Model):
     query_string = models.TextField(blank=True, default='')
     payload = models.JSONField(default=dict, blank=True)
     raw_body = models.TextField(blank=True, default='')
+    empresa_nit = models.CharField(max_length=32, blank=True, default='')
+    process_status = models.CharField(max_length=16, blank=True, default='')
+    process_detail = models.CharField(max_length=128, blank=True, default='')
+    factura_id = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

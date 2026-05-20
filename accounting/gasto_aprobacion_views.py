@@ -1,0 +1,336 @@
+import json
+import re
+
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.views.decorators.http import require_http_methods
+
+from django.utils.dateparse import parse_date
+
+from accounting.gasto_aprobacion import (
+    aprobadores_para_empresa,
+    aprobar_gasto_alegra,
+    asignar_gasto_alegra,
+    crear_radicado_gasto_alegra,
+    factura_a_dict,
+    usuario_es_aprobador_gasto,
+)
+from accounting.journal_cxp import (
+    detalle_pago_desde_factura,
+    parsear_journal_para_radicado,
+)
+from accounting.models import Facturas, Pagos
+from andina.decorators import check_groups, check_perms, group_perm_required
+from alegra_integration.bill_mapping import bill_descripcion_candidatos, parse_alegra_bill_id_for_api
+from alegra_integration.client import AlegraMCPClient
+from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError
+from andinasoft.models import empresas
+
+
+def _json_error(exc, status=400):
+    return JsonResponse({'detail': str(exc)}, status=status)
+
+
+@login_required
+@group_perm_required(('accounting.view_facturas',), raise_exception=True)
+def gastos_alegra_asignar(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return render(request, 'accounting/gastos_alegra_denied.html', status=403)
+    return render(request, 'accounting/gastos_alegra_asignar.html', {
+        'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
+    })
+
+
+@login_required
+def gastos_alegra_aprobar(request):
+    if not usuario_es_aprobador_gasto(request.user) and not request.user.is_superuser:
+        return render(request, 'accounting/gastos_alegra_denied.html', {
+            'mensaje': 'No está configurado como aprobador de gastos Alegra.',
+        }, status=403)
+    return render(request, 'accounting/gastos_alegra_aprobar.html', {
+        'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
+    })
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_pendientes_asignar(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    empresa = (request.GET.get('empresa') or '').strip()
+    qs = Facturas.objects.filter(
+        origen='Alegra',
+        gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
+    ).select_related('empresa').order_by('-fecharadicado', '-pk')
+    if empresa:
+        qs = qs.filter(empresa_id=empresa)
+    data = [factura_a_dict(f) for f in qs[:500]]
+    return JsonResponse({'data': data})
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_pendientes_aprobar(request):
+    if not usuario_es_aprobador_gasto(request.user) and not request.user.is_superuser:
+        return _json_error('No es aprobador de gastos.', 403)
+    empresa = (request.GET.get('empresa') or '').strip()
+    qs = Facturas.objects.filter(
+        origen='Alegra',
+        gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+    ).select_related('empresa', 'gasto_aprobador_asignado', 'gasto_asignado_por')
+    if not request.user.is_superuser:
+        qs = qs.filter(gasto_aprobador_asignado=request.user)
+    if empresa:
+        qs = qs.filter(empresa_id=empresa)
+    qs = qs.order_by('-gasto_asignado_en', '-pk')
+    data = [factura_a_dict(f) for f in qs[:500]]
+    return JsonResponse({'data': data})
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_aprobadores(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    empresa = (request.GET.get('empresa') or '').strip()
+    if not empresa:
+        return JsonResponse({'detail': 'empresa es requerida'}, status=400)
+    items = []
+    for row in aprobadores_para_empresa(empresa):
+        u = row.user
+        label = u.get_full_name() or u.username
+        if row.empresa_id:
+            label += f' ({row.empresa_id})'
+        items.append({'id': u.pk, 'label': label})
+    return JsonResponse({'aprobadores': items})
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_journal_preview(request):
+    """
+    GET /journals/{id} en Alegra — respuesta cruda para diseñar mapeo (solo Contabilidad).
+    Query: empresa (NIT), journal_id (numérico).
+    """
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    empresa_id = (request.GET.get('empresa') or '').strip()
+    journal_id = (request.GET.get('journal_id') or '').strip()
+    if not empresa_id:
+        return _json_error('empresa es requerida.', 400)
+    if not journal_id:
+        return _json_error('journal_id es requerido.', 400)
+    if not re.fullmatch(r'\d+', journal_id):
+        return _json_error('journal_id debe ser solo dígitos.', 400)
+    try:
+        empresa = empresas.objects.get(pk=empresa_id)
+    except empresas.DoesNotExist:
+        return _json_error('Empresa no encontrada.', 404)
+    try:
+        client = AlegraMCPClient(empresa)
+        journal = client.get_journal(journal_id)
+        payload = {
+            'ok': True,
+            'empresa': empresa_id,
+            'journal_id': journal_id,
+        }
+        try:
+            radicado = parsear_journal_para_radicado(journal)
+            radicado['pago_detallado'] = [
+                {k: v for k, v in row.items() if k != 'lineas'}
+                for row in radicado.get('pago_detallado', [])
+            ]
+            payload['radicado'] = radicado
+        except ValueError as exc:
+            payload['radicado_error'] = str(exc)
+        return JsonResponse(payload)
+    except AlegraConfigurationError as exc:
+        return _json_error(str(exc), 400)
+    except AlegraClientError as exc:
+        return _json_error(str(exc), 502)
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_bill_preview(request):
+    """
+    GET /bills/{id} en Alegra — respuesta cruda para revisar descripción y mapeo.
+    Query: empresa (NIT) + bill_id, o radicado (pk local).
+    """
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+
+    empresa_id = (request.GET.get('empresa') or '').strip()
+    bill_id = (request.GET.get('bill_id') or '').strip()
+    radicado_pk = (request.GET.get('radicado') or '').strip()
+
+    factura_local = None
+    if radicado_pk:
+        try:
+            fac = Facturas.objects.select_related('empresa').get(pk=int(radicado_pk))
+        except (Facturas.DoesNotExist, TypeError, ValueError):
+            return _json_error('Radicado no encontrado.', 404)
+        factura_local = factura_a_dict(fac)
+        if not bill_id and fac.alegra_bill_id:
+            empresa_id, bill_id = parse_alegra_bill_id_for_api(fac.alegra_bill_id)
+            if not empresa_id:
+                empresa_id = str(fac.empresa_id)
+        elif not empresa_id:
+            empresa_id = str(fac.empresa_id)
+
+    if not empresa_id:
+        return _json_error('empresa (NIT) es requerida.', 400)
+    if not bill_id or not re.fullmatch(r'\d+', bill_id):
+        return _json_error('bill_id numérico es requerido (o radicado con alegra_bill_id).', 400)
+
+    try:
+        empresa = empresas.objects.get(pk=empresa_id)
+    except empresas.DoesNotExist:
+        return _json_error('Empresa no encontrada.', 404)
+
+    fields = (request.GET.get('fields') or '').strip() or None
+    try:
+        client = AlegraMCPClient(empresa)
+        bill = client.get_bill(bill_id, fields=fields)
+    except AlegraConfigurationError as exc:
+        return _json_error(str(exc), 400)
+    except AlegraClientError as exc:
+        return _json_error(str(exc), 502)
+
+    return JsonResponse({
+        'ok': True,
+        'empresa': empresa_id,
+        'bill_id': bill_id,
+        'fields_requested': fields,
+        'api': f'GET /bills/{bill_id}',
+        'factura_local': factura_local,
+        'descripcion_candidatos': bill_descripcion_candidatos(bill),
+        'bill': bill,
+    })
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_journal_detalle_radicado(request):
+    """Detalle CxP guardado al radicar desde journal (para tesorería)."""
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        if not usuario_es_aprobador_gasto(request.user):
+            return _json_error('Sin permiso.', 403)
+    pk = (request.GET.get('radicado') or '').strip()
+    if not pk:
+        return _json_error('radicado es requerido.', 400)
+    try:
+        fac = Facturas.objects.get(pk=pk)
+    except Facturas.DoesNotExist:
+        return _json_error('Radicado no encontrado.', 404)
+    detalle = detalle_pago_desde_factura(fac)
+    return JsonResponse({
+        'ok': True,
+        'radicado': fac.pk,
+        'alegra_bill_id': fac.alegra_bill_id or '',
+        'pago_detallado': detalle or [],
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajax_gastos_alegra_crear(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    try:
+        check_perms(request, ('accounting.add_facturas',))
+    except Exception as exc:
+        return _json_error(exc, 403)
+    try:
+        empresa_id = (request.POST.get('empresa') or '').strip()
+        fecha_factura = parse_date((request.POST.get('fecha_factura') or '')[:10])
+        fecha_vencimiento = parse_date((request.POST.get('fecha_vencimiento') or '')[:10])
+        if not fecha_factura or not fecha_vencimiento:
+            return _json_error('Fechas de factura y vencimiento son obligatorias (YYYY-MM-DD).', 400)
+        soporte = request.FILES.get('soporte')
+        detalle_raw = (request.POST.get('alegra_journal_detalle') or '').strip()
+        alegra_journal_detalle = detalle_raw or None
+        fac = crear_radicado_gasto_alegra(
+            request,
+            empresa_id=empresa_id,
+            nro_factura=request.POST.get('nro_factura'),
+            fecha_factura=fecha_factura,
+            fecha_vencimiento=fecha_vencimiento,
+            id_tercero=request.POST.get('id_tercero'),
+            nombre_tercero=request.POST.get('nombre_tercero'),
+            valor=request.POST.get('valor'),
+            descripcion=request.POST.get('descripcion'),
+            soporte=soporte,
+            oficina=(request.POST.get('oficina') or '').strip(),
+            aprobador_user_id=int(request.POST.get('aprobador_id')),
+            comentario_contable=(request.POST.get('comentario_contable') or '').strip(),
+            referencia_alegra=(request.POST.get('referencia_alegra') or '').strip(),
+            alegra_journal_detalle=alegra_journal_detalle,
+        )
+        return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except (ValueError, TypeError) as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        return _json_error(exc, 500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajax_gastos_alegra_asignar(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            body = json.loads(request.body.decode() or '{}')
+        else:
+            body = request.POST
+        radicado = body.get('radicado')
+        oficina = (body.get('oficina') or '').strip()
+        aprobador_id = body.get('aprobador_id')
+        comentario = (body.get('comentario_contable') or '').strip()
+        fac = Facturas.objects.get(pk=radicado)
+        if Pagos.objects.filter(nroradicado=fac).exists():
+            return _json_error('El radicado ya tiene pagos asociados.')
+        asignar_gasto_alegra(
+            request,
+            factura=fac,
+            oficina=oficina,
+            aprobador_user_id=int(aprobador_id),
+            comentario_contable=comentario,
+        )
+        return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except Facturas.DoesNotExist:
+        return _json_error('Radicado no encontrado.', 404)
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except (ValueError, TypeError) as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        return _json_error(exc, 500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajax_gastos_alegra_aprobar(request):
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            body = json.loads(request.body.decode() or '{}')
+        else:
+            body = request.POST
+        radicado = body.get('radicado')
+        fac = Facturas.objects.get(pk=radicado)
+        if Pagos.objects.filter(nroradicado=fac).exists():
+            return _json_error('El radicado ya tiene pagos asociados.')
+        aprobar_gasto_alegra(request, factura=fac)
+        return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except Facturas.DoesNotExist:
+        return _json_error('Radicado no encontrado.', 404)
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except ValueError as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        return _json_error(exc, 500)

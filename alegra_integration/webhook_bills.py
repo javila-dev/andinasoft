@@ -9,12 +9,10 @@ import logging
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.utils import timezone
-from django.utils.dateparse import parse_date
-
 from accounting.models import Facturas, Pagos, history_facturas
 from andinasoft.models import empresas
-from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
+from alegra_integration.bill_mapping import map_bill_to_factura_fields
+from alegra_integration.bill_pdf import sync_factura_from_alegra_bill
 
 logger = logging.getLogger(__name__)
 
@@ -24,24 +22,30 @@ def composite_alegra_bill_id(empresa_nit, alegra_numeric_id):
 
 
 def _schedule_bill_pdf_download(empresa_pk, alegra_numeric_id, factura_pk):
-    """Tras commit: GET /bills/{id} en Alegra y guarda PDF en soporte_radicado."""
+    """Tras commit: GET /bills/{id} — enriquece campos y descarga PDF (un solo request)."""
 
     def _after_commit():
         try:
             empresa_obj = empresas.objects.get(pk=empresa_pk)
             fac = Facturas.objects.get(pk=factura_pk)
-            ok = attach_bill_pdf_from_alegra(empresa_obj, str(alegra_numeric_id), fac)
-            if ok:
-                user = _history_user()
-                if user:
-                    history_facturas.objects.create(
-                        factura=fac,
-                        usuario=user,
-                        accion=f'PDF descargado desde Alegra (bill {alegra_numeric_id})',
-                        ubicacion='Contabilidad',
-                    )
+            result = sync_factura_from_alegra_bill(empresa_obj, str(alegra_numeric_id), fac)
+            user = _history_user()
+            if not user:
+                return
+            parts = []
+            if result.get('enriched_fields'):
+                parts.append('datos: ' + ', '.join(result['enriched_fields']))
+            if result.get('pdf_saved'):
+                parts.append('PDF adjunto')
+            if parts:
+                history_facturas.objects.create(
+                    factura=fac,
+                    usuario=user,
+                    accion=f'Sincronizado desde Alegra GET /bills/{alegra_numeric_id} ({"; ".join(parts)})',
+                    ubicacion='Contabilidad',
+                )
         except Exception:
-            logger.exception('Fallo descarga PDF Alegra factura_pk=%s bill=%s', factura_pk, alegra_numeric_id)
+            logger.exception('Fallo sync Alegra bill factura_pk=%s bill=%s', factura_pk, alegra_numeric_id)
 
     transaction.on_commit(_after_commit)
 
@@ -61,76 +65,9 @@ def _history_user():
     return User.objects.filter(is_active=True).order_by('pk').first()
 
 
-def _parse_int(value, default=0):
-    try:
-        if value is None:
-            return default
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def map_bill_to_factura_fields(bill):
-    """
-    Campos locales derivados de message.bill (sin empresa, alegra_bill_id ni archivos).
-    """
-    nt = bill.get('numberTemplate') or {}
-    if isinstance(nt, dict):
-        raw_num = nt.get('number')
-        number_str = str(raw_num).strip() if raw_num is not None else ''
-    else:
-        number_str = ''
-
-    client = bill.get('client') or {}
-    identification = (client.get('identification') or '').strip()
-    if not identification and client.get('id') is not None:
-        identification = str(client.get('id')).strip()
-
-    nombre = (client.get('name') or '')[:255]
-    bid = str(bill.get('id') or '').strip()
-
-    total = _parse_int(bill.get('total'))
-    subtotal = _parse_int(bill.get('subtotal'))
-    valor = total if total else subtotal
-    pago_neto = valor
-
-    fecha_fact = parse_date(str(bill.get('date') or '')[:10]) if bill.get('date') else None
-    if not fecha_fact:
-        fecha_fact = timezone.now().date()
-    fecha_venc = (
-        parse_date(str(bill.get('dueDate') or '')[:10]) if bill.get('dueDate') else fecha_fact
-    ) or fecha_fact
-    fecha_causa = fecha_fact
-
-    observations = bill.get('observations')
-    if observations:
-        desc = str(observations)[:255]
-    else:
-        desc = (f'Factura compra Alegra {number_str or bid}')[:255]
-
-    nrocausa = (number_str or f'ALEGRA-{bid}')[:255]
-    nrofactura = (number_str or f'ALEGRA-{bid}')[:255]
-
-    idtercero = (identification or str(client.get('id') or ''))[:255]
-
-    return {
-        'nrofactura': nrofactura,
-        'fechafactura': fecha_fact,
-        'fechavenc': fecha_venc,
-        'idtercero': idtercero,
-        'nombretercero': (nombre or 'SIN NOMBRE')[:255],
-        'descripcion': desc,
-        'valor': valor,
-        'pago_neto': pago_neto,
-        'nrocausa': nrocausa,
-        'fechacausa': fecha_causa,
-        'origen': 'Alegra',
-    }
-
-
 def process_inbound_post(empresa_nit, payload):
     """
-    empresa_nit: query param ?empresa= de la URL registrada en Alegra.
+    empresa_nit: NIT de la empresa, desde path /webhooks/bills/<NIT>/ o ?empresa=<NIT>.
     """
     result = {'processed': False}
     subject = str((payload or {}).get('subject') or '').strip().lower()
@@ -138,7 +75,7 @@ def process_inbound_post(empresa_nit, payload):
     bill = msg.get('bill') if isinstance(msg, dict) else None
 
     if not (empresa_nit or '').strip():
-        result['skip_reason'] = 'missing_empresa_query_param'
+        result['skip_reason'] = 'missing_empresa'
         return result
     if not isinstance(bill, dict):
         result['skip_reason'] = 'no_message.bill'
@@ -177,6 +114,13 @@ def process_inbound_post(empresa_nit, payload):
 def _handle_new_bill(empresa, composite_alegra_id, bill):
     if Facturas.objects.filter(alegra_bill_id=composite_alegra_id).exists():
         fac = Facturas.objects.get(alegra_bill_id=composite_alegra_id)
+        if (
+            fac.origen == 'Alegra'
+            and not fac.gasto_aprobado
+            and fac.gasto_aprobacion_estado == Facturas.GASTO_APROB_NO_APLICA
+        ):
+            fac.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_ASIGNACION
+            fac.save(update_fields=['gasto_aprobacion_estado'])
         if not fac.soporte_radicado:
             _schedule_bill_pdf_download(str(empresa.pk), str(bill.get('id') or '').strip(), fac.pk)
         return {'processed': True, 'idempotent': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite_alegra_id}
@@ -193,6 +137,9 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
         cuenta_por_pagar=None,
         secuencia_cxp=None,
         oficina=None,
+        gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
+        gasto_aprobacion_comentario_contable='',
+        gasto_aprobado=False,
         **fields,
     )
 
@@ -201,7 +148,7 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
         history_facturas.objects.create(
             factura=fac,
             usuario=user,
-            accion=f'Creada desde webhook Alegra new-bill ({composite_alegra_id})',
+            accion=f'Creada desde webhook Alegra new-bill ({composite_alegra_id}); pendiente asignación oficina/aprobador',
             ubicacion='Contabilidad',
         )
     _schedule_bill_pdf_download(str(empresa.pk), str(bill.get('id') or '').strip(), fac.pk)

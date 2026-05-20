@@ -67,7 +67,10 @@ class AlegraBillGetLogAdmin(admin.ModelAdmin):
 
 @admin.register(AlegraWebhookInboundLog)
 class AlegraWebhookInboundLogAdmin(admin.ModelAdmin):
-    list_display = ['id', 'created_at', 'http_method', 'remote_addr', 'content_type', 'payload_preview']
+    list_display = [
+        'id', 'created_at', 'http_method', 'empresa_nit', 'process_status',
+        'factura_id', 'remote_addr', 'payload_preview',
+    ]
     list_filter = ['http_method']
     search_fields = ['remote_addr', 'raw_body']
     readonly_fields = ['http_method', 'content_type', 'remote_addr', 'query_string', 'payload', 'raw_body', 'created_at']

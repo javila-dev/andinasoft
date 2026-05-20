@@ -661,6 +661,7 @@ const DOCS_PER_PAGE = 25;
 let historyBatches = [];
 let historyPage = 1;
 const HISTORY_PER_PAGE = 12;
+let currentBatchStatus = null;
 
 // ── Config maps ────────────────────────────────
 const DOC_LABELS = {
@@ -1020,7 +1021,8 @@ function confirmSend() {
 function doSend() {
   $('#confirmSendModal').modal('hide');
 
-  const p = Object.assign(getPayload(), { retry_failed: true });
+  const retry_failed = true;
+  const p = Object.assign(getPayload(), { retry_failed });
 
   clearLog();
   log('loading', 'Iniciando envío a Alegra&hellip;');
@@ -1032,11 +1034,15 @@ function doSend() {
   setBusy('send', true);
   $('#sendProgressBar').show();
 
+  const useBatchSend = (currentBatchId != null && String(currentBatchStatus || '') === 'preview');
+  const url = useBatchSend ? `${API.batches}${currentBatchId}/send` : API.send;
+  const body = useBatchSend ? { retry_failed } : p;
+
   $.ajax({
-    url: API.send, method: 'POST',
+    url: url, method: 'POST',
     contentType: 'application/json',
     headers: { 'X-CSRFToken': CSRF },
-    data: JSON.stringify(p),
+    data: JSON.stringify(body),
     success: onSendSuccess,
     error: function(xhr) {
       const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
@@ -1512,6 +1518,7 @@ function loadBatchDetail(batchId) {
     const batch = data.batch;
     const docs  = data.documents;
     currentBatchId = batch.id;
+    currentBatchStatus = batch.status;
 
     // Mirror form to match this batch
     if (batch.empresa)       $('#selEmpresa').val(batch.empresa);
@@ -1533,10 +1540,19 @@ function loadBatchDetail(batchId) {
     if (batch.error_count)   log('error',   `Con error: <strong>${batch.error_count}</strong>`);
 
     $('#logBatchBadge').html(statusBadge(batch.status)).show();
-    updateMetrics(batch, batch.status === 'preview' ? 'preview' : 'send');
     renderDocuments(docs);
 
-    if (batch.status === 'preview' && batch.success_count > 0) {
+    // For preview batches, trust document statuses (some admin resets may leave batch.success_count=0).
+    const validDocs = (docs || []).filter(d => d.status === 'valid').length;
+    const invalidDocs = (docs || []).filter(d => d.status === 'invalid').length;
+    const mode = (batch.status === 'preview') ? 'preview' : 'send';
+    updateMetrics(batch, mode);
+    if (mode === 'preview') {
+      $('#metricOk').text(validDocs);
+      $('#metricErr').text(invalidDocs);
+    }
+
+    if (batch.status === 'preview' && validDocs > 0) {
       $('#btnSend').prop('disabled', false);
       log('label', 'Puedes enviar este lote a Alegra desde el botón de arriba.');
     }
