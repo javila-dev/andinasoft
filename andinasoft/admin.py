@@ -52,9 +52,25 @@ class adminProfiles(admin.ModelAdmin):
     list_display=['user']
 
 class adminEmpresas(admin.ModelAdmin):
-    list_display=['Nit','nombre','alegra_enabled','logo']
+    list_display=['Nit','nombre','alegra_enabled','alegra_gasto_max_sin_aprobador','logo']
     list_filter=['alegra_enabled']
     search_fields=['Nit','nombre']
+    fieldsets = (
+        (None, {
+            'fields': ('Nit', 'nombre', 'representante_legal', 'cc_replegal', 'logo'),
+        }),
+        ('Alegra', {
+            'fields': (
+                'alegra_enabled',
+                'alegra_token',
+                'alegra_gasto_max_sin_aprobador',
+            ),
+            'description': (
+                'Máximo sin aprobador: monto en COP. Si está vacío o en cero, '
+                'todo gasto Alegra debe pasar por aprobador designado.'
+            ),
+        }),
+    )
     
 class adminNotificacionesEmail(admin.ModelAdmin):
     list_display=['id_notificacion','identificador']

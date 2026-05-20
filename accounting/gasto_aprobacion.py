@@ -29,6 +29,89 @@ def aprobadores_para_empresa(empresa_id):
     return qs
 
 
+def _valor_factura_entero(valor):
+    if isinstance(valor, int):
+        return valor
+    if hasattr(valor, '__int__'):
+        return int(valor)
+    return parse_valor_entero(valor)
+
+
+def empresa_config_sin_aprobador(empresa):
+    """
+    Configuración por empresa para registro sin aprobador.
+    alegra_gasto_max_sin_aprobador: None o <=0 → no permite; >0 → tope COP.
+    """
+    if empresa is None:
+        return {
+            'permite_sin_aprobador': False,
+            'max_sin_aprobador': None,
+            'mensaje_requiere_aprobador': 'Empresa no encontrada.',
+        }
+    if not isinstance(empresa, empresas):
+        empresa = empresas.objects.filter(pk=str(empresa).strip()).first()
+    if not empresa:
+        return {
+            'permite_sin_aprobador': False,
+            'max_sin_aprobador': None,
+            'mensaje_requiere_aprobador': 'Empresa no encontrada.',
+        }
+    raw = getattr(empresa, 'alegra_gasto_max_sin_aprobador', None)
+    if raw is None:
+        max_cop = 0
+    else:
+        try:
+            max_cop = int(raw)
+        except (TypeError, ValueError):
+            max_cop = 0
+    if max_cop <= 0:
+        return {
+            'permite_sin_aprobador': False,
+            'max_sin_aprobador': None,
+            'mensaje_requiere_aprobador': (
+                f'La empresa {empresa.nombre} no permite gastos Alegra sin aprobador. '
+                'Configure un tope en Admin (empresas) o asigne un aprobador.'
+            ),
+        }
+    return {
+        'permite_sin_aprobador': True,
+        'max_sin_aprobador': max_cop,
+        'mensaje_requiere_aprobador': '',
+    }
+
+
+def validar_gasto_sin_aprobador(empresa, valor):
+    """Lanza ValueError si no puede registrarse sin aprobador."""
+    cfg = empresa_config_sin_aprobador(empresa)
+    if not cfg['permite_sin_aprobador']:
+        raise ValueError(cfg['mensaje_requiere_aprobador'])
+    v = _valor_factura_entero(valor)
+    max_cop = cfg['max_sin_aprobador']
+    if v > max_cop:
+        emp = empresa if isinstance(empresa, empresas) else empresas.objects.filter(pk=str(empresa).strip()).first()
+        nombre = getattr(emp, 'nombre', empresa) if emp else empresa
+        raise ValueError(
+            f'El valor ${v:,} supera el máximo sin aprobador (${max_cop:,}) para {nombre}. '
+            'Asigne un aprobador.'
+        )
+
+
+def parse_aprobador_user_id_opcional(aprobador_user_id):
+    """None = sin aprobador; al asignar oficina el gasto queda aprobado de inmediato."""
+    if aprobador_user_id is None:
+        return None
+    if isinstance(aprobador_user_id, str):
+        raw = aprobador_user_id.strip()
+        if not raw:
+            return None
+        aprobador_user_id = raw
+    try:
+        uid = int(aprobador_user_id)
+    except (TypeError, ValueError):
+        return None
+    return uid if uid > 0 else None
+
+
 def alegra_sin_aprobacion_q():
     """Radicados Alegra que aún no pueden operarse en causación/tesorería."""
     return Q(origen='Alegra', gasto_aprobado=False)
@@ -145,7 +228,7 @@ def crear_radicado_gasto_alegra(
     descripcion,
     soporte,
     oficina,
-    aprobador_user_id,
+    aprobador_user_id=None,
     comentario_contable='',
     referencia_alegra,
     alegra_journal_detalle=None,
@@ -232,7 +315,7 @@ def crear_radicado_gasto_alegra(
     return fac
 
 
-def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, comentario_contable=''):
+def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, comentario_contable=''):
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         raise PermissionError('Solo Contabilidad puede asignar aprobador y oficina.')
     if factura.origen != 'Alegra':
@@ -243,33 +326,65 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, coment
         raise ValueError('Oficina inválida.')
     from django.contrib.auth import get_user_model
     User = get_user_model()
-    aprobador = User.objects.filter(pk=aprobador_user_id).first()
-    if not aprobador or not usuario_es_aprobador_gasto(aprobador, factura.empresa_id):
-        raise ValueError('El aprobador seleccionado no está autorizado para esta empresa.')
+    aprobador_uid = parse_aprobador_user_id_opcional(aprobador_user_id)
 
     factura.oficina = oficina
-    factura.gasto_aprobador_asignado = aprobador
     factura.gasto_asignado_por = request.user
     factura.gasto_asignado_en = timezone.now()
     factura.gasto_aprobacion_comentario_contable = (comentario_contable or '').strip()[:2000]
-    factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_APROBACION
-    factura.save(
-        update_fields=[
+
+    if aprobador_uid:
+        aprobador = User.objects.filter(pk=aprobador_uid).first()
+        if not aprobador or not usuario_es_aprobador_gasto(aprobador, factura.empresa_id):
+            raise ValueError('El aprobador seleccionado no está autorizado para esta empresa.')
+        factura.gasto_aprobador_asignado = aprobador
+        factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_APROBACION
+        factura.gasto_aprobado = False
+        factura.gasto_aprobado_por = None
+        factura.gasto_aprobado_en = None
+        update_fields = [
             'oficina',
             'gasto_aprobador_asignado',
             'gasto_asignado_por',
             'gasto_asignado_en',
             'gasto_aprobacion_comentario_contable',
             'gasto_aprobacion_estado',
+            'gasto_aprobado',
+            'gasto_aprobado_por',
+            'gasto_aprobado_en',
         ]
-    )
+        accion = (
+            f'Asignó oficina {oficina} y aprobador {aprobador.get_full_name() or aprobador.username}'
+            + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
+        )
+    else:
+        validar_gasto_sin_aprobador(factura.empresa, factura.valor)
+        factura.gasto_aprobador_asignado = None
+        factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_APROBADO
+        factura.gasto_aprobado = True
+        factura.gasto_aprobado_por = request.user
+        factura.gasto_aprobado_en = timezone.now()
+        update_fields = [
+            'oficina',
+            'gasto_aprobador_asignado',
+            'gasto_asignado_por',
+            'gasto_asignado_en',
+            'gasto_aprobacion_comentario_contable',
+            'gasto_aprobacion_estado',
+            'gasto_aprobado',
+            'gasto_aprobado_por',
+            'gasto_aprobado_en',
+        ]
+        accion = (
+            f'Asignó oficina {oficina} sin aprobador (aprobación automática)'
+            + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
+        )
+
+    factura.save(update_fields=update_fields)
     history_facturas.objects.create(
         factura=factura,
         usuario=request.user,
-        accion=(
-            f'Asignó oficina {oficina} y aprobador {aprobador.get_full_name() or aprobador.username}'
-            + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
-        )[:255],
+        accion=accion[:255],
         ubicacion='Contabilidad',
     )
     return factura

@@ -52,7 +52,7 @@
     <h4 class="mb-0"><i class="fas fa-tasks mr-2"></i>Asignar gastos Alegra</h4>
     <a class="btn btn-sm btn-outline-secondary" href="/accounting/alegra/webhooks/">Webhooks Alegra</a>
   </div>
-  <p class="text-muted small">Radicados Alegra pendientes de oficina y aprobador (webhook o <strong>manual</strong>, p. ej. journal sin webhook). Tras asignar, el aprobador los verá en <a href="/accounting/gastos-alegra/aprobar/">Aprobar gastos</a>.</p>
+  <p class="text-muted small">Radicados Alegra pendientes de oficina (webhook o <strong>manual</strong>). Sin aprobador solo si la empresa tiene tope configurado en Admin y el valor no lo supera; se pedirá confirmación antes de guardar.</p>
 
   <div id="alertBox"></div>
 
@@ -187,10 +187,11 @@
             </select>
           </div>
           <div class="form-group col-md-8">
-            <label class="font-weight-bold small">Aprobador <span class="text-danger">*</span></label>
-            <select id="crearAprobador" class="form-control form-control-sm" required>
-              <option value="">Seleccione empresa primero</option>
+            <label class="font-weight-bold small">Aprobador <span class="text-muted">(opcional)</span></label>
+            <select id="crearAprobador" class="form-control form-control-sm">
+              <option value="">— Sin aprobador (aprobación automática) —</option>
             </select>
+            <small id="hintCrearSinAprob" class="form-text text-muted"></small>
           </div>
         </div>
         <div class="form-group mb-0">
@@ -224,10 +225,11 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="font-weight-bold small">Aprobador <span class="text-danger">*</span></label>
+          <label class="font-weight-bold small">Aprobador <span class="text-muted">(opcional)</span></label>
           <select id="selAprobador" class="form-control">
-            <option value="">Cargando…</option>
+            <option value="">— Sin aprobador (aprobación automática) —</option>
           </select>
+          <small id="hintAsignarSinAprob" class="form-text text-muted"></small>
         </div>
         <div class="form-group">
           <label class="font-weight-bold small">Comentario para el aprobador</label>
@@ -246,14 +248,69 @@
 {% block js %}
 <script>
 const CSRF = '{{ csrf_token }}';
-let tabla, radicadoActual = null, empresaRad = '';
+let tabla, radicadoActual = null, empresaRad = '', radicadoValor = 0;
+const OPT_SIN_APROB = '<option value="">— Sin aprobador (aprobación automática) —</option>';
+
 function showAlert(type, html) {
   $('#alertBox').html('<div class="alert alert-' + type + ' alert-dismissible fade show">' + html +
     '<button type="button" class="close" data-dismiss="alert">&times;</button></div>');
 }
 
-function loadAprobadores(empresa, $select) {
+function updateHintSinAprob(data, $hint) {
+  if (!$hint || !$hint.length) return;
+  if (!data) {
+    $hint.text('');
+    return;
+  }
+  if (data.permite_sin_aprobador && data.max_sin_aprobador) {
+    $hint.text(
+      'Sin aprobador: auto-aprobación hasta $' +
+      Number(data.max_sin_aprobador).toLocaleString('es-CO') + ' (se pedirá confirmación).'
+    );
+  } else {
+    $hint.text(data.mensaje_requiere_aprobador || 'Esta empresa exige aprobador designado.');
+  }
+}
+
+function validarSinAprobadorCliente(data, valor) {
+  if (!data || !data.permite_sin_aprobador) {
+    return {
+      ok: false,
+      msg: (data && data.mensaje_requiere_aprobador) ||
+        'Esta empresa no permite gastos sin aprobador. Seleccione un aprobador.'
+    };
+  }
+  const v = Number(valor) || 0;
+  const max = Number(data.max_sin_aprobador) || 0;
+  if (v > max) {
+    return {
+      ok: false,
+      msg: 'El valor $' + v.toLocaleString('es-CO') +
+        ' supera el máximo sin aprobador ($' + max.toLocaleString('es-CO') + '). Asigne un aprobador.'
+    };
+  }
+  return { ok: true, max: max };
+}
+
+function confirmarRegistroSinAprobador(data, valor, onOk) {
+  const check = validarSinAprobadorCliente(data, valor);
+  if (!check.ok) {
+    showAlert('warning', check.msg);
+    return;
+  }
+  const msg =
+    'Está registrando un gasto SIN aprobador.\n\n' +
+    'Valor: $' + Number(valor).toLocaleString('es-CO') + '\n' +
+    'Máximo permitido sin aprobador: $' + Number(check.max).toLocaleString('es-CO') + '\n\n' +
+    '¿Desea continuar?';
+  if (window.confirm(msg)) {
+    onOk();
+  }
+}
+
+function loadAprobadores(empresa, $select, $hint) {
   $select.html('<option value="">Cargando…</option>');
+  if ($hint) $hint.text('');
   if (!empresa) {
     $select.html('<option value="">Seleccione empresa primero</option>');
     return $.Deferred().resolve();
@@ -263,7 +320,16 @@ function loadAprobadores(empresa, $select) {
       const opts = (data.aprobadores || []).map(function(a) {
         return '<option value="' + a.id + '">' + a.label + '</option>';
       }).join('');
-      $select.html(opts ? '<option value="">— seleccionar —</option>' + opts : '<option value="">Sin aprobadores en admin</option>');
+      let html = '';
+      if (data.permite_sin_aprobador) {
+        html = OPT_SIN_APROB + (opts || '<option disabled>Sin aprobadores en admin</option>');
+      } else {
+        html = '<option value="">— seleccionar aprobador —</option>' +
+          (opts || '<option disabled>Sin aprobadores en admin</option>');
+      }
+      $select.html(html);
+      updateHintSinAprob(data, $hint);
+      $select.data('empresaConfig', data);
     })
     .fail(function(xhr) {
       $select.html('<option value="">Error</option>');
@@ -414,7 +480,7 @@ $(function() {
           r.cantidad_terceros + ' CxP, total $' + Number(r.valor).toLocaleString('es-CO') +
           '</span>'
         );
-        loadAprobadores(empresa, $('#crearAprobador'));
+        loadAprobadores(empresa, $('#crearAprobador'), $('#hintCrearSinAprob'));
       })
       .fail(function(xhr) {
         const detail = (xhr.responseJSON || {}).detail || ('Error ' + xhr.status);
@@ -435,23 +501,15 @@ $(function() {
     resetFormCrear();
     $('#modalCrear').modal('show');
     const emp = $('#crearEmpresa').val();
-    if (emp) loadAprobadores(emp, $('#crearAprobador'));
+    if (emp) loadAprobadores(emp, $('#crearAprobador'), $('#hintCrearSinAprob'));
   });
 
   $('#crearEmpresa').on('change', function() {
-    loadAprobadores($(this).val(), $('#crearAprobador'));
+    loadAprobadores($(this).val(), $('#crearAprobador'), $('#hintCrearSinAprob'));
   });
 
-  $('#btnConfirmarCrear').on('click', function() {
+  function enviarCrearRadicado() {
     const file = $('#crearSoporte')[0].files[0];
-    if (!$('#crearEmpresa').val() || !$('#crearNroFactura').val() ||
-        !/^\d+$/.test($('#crearIdTercero').val().trim()) ||
-        !$('#crearNombreTercero').val() || !$('#crearFechaFactura').val() || !$('#crearFechaVenc').val() ||
-        !parseMoneyInput($('#crearValor').val()) || !/^\d+$/.test($('#crearRefAlegra').val().trim()) ||
-        !$('#crearOficina').val() || !$('#crearAprobador').val() || !file) {
-      showAlert('warning', 'Complete todos los campos obligatorios (incl. ref. Alegra y PDF).');
-      return;
-    }
     const fd = new FormData();
     fd.append('empresa', $('#crearEmpresa').val());
     fd.append('nro_factura', $('#crearNroFactura').val());
@@ -468,8 +526,7 @@ $(function() {
     fd.append('aprobador_id', $('#crearAprobador').val());
     fd.append('comentario_contable', $('#crearComentario').val());
     fd.append('soporte', file);
-
-    const $btn = $(this).prop('disabled', true);
+    const $btn = $('#btnConfirmarCrear').prop('disabled', true);
     $.ajax({
       url: '/accounting/ajax/gastos-alegra/crear',
       method: 'POST',
@@ -479,14 +536,43 @@ $(function() {
       headers: { 'X-CSRFToken': CSRF },
       success: function(res) {
         $('#modalCrear').modal('hide');
-        showAlert('success', 'Radicado #' + (res.factura && res.factura.pk) + ' creado y enviado al aprobador.');
+        const st = res.factura && res.factura.gasto_aprobacion_estado;
+        const msg = st === 'aprobado'
+          ? 'Radicado #' + res.factura.pk + ' creado y aprobado (sin aprobador).'
+          : 'Radicado #' + res.factura.pk + ' creado y enviado al aprobador.';
+        showAlert('success', msg);
         loadTable();
       },
       error: function(xhr) {
-        showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al crear radicado');
+        var detail = (xhr.responseJSON || {}).detail;
+        if (!detail && xhr.responseText) {
+          try { detail = JSON.parse(xhr.responseText).detail; } catch (e) {}
+        }
+        var msg = detail || ('Error al crear radicado (HTTP ' + xhr.status + ')');
+        showAlert('danger', msg);
       },
       complete: function() { $btn.prop('disabled', false); }
     });
+  }
+
+  $('#btnConfirmarCrear').on('click', function() {
+    const file = $('#crearSoporte')[0].files[0];
+    if (!$('#crearEmpresa').val() || !$('#crearNroFactura').val() ||
+        !/^\d+$/.test($('#crearIdTercero').val().trim()) ||
+        !$('#crearNombreTercero').val() || !$('#crearFechaFactura').val() || !$('#crearFechaVenc').val() ||
+        !parseMoneyInput($('#crearValor').val()) || !/^\d+$/.test($('#crearRefAlegra').val().trim()) ||
+        !$('#crearOficina').val() || !file) {
+      showAlert('warning', 'Complete todos los campos obligatorios (incl. oficina, ref. Alegra y PDF).');
+      return;
+    }
+    const aprobadorId = $('#crearAprobador').val();
+    const valor = parseMoneyInput($('#crearValor').val());
+    const cfg = $('#crearAprobador').data('empresaConfig');
+    if (!aprobadorId) {
+      confirmarRegistroSinAprobador(cfg, valor, enviarCrearRadicado);
+      return;
+    }
+    enviarCrearRadicado();
   });
 
   $('#tablaPendientes').on('click', '.btn-soporte', function() {
@@ -497,21 +583,16 @@ $(function() {
     const row = tabla.row($(this).closest('tr')).data();
     radicadoActual = row.pk;
     empresaRad = row.empresa;
+    radicadoValor = Number(row.valor) || 0;
     $('#lblRad').text(row.pk);
     $('#resumenRad').text(row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO'));
     $('#selOficina').val('');
     $('#comentarioContable').val('');
     $('#modalAsignar').modal('show');
-    loadAprobadores(empresaRad, $('#selAprobador'));
+    loadAprobadores(empresaRad, $('#selAprobador'), $('#hintAsignarSinAprob'));
   });
 
-  $('#btnConfirmarAsignar').on('click', function() {
-    const oficina = $('#selOficina').val();
-    const aprobador_id = $('#selAprobador').val();
-    if (!oficina || !aprobador_id) {
-      showAlert('warning', 'Oficina y aprobador son obligatorios.');
-      return;
-    }
+  function enviarAsignacion(oficina, aprobador_id) {
     $.ajax({
       url: '/accounting/ajax/gastos-alegra/asignar',
       method: 'POST',
@@ -525,13 +606,30 @@ $(function() {
       }),
       success: function() {
         $('#modalAsignar').modal('hide');
-        showAlert('success', 'Asignación guardada.');
+        showAlert('success', aprobador_id ? 'Asignación guardada; pendiente de aprobación.' : 'Oficina asignada; gasto aprobado automáticamente.');
         loadTable();
       },
       error: function(xhr) {
         showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al asignar');
       }
     });
+  }
+
+  $('#btnConfirmarAsignar').on('click', function() {
+    const oficina = $('#selOficina').val();
+    const aprobador_id = $('#selAprobador').val();
+    if (!oficina) {
+      showAlert('warning', 'La oficina es obligatoria.');
+      return;
+    }
+    if (!aprobador_id) {
+      const cfg = $('#selAprobador').data('empresaConfig');
+      confirmarRegistroSinAprobador(cfg, radicadoValor, function() {
+        enviarAsignacion(oficina, '');
+      });
+      return;
+    }
+    enviarAsignacion(oficina, aprobador_id);
   });
 });
 </script>

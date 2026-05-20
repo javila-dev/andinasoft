@@ -4,10 +4,13 @@ from django.test import RequestFactory, TestCase
 from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra,
     asignar_gasto_alegra,
+    empresa_config_sin_aprobador,
     normalizar_alegra_bill_id,
     normalizar_id_tercero,
+    parse_aprobador_user_id_opcional,
     parse_valor_entero,
     usuario_es_aprobador_gasto,
+    validar_gasto_sin_aprobador,
 )
 from accounting.models import Facturas, GastoAprobador
 from andinasoft.models import empresas
@@ -78,6 +81,45 @@ class GastoAprobacionTests(TestCase):
     def test_usuario_es_aprobador(self):
         self.assertTrue(usuario_es_aprobador_gasto(self.aprobador, self.empresa.Nit))
         self.assertFalse(usuario_es_aprobador_gasto(self.contable, self.empresa.Nit))
+
+    def test_parse_aprobador_opcional(self):
+        self.assertIsNone(parse_aprobador_user_id_opcional(None))
+        self.assertIsNone(parse_aprobador_user_id_opcional(''))
+        self.assertIsNone(parse_aprobador_user_id_opcional(0))
+        self.assertEqual(parse_aprobador_user_id_opcional(self.aprobador.pk), self.aprobador.pk)
+
+    def test_empresa_sin_tope_no_permite_sin_aprobador(self):
+        cfg = empresa_config_sin_aprobador(self.empresa)
+        self.assertFalse(cfg['permite_sin_aprobador'])
+        with self.assertRaises(ValueError):
+            validar_gasto_sin_aprobador(self.empresa, 1000)
+
+    def test_validar_gasto_sin_aprobador_supera_tope(self):
+        self.empresa.alegra_gasto_max_sin_aprobador = 50_000
+        self.empresa.save(update_fields=['alegra_gasto_max_sin_aprobador'])
+        with self.assertRaises(ValueError) as ctx:
+            validar_gasto_sin_aprobador(self.empresa, 100_000)
+        self.assertIn('supera', str(ctx.exception).lower())
+
+    def test_asignar_sin_aprobador_auto_aprobado(self):
+        from django.contrib.auth.models import Group
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.empresa.alegra_gasto_max_sin_aprobador = 500_000
+        self.empresa.save(update_fields=['alegra_gasto_max_sin_aprobador'])
+
+        asignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MEDELLIN',
+            aprobador_user_id=None,
+        )
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.oficina, 'MEDELLIN')
+        self.assertTrue(self.factura.gasto_aprobado)
+        self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_APROBADO)
+        self.assertIsNone(self.factura.gasto_aprobador_asignado_id)
+        self.assertEqual(self.factura.gasto_aprobado_por, self.contable)
 
     def test_flujo_asignar_y_aprobar(self):
         from django.contrib.auth.models import Group

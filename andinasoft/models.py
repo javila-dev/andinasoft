@@ -53,6 +53,14 @@ class empresas(models.Model):
     logo=models.ImageField(upload_to='logos_empresas', storage=PUBLIC_MEDIA_STORAGE)
     alegra_enabled=models.BooleanField(default=False)
     alegra_token=models.CharField(max_length=1024,null=True,blank=True)
+    alegra_gasto_max_sin_aprobador = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            'COP (entero): tope para registrar gastos Alegra sin aprobador. '
+            'Vacío o 0 = obligatorio designar aprobador.'
+        ),
+    )
     
     def __str__(self):
         return self.nombre.upper()

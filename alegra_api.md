@@ -67,16 +67,18 @@ No hay en la documentación pública de **`api/v1`** un endpoint tipo “descarg
 
 **Mapeo a `accounting.Facturas`** (implementado en `alegra_integration/bill_mapping.py`, usado por `webhook_bills.py`): la URL de ingesta incluye `?empresa=<NIT>` al suscribir. Se guarda `alegra_bill_id = "{NIT}:{id_bill}"` para idempotencia global. Campos: `nrofactura` / `nrocausa` ← `numberTemplate.number` (o `ALEGRA-{id}`); `idtercero` / `nombretercero` ← `client.identification` / `client.name`; `valor` y `pago_neto` ← `balance` (saldo CxP pendiente); si no viene, `total` o `subtotal`; `fechafactura` / `fechacausa` ← `date`; `fechavenc` ← `dueDate`; `descripcion` ← `observations`, ítems del GET o texto por defecto (el GET suele traer más detalle que el webhook); `origen` = `Alegra`. `cuenta_por_pagar`, `secuencia_cxp` quedan vacíos. **`oficina`** queda vacía hasta el paso de asignación contable. `edit-bill` actualiza la misma fila; `delete-bill` borra si no hay `Pagos`, si no marca `alegra_bill_deleted`. Historial: usuario vía `ALEGRA_WEBHOOK_HISTORY_USERNAME` / `ALEGRA_WEBHOOK_HISTORY_USER_ID` en settings o primer usuario activo.
 
-### Aprobación de gastos Alegra (dos pasos)
+### Aprobación de gastos Alegra
 
-Los radicados creados por webhook (`new-bill`) entran con `gasto_aprobacion_estado=pendiente_asignacion` y `gasto_aprobado=False`. **No** aparecen en causación/tesorería hasta completar el flujo.
+Los radicados creados por webhook (`new-bill`) entran con `gasto_aprobacion_estado=pendiente_asignacion` y `gasto_aprobado=False`. **No** aparecen en causación/tesorería hasta quedar aprobados (`gasto_aprobado=True`).
 
-1. **Contabilidad** (grupo Django `Contabilidad`): `/accounting/gastos-alegra/asignar/` — asigna **oficina** (MONTERIA/MEDELLIN), **aprobador** (catálogo `GastoAprobador` en Admin) y comentario opcional para el aprobador.
-2. **Aprobador designado**: `/accounting/gastos-alegra/aprobar/` — solo botón **Aprobar**; ve el comentario del contable en lectura.
+**Contabilidad** (`/accounting/gastos-alegra/asignar/`): asigna **oficina** (obligatoria) y, opcionalmente, **aprobador** (`GastoAprobador` en Admin) + comentario.
 
-Tras aprobar, `gasto_aprobado=True` y el radicado sigue el flujo normal (`info_facturas`, causar, pagar). Radicados manuales (`radicarfactura`) usan `gasto_aprobacion_estado=no_aplica`.
+- **Con aprobador:** pasa a `pendiente_aprobacion`; el aprobador designado los ve en `/accounting/gastos-alegra/aprobar/` y pulsa **Aprobar**.
+- **Sin aprobador** (solo si la empresa tiene tope en Admin): campo `empresas.alegra_gasto_max_sin_aprobador` (COP, entero). Vacío o `0` = **siempre** exige aprobador. Si el valor del gasto es ≤ tope, la UI pide confirmación (“está registrando un gasto sin aprobador”) y al guardar queda `aprobado` con `gasto_aprobado_por` = contable que asignó. Si el valor supera el tope, debe asignar aprobador.
 
-**Radicado manual (sin webhook**, p. ej. journal en Alegra): en `/accounting/gastos-alegra/asignar/` → **Nuevo radicado** — el usuario ingresa **solo el id numérico** en Alegra; el backend arma `alegra_bill_id = {NIT}:journal:{id}` (p. ej. `12345` → `901018375:journal:12345`). Incluye PDF, oficina y aprobador (`POST /accounting/ajax/gastos-alegra/crear`). Queda `origen=Alegra` y `pendiente_aprobacion`.
+Tras aprobar (manual o automático), el radicado sigue el flujo normal (`info_facturas`, causar, pagar). Radicados ordinarios (`radicarfactura`) usan `gasto_aprobacion_estado=no_aplica`.
+
+**Radicado manual (sin webhook**, p. ej. journal en Alegra): en *Nuevo radicado* — id numérico en Alegra → `alegra_bill_id = {NIT}:journal:{id}`; `POST /accounting/ajax/gastos-alegra/crear` con oficina y aprobador opcional (misma regla de auto-aprobación si va vacío). Permisos: grupo **Contabilidad** + `accounting.view_facturas` (igual que la pantalla asignar; no exige `add_facturas` del radicado clásico).
 
 **Radicado desde journal:** en *Nuevo radicado* → empresa + id journal + **Consultar** — `GET /accounting/ajax/gastos-alegra/journal-preview?empresa={NIT}&journal_id={id}` precarga el formulario (`radicado` con mapeo CxP). Reglas en `accounting/journal_cxp.py`: crédito > 0, tercero, pasivo **orden 2** (`code` empieza por `2`), sin retenciones/impuestos; guarda `alegra_journal_detalle` para pago detallado. `GET .../journal-detalle-radicado?radicado={pk}` devuelve ese detalle.
 

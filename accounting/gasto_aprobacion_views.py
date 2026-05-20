@@ -1,19 +1,25 @@
 import json
+import logging
 import re
 
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from django.utils.dateparse import parse_date
 
+logger = logging.getLogger(__name__)
+
 from accounting.gasto_aprobacion import (
     aprobadores_para_empresa,
     aprobar_gasto_alegra,
     asignar_gasto_alegra,
     crear_radicado_gasto_alegra,
+    empresa_config_sin_aprobador,
     factura_a_dict,
+    parse_aprobador_user_id_opcional,
     usuario_es_aprobador_gasto,
 )
 from accounting.journal_cxp import (
@@ -29,7 +35,25 @@ from andinasoft.models import empresas
 
 
 def _json_error(exc, status=400):
-    return JsonResponse({'detail': str(exc)}, status=status)
+    if isinstance(exc, PermissionDenied):
+        detail = (
+            'No tiene permiso para esta acción. '
+            'Revise que su usuario tenga el grupo Contabilidad y los permisos de facturas '
+            '(ver/agregar según la operación).'
+        )
+    else:
+        detail = str(exc).strip() or 'Error en la operación.'
+    return JsonResponse({'detail': detail}, status=status)
+
+
+def _log_gastos_alegra_denied(request, endpoint, detail, status=403):
+    logger.warning(
+        'gastos-alegra %s: user=%s status=%s detail=%s',
+        endpoint,
+        getattr(request.user, 'username', '?'),
+        status,
+        detail,
+    )
 
 
 @login_required
@@ -103,7 +127,13 @@ def ajax_gastos_alegra_aprobadores(request):
         if row.empresa_id:
             label += f' ({row.empresa_id})'
         items.append({'id': u.pk, 'label': label})
-    return JsonResponse({'aprobadores': items})
+    cfg = empresa_config_sin_aprobador(empresa)
+    return JsonResponse({
+        'aprobadores': items,
+        'permite_sin_aprobador': cfg['permite_sin_aprobador'],
+        'max_sin_aprobador': cfg['max_sin_aprobador'],
+        'mensaje_requiere_aprobador': cfg['mensaje_requiere_aprobador'],
+    })
 
 
 @login_required
@@ -237,11 +267,19 @@ def ajax_gastos_alegra_journal_detalle_radicado(request):
 @require_http_methods(['POST'])
 def ajax_gastos_alegra_crear(request):
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
-        return _json_error('Sin permiso Contabilidad.', 403)
-    try:
-        check_perms(request, ('accounting.add_facturas',))
-    except Exception as exc:
-        return _json_error(exc, 403)
+        detail = 'Sin permiso Contabilidad.'
+        _log_gastos_alegra_denied(request, 'crear', detail)
+        return _json_error(detail, 403)
+    # Misma puerta que la pantalla asignar (view_facturas). add_facturas solo en radicar clásico.
+    if not request.user.is_superuser and not check_perms(
+        request, ('accounting.view_facturas',), raise_exception=False
+    ):
+        detail = (
+            'Sin permiso accounting.view_facturas para crear radicados Alegra. '
+            'Solicite el mismo acceso que para «Asignar gastos Alegra».'
+        )
+        _log_gastos_alegra_denied(request, 'crear', detail)
+        return _json_error(detail, 403)
     try:
         empresa_id = (request.POST.get('empresa') or '').strip()
         fecha_factura = parse_date((request.POST.get('fecha_factura') or '')[:10])
@@ -263,17 +301,33 @@ def ajax_gastos_alegra_crear(request):
             descripcion=request.POST.get('descripcion'),
             soporte=soporte,
             oficina=(request.POST.get('oficina') or '').strip(),
-            aprobador_user_id=int(request.POST.get('aprobador_id')),
+            aprobador_user_id=parse_aprobador_user_id_opcional(request.POST.get('aprobador_id')),
             comentario_contable=(request.POST.get('comentario_contable') or '').strip(),
             referencia_alegra=(request.POST.get('referencia_alegra') or '').strip(),
             alegra_journal_detalle=alegra_journal_detalle,
         )
         return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except PermissionDenied:
+        detail = (
+            'No tiene permiso para crear radicados Alegra. '
+            'Revise grupo Contabilidad y permiso accounting.view_facturas.'
+        )
+        _log_gastos_alegra_denied(request, 'crear', detail)
+        return _json_error(detail, 403)
     except PermissionError as exc:
-        return _json_error(exc, 403)
+        detail = str(exc)
+        _log_gastos_alegra_denied(request, 'crear', detail)
+        return _json_error(detail, 403)
     except (ValueError, TypeError) as exc:
-        return _json_error(exc, 400)
+        detail = str(exc)
+        logger.info(
+            'gastos-alegra crear validación: user=%s detail=%s',
+            request.user.username,
+            detail,
+        )
+        return _json_error(detail, 400)
     except Exception as exc:
+        logger.exception('gastos-alegra crear: user=%s', request.user.username)
         return _json_error(exc, 500)
 
 
@@ -298,7 +352,7 @@ def ajax_gastos_alegra_asignar(request):
             request,
             factura=fac,
             oficina=oficina,
-            aprobador_user_id=int(aprobador_id),
+            aprobador_user_id=parse_aprobador_user_id_opcional(aprobador_id),
             comentario_contable=comentario,
         )
         return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
