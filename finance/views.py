@@ -5,10 +5,9 @@ from django.http import JsonResponse, FileResponse
 from django.db.models import Avg, Max, Min, Sum, Q
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.core.files.storage import default_storage
 from andina.decorators import check_perms, group_perm_required
 from andinasoft.create_pdf import GenerarPDF
-from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy
+from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, file_response_from_pdf_root
 from andinasoft.models import clientes, proyectos
 from andinasoft.shared_models import Recaudos_general, Vista_Adjudicacion
 from finance.models import recibos_internos
@@ -593,11 +592,7 @@ def imprimir_recibo(request):
             pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
 
         file = pdf.get('root')
-
-        # When tmp PDFs are stored in S3/default_storage, `root` is a storage key (e.g. tmp/<file>.pdf).
-        if file and str(file).replace("\\", "/").startswith("tmp/"):
-            return FileResponse(default_storage.open(file, "rb"), as_attachment=True, filename=filename)
-        return FileResponse(open(file,'rb'),as_attachment=True,filename=filename)
+        return file_response_from_pdf_root(file, filename=filename)
 
 
 @csrf_exempt

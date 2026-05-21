@@ -274,6 +274,21 @@ def pdf_gen_weasy(template_path, context, filename):
         'root': settings.MEDIA_ROOT + f'/tmp/{filename}'
     }
 
+
+def file_response_from_pdf_root(root_path, *, filename):
+    """
+    pdf_gen/pdf_gen_weasy return a storage key as `root` (e.g. tmp/<file>.pdf) when using default_storage.
+    Fall back to local filesystem when `root` is a real path.
+    """
+    from django.http import FileResponse
+
+    root_str = str(root_path or "")
+    normalized = root_str.replace("\\", "/")
+    if normalized.startswith("tmp/"):
+        return FileResponse(default_storage.open(root_str, "rb"), as_attachment=True, filename=filename)
+    return FileResponse(open(root_str, "rb"), as_attachment=True, filename=filename)
+
+
 def get_text_from_file(file_path):
     
     #pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'

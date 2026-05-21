@@ -45,7 +45,7 @@ from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_cont
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
 from andinasoft.create_pdf import GenerarPDF
-from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy
+from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, file_response_from_pdf_root
 from andinasoft.passes_test import perms_test
 from buildingcontrol import models as building_model
 from accounting import forms as forms_accounting
@@ -181,16 +181,7 @@ def _tmp_download_url(filename):
     return settings.DIR_DOWNLOADS + filename
 
 
-def _file_response_from_pdf_root(root_path, *, filename):
-    """
-    pdf_gen/pdf_gen_weasy may return a storage key as `root` (e.g. tmp/<file>.pdf) when using default_storage.
-    Fall back to local filesystem when `root` is a real path.
-    """
-    root_str = str(root_path or "")
-    normalized = root_str.replace("\\", "/")
-    if normalized.startswith("tmp/"):
-        return FileResponse(default_storage.open(root_str, "rb"), as_attachment=True, filename=filename)
-    return FileResponse(open(root_str, "rb"), as_attachment=True, filename=filename)
+_file_response_from_pdf_root = file_response_from_pdf_root
 
 
 INVENTARIO_IMPORT_COLUMNS = [
@@ -7870,7 +7861,7 @@ def promesas(request,proyecto):
                                                 
                         ruta_link=pdf.get('url')
                     
-                    return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
+                    return _file_response_from_pdf_root(ruta, filename=filename)
                     
                 elif request.POST.get('btnReimpPagare'):
                     contrato=obj_promesas[0].nropromesa
@@ -8969,12 +8960,7 @@ def ajax_imprimir_promesa(request):
                 pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
             
             ruta = pdf.get('root')
-                                    
-            ruta_link=pdf.get('url')
-            
-            print('llega')
-            
-            return FileResponse(open(ruta,'rb'),as_attachment=True,filename=filename)
+            return _file_response_from_pdf_root(ruta, filename=filename)
             
 def ajax_print_estado_cuenta(request):
     
@@ -8987,7 +8973,7 @@ def ajax_print_estado_cuenta(request):
         filename = f'Estado_de_cuenta_{adj}_{proyecto}.pdf'
         pdf = pdf_gen('pdf/statement_of_account.html', context, filename)
         ruta = pdf.get('root')
-        return FileResponse(open(ruta, 'rb'), as_attachment=True, filename=filename)
+        return _file_response_from_pdf_root(ruta, filename=filename)
 
 def print_documents(request,proyecto):
     if request.method == 'GET':

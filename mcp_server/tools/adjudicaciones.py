@@ -305,17 +305,20 @@ def adjudicacion_estado_cuenta(
             logger.error("[DEBUG adjudicacion_estado_cuenta] pdf_gen fallo (pisa error)")
             return {'error': 'Error generando el PDF del estado de cuenta.'}
 
-        # Verificar que el archivo fue creado
         ruta_archivo = pdf.get('root', '')
-        if not os.path.exists(ruta_archivo):
-            logger.error("[DEBUG adjudicacion_estado_cuenta] PDF no encontrado en disco: %s", ruta_archivo)
-            return {'error': f'El PDF fue procesado pero no se encontró en disco: {ruta_archivo}'}
+        normalized = str(ruta_archivo).replace('\\', '/')
+        if normalized.startswith('tmp/'):
+            if not default_storage.exists(ruta_archivo):
+                logger.error("[DEBUG adjudicacion_estado_cuenta] PDF no encontrado en storage: %s", ruta_archivo)
+                return {'error': f'El PDF fue procesado pero no se encontró en storage: {ruta_archivo}'}
+            pdf_url = pdf.get('url') or (settings.DIR_DOWNLOADS + quote(filename))
+        else:
+            if not os.path.exists(ruta_archivo):
+                logger.error("[DEBUG adjudicacion_estado_cuenta] PDF no encontrado en disco: %s", ruta_archivo)
+                return {'error': f'El PDF fue procesado pero no se encontró en disco: {ruta_archivo}'}
+            pdf_url = settings.DIR_DOWNLOADS + quote(filename)
 
-        logger.info("[DEBUG adjudicacion_estado_cuenta] PDF generado OK: %s (%d bytes)",
-                    ruta_archivo, os.path.getsize(ruta_archivo))
-
-        # URL absoluta con filename URL-encoded (espacios → %20)
-        pdf_url = settings.DIR_DOWNLOADS + quote(filename)
+        logger.info("[DEBUG adjudicacion_estado_cuenta] PDF generado OK: %s", ruta_archivo)
 
         # Construir resumen para el agente
         titulares_obj = context['adj'].titulares

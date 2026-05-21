@@ -1,12 +1,10 @@
 import datetime
 
-from django.http import FileResponse
 from django.shortcuts import redirect
-from django.core.files.storage import default_storage
 
 from andinasoft.shared_models import Adjudicacion
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
-from andinasoft.utilities import pdf_gen
+from andinasoft.utilities import pdf_gen, file_response_from_pdf_root
 
 
 STATEMENT_TEMPLATE_BY_PROJECT = {
@@ -76,10 +74,7 @@ def build_account_statement_response(project_alias, adj_id, actor_label='Portal 
     ruta = pdf.get('root')
     if not ruta:
         return None
-    ruta_str = str(ruta or '').replace('\\', '/')
-    if ruta_str.startswith('tmp/'):
-        return FileResponse(default_storage.open(ruta, 'rb'), as_attachment=True, filename=filename)
-    return FileResponse(open(ruta, 'rb'), as_attachment=True, filename=filename)
+    return file_response_from_pdf_root(ruta, filename=filename)
 
 
 def _humanize_document_name(raw_name):
