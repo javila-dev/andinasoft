@@ -18,6 +18,34 @@ def _date(value):
     return value.isoformat() if value else None
 
 
+def _journal_payload(*, numeration_id, date, reference, observations, entries):
+    """
+    POST /journals — mismo contrato que recibos de caja (numberTemplate + status open).
+    Alegra aplica el tipo de comprobante contable vía numberTemplate, no idNumeration.
+    """
+    return {
+        'numberTemplate': str(numeration_id),
+        'date': date,
+        'reference': reference,
+        'observations': (observations or '')[:500],
+        'status': 'open',
+        'entries': entries,
+    }
+
+
+def _journal_entry(*, account_id, description, debit, credit, client_id=None):
+    """Línea de asiento; `client` como string (mismo formato que recibos de caja)."""
+    entry = {
+        'id': account_id,
+        'description': (description or '')[:255],
+        'debit': debit,
+        'credit': credit,
+    }
+    if client_id:
+        entry['client'] = str(client_id)
+    return entry
+
+
 def _nonzero(value):
     return Decimal(value or 0) != 0
 
@@ -581,6 +609,55 @@ class ExpensePaymentBuilder:
         self.empresa = empresa
         self.resolver = MappingResolver(empresa)
 
+    def _contact_id_for_tercero(self, resolver, tercero_pk, *, required=True):
+        """Resuelve contacto Alegra para idtercero de Facturas/Pagos (cliente, empresa, asesor o índice)."""
+        tercero_pk = str(tercero_pk or '').strip()
+        if not tercero_pk:
+            if required:
+                raise AlegraBuildError('Falta idtercero para mapear contacto en el asiento.')
+            return None
+        if clientes.objects.filter(pk=tercero_pk).exists():
+            return resolver.contact_for_cliente(tercero_pk)
+        if empresas.objects.filter(pk=tercero_pk).exists():
+            return resolver.contact_for_empresa(tercero_pk)
+        if asesores.objects.filter(pk=tercero_pk).exists():
+            return resolver.contact_for_asesor(tercero_pk)
+        return resolver.contact_by_identification(
+            tercero_pk,
+            prefer_types=['provider', 'client'],
+            required=required,
+        )
+
+    def _contact_id_for_empresa_nit(self, resolver, empresa_id, *, required=False):
+        nit = str(empresa_id or '').strip()
+        if not nit or not empresas.objects.filter(pk=nit).exists():
+            if required:
+                raise AlegraBuildError(f'Falta empresa local {empresa_id} para mapear contacto intercompany.')
+            return None
+        return resolver.get(
+            AlegraMapping.CONTACT,
+            local_model='andinasoft.empresas',
+            local_pk=nit,
+            required=required,
+        )
+
+    def _contact_id_empresa_intercompany(self, resolver, counterparty_nit, *, label='contraparte'):
+        """
+        Contacto Alegra de la empresa del grupo contraparte (NIT = empresas.pk).
+        Fuente: empresa_origen/empresa_pago en pagos; empresa_sale/empresa_entra en transferencias;
+        alineado con local_code interco_cxc:<nit> / interco_cxp:<nit> en cuentas_intercompanias.
+        """
+        nit = str(counterparty_nit or '').strip()
+        if not nit:
+            raise AlegraBuildError(f'Falta NIT de empresa {label} para el asiento intercompany.')
+        contact_id = self._contact_id_for_empresa_nit(resolver, nit, required=False)
+        if not contact_id:
+            raise AlegraBuildError(
+                f'Falta mapeo de contacto Alegra para la empresa intercompany {nit} ({label}). '
+                f'Configure en Referencias → contacto con local_model=andinasoft.empresas.'
+            )
+        return contact_id
+
     def build(self, source):
         if isinstance(source, Pagos):
             return self._from_pago(source)
@@ -630,25 +707,9 @@ class ExpensePaymentBuilder:
         if empresa_origen_id and empresa_pago_id and empresa_origen_id != empresa_pago_id:
             return self._from_pago_intercompany(pago, factura, empresa_origen_id, empresa_pago_id)
 
-        tercero_pk = str(factura.idtercero).strip() if factura and getattr(factura, 'idtercero', None) is not None else ''
-        if not tercero_pk:
+        if not factura or getattr(factura, 'idtercero', None) is None:
             raise AlegraBuildError(f'El pago {pago.pk} no tiene idtercero en su factura/radicado.')
-
-        # `idtercero` in Facturas/Pagos can refer to different local tables depending on the business case.
-        # Prefer a concrete local model to avoid creating the mapping under the wrong local_model.
-        if clientes.objects.filter(pk=tercero_pk).exists():
-            contact_id = self.resolver.contact_for_cliente(tercero_pk)
-        elif empresas.objects.filter(pk=tercero_pk).exists():
-            contact_id = self.resolver.contact_for_empresa(tercero_pk)
-        elif asesores.objects.filter(pk=tercero_pk).exists():
-            contact_id = self.resolver.contact_for_asesor(tercero_pk)
-        else:
-            # No local third-party table; resolve using Alegra contact index by identification.
-            contact_id = self.resolver.contact_by_identification(
-                tercero_pk,
-                prefer_types=['provider', 'client'],
-                required=True,
-            )
+        contact_id = self._contact_id_for_tercero(self.resolver, factura.idtercero, required=True)
         built = self._base_payment(
             date=pago.fecha_pago,
             cuenta=pago.cuenta,
@@ -785,19 +846,28 @@ class ExpensePaymentBuilder:
             if not bank_code:
                 raise AlegraBuildError('La cuenta bancaria del pago no tiene nro_cuentacontable.')
             bank_cat = resolver.category_for_code(str(bank_code))
+            # Contraparte = empresa del gasto (dueña del radicado); las líneas interco/banco no usan proveedor.
+            interco_client = self._contact_id_empresa_intercompany(
+                resolver, empresa_origen_id, label='empresa origen (gasto)',
+            )
+            desc = observations[:255]
 
-            num = resolver.get(AlegraMapping.NUMERATION, local_code='interco_journal', required=False)
-            payload = {
-                'date': date,
-                'reference': interco_ref,
-                'observations': observations[:500],
-                'entries': [
-                    {'id': interco_cxc, 'description': observations[:255], 'debit': value},
-                    {'id': bank_cat, 'description': observations[:255], 'credit': value},
+            numeration_id = resolver.numeration('interco_journal')
+            payload = _journal_payload(
+                numeration_id=numeration_id,
+                date=date,
+                reference=interco_ref,
+                observations=observations,
+                entries=[
+                    _journal_entry(
+                        account_id=interco_cxc, description=desc, debit=value, credit=0,
+                        client_id=interco_client,
+                    ),
+                    _journal_entry(
+                        account_id=bank_cat, description=desc, debit=0, credit=value,
+                    ),
                 ],
-            }
-            if num:
-                payload['idNumeration'] = num
+            )
             return BuiltDocument(
                 document_type='expense_intercompany',
                 operation='accounting__createJournal',
@@ -836,18 +906,28 @@ class ExpensePaymentBuilder:
                 raise AlegraBuildError(f'La factura {factura.pk} no tiene cuenta por pagar para mapear categoria.')
             concept_cat = resolver.category_for_code(str(category_code))
 
-        num = resolver.get(AlegraMapping.NUMERATION, local_code='interco_journal', required=False)
-        payload = {
-            'date': date,
-            'reference': interco_ref,
-            'observations': observations[:500],
-            'entries': [
-                {'id': concept_cat, 'description': observations[:255], 'debit': value},
-                {'id': interco_cxp, 'description': observations[:255], 'credit': value},
+        provider_id = self._contact_id_for_tercero(resolver, getattr(factura, 'idtercero', None), required=True)
+        interco_client = self._contact_id_empresa_intercompany(
+            resolver, empresa_pago_id, label='empresa que pagó (banco)',
+        )
+        desc = observations[:255]
+        numeration_id = resolver.numeration('interco_journal')
+        payload = _journal_payload(
+            numeration_id=numeration_id,
+            date=date,
+            reference=interco_ref,
+            observations=observations,
+            entries=[
+                _journal_entry(
+                    account_id=concept_cat, description=desc, debit=value, credit=0,
+                    client_id=provider_id,
+                ),
+                _journal_entry(
+                    account_id=interco_cxp, description=desc, debit=0, credit=value,
+                    client_id=interco_client,
+                ),
             ],
-        }
-        if num:
-            payload['idNumeration'] = num
+        )
         return BuiltDocument(
             document_type='expense_intercompany',
             operation='accounting__createJournal',
@@ -980,19 +1060,29 @@ class ExpensePaymentBuilder:
             if not bank_code:
                 raise AlegraBuildError('La cuenta que entra no tiene nro_cuentacontable.')
             bank_cat = resolver.category_for_code(str(bank_code))
+            # Dinero sale de empresa_sale → entra aquí: contraparte = empresa_sale (NIT).
+            interco_client = self._contact_id_empresa_intercompany(
+                resolver, empresa_sale_id, label='empresa sale (origen fondos)',
+            )
+            desc = observations[:255]
 
-            num = resolver.get(AlegraMapping.NUMERATION, local_code='interco_journal', required=False)
-            payload = {
-                'date': date,
-                'reference': interco_ref,
-                'observations': observations[:500],
-                'entries': [
-                    {'id': bank_cat, 'description': observations[:255], 'debit': value},
-                    {'id': interco_cxp, 'description': observations[:255], 'credit': value},
+            numeration_id = resolver.numeration('interco_journal')
+            payload = _journal_payload(
+                numeration_id=numeration_id,
+                date=date,
+                reference=interco_ref,
+                observations=observations,
+                entries=[
+                    _journal_entry(
+                        account_id=bank_cat, description=desc, debit=value, credit=0,
+                        client_id=interco_client,
+                    ),
+                    _journal_entry(
+                        account_id=interco_cxp, description=desc, debit=0, credit=value,
+                        client_id=interco_client,
+                    ),
                 ],
-            }
-            if num:
-                payload['idNumeration'] = num
+            )
             return BuiltDocument(
                 document_type='expense_intercompany_transfer_in',
                 operation='accounting__createJournal',
@@ -1037,19 +1127,28 @@ class ExpensePaymentBuilder:
         if not bank_code:
             raise AlegraBuildError('La cuenta que sale no tiene nro_cuentacontable.')
         bank_cat = resolver.category_for_code(str(bank_code))
+        interco_client = self._contact_id_empresa_intercompany(
+            resolver, empresa_entra_id, label='empresa entra (destino fondos)',
+        )
+        desc = observations[:255]
 
-        num = resolver.get(AlegraMapping.NUMERATION, local_code='interco_journal', required=False)
-        payload = {
-            'date': date,
-            'reference': interco_ref,
-            'observations': observations[:500],
-            'entries': [
-                {'id': interco_cxc, 'description': observations[:255], 'debit': value},
-                {'id': bank_cat, 'description': observations[:255], 'credit': value},
+        numeration_id = resolver.numeration('interco_journal')
+        payload = _journal_payload(
+            numeration_id=numeration_id,
+            date=date,
+            reference=interco_ref,
+            observations=observations,
+            entries=[
+                _journal_entry(
+                    account_id=interco_cxc, description=desc, debit=value, credit=0,
+                    client_id=interco_client,
+                ),
+                _journal_entry(
+                    account_id=bank_cat, description=desc, debit=0, credit=value,
+                    client_id=interco_client,
+                ),
             ],
-        }
-        if num:
-            payload['idNumeration'] = num
+        )
         return BuiltDocument(
             document_type='expense_intercompany_transfer_out',
             operation='accounting__createJournal',

@@ -78,11 +78,20 @@ class AlegraIntegrationService:
         )
 
         built_results = self._build_documents(empresa, proyecto, document_type, desde, hasta)
-        valid = 0
+        ready_to_send = 0
+        already_sent = 0
         invalid = 0
         documents = []
 
         for result in built_results:
+            if result.get('existing_sent'):
+                doc = result['existing_sent']
+                doc.batch = batch
+                doc.save(update_fields=['batch', 'updated_at'])
+                already_sent += 1
+                documents.append(self._document_summary(doc))
+                continue
+
             if result.get('error'):
                 invalid += 1
                 doc = self._upsert_document(
@@ -100,7 +109,6 @@ class AlegraIntegrationService:
                     error=result['error'],
                 )
             else:
-                valid += 1
                 built = result['built']
                 doc_empresa = empresas.objects.get(pk=built.empresa_id) if getattr(built, 'empresa_id', None) else empresa
                 doc_proyecto = proyectos.objects.get(pk=built.proyecto_id) if getattr(built, 'proyecto_id', None) else proyecto
@@ -118,12 +126,21 @@ class AlegraIntegrationService:
                     status=AlegraDocument.STATUS_VALID,
                     error='',
                 )
+                if doc.status == AlegraDocument.STATUS_SENT:
+                    already_sent += 1
+                elif doc.status == AlegraDocument.STATUS_VALID:
+                    ready_to_send += 1
             documents.append(self._document_summary(doc))
 
         batch.total_documents = len(documents)
-        batch.success_count = valid
+        batch.success_count = ready_to_send
         batch.error_count = invalid
-        batch.summary = {'valid': valid, 'invalid': invalid}
+        batch.summary = {
+            'ready_to_send': ready_to_send,
+            'already_sent': already_sent,
+            'built_ok': ready_to_send + already_sent,
+            'invalid': invalid,
+        }
         batch.save(update_fields=['total_documents', 'success_count', 'error_count', 'summary', 'updated_at'])
         return self._batch_response(batch, documents)
 
@@ -978,7 +995,7 @@ class AlegraIntegrationService:
             queryset = Recaudos_general.objects.using(proyecto.pk).filter(fecha__range=(desde, hasta)).order_by('fecha', 'pk')
             results = []
             for receipt in queryset:
-                results.extend(self._safe_build(builder, receipt))
+                results.extend(self._safe_build(builder, receipt, empresa=empresa, proyecto=proyecto))
             return results
 
         if document_type == AlegraSyncBatch.DOC_COMMISSION:
@@ -986,7 +1003,7 @@ class AlegraIntegrationService:
             commissions = Pagocomision.objects.using(proyecto.pk).raw(f'CALL detalle_comisiones_fecha("{desde}","{hasta}")')
             results = []
             for commission in commissions:
-                results.extend(self._safe_build(builder, commission))
+                results.extend(self._safe_build(builder, commission, empresa=empresa, proyecto=proyecto))
             return results
 
         if document_type == AlegraSyncBatch.DOC_GTT:
@@ -1004,7 +1021,7 @@ class AlegraIntegrationService:
             )
             results = []
             for detalle in detalles:
-                results.extend(self._safe_build(builder, detalle))
+                results.extend(self._safe_build(builder, detalle, empresa=empresa, proyecto=proyecto))
             return results
 
         builder = ExpensePaymentBuilder(empresa)
@@ -1016,12 +1033,30 @@ class AlegraIntegrationService:
         ).select_related('cuenta_sale', 'cuenta_entra', 'empresa_sale', 'empresa_entra'))
         results = []
         for item in pagos + anticipos + transferencias:
-            results.extend(self._safe_build(builder, item))
+            results.extend(self._safe_build(builder, item, empresa=empresa, proyecto=proyecto))
         return results
 
-    def _safe_build(self, builder, source):
+    def _sent_documents_for_source(self, empresa, proyecto, source_model, source_pk):
+        """Documentos ya enviados a Alegra para esta fuente y empresa (no reconstruir en preview)."""
+        qs = AlegraDocument.objects.filter(
+            empresa_id=empresa.pk,
+            source_model=source_model,
+            source_pk=str(source_pk),
+            status=AlegraDocument.STATUS_SENT,
+        )
+        if proyecto:
+            qs = qs.filter(proyecto_id=proyecto.pk)
+        else:
+            qs = qs.filter(proyecto__isnull=True)
+        return list(qs.order_by('pk'))
+
+    def _safe_build(self, builder, source, *, empresa, proyecto):
         source_model = f'{source.__class__._meta.app_label}.{source.__class__.__name__}'
         source_pk = getattr(source, 'pk', None) or getattr(source, 'id_pago', '')
+        sent_docs = self._sent_documents_for_source(empresa, proyecto, source_model, source_pk)
+        if sent_docs:
+            return [{'existing_sent': doc} for doc in sent_docs]
+
         try:
             built = builder.build(source)
             built_list = built if isinstance(built, list) else [built]
@@ -1067,7 +1102,7 @@ class AlegraIntegrationService:
         if existing and existing.status == AlegraDocument.STATUS_SENT:
             existing.batch = batch
             existing.save(update_fields=['batch', 'updated_at'])
-            return existing
+            return existing  # preview no debería llegar aquí si _safe_build omitió el build
 
         doc, _ = AlegraDocument.objects.update_or_create(
             empresa=empresa,

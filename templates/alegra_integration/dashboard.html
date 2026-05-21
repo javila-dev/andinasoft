@@ -789,14 +789,31 @@ function escHtml(s) {
 }
 
 // ── Metrics ────────────────────────────────────
-function updateMetrics(batch, mode) {
+function previewCounts(batch, docs) {
+  const sum = batch.summary || {};
+  let ready = sum.ready_to_send;
+  let already = sum.already_sent;
+  if (ready == null && docs && docs.length) {
+    ready = docs.filter(d => d.status === 'valid').length;
+  }
+  if (already == null && docs && docs.length) {
+    already = docs.filter(d => d.status === 'sent').length;
+  }
+  if (ready == null) ready = batch.success_count || 0;
+  if (already == null) already = 0;
+  return { ready: parseInt(ready, 10) || 0, already: parseInt(already, 10) || 0 };
+}
+
+function updateMetrics(batch, mode, docs) {
   $('#metricTotal').text(batch.total_documents);
   if (mode === 'preview') {
-    $('#metricOk').text(batch.success_count);
+    const c = previewCounts(batch, docs);
+    $('#metricOk').text(c.ready);
     $('#metricErr').text(batch.error_count);
-    $('#metricSkipped').text(0);
-    $('#metricOkLabel').text('Válidos');
+    $('#metricSkipped').text(c.already);
+    $('#metricOkLabel').text('Listos para enviar');
     $('#metricErrLabel').text('Inválidos');
+    $('.metric-card').eq(3).find('.metric-label').text('Ya enviados');
   } else {
     $('#metricOk').text(batch.success_count);
     $('#metricErr').text(batch.error_count);
@@ -972,8 +989,16 @@ function onPreviewSuccess(data) {
   log('success', `Lote <strong>#${batch.id}</strong> generado`);
   log('info',    `Total documentos encontrados: <strong>${batch.total_documents}</strong>`);
 
-  if (batch.success_count > 0) {
-    log('success', `Válidos y listos para enviar: <strong>${batch.success_count}</strong>`);
+  const prev = previewCounts(batch, docs);
+  const builtOk = (batch.summary || {}).built_ok;
+  if (prev.already > 0 && builtOk != null) {
+    log('info', `Construidos correctamente: <strong>${builtOk}</strong>`);
+  }
+  if (prev.ready > 0) {
+    log('success', `Listos para enviar: <strong>${prev.ready}</strong>`);
+  }
+  if (prev.already > 0) {
+    log('dim', `Ya enviados (solo informativo, no se reconstruyen ni reenvían): <strong>${prev.already}</strong>`);
   }
   if (batch.error_count > 0) {
     log('error', `Con errores (mapeos faltantes): <strong>${batch.error_count}</strong>`);
@@ -987,20 +1012,25 @@ function onPreviewSuccess(data) {
     }
   }
 
-  updateMetrics(batch, 'preview');
+  updateMetrics(batch, 'preview', docs);
   renderDocuments(docs);
 
   $('#logBatchBadge').html(statusBadge(batch.status)).show();
 
-  if (batch.success_count > 0) {
+  if (prev.ready > 0) {
     logSep();
     log('label',
-      `<strong>${batch.success_count}</strong> documento(s) listo(s). ` +
-      `Presiona <em>Enviar a Alegra</em> para continuar.`
+      `Se enviarán <strong>${prev.ready}</strong> documento(s)` +
+      (prev.already > 0 ? ` (${prev.already} ya enviado(s) se omitirán).` : '.') +
+      ` Presiona <em>Enviar a Alegra</em> para continuar.`
     );
     $('#btnSend').prop('disabled', false);
+  } else if (prev.already > 0) {
+    log('warning', 'Todos los documentos del período ya están enviados; no hay nada nuevo que enviar.');
+    $('#btnSend').prop('disabled', true);
   } else {
     log('warning', 'No hay documentos válidos. Revisa los mapeos en el administrador Django.');
+    $('#btnSend').prop('disabled', true);
   }
 
   loadHistory();
@@ -1011,7 +1041,14 @@ function confirmSend() {
   const p = getPayload();
   if (!validatePayload(p)) return;
 
-  const validN = parseInt($('#metricOk').text()) || 0;
+  const readyN = parseInt($('#metricOk').text()) || 0;
+  const alreadyN = parseInt($('#metricSkipped').text()) || 0;
+  let sendRows = `<tr><td class="text-muted">Se enviarán</td>
+          <td><strong class="text-success">${readyN}</strong> documento(s)</td></tr>`;
+  if (alreadyN > 0) {
+    sendRows += `<tr><td class="text-muted">Ya enviados (omitidos)</td>
+          <td><strong class="text-muted">${alreadyN}</strong></td></tr>`;
+  }
   $('#confirmSendDetails').html(`
     <table class="table table-sm table-bordered mb-0" style="font-size:.875rem">
       <tr><td class="text-muted" style="width:140px">Empresa</td>
@@ -1022,8 +1059,7 @@ function confirmSend() {
           <td><strong>${DOC_LABELS[currentDocType]}</strong></td></tr>
       <tr><td class="text-muted">Período</td>
           <td><strong>${p.fecha_desde} → ${p.fecha_hasta}</strong></td></tr>
-      <tr><td class="text-muted">Documentos válidos</td>
-          <td><strong class="text-success">${validN}</strong></td></tr>
+      ${sendRows}
     </table>
   `);
   $('#confirmSendModal').modal('show');
@@ -1553,17 +1589,16 @@ function loadBatchDetail(batchId) {
     $('#logBatchBadge').html(statusBadge(batch.status)).show();
     renderDocuments(docs);
 
-    // For preview batches, trust document statuses (some admin resets may leave batch.success_count=0).
-    const validDocs = (docs || []).filter(d => d.status === 'valid').length;
-    const invalidDocs = (docs || []).filter(d => d.status === 'invalid').length;
     const mode = (batch.status === 'preview') ? 'preview' : 'send';
-    updateMetrics(batch, mode);
-    if (mode === 'preview') {
-      $('#metricOk').text(validDocs);
-      $('#metricErr').text(invalidDocs);
+    updateMetrics(batch, mode, docs);
+    const prev = previewCounts(batch, docs);
+
+    if (batch.status === 'preview') {
+      if (prev.ready) log('success', `Listos para enviar: <strong>${prev.ready}</strong>`);
+      if (prev.already) log('dim', `Ya enviados: <strong>${prev.already}</strong>`);
     }
 
-    if (batch.status === 'preview' && validDocs > 0) {
+    if (batch.status === 'preview' && prev.ready > 0) {
       $('#btnSend').prop('disabled', false);
       log('label', 'Puedes enviar este lote a Alegra desde el botón de arriba.');
     }

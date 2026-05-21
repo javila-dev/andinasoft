@@ -663,3 +663,67 @@ class WebhookBillMappingTests(SimpleTestCase):
         self.assertEqual(cats[0]['price'], 1500000.0)
         self.assertEqual(cats[0]['quantity'], 1)
         self.assertTrue(cats[0]['id'])
+
+    @patch('alegra_integration.builders.MappingResolver')
+    @patch('alegra_integration.builders.empresas')
+    @patch('alegra_integration.builders.cuentas_intercompanias')
+    def test_intercompany_pago_journal_usa_number_template_como_recibos(
+        self, interco_model, empresas_model, resolver_cls,
+    ):
+        from alegra_integration.builders import ExpensePaymentBuilder
+
+        class IntercoResolver(ResolverStub):
+            def numeration(self, document_code, required=True):
+                if document_code == 'interco_journal':
+                    return 'num-interco'
+                return super().numeration(document_code, required=required)
+
+            def get(self, mapping_type, *args, **kwargs):
+                if mapping_type == 'contact' and kwargs.get('local_model') == 'andinasoft.empresas':
+                    return f"contact-emp-{kwargs.get('local_pk')}"
+                lc = kwargs.get('local_code') or ''
+                if lc.startswith('interco_cxc:') or lc.startswith('interco_cxp:'):
+                    return 'cat-interco'
+                if kwargs.get('local_code') == 'cxp_credito_1':
+                    return 'cat-cxp'
+                return super().get(mapping_type, *args, **kwargs)
+
+        empresas_model.objects.get.side_effect = lambda pk: SimpleNamespace(
+            pk=pk, nombre=f'Empresa {pk}',
+        )
+        rel_b_to_a = SimpleNamespace(pk=1, cuenta_por_cobrar='1380')
+        rel_a_to_b = SimpleNamespace(pk=2, cuenta_por_pagar='2380')
+        interco_model.objects.filter.side_effect = lambda **kw: SimpleNamespace(
+            first=lambda: rel_b_to_a if kw.get('empresa_desde_id') == '900B' else rel_a_to_b,
+        )
+
+        factura = SimpleNamespace(
+            pk=1,
+            nombretercero='Proveedor X',
+            descripcion='',
+            idtercero='123',
+            cuenta_por_pagar=SimpleNamespace(cuenta_credito_1='22050501'),
+            cuenta_por_pagar_id=5,
+        )
+        pago = SimpleNamespace(
+            pk=99,
+            valor=500000,
+            fecha_pago=datetime.date(2026, 5, 5),
+            cuenta=SimpleNamespace(nro_cuentacontable='11100501'),
+            nroradicado=factura,
+        )
+        resolver_cls.return_value = IntercoResolver()
+        with patch('alegra_integration.builders.empresas') as mock_emp:
+            mock_emp.objects.filter.return_value.exists.return_value = True
+            builder = ExpensePaymentBuilder(SimpleNamespace(pk='900B'))
+            built = builder._from_pago_intercompany(
+                pago, factura, empresa_origen_id='900A', empresa_pago_id='900B',
+            )
+        self.assertEqual(built.operation, 'accounting__createJournal')
+        self.assertEqual(built.payload['numberTemplate'], 'num-interco')
+        self.assertEqual(built.payload['status'], 'open')
+        self.assertNotIn('idNumeration', built.payload)
+        self.assertEqual(built.payload['entries'][0]['debit'], 500000.0)
+        self.assertEqual(built.payload['entries'][0]['credit'], 0)
+        self.assertEqual(built.payload['entries'][0]['client'], 'contact-emp-900A')
+        self.assertNotIn('client', built.payload['entries'][1])

@@ -1,675 +1,530 @@
 # Integración Alegra
 
-Este documento describe el módulo `alegra_integration`: qué hace, cómo se usa, y cuáles son las reglas/mapeos para mantener la integración estable.
+Documentación del módulo `alegra_integration` y flujos relacionados en `accounting`. Pensada para operadores y **agentes de código** que mantengan o extiendan la integración.
+
+## Guía rápida para agentes
+
+| Tema | Dónde leer | Archivos clave |
+|------|------------|----------------|
+| Preview / envío / lotes | [Flujo Preview](#flujo-preview), [Flujo Send](#flujo-send), [Dashboard](#dashboard-ui) | `services.py`, `views.py` |
+| Mapeos empresa/proyecto | [Mapeos esperados](#mapeos-esperados), [MappingResolver](#mappingresolver) | `mapping.py`, `models.py` |
+| Egresos `POST /payments` | [Egresos — pagos](#pagos-accountingpagos) | `builders.py` → `ExpensePaymentBuilder` |
+| Intercompany | [Intercompany](#pagos-y-transferencias-intercompany) | `builders.py`, `cuentas_intercompanias` |
+| Webhooks facturas compra | [Webhooks](#webhooks-facturas-de-compra) | `webhook_bills.py`, `bill_mapping.py`, `bill_pdf.py` |
+| Radicado journal CxP | [Radicados y tipos](#radicados-facturas-y-tipos-en-alegra) | `accounting/journal_cxp.py` |
+| Recibos (numeración OK) | [Recibos](#recibos-de-caja) | `ReceiptPaymentBuilder` — usa `numberTemplate` |
+| Tests | [Comandos](#comandos-de-verificación) | `alegra_integration/tests.py` |
+
+**Reglas que no se deben romper:**
+
+1. Los builders **no** llaman a Alegra; solo arman JSON.
+2. Los IDs de Alegra vienen de `AlegraMapping` / `MappingResolver`, no del PUC legacy directo.
+3. `local_key` es idempotencia: no cambiar formatos sin migración.
+4. Documentos `status=sent` no se reenvían ni se degradan a `valid` en preview.
+5. Journals intercompany y recibos usan **`numberTemplate`** (string ID); no confundir con `idNumeration` de comisiones internas.
+6. `POST /payments` no lleva `amount` en la raíz: el valor va en `bills[].amount` o `categories[].price`.
+
+---
 
 ## Objetivo
 
-Reemplazar gradualmente las interfaces contables tipo Excel/SIIGO por envío directo a Alegra, **sin eliminar los flujos viejos**.
+Reemplazar gradualmente interfaces contables tipo Excel/SIIGO por envío directo a Alegra, **sin eliminar flujos viejos**.
 
-Hoy existe un frontend interno (Dashboard + Referencias) para operar y configurar mapeos, además de los endpoints backend.
+Hay UI interna (Dashboard + Referencias) y API REST bajo `/accounting/alegra/`.
 
-Documentos cubiertos:
+**Documentos cubiertos:**
 
-- **Recibos de caja** por proyecto desde `andinasoft.shared_models.Recaudos_general` (se envían como comprobante contable).
-- **Comisiones** por proyecto desde `andinasoft.shared_models.Pagocomision` (internos: comprobante; externos: documento soporte).
-- **GTT** por proyecto desde `andinasoft.Gtt` / `Detalle_gtt` (solo aprobados; cada línea → documento soporte).
-- **Pagos/Egresos** por empresa desde modelos de `accounting` (pagos a facturas/categorías).
+| Tipo lote (`document_type`) | Fuente | Envío Alegra |
+|----------------------------|--------|--------------|
+| `receipt` | `Recaudos_general` (BD proyecto) | `POST /journals` |
+| `commission` | `Pagocomision` (SP proyecto) | Journal interno / `POST /bills` externo |
+| `gtt` | `Gtt` + `Detalle_gtt` (aprobados) | `POST /bills` (documento soporte) |
+| `expense` | `Pagos`, `Anticipos`, `transferencias_companias` | `POST /payments`, transfer bancaria, journals interco |
 
-Idea central: **no** mandar códigos contables legacy directamente. Alegra opera con IDs internos (banco, categoría/cuenta, contacto, centro de costo, numeración, retención, factura, etc.). Por eso existe una capa de mapeo (`AlegraMapping`) y un resolver (`MappingResolver`).
+**Idea central:** Alegra usa IDs propios (banco, categoría, contacto, numeración, bill, etc.). El puente es `AlegraMapping` + `MappingResolver`.
 
-## Puntos de entrada (UI + Endpoints)
+---
 
-Las rutas viven bajo:
+## Estructura del módulo
 
-```text
-/accounting/alegra/
+```
+alegra_integration/
+├── models.py              # AlegraMapping, AlegraSyncBatch, AlegraDocument, índices, webhooks logs
+├── mapping.py             # MappingResolver
+├── builders.py            # Payloads por tipo de documento
+├── services.py            # preview, send, contact-sync, reference-sync
+├── client.py              # AlegraMCPClient (REST api/v1)
+├── views.py + urls.py     # Dashboard, referencias, API
+├── bill_mapping.py        # Webhook/edit bill → Facturas, tipo bill/journal
+├── bill_pdf.py            # GET bill, PDF, enrich
+├── webhook_bills.py       # Ingesta new-bill / edit-bill / delete-bill
+├── webhook_inbound_status.py
+├── pago_link.py           # Pagos.alegra_payment_id tras envío
+└── management/commands/
+    ├── backfill_alegra_bill_sync.py
+    ├── backfill_alegra_journal_detalle.py
+    └── backfill_webhook_inbound.py
 ```
 
-### UI (interno)
+**Accounting relacionado:**
 
-- `GET /accounting/alegra/` (dashboard: preview, send, historial, enlace manual)
-- `GET /accounting/alegra/references` (referencias + configuración recibos)
+- `accounting/journal_cxp.py` — extracción CxP de journals Alegra, `alegra_journal_detalle`, mapeo PUC→categoría.
+- `accounting/gasto_aprobacion*.py` — aprobación gastos webhook.
+- Campos en `Facturas`: `alegra_bill_id`, `alegra_document_type`, `alegra_journal_detalle`, …
+- Campos en `Pagos`: `alegra_payment_id` (migración `0086`).
 
-### Operación
+---
 
-- `POST /accounting/alegra/preview`
-- `POST /accounting/alegra/send`
-- `GET  /accounting/alegra/batches/` (listado; incluye `created_by`, contadores y `summary` cuando aplica)
-- `GET  /accounting/alegra/batches/<id>` (detalle; el objeto `batch` incluye los mismos contadores, `summary` y `created_by`)
-- `POST /accounting/alegra/reference-sync` (sincronizar referencias)
+## Puntos de entrada
 
-### Webhooks (suscripción en Alegra)
+Base: `/accounting/alegra/`
 
-- `GET  /accounting/alegra/webhooks/` — consola: empresa (`alegra_enabled` + token), tipo de evento (`new-bill`, `edit-bill`, etc.), **host** (ej. `ibex-daring-molly.ngrok-free.app`; también acepta URL con `https://` y se normaliza) y **Suscribir**. Llama a Alegra `POST /webhooks/subscriptions` con la misma Basic Auth que el cliente REST.
-- `POST /accounting/alegra/webhooks/subscribe` — JSON: `{ "empresa": "<NIT>", "event": "new-bill", "domain": "https://..." }` o `"domain": "host.sin.scheme"`. **Alegra no acepta** `http://` ni `https://` en el campo `url` del API: el backend envía `host + /accounting/alegra/webhooks/bills/`. La respuesta JSON incluye `callback_url` (como en Alegra) y `callback_url_https` (para probar en navegador).
-- `GET|HEAD|POST /accounting/alegra/webhooks/bills/` — endpoint público (stub) para validación de URL; ingesta de eventos, aparte.
+### UI
 
-Cada intento de suscripción queda en **`AlegraWebhookSubscriptionLog`** (`response_json`, `response_status`, `success`).
+| Ruta | Uso |
+|------|-----|
+| `GET /` | Dashboard: preview, enviar, tabla documentos, historial lotes |
+| `GET /references` | Mapeos bancos, categorías, numeraciones, interfaces CxP, intercompany, GTT, recibos |
 
-Cada **POST** de Alegra al endpoint de ingesta se guarda en **`AlegraWebhookInboundLog`** (`payload` JSON, `raw_body` si el JSON no parseó, IP, fecha). Consúltalo en Admin o en la tabla «Recepciones desde Alegra» de `/accounting/alegra/webhooks/`.
+### Operación (JSON + sesión)
 
-- `POST /accounting/alegra/webhooks/inbound/replay` — JSON: `{ "log_id": <id>, "empresa": "<NIT>" }`. Reejecuta `process_inbound_post` con el payload guardado (depuración; no llama a Alegra). Requiere sesión. La empresa puede omitirse si el log trae `?empresa=` en `query_string`.
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/preview` | Construye lote + documentos (`status=preview`) |
+| `POST` | `/send` | Preview + envío en una llamada |
+| `GET` | `/batches/` | Historial lotes |
+| `GET` | `/batches/<id>` | Detalle lote + documentos |
+| `POST` | `/batches/<id>/send` | Envía lote ya en preview **sin reconstruir** |
+| `POST` | `/reference-sync` | Sincroniza catálogos Alegra → cache/UI |
 
-En la consola webhooks, la columna **Radicado** muestra si el POST creó o encontró factura (`AlegraWebhookInboundLog.process_status` / `factura_id`). Recepciones antiguas sin esos campos se infieren buscando `Facturas.alegra_bill_id = NIT:id` (elige empresa en el filtro si la URL no traía NIT). Migración `0006_alegrawebhookinboundlog_process_fields`.
-
-**Forma del payload (new-bill):** raíz con `subject` (p. ej. `new-bill`) y `message.bill` (objeto factura de compra: `id`, fechas, `state`, `client` con `identification`/`name`, importes `subtotal`/`total`/`balance`, `numberTemplate.number`, `items`, etc.). Ejemplo anotado en el repo: [`docs/samples/alegra-webhook-new-bill-payload.json`](docs/samples/alegra-webhook-new-bill-payload.json).
-
-**Backfill radicados existentes:** `python manage.py backfill_alegra_bill_sync --empresa=<NIT>` (opciones `--dry-run`, `--only-placeholder-desc`, `--only-missing-pdf`). Omite `alegra_bill_id` tipo `journal`.
-
-**GET /bills/{id} tras el webhook:** el payload del webhook suele venir incompleto (`observations` null, `items` vacío). Tras crear/actualizar el radicado, en segundo plano (tras el `commit`) un **solo** `GET /bills/{id}` con `fields=url,stampFiles,stamp,attachments` ([get_bills-id](https://developer.alegra.com/reference/get_bills-id)) hace dos cosas en `sync_factura_from_alegra_bill` (`bill_pdf.py` + `bill_mapping.py`): (1) **enriquecer** el radicado con datos del GET — `descripcion` desde `observations`, nombres de `items` o `termsConditions` (solo si el radicado aún tiene texto genérico tipo «Factura compra Alegra…»); actualiza también `valor`/`pago_neto` (`balance`), fechas y tercero si faltaban; **no** cambia `nrofactura` ni el flujo de aprobación; (2) **descargar PDF** a `soporte_radicado` si hay URL válida. Respuesta cruda en **`AlegraBillGetLog`** (Admin).
-
-**Adjuntos y documentación Alegra (referencia):**
-
-- **`GET /bills/{id}`** — El parámetro `fields` admite, entre otros, `url`, `stamp`, `stampFiles`, `xml`, `additionalInfoStamp` (documento soporte electrónico en Colombia: archivos del timbre, etc.). La respuesta completa del API puede incluir propiedades adicionales (p. ej. un arreglo de adjuntos) que no siempre aparecen en el enum del OpenAPI; por eso el backend solicita también `attachments` y usa un extractor recursivo.
-- **`POST /bills/{id}/attachment`** — Adjunta un archivo a la factura de proveedor; la respuesta documentada incluye `id`, `name` y **`url`** del archivo (descarga vía esa URL). Ver [post_bills-id-attachment](https://developer.alegra.com/reference/post_bills-id-attachment).
-- **`DELETE /bills/attachment/{attachment_id}`** — Elimina un adjunto por id ([delete_bills-attachment-attachment-id](https://developer.alegra.com/reference/delete_bills-attachment-attachment-id)); no sustituye a una URL de lectura.
-
-No hay en la documentación pública de **`api/v1`** un endpoint tipo “descargar adjunto solo con `attachment_id`” aparte de la **`url`** devuelta al adjuntar o la que exponga `GET /bills/{id}` en los objetos anidados. Si en producción solo llegan identificadores sin URL, conviene capturar un JSON de ejemplo en logs y escalar con soporte Alegra; el producto **e-provider** / facturación electrónica documenta rutas distintas para archivos (p. ej. [getinvoicefile](https://e-provider-docs.alegra.com/reference/getinvoicefile)), que no son el mismo flujo que `bill_pdf.py`.
-
-**Mapeo a `accounting.Facturas`** (implementado en `alegra_integration/bill_mapping.py`, usado por `webhook_bills.py`): la URL de ingesta incluye `?empresa=<NIT>` al suscribir. Se guarda `alegra_bill_id = "{NIT}:{id_bill}"` para idempotencia global. Campos: `nrofactura` / `nrocausa` ← `numberTemplate.number` (o `ALEGRA-{id}`); `idtercero` / `nombretercero` ← `client.identification` / `client.name`; `valor` y `pago_neto` ← `balance` (saldo CxP pendiente); si no viene, `total` o `subtotal`; `fechafactura` / `fechacausa` ← `date`; `fechavenc` ← `dueDate`; `descripcion` ← `observations`, ítems del GET o texto por defecto (el GET suele traer más detalle que el webhook); `origen` = `Alegra`. `cuenta_por_pagar`, `secuencia_cxp` quedan vacíos. **`oficina`** queda vacía hasta el paso de asignación contable. `edit-bill` actualiza la misma fila; `delete-bill` borra si no hay `Pagos`, si no marca `alegra_bill_deleted`. Historial: usuario vía `ALEGRA_WEBHOOK_HISTORY_USERNAME` / `ALEGRA_WEBHOOK_HISTORY_USER_ID` en settings o primer usuario activo.
-
-### Aprobación de gastos Alegra
-
-Los radicados creados por webhook (`new-bill`) entran con `gasto_aprobacion_estado=pendiente_asignacion` y `gasto_aprobado=False`. **No** aparecen en causación/tesorería hasta quedar aprobados (`gasto_aprobado=True`).
-
-**Contabilidad** (`/accounting/gastos-alegra/asignar/`): asigna **oficina** (obligatoria) y, opcionalmente, **aprobador** (`GastoAprobador` en Admin) + comentario.
-
-- **Con aprobador:** pasa a `pendiente_aprobacion`; el aprobador designado los ve en `/accounting/gastos-alegra/aprobar/` y pulsa **Aprobar**.
-- **Sin aprobador** (solo si la empresa tiene tope en Admin): campo `empresas.alegra_gasto_max_sin_aprobador` (COP, entero). Vacío o `0` = **siempre** exige aprobador. Si el valor del gasto es ≤ tope, la UI pide confirmación (“está registrando un gasto sin aprobador”) y al guardar queda `aprobado` con `gasto_aprobado_por` = contable que asignó. Si el valor supera el tope, debe asignar aprobador.
-
-Tras aprobar (manual o automático), el radicado sigue el flujo normal (`info_facturas`, causar, pagar). Radicados ordinarios (`radicarfactura`) usan `gasto_aprobacion_estado=no_aplica`.
-
-**Radicado manual (sin webhook**, p. ej. journal en Alegra): en *Nuevo radicado* — id numérico en Alegra → `alegra_bill_id = {NIT}:journal:{id}`; `POST /accounting/ajax/gastos-alegra/crear` con oficina y aprobador opcional (misma regla de auto-aprobación si va vacío). Permisos: grupo **Contabilidad** + `accounting.view_facturas` (igual que la pantalla asignar; no exige `add_facturas` del radicado clásico).
-
-**Radicado desde journal:** en *Nuevo radicado* → empresa + id journal + **Consultar** — `GET /accounting/ajax/gastos-alegra/journal-preview?empresa={NIT}&journal_id={id}` precarga el formulario (`radicado` con mapeo CxP). Reglas en `accounting/journal_cxp.py`: crédito > 0, tercero, pasivo **orden 2** (`code` empieza por `2`), sin retenciones/impuestos; guarda `alegra_journal_detalle` para pago detallado. `GET .../journal-detalle-radicado?radicado={pk}` devuelve ese detalle.
-
-Configurar aprobadores: Admin → **Aprobadores de gasto Alegra** (`accounting.GastoAprobador`). `empresa` vacío = todas las empresas Alegra.
-
-Enlaces desde la consola de webhooks: `/accounting/alegra/webhooks/`.
-
-En el dashboard, la tabla **Lotes recientes** muestra: **Total** con desglose `(Env · OK · Err)` donde **Err** son envíos a Alegra que no quedaron OK (`enviados − OK`); columna **Usuario** = quien generó el lote (`created_by.username`).
-
-Payload base para `preview`/`send`:
+Payload preview/send:
 
 ```json
 {
   "empresa": "901018375",
   "proyecto": "Oasis",
-  "document_type": "commission",
-  "fecha_desde": "2026-04-01",
-  "fecha_hasta": "2026-04-30"
+  "document_type": "expense",
+  "fecha_desde": "2026-05-01",
+  "fecha_hasta": "2026-05-08"
 }
 ```
 
-`proyecto` es obligatorio para `receipt` y `commission`. Para `expense` el alcance principal es por empresa.
+- `proyecto` **obligatorio** para `receipt` y `commission`.
+- `expense` opera por **empresa** (`Pagos.empresa`, transferencias donde la empresa es `sale` o `entra`).
 
-Tipos:
+Tipos: `receipt` | `commission` | `gtt` | `expense`.
 
-- `receipt`
-- `commission`
-- `expense`
+### Referencias (API)
 
-### Referencias y mapeos
+- `GET /references/data?empresa=&type=banks|categories|cost_centers|number_templates`
+- `GET /references/mappings?...`
+- `GET /references/local-accounts?empresa=`
+- `POST /references/save-bank-mapping`
+- `POST /references/save-category-mapping`
+- `POST /references/save-numeration-mapping`
+- `GET /references/categories/search?empresa=&q=`
+- `GET /references/interfaces?empresa=` — `info_interfaces` → CxP / anticipos
+- `GET /references/intercompany?empresa=` — `cuentas_intercompanias`
 
-- `GET  /accounting/alegra/references/data?empresa=<nit>&type=banks|categories|cost_centers|number_templates`
-- `GET  /accounting/alegra/references/mappings?...` (ver mapeos en BD; soporta `proyecto` + `include_null=1`)
-- `GET  /accounting/alegra/references/local-accounts?empresa=<nit>` (cuentas bancarias locales)
-- `POST /accounting/alegra/references/save-bank-mapping`
-- `POST /accounting/alegra/references/save-category-mapping`
-- `POST /accounting/alegra/references/save-numeration-mapping`
-- `GET  /accounting/alegra/references/categories/search?empresa=<nit>&q=<texto>` (búsqueda server-side de catálogo contable)
-- `GET  /accounting/alegra/references/interfaces?empresa=<nit>` (lista `accounting.info_interfaces` por empresa; mapeo de cuentas CXP / anticipos)
-- `GET  /accounting/alegra/references/intercompany?empresa=<nit>` (lista `accounting.cuentas_intercompanias` donde la empresa es **desde** o **hacia**)
+### Contactos
 
-### Contactos (sincronización + enlace manual)
+- `POST /contact-sync` — progresivo con cache
+- `POST /contact-link` — enlace manual local ↔ Alegra
+- `GET /contact-link/lookup-local`, `/contact-link/validate-alegra`
+- `POST /contacts/bulk-create-from-batch`, `/contacts/missing-in-alegra-from-batch`
 
-- `POST /accounting/alegra/contact-sync` (progresivo con cache)
-- `POST /accounting/alegra/contact-link` (crear/actualizar mapeo manual)
-- `GET  /accounting/alegra/contact-link/lookup-local` (trae nombre del tercero local por PK)
-- `GET  /accounting/alegra/contact-link/validate-alegra` (valida que el ID no esté usado y muestra nombre en Alegra)
+### Debug
+
+- `GET /debug/mapping-check?...` — comprobar resolución de un mapeo
+
+---
+
+## Dashboard UI
+
+Tras **Preview**, el resumen del lote (`batch.summary`) distingue:
+
+| Campo | Significado |
+|-------|-------------|
+| `total_documents` | Filas en el lote |
+| `ready_to_send` | `status=valid` — se enviarán |
+| `already_sent` | `status=sent` — solo informativo |
+| `built_ok` | `ready_to_send + already_sent` |
+| `invalid` | Errores de mapeo/datos |
+
+**Optimización:** si ya existe `AlegraDocument` `sent` para la misma `empresa` + `source_model` + `source_pk`, el preview **no ejecuta el builder** (no resuelve mapeos ni arma payload); solo reasocia el documento al lote.
+
+Métricas en pantalla (modo preview):
+
+- **Listos para enviar** = `ready_to_send`
+- **Ya enviados** = `already_sent` (no se reconstruyen ni reenvían)
+- **Inválidos** = errores
+
+Modal de confirmación de envío muestra cuántos se enviarán y cuántos ya enviados se omiten.
+
+Al **enviar**, documentos `sent` se saltan; `invalid` cuentan como fallo; respuesta incluye `skipped` en `batch.summary`.
+
+Tabla documentos: filtros Todos / Válidos / Enviados / Inválidos / Fallidos / Omitidos. Payload con pestaña **Local** (`__local` en JSON) para depuración.
+
+---
 
 ## Credenciales
 
-El token de Alegra vive en `andinasoft.models.empresas`:
+En `andinasoft.models.empresas`:
 
 - `alegra_enabled`
 - `alegra_token`
 
-El cliente no permite enviar si la empresa no está habilitada o no tiene token.
+Auth: Basic `email:token`. Cliente con reintentos 429, 502/503/504, timeouts.
 
-Autenticación: Basic Auth usando `email:token` (codificado en base64). El cliente valida el formato y reintenta en casos comunes (429/502/503/504/timeouts).
+---
 
-## Estructura del módulo
-
-Archivos principales:
-
-- `alegra_integration/models.py`: modelos de mapeo, lote y documento.
-- `alegra_integration/mapping.py`: resolución de IDs de Alegra (scoping empresa/proyecto según tipo).
-- `alegra_integration/builders.py`: transforma objetos legacy en payloads Alegra.
-- `alegra_integration/client.py`: cliente REST (preferido) con reintentos.
-- `alegra_integration/services.py`: orquesta preview, envío, idempotencia y lotes.
-- `alegra_integration/views.py`: endpoints internos + UI.
-
-## Modelos
+## Modelos principales
 
 ### `AlegraMapping`
 
-Guarda equivalencias entre datos locales e IDs de Alegra.
+Equivalencia local → `alegra_id`. Tipos: `bank_account`, `category`, `contact`, `cost_center`, `numeration`, `retention`, `payment_method`, `bill`.
 
-Campos importantes:
-
-- `empresa`
-- `proyecto` opcional
-- `mapping_type`
-- `local_model`
-- `local_pk`
-- `local_code`
-- `alegra_id`
-- `alegra_payload`
-- `active`
-
-Tipos soportados:
-
-- `bank_account`
-- `category`
-- `contact`
-- `cost_center`
-- `numeration`
-- `retention`
-- `payment_method`
-- `bill`
-
-Regla: si un builder necesita un ID de Alegra y no existe mapeo, debe fallar en `preview`; no debe inventar IDs ni usar codigos contables legacy como IDs de Alegra.
+Alcance: mayoría a nivel **empresa**; recibos/GTT pueden usar **proyecto** con fallback empresa.
 
 ### `AlegraSyncBatch`
 
-Representa una ejecución por rango de fechas.
+Ejecución por rango de fechas. Estados: `pending`, `preview`, `processing`, `done`, `failed`, `partial`.
 
-- `created_by`: usuario Django que ejecutó el preview (y es el dueño “lógico” del lote en la UI). Puede ser `null` en datos viejos.
+`summary` (JSON): en preview `{ready_to_send, already_sent, built_ok, invalid}`; tras send `{sent, failed, skipped}`.
 
-Estados:
-
-- `pending`
-- `preview`
-- `processing`
-- `done`
-- `failed`
-- `partial`
-
-### `AlegraContactIndex`
-
-Tabla auxiliar poblada al sincronizar contactos desde Alegra: identificación normalizada, tipo (`client` / `provider`), `alegra_id` y nombre. Sirve para resolver contactos cuando el origen local no encaja en `clientes` / `empresas` / `asesores`.
+`created_by`: usuario que generó el preview.
 
 ### `AlegraDocument`
 
-Representa cada documento local transformado hacia Alegra.
+Un envío potencial o real. Estados: `pending`, `valid`, `invalid`, `sent`, `failed`, `skipped`.
 
-Campos importantes:
+**`local_key` (idempotencia):**
 
-- `empresa`
-- `proyecto`
-- `document_type`
-- `alegra_operation`
-- `transport`
-- `source_model`
-- `source_pk`
-- `local_key`
-- `payload`
-- `response`
-- `alegra_id`
-- `status`
-- `error`
+| Patrón | Uso |
+|--------|-----|
+| `receipt:<proyecto>:<numrecibo>` | Recibo caja |
+| `commission:internal\|external:<proyecto>:<id>` | Comisión |
+| `gtt:<proyecto>:<detalle_pk>` | Línea GTT |
+| `expense:pago:<id>` | Pago mismo empresa → `POST /payments` |
+| `expense:anticipo:<id>` | Anticipo |
+| `banktransfer:<id_transf>:<nit>` | Transferencia misma empresa |
+| `interco:pago:<id>:<nit_empresa>` | Pago intercompany (journal por empresa) |
+| `interco:transfer:<id>:<nit>:in\|out` | Transferencia intercompany |
 
-`local_key` es la llave de idempotencia. Debe ser estable y especifica, por ejemplo:
+Constraint único: `(empresa, document_type, local_key)`.
 
-- `receipt:Oasis:RC-123`
-- `commission:internal:Oasis:77`
-- `commission:external:Oasis:88`
-- `expense:pago:1201`
-- `banktransfer:<id_transferencia>:<nit_empresa>` (transferencia bancaria misma empresa vía `POST /bank-accounts/{id}/transfer`)
-- `interco:transfer:<id>:<nit_empresa>:in|out` (transferencia intercompany por journal, un documento por empresa)
+### `AlegraContactIndex`
 
-No cambiar el formato de llaves existentes sin migración de datos.
+Contactos Alegra por identificación (NIT/CC) para `contact_by_identification`.
+
+### Logs webhook
+
+- `AlegraWebhookSubscriptionLog` — suscripciones
+- `AlegraWebhookInboundLog` — POST recibidos + `process_status` / `factura_id`
+- `AlegraBillGetLog` — respuestas GET `/bills/{id}`
+
+---
 
 ## Flujo Preview
 
 `AlegraIntegrationService.preview(...)`:
 
-1. Valida empresa, proyecto, tipo y fechas.
-2. Consulta los objetos legacy.
-3. Ejecuta el builder correspondiente.
-4. Si el builder produce payload, guarda/actualiza `AlegraDocument` como `valid`.
-5. Si falta mapeo o dato, guarda `AlegraDocument` como `invalid`.
-6. Crea un `AlegraSyncBatch` con resumen.
+1. Valida empresa, proyecto, tipo, fechas.
+2. Consulta fuentes (`_build_documents`).
+3. Por cada registro:
+   - Si ya hay doc **`sent`** (misma empresa/proyecto + `source_model` + `source_pk`) → **skip build**, reasignar al lote.
+   - Si no → `builder.build()` → `_upsert_document` como `valid` o `invalid`.
+4. Persiste contadores en `batch.summary` y `success_count = ready_to_send`.
 
-Preview no llama a Alegra.
+**No llama a Alegra.**
+
+Si existe doc `sent` con misma `local_key`, `_upsert_document` solo actualiza `batch` (no pisa payload ni baja a `valid`).
+
+---
 
 ## Flujo Send
 
-`AlegraIntegrationService.send(...)`:
+1. Preview (o lote existente) + `_send_batch_documents`.
+2. Omite `sent`; opcionalmente reintenta `failed`.
+3. Detecta duplicado por `local_key` → `skipped` + `already_sent`.
+4. `_send_document` según `alegra_operation`.
+5. Tras éxito: `alegra_id`, `sent_at`; para `accounting.Pagos` → `sync_pago_from_alegra_document` → `Pagos.alegra_payment_id`.
 
-1. Ejecuta `preview`.
-2. Recorre documentos del lote.
-3. Omite documentos ya enviados.
-4. No envia documentos invalidos.
-5. Envia segun `alegra_operation`.
-6. Guarda `response`, `alegra_id`, `status` y `sent_at`.
+`POST /journals`: tras crear, GET opcional `fields=numberTemplate,type` en `response.__fetched`.
 
-Idempotencia:
+Lotes multi-empresa: un `AlegraMCPClient` por NIT.
 
-- Si ya existe un documento `sent` para la misma `empresa + document_type + local_key`, no debe reenviarse.
-- Un preview posterior no debe degradar un documento `sent` a `valid`.
+---
 
-## Mapeos Esperados
+## MappingResolver
 
-### Bancos
+`alegra_integration/mapping.py`
 
-Local:
+Métodos habituales: `get`, `numeration`, `bank_account_for_account`, `category_for_code`, `contact_for_*`, `contact_by_identification`, `bill_for_factura`, `cost_center_for_project`.
 
-- `andinasoft.cuentas_pagos.pk`
+### `category_for_puc_code(account_code)`
 
-Mapeo:
+Para egresos por categoría y journals. Orden:
 
-```text
-mapping_type = bank_account
-local_model = andinasoft.cuentas_pagos
-local_pk = <idcuenta>
-alegra_id = <bankAccount.id>
+1. `AlegraMapping` `category` + `local_code` = código PUC exacto.
+2. Mapeo `local_code=cxp_credito_1` cuya `description` empieza por el PUC.
+3. Primera `info_interfaces` con `cuenta_credito_1` = PUC → mapeo interfaz `cxp_credito_1`.
+4. Fallback `local_code=default_cxp`.
+
+### `bill_for_factura(factura_id, factura=...)`
+
+Orden:
+
+1. Mapeo `bill` + `local_model=accounting.Facturas` + `local_pk`.
+2. Si `alegra_document_type` es `bill` (o vacío con id tipo `NIT:34`) → id desde `alegra_bill_id`.
+3. Si tipo `journal` → **no** devuelve bill (egreso va por categorías).
+
+`sync_alegra_bill_mapping` / webhook crean mapeo `bill` al radicar compra Alegra.
+
+---
+
+## Radicados (`Facturas`) y tipos en Alegra
+
+### `alegra_bill_id` (formato compuesto)
+
+| Formato | `alegra_document_type` | Origen |
+|---------|------------------------|--------|
+| `{NIT}:{id_bill}` | `bill` | Webhook `new-bill`, compra en Alegra |
+| `{NIT}:journal:{id}` | `journal` | Radicado manual desde comprobante Alegra |
+
+`infer_alegra_document_type()` en `bill_mapping.py`.
+
+### Webhook → radicado
+
+Ver sección [Webhooks](#webhooks-facturas-de-compra). Tras `new-bill`: `gasto_aprobacion_estado=pendiente_asignacion`, sin causación hasta aprobación.
+
+`sync_alegra_bill_mapping` enlaza bill para egresos posteriores.
+
+### Radicado manual (sin bill Alegra)
+
+- Causación clásica: `cuenta_por_pagar` → `info_interfaces` (concepto CxP del software legacy).
+- Prefijos tipo `INT-...` en `nrofactura`.
+- Egreso: **no** `bills[]`; **`categories[]`** con mapeo interfaz `cxp_credito_1` (prioridad) o PUC / `default_cxp`.
+
+### Radicado desde journal
+
+1. `GET .../journal-preview?empresa=&journal_id=` — `parsear_journal_para_radicado` (`journal_cxp.py`).
+2. Al guardar: `alegra_journal_detalle` (JSON lista por tercero: `id_tercero`, `valor`, `account_code`, `account_codes`, `alegra_category_id`).
+3. `persist_journal_cxp_mappings` crea mapeos PUC → categoría Alegra.
+4. Pago: `categoria_alegra_para_pago_journal` elige fila según `pago_detallado_relacionado` / tercero factura.
+
+Reglas CxP en journal: crédito > 0, pasivo orden 2, exclusiones retención/impuesto cuando hay 22x, nómina solo «Salarios por pagar», etc. (tests en `accounting/test_journal_cxp.py`).
+
+---
+
+## Webhooks facturas de compra
+
+- Consola: `/accounting/alegra/webhooks/`
+- Ingesta: `GET|POST .../webhooks/bills/?empresa=<NIT>` (suscribir sin `https://` en URL API Alegra).
+- Replay: `POST .../webhooks/inbound/replay` `{log_id, empresa}`.
+
+`process_inbound_post` → `_handle_new_bill` / `_handle_edit_bill` / `_handle_delete_bill`.
+
+Enriquecimiento async: `GET /bills/{id}?fields=url,stampFiles,stamp,attachments` → `sync_factura_from_alegra_bill`.
+
+Comandos:
+
+```bash
+python manage.py backfill_alegra_bill_sync --empresa=<NIT> [--dry-run] [--only-placeholder-desc] [--only-missing-pdf]
+python manage.py backfill_webhook_inbound.py  # ver comando
 ```
 
-Usado en:
+---
 
-- Recibos de caja
-- Egresos
+## Aprobación gastos Alegra
 
-Al guardar el mapeo de banco (`POST .../save-bank-mapping`), el backend intenta leer `GET /bank-accounts/<id>?fields=category` y, si existe categoría contable en Alegra, **crea o actualiza** un mapeo `category` con `local_code = <nro_cuentacontable>` de la cuenta local. Así los journals que usan la cuenta contable del banco encuentran el ID de categoría sin un paso manual extra.
+Radicados webhook: `/accounting/gastos-alegra/asignar/`, `/aprobar/`. Tope `empresas.alegra_gasto_max_sin_aprobador`. Detalle en sección histórica del repo (sin cambios de fondo).
 
-### Categorias / Cuentas Contables
+---
 
-Local:
+## Reglas por documento
 
-- Codigos en `consecutivos`
-- Codigos en `info_interfaces`
-- `cuentas_pagos.nro_cuentacontable`
+### Recibos de caja
 
-Mapeo:
-
-```text
-mapping_type = category
-local_code = <codigo_contable_legacy>
-alegra_id = <category/account id>
-```
-
-Usado en:
-
-- `entries[].id` de journals
-- `categories[].id` de payments (egresos)
-- `purchases.categories[].id` de bills/documentos soporte
-
-### Contactos
-
-Clientes:
-
-```text
-mapping_type = contact
-local_model = andinasoft.clientes
-local_pk = <idTercero>
-alegra_id = <contact.id>
-```
-
-Asesores:
-
-```text
-mapping_type = contact
-local_model = andinasoft.asesores
-local_pk = <cedula>
-alegra_id = <contact/provider.id>
-```
-
-Empresas:
-
-```text
-mapping_type = contact
-local_model = andinasoft.empresas
-local_pk = <Nit>
-alegra_id = <contact.id>
-```
-
-### Centros De Costo
-
-Por proyecto:
-
-```text
-mapping_type = cost_center
-local_model = andinasoft.proyectos
-local_pk = <nombre_proyecto>
-alegra_id = <costCenter.id>
-```
-
-Para egresos sin proyecto, si se requiere uno por defecto:
-
-```text
-mapping_type = cost_center
-local_code = company_default
-alegra_id = <costCenter.id>
-```
-
-### Numeraciones
-
-Mapeo por código funcional:
-
-```text
-mapping_type = numeration
-local_code = receipt_cash
-alegra_id = <ID numeración contable>  # URL .../ledger/numerations/edit/{id}
-```
-
-Codigos usados:
-
-- `receipt_cash`
-- `commission_journal`
-- `support_document` (comisiones externas)
-- `gtt_support_document` (GTT → documento soporte; configurar en Referencias → GTT)
-- `expense_payment`, `expense_anticipo` (numeración opcional en `POST /payments`)
-- `interco_journal` (numeración opcional en journals intercompany: pagos y transferencias entre empresas)
-
-Se pueden agregar nuevos codigos cuando aparezcan nuevos documentos.
-
-Regla de alcance:
-
-- Por defecto `numeration` es a nivel empresa.
-- Para recibos (`local_code` que empieza con `receipt_`) se permite **por proyecto con fallback a empresa**.
-
-### Retenciones
-
-Ejemplo para comisiones:
-
-```text
-mapping_type = retention
-local_code = commission_retefuente
-alegra_id = <retention.id>
-```
-
-### Metodos De Pago
-
-Mapeo desde descripcion local a enum Alegra:
-
-```text
-mapping_type = payment_method
-local_code = TRANSFERENCIA
-alegra_id = transfer
-```
-
-Valores Alegra esperados:
-
-- `cash`
-- `check`
-- `transfer`
-- `deposit`
-- `credit-card`
-- `debit-card`
-
-### Facturas / Bills
-
-Si una factura local ya existe en Alegra:
-
-```text
-mapping_type = bill
-local_model = accounting.Facturas
-local_pk = <nroradicado>
-alegra_id = <bill.id>
-```
-
-Si no existe este mapeo, los egresos caen a pago por categoria cuando el builder puede resolver la cuenta.
-
-## Reglas Por Documento
-
-### Recibos De Caja
-
-Fuente:
-
-- `Recaudos_general.objects.using(proyecto).filter(fecha__range=...)`
-
-Builder:
-
-- `ReceiptPaymentBuilder`
-
-Operacion:
-
-- REST `POST /journals` (comprobante contable)
-
-Payload (formato acordado con soporte Alegra para super asiento / anticipos):
-
-- `numberTemplate` — ID de numeración contable (`Configuración > Contabilidad > Numeraciones contables`, mapeo `receipt_cash`)
-- `date` — siempre `Recaudos_general.fecha` (elaboración del recibo), no `fecha_pago`
-- `reference`
-- `observations` (incluye `ADJ <idadjudicacion>`, recibo, proyecto, titular; si existe `fecha_pago` interna: `· F.pago YYYY-MM-DD`)
-- `status`: `open`
-- `entries`
-
-Regla clave: el valor del recibo se **divide entre titulares de la adjudicación**.
-
-- 1 entry de **débito** (banco/caja o CxC interco) por el total (`debit` + `credit: 0`, con `client` del titular principal para conciliación)
-- N entries de **crédito** (cuenta “Anticipo de clientes” habilitada como anticipo en Alegra) divididos por titular
-- Cada crédito lleva `client` como **string** (ID del contacto Alegra del titular) y `debit: 0`
-
-Si la forma de pago apunta a `cuentas_pagos` de **otra empresa** (`nit_empresa` distinto al NIT del lote), el débito no usa banco ni mapeo `bank_account`: se registra **CxC intercompany** hacia la empresa dueña del banco (`interco_cxc:<nit_banco>` en `cuentas_intercompanias`, misma lógica que egresos intercompany).
-
-La cuenta “Anticipo de clientes” se configura en la UI de Referencias por proyecto (con fallback a empresa).
+- Builder: `ReceiptPaymentBuilder`
+- `POST /journals`
+- **`numberTemplate`** (string, mapeo `receipt_cash`), **`status: open`**
+- Fecha = `Recaudos_general.fecha` (no `fecha_pago`)
+- Débito banco o **CxC interco** si banco es de otra empresa; créditos anticipo cliente divididos por titular adjudicación
+- Mapeo anticipo: `receipt_client_advance` (Referencias, por proyecto)
 
 ### Comisiones
 
-Fuente:
-
-- `CALL detalle_comisiones_fecha(desde, hasta)` en la base del proyecto.
-
-Builder principal:
-
-- `CommissionBuilder`
-
-Regla:
-
-- Si `asesor.tipo_asesor == "Interno"`: asiento contable de anticipo.
-- Si `asesor.tipo_asesor == "Externo"`: documento soporte.
-- Si no existe asesor o no tiene tipo valido: documento invalido en preview.
-
-#### Internos
-
-Builder:
-
-- `InternalCommissionAdvanceBuilder`
-
-Operacion:
-
-- REST `POST /journals`
-
-Payload:
-
-- `date`
-- `reference`
-- `observations`
-- `idNumeration`
-- `entries`
-
-Entradas:
-
-- Debito a `consecutivos.cuenta_aux1` por `pagoneto`.
-- Credito a `consecutivos.cuenta_inmora` por `pagoneto`.
-- Contacto: asesor.
-- Centro de costo: proyecto, si esta mapeado.
-
-#### Externos
-
-Builder:
-
-- `ExternalCommissionSupportDocumentBuilder`
-
-Operacion:
-
-- REST `POST /bills`
-
-Payload:
-
-- `date`
-- `dueDate`
-- `provider`
-- `numberTemplate`
-- `purchases.categories`
-- `retentions` si hay retefuente
-- `costCenter` opcional
-
-Categoria de gasto:
-
-- `consecutivos.cuenta_capital`
-
-Retencion:
-
-- `commission_retefuente`
+- Interno: journal con **`idNumeration`** (distinto a recibos/interco)
+- Externo: `POST /bills` + `numberTemplate`, retenciones, etc.
 
 ### GTT
 
-Fuente:
+- Solo `Gtt` aprobado, líneas `Detalle_gtt` valor > 0
+- `POST /bills`, numeración `gtt_support_document`, cuentas `gtt_expense` / `gtt_cxp` por proyecto
 
-- `andinasoft.Gtt` con `estado=Aprobado`, `proyecto=<pk>`, periodo que solapa el rango `fecha_desde`..`fecha_hasta` del lote.
-- `andinasoft.Detalle_gtt` por cada línea con `valor > 0` (asesor externo).
-
-Builder:
-
-- `GttBuilder` → `GttSupportDocumentBuilder`
-
-Operacion:
-
-- REST `POST /bills` (documento soporte Colombia; ver [post_bills](https://developer.alegra.com/reference/post_bills))
-
-Payload:
-
-- `date` / `dueDate` — `Gtt.fecha_hasta`
-- `provider` — asesor (contacto proveedor)
-- `numberTemplate.id` — mapeo `gtt_support_document` (numeración tipo documento soporte en Alegra)
-- `purchases.categories` — cuenta de gasto (`gtt_expense` por proyecto; fallback `COMISIONES` / `cuenta_capital`)
-- Mapeo `gtt_cxp` (cuenta por pagar, obligatorio por proyecto; referencia en preview `__local`)
-- `costCenter` opcional
-
-Configuracion UI:
-
-- Dashboard Alegra: tipo **GTT**, empresa + proyecto + rango de fechas.
-- **Referencias** (`/accounting/alegra/references` → botón **GTT**): por **proyecto**, numeración `gtt_support_document`, `gtt_expense` (gasto) y `gtt_cxp` (cuenta por pagar).
+---
 
 ## Egresos
 
-Fuente:
+Builder: `ExpensePaymentBuilder` (`builders.py`).
 
-- `accounting.Pagos`
-- `accounting.Anticipos`
-- `accounting.transferencias_companias`
+Fuentes en lote `expense`:
 
-Builder:
+- `Pagos` (`fecha_pago`, `empresa`, `nroradicado`, `cuenta`)
+- `Anticipos`
+- `transferencias_companias` (sale/entra, cuentas, valor)
 
-- `ExpensePaymentBuilder`
+### Pagos (`accounting.Pagos`)
 
-### Pagos y anticipos (misma empresa)
+**Misma empresa** (radicado.empresa = banco.nit_empresa): `POST /payments`
 
-Operación habitual:
+Payload base (`_base_payment`):
 
-- REST `POST /payments`
+```json
+{
+  "type": "out",
+  "date": "2026-05-05",
+  "bankAccount": { "id": "<mapeo cuenta>" },
+  "paymentMethod": "transfer",
+  "client": { "id": "<contacto>" },
+  "numberTemplate": { "id": "<opcional expense_payment>" },
+  "observations": "PAGO FACT ..."
+}
+```
 
-Payload base:
+**Destino del valor (uno de dos):**
 
-- `type = out`
-- `date`
-- `bankAccount`
-- `paymentMethod`
-- `client` cuando aplique
-- `bills` si existe mapeo a bill
-- `categories` si no hay bill y se puede resolver categoría
+```mermaid
+flowchart TD
+  A[Pago + factura] --> B{Intercompany?}
+  B -->|sí| J[Journal por empresa]
+  B -->|no| C{bill_for_factura?}
+  C -->|sí| D["bills[].amount"]
+  C -->|no| E{journal / detalle?}
+  E -->|sí| F["categories[].price por PUC journal"]
+  E -->|no| G{cuenta_por_pagar?}
+  G -->|sí| H["categories[].price por interfaz cxp_credito_1"]
+  G -->|no| X[Error preview]
+```
 
-Tras envío exitoso del lote, el id devuelto por Alegra se guarda en:
+1. **`bills`**: factura tipo `bill` con id Alegra (webhook o mapeo).
+2. **`categories`**: radicado manual, journal, o sin bill — `price` = `pago.valor`, `quantity` = 1.
+3. **Sin `amount` en raíz** del JSON.
 
-- `AlegraDocument.alegra_id` (`source_model=accounting.Pagos`, `local_key=expense:pago:<IdPago>`)
-- `accounting.Pagos.alegra_payment_id` (mismo id numérico; consulta directa pago Andinasoft ↔ pago Alegra)
+Tras envío: `Pagos.alegra_payment_id` = id Alegra (`pago_link.py`).
 
-Categoría CXP / anticipo:
+### Anticipos
 
-- Prioridad por **interface**: `mapping_type=category`, `local_model=accounting.info_interfaces`, `local_pk=<id_doc>`, `local_code=cxp_credito_1` o `anticipo_debito_1`.
-- Luego por código de cuenta legacy; fallback `default_cxp` / `default_anticipo` (mapeos `local_code` dedicados).
+Igual `POST /payments` + `categories` vía `tipo_anticipo` → `anticipo_debito_1` o `default_anticipo`.
 
-Contacto: además de mapeos por modelo local, puede resolverse por **identificación** usando `AlegraContactIndex` + `MappingResolver.contact_by_identification()`.
+### Transferencias misma empresa
 
-### Pagos intercompany (cuenta banco de otra empresa)
+`POST /bank-accounts/{id_origen}/transfer`
 
-Si el gasto corresponde a la empresa del radicado pero el pago sale de banco de otra empresa, no se usa un solo `POST /payments` “mixto”: se generan **journals** (uno por empresa en el lote), con `reference` tipo `INTERCO-PAGO-<idPago>` y observaciones con nombre del proveedor. Cada lado usa la relación `accounting.cuentas_intercompanias` y mapeos de categoría **interco** (ver más abajo).
+- **Path `{id}`** = cuenta **origen** (`cuenta_sale` mapeada).
+- **Body `idDestination`** = cuenta **destino** (`cuenta_entra`).
+- `amount`, `date`, `observations` (ej. `TRANSFERENCIA 230-… → 234-…`).
 
-### Transferencias entre cuentas
+Ref: [bankaccounttransfer](https://developer.alegra.com/reference/bankaccounttransfer) (el texto del parámetro `id` en la doc Alegra puede decir “destino”; el error API y la respuesta usan **origen** en el path).
 
-- **Misma empresa** (`empresa_sale == empresa_entra`): `POST /bank-accounts/{cuenta_origen_alegra}/transfer` con `idDestination`, `amount`, `date`, `observations`. Sin numeraciones separadas entrada/salida en el payload.
-- **Distinta empresa**: journals con `INTERCO-TRANSF-<id>`, una pata por empresa. La relación intercompany se busca en la **dirección del movimiento**: para el asiento en la empresa que **recibe** (`empresa_entra`), la fila es `empresa_desde = empresa_sale` y `empresa_hacia = empresa_entra` (dinero que “sale” de A y “entra” en B).
+### Pagos y transferencias intercompany
 
-En el journal intercompany, una línea usa la **cuenta contable del banco** (`nro_cuentacontable` de la cuenta local) mapeada como `category` + `local_code=<código>`; la otra línea usa CxC/CxP intercompany mapeados en UI.
+Cuando `empresa_sale != empresa_entra` o pago con banco de otra empresa:
 
-### Mapeos intercompany (UI Referencias → Egresos)
+- **`POST /journals`** (un documento por empresa del lote)
+- Payload como recibos: **`numberTemplate`** (`interco_journal`), **`status: open`**, `entries` con `debit`/`credit` y 0 en el lado opuesto
+- Referencias: `INTERCO-PAGO-<id>` / `INTERCO-TRANSF-<id>`
+- Mapeos en `cuentas_intercompanias`: `interco_cxc:<nit_hacia>`, `interco_cxp:<nit_desde>` (UI Referencias → Egresos)
+- **`client` en líneas intercompany** = contacto Alegra de la **empresa contraparte del grupo** (`andinasoft.empresas.pk` = NIT), mismo criterio que `interco_cxc:<nit>` / `interco_cxp:<nit>` en mapeos de categoría. **No** es el proveedor del radicado.
 
-Relación: `accounting.cuentas_intercompanias` con `empresa_desde` / `empresa_hacia`.
+| Movimiento | Empresa del lote | NIT contraparte (`client`) | Fuente del NIT |
+|------------|------------------|----------------------------|----------------|
+| Transferencia in | `empresa_entra` | `empresa_sale_id` | `transferencias_companias.empresa_sale` |
+| Transferencia out | `empresa_sale` | `empresa_entra_id` | `transferencias_companias.empresa_entra` |
+| Pago interco (banco) | `empresa_pago` | `empresa_origen_id` | `factura.empresa` (dueña del gasto) |
+| Pago interco (gasto) | `empresa_origen` | `empresa_pago_id` en línea interco | `pago.cuenta.nit_empresa_id` (dueña del banco) |
 
-Los mapeos se guardan como `category` con `local_model=accounting.cuentas_intercompanias` y `local_pk=<pk de la relación>`:
+- **Transferencia:** todas las líneas del journal llevan `client` = empresa contraparte.
+- **Pago intercompany:** solo la línea **interco** lleva `client` contraparte; la línea de **concepto CxP** (débito) lleva el proveedor del radicado (`factura.idtercero`); el banco (crédito) sin `client`.
 
-- **CxC** (lado empresa **desde**): búsqueda de categorías en Alegra con credenciales de **empresa_desde**; registro en BD con `empresa = empresa_desde`, `local_code=interco_cxc:<nit_empresa_hacia>`.
-- **CxP** (lado empresa **hacia**): búsqueda en **empresa_hacia**; registro con `empresa = empresa_hacia`, `local_code=interco_cxp:<nit_empresa_desde>`.
+Relación contable: `cuentas_intercompanias` con `empresa_desde` → `empresa_hacia` según dirección del flujo (ver builders).
 
-El builder usa esas mismas llaves (`interco_cxc:<contraparte>` / `interco_cxp:<contraparte>`). Si hay varias filas para el mismo par de NITs, se elige la primera relación que **tenga** mapeo guardado antes de caer al fallback por código contable local.
+Lado **empresa que paga** (banco): débito CxC interco (`client` = NIT origen gasto), crédito banco.
 
-### Envío multi-empresa en un lote
+Lado **empresa del gasto**: débito concepto CxP (`client` = proveedor), crédito CxP interco (`client` = NIT empresa que pagó).
 
-Si un lote incluye documentos con `empresa_id` distinto (intercompany), `send()` instancia un cliente Alegra **por empresa** según el token de cada NIT.
+---
 
-## Cliente Alegra
+## Mapeos esperados (resumen)
 
-`AlegraMCPClient` opera principalmente por REST contra:
+### Bancos
 
-- `https://api.alegra.com/api/v1`
+`bank_account` + `cuentas_pagos.pk`. Auto-mapeo categoría contable del banco vía `GET /bank-accounts/{id}?fields=category`.
 
-Endpoints usados (según builders/servicios):
+### Categorías / interfaces
 
-- `POST /journals` (recibos, comisiones internas, egresos intercompany)
-- `POST /payments` (egresos)
-- `POST /bank-accounts/<id>/transfer` (transferencia entre cuentas misma empresa)
-- `POST /bills` (documento soporte)
-- Referencias:
-  - `GET /bank-accounts` / `GET /bank-accounts/<id>` (incl. `?fields=category` para auto-mapeo contable del banco)
-  - `GET /categories?format=plain`
-  - `GET /cost-centers`
-  - `GET /number-templates?documentType=...`
-  - `GET /contacts` y `GET /contacts/<id>`
+- Por código PUC: `local_code=<puc>`
+- Por concepto: `local_model=accounting.info_interfaces`, `local_pk=<id_doc>`, `local_code=cxp_credito_1` | `anticipo_debito_1`
+- Respaldo: `default_cxp`, `default_anticipo`
 
-Notas:
+### Numeraciones (`numeration`)
 
-- Se implementaron reintentos para 429 y errores transitorios (502/503/504) + timeouts.
-- Para catálogos grandes (categorías/cuentas) la UI usa búsqueda server-side con cache.
+| `local_code` | Uso | Campo en payload journal |
+|--------------|-----|---------------------------|
+| `receipt_cash` | Recibos | `numberTemplate` |
+| `interco_journal` | Intercompany | `numberTemplate` |
+| `commission_journal` | Comisión interna | `idNumeration` |
+| `gtt_support_document` | GTT | `numberTemplate.id` en bills |
+| `expense_payment`, `expense_anticipo` | Opcional en payments | `numberTemplate.id` |
 
-## Como Extender
+### Bills
 
-Para agregar un nuevo documento:
+`bill` + `Facturas.pk` o id parseado de `alegra_bill_id` tipo bill.
 
-1. Agregar tipo en `AlegraSyncBatch.DOCUMENT_TYPES`.
-2. Crear builder en `builders.py`.
-3. Agregar consulta de fuente en `AlegraIntegrationService._build_documents`.
-4. Agregar operacion en `_send_document`.
-5. Definir los mapeos requeridos.
-6. Agregar tests unitarios del builder y del servicio.
+---
 
-Reglas:
+## Cliente REST
 
-- No llamar Alegra desde builders.
-- No usar IDs legacy como IDs Alegra.
-- No degradar documentos `sent`.
-- No reusar `local_key` para otro significado.
-- Mantener las interfaces Excel viejas hasta que el frontend dedicado y la operacion nueva esten estabilizados.
+`https://api.alegra.com/api/v1`
 
-## Comandos De Verificacion
+Operaciones: `create_journal`, `create_out_payment`, `bank_account_transfer`, `create_bill`, `get_bill`, `get_journal`, catálogos, webhooks.
+
+---
+
+## Comandos de verificación y mantenimiento
 
 ```bash
 python manage.py check
-python manage.py test alegra_integration --noinput
-python manage.py makemigrations alegra_integration --check --dry-run
+python manage.py test alegra_integration accounting.test_journal_cxp --noinput
 ```
 
-Nota: en el estado actual del repo puede haber cambios de migracion pendientes en otras apps, por ejemplo `crm`, que no pertenecen a esta integracion.
+| Comando | Propósito |
+|---------|-----------|
+| `backfill_alegra_bill_sync` | PDF + enrich radicados bill existentes |
+| `backfill_alegra_journal_detalle` | Rellena `alegra_journal_detalle` desde GET journal |
+| `backfill_webhook_inbound` | Reprocesa logs webhook |
+
+Migraciones accounting relevantes: `0085_facturas_alegra_document_type`, `0086_pagos_alegra_payment_id`.
+
+---
+
+## Cómo extender
+
+1. Tipo en `AlegraSyncBatch.DOCUMENT_TYPES`.
+2. Builder en `builders.py`.
+3. Fuente en `_build_documents`.
+4. Rama en `_send_document`.
+5. Mapeos en Referencias + tests.
+
+No: llamar Alegra desde builders; inventar IDs; cambiar `local_key`; degradar `sent`.
+
+---
+
+## Referencias externas
+
+- [Alegra API](https://developer.alegra.com/)
+- [POST /journals](https://developer.alegra.com/reference/journalscreate)
+- [POST /payments](https://developer.alegra.com/reference/post_payments)
+- [Transferencia bancaria](https://developer.alegra.com/reference/bankaccounttransfer)
+- Ejemplo webhook: `docs/samples/alegra-webhook-new-bill-payload.json`
