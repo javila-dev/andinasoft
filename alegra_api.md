@@ -583,6 +583,11 @@ Payload base:
 - `bills` si existe mapeo a bill
 - `categories` si no hay bill y se puede resolver categoría
 
+Tras envío exitoso del lote, el id devuelto por Alegra se guarda en:
+
+- `AlegraDocument.alegra_id` (`source_model=accounting.Pagos`, `local_key=expense:pago:<IdPago>`)
+- `accounting.Pagos.alegra_payment_id` (mismo id numérico; consulta directa pago Andinasoft ↔ pago Alegra)
+
 Categoría CXP / anticipo:
 
 - Prioridad por **interface**: `mapping_type=category`, `local_model=accounting.info_interfaces`, `local_pk=<id_doc>`, `local_code=cxp_credito_1` o `anticipo_debito_1`.

@@ -25,6 +25,8 @@ from accounting.gasto_aprobacion import (
 from accounting.journal_cxp import (
     detalle_pago_desde_factura,
     parsear_journal_para_radicado,
+    persist_journal_cxp_mappings,
+    serializar_detalle_journal_pago,
 )
 from accounting.models import Facturas, Pagos
 from andina.decorators import check_groups, check_perms, group_perm_required
@@ -167,10 +169,13 @@ def ajax_gastos_alegra_journal_preview(request):
         }
         try:
             radicado = parsear_journal_para_radicado(journal)
-            radicado['pago_detallado'] = [
-                {k: v for k, v in row.items() if k != 'lineas'}
-                for row in radicado.get('pago_detallado', [])
-            ]
+            rows = serializar_detalle_journal_pago(radicado.get('pago_detallado', []))
+            try:
+                emp = empresas.objects.get(pk=empresa_id)
+                rows = persist_journal_cxp_mappings(emp, rows)
+            except empresas.DoesNotExist:
+                pass
+            radicado['pago_detallado'] = rows
             payload['radicado'] = radicado
         except ValueError as exc:
             payload['radicado_error'] = str(exc)

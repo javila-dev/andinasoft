@@ -4,6 +4,23 @@ Mapeo GET/webhook Alegra bill -> campos de accounting.Facturas.
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
+from alegra_integration.models import AlegraMapping
+
+ALEGRA_DOC_BILL = 'bill'
+ALEGRA_DOC_JOURNAL = 'journal'
+
+
+def infer_alegra_document_type(alegra_bill_id):
+    """bill = documento soporte/compra (webhook); journal = comprobante manual."""
+    raw = (alegra_bill_id or '').strip()
+    if not raw:
+        return ''
+    if ':journal:' in raw:
+        return ALEGRA_DOC_JOURNAL
+    if ':' in raw:
+        return ALEGRA_DOC_BILL
+    return ''
+
 
 def parse_alegra_bill_id_for_api(alegra_bill_id):
     """
@@ -21,6 +38,67 @@ def parse_alegra_bill_id_for_api(alegra_bill_id):
     if not nit or not rest or rest.startswith('journal'):
         return None, None
     return nit, rest
+
+
+def parse_alegra_journal_id_for_api(alegra_bill_id):
+    """Extrae (NIT empresa, id numérico journal) desde {NIT}:journal:{id}."""
+    raw = (alegra_bill_id or '').strip()
+    if ':journal:' not in raw:
+        return None, None
+    nit, journal_id = raw.split(':journal:', 1)
+    nit = nit.strip()
+    journal_id = journal_id.strip()
+    if not nit or not journal_id or not journal_id.isdigit():
+        return None, None
+    return nit, journal_id
+
+
+def sync_alegra_bill_mapping(empresa, factura, alegra_numeric_id):
+    """
+    Enlaza radicado local → id numérico de bill en Alegra (POST /payments bills[]).
+    """
+    alegra_numeric_id = str(alegra_numeric_id or '').strip()
+    if not alegra_numeric_id:
+        return None
+    empresa_pk = str(getattr(empresa, 'pk', empresa) or '').strip()
+    AlegraMapping.objects.update_or_create(
+        empresa_id=empresa_pk,
+        proyecto=None,
+        mapping_type=AlegraMapping.BILL,
+        local_model='accounting.Facturas',
+        local_pk=str(factura.pk),
+        local_code='',
+        defaults={
+            'alegra_id': alegra_numeric_id,
+            'description': (getattr(factura, 'nrofactura', None) or '')[:255],
+            'active': True,
+        },
+    )
+    return alegra_numeric_id
+
+
+def deactivate_alegra_bill_mapping(empresa_id, factura_pk):
+    AlegraMapping.objects.filter(
+        empresa_id=str(empresa_id).strip(),
+        mapping_type=AlegraMapping.BILL,
+        local_model='accounting.Facturas',
+        local_pk=str(factura_pk),
+        local_code='',
+    ).update(active=False)
+
+
+def link_alegra_document(empresa, factura, *, document_type, alegra_numeric_id=None):
+    """
+    Persiste tipo de documento Alegra y, si es bill, el mapeo para egresos.
+    """
+    factura.alegra_document_type = document_type
+    if document_type == ALEGRA_DOC_BILL:
+        num = alegra_numeric_id
+        if not num:
+            _, num = parse_alegra_bill_id_for_api(getattr(factura, 'alegra_bill_id', None))
+        if num:
+            sync_alegra_bill_mapping(empresa, factura, num)
+    return document_type
 
 
 def _parse_int(value, default=0):

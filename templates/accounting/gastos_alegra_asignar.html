@@ -129,7 +129,7 @@
             <span class="small font-weight-bold">CxP detectadas (pasivo orden 2)</span>
             <div class="table-responsive mt-1">
               <table class="table table-sm table-bordered mb-0" id="tablaCrearCxp">
-                <thead><tr><th>CC/NIT</th><th>Tercero</th><th class="text-right">Valor</th></tr></thead>
+                <thead><tr><th>CC/NIT</th><th>Tercero</th><th>Cuenta CxP</th><th class="text-right">Valor</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -401,8 +401,10 @@ function aplicarRadicadoDesdeJournal(r) {
       'Pago detallado: ' + r.pago_detallado.length + ' tercero(s) al pagar en tesorería.'
     );
     const rows = r.pago_detallado.map(function(line) {
+      const cxp = (line.account_code || (line.account_codes && line.account_codes[0]) || '—');
       return '<tr><td>' + line.id_tercero + '</td><td>' + line.nombre_tercero +
-        '</td><td class="text-right">' + Number(line.valor).toLocaleString('es-CO') + '</td></tr>';
+        '</td><td><code>' + cxp + '</code></td><td class="text-right">' +
+        Number(line.valor).toLocaleString('es-CO') + '</td></tr>';
     }).join('');
     $('#tablaCrearCxp tbody').html(rows);
     $('#crearCxpBox').removeClass('d-none');

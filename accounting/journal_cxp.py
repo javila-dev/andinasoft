@@ -84,6 +84,25 @@ def _es_linea_salarios_por_pagar(entry):
     return bool(_SALARIOS_POR_PAGAR_TEXTO.search(entry.get('name') or ''))
 
 
+def _ident_norm(ident):
+    return re.sub(r'\D', '', str(ident or ''))
+
+
+def _cuenta_cxp_desde_lineas(lineas):
+    """Código PUC principal del bucket (mayor crédito); si hay varios, el dominante + lista."""
+    by_code = defaultdict(int)
+    for ln in lineas or []:
+        code = (ln.get('account_code') or '').strip()
+        if code:
+            by_code[code] += _money(ln.get('credit'))
+    if not by_code:
+        return '', []
+    ordered = sorted(by_code.items(), key=lambda x: (-x[1], x[0]))
+    principal = ordered[0][0]
+    all_codes = [c for c, _ in ordered]
+    return principal, all_codes
+
+
 def _credit_entries_con_tercero(entries):
     result = []
     for entry in entries or []:
@@ -171,14 +190,60 @@ def extraer_lineas_cxp(journal):
 
     result = []
     for ident, data in sorted(buckets.items(), key=lambda x: x[0]):
+        account_code, account_codes = _cuenta_cxp_desde_lineas(data['lineas'])
         result.append({
             'id_tercero': ident,
             'nombre_tercero': data['nombre_tercero'],
             'valor': data['valor'],
             'vencimiento': 1,
+            'account_code': account_code,
+            'account_codes': account_codes,
             'lineas': data['lineas'],
         })
     return result
+
+
+def serializar_detalle_journal_pago(lineas_cxp):
+    """JSON en Facturas.alegra_journal_detalle (sin líneas crudas del journal)."""
+    rows = []
+    for row in lineas_cxp or []:
+        principal, all_codes = _cuenta_cxp_desde_lineas(row.get('lineas'))
+        code = (row.get('account_code') or principal or '').strip()
+        codes = row.get('account_codes') or all_codes or ([code] if code else [])
+        rows.append({
+            'id_tercero': row.get('id_tercero'),
+            'nombre_tercero': row.get('nombre_tercero'),
+            'valor': row.get('valor'),
+            'vencimiento': row.get('vencimiento', 1),
+            'account_code': code,
+            'account_codes': codes,
+        })
+    return rows
+
+
+def persist_journal_cxp_mappings(empresa, detalle_rows):
+    """
+    Por cada account_code del journal: guarda AlegraMapping (local_code=PUC → categoría)
+    y alegra_category_id en cada fila del detalle del radicado.
+    """
+    from alegra_integration.mapping import MappingResolver
+
+    if not detalle_rows:
+        return detalle_rows
+    resolver = MappingResolver(empresa)
+    cat_by_code = {}
+    for row in detalle_rows:
+        code = (row.get('account_code') or '').strip()
+        if not code or code in cat_by_code:
+            continue
+        cat_id = resolver.sync_puc_category_mapping(code)
+        if cat_id:
+            cat_by_code[code] = cat_id
+    for row in detalle_rows:
+        code = (row.get('account_code') or '').strip()
+        if code and cat_by_code.get(code):
+            row['alegra_category_id'] = cat_by_code[code]
+    return detalle_rows
 
 
 def _nro_factura_desde_journal(journal, journal_id):
@@ -236,8 +301,58 @@ def _descripcion_desde_journal(journal, multi_tercero):
     return obs
 
 
+def _fila_detalle_para_pago(detalle, factura, pago):
+    """Fila de alegra_journal_detalle que corresponde a este pago (tercero / detalle tesorería)."""
+    from accounting.models import pago_detallado_relacionado
+
+    if not detalle:
+        return None
+    target_ident = ''
+    pagos_det = list(pago_detallado_relacionado.objects.filter(pago=pago.pk))
+    if len(pagos_det) == 1:
+        target_ident = _ident_norm(pagos_det[0].id_tercero)
+    elif len(pagos_det) > 1:
+        pago_val = _money(getattr(pago, 'valor', 0))
+        for pd in pagos_det:
+            if _money(pd.valor) == pago_val:
+                target_ident = _ident_norm(pd.id_tercero)
+                break
+    if not target_ident:
+        target_ident = _ident_norm(getattr(factura, 'idtercero', None))
+    if target_ident:
+        for row in detalle:
+            if _ident_norm(row.get('id_tercero')) == target_ident:
+                return row
+    if len(detalle) == 1:
+        return detalle[0]
+    return None
+
+
+def categoria_alegra_para_pago_journal(resolver, factura, pago):
+    """
+    Id de categoría Alegra (CxP) para POST /payments cuando el radicado es journal.
+    Usa account_code guardado en alegra_journal_detalle al radicar.
+    """
+    detalle = detalle_pago_desde_factura(factura)
+    if not detalle:
+        return None
+    row = _fila_detalle_para_pago(detalle, factura, pago)
+    if not row:
+        return None
+    account_code = (row.get('account_code') or '').strip()
+    if not account_code:
+        codes = row.get('account_codes') or []
+        account_code = (codes[0] if codes else '').strip()
+    if not account_code:
+        return None
+    stored = (row.get('alegra_category_id') or '').strip()
+    if stored:
+        return stored
+    return resolver.category_for_puc_code(account_code, required=False)
+
+
 def detalle_pago_desde_factura(factura):
-    """Lista para pago_detallado_relacionado o None."""
+    """Lista CxP por tercero guardada al radicar journal (incluye account_code)."""
     raw = getattr(factura, 'alegra_journal_detalle', None) or ''
     if not raw.strip():
         return None

@@ -69,6 +69,15 @@ class GastoAprobacionTests(TestCase):
         with self.assertRaises(ValueError):
             normalizar_alegra_bill_id('901018375', 'journal:28', es_radicado_manual=True)
 
+    def test_parse_alegra_journal_id_for_api(self):
+        from alegra_integration.bill_mapping import parse_alegra_journal_id_for_api
+
+        self.assertEqual(
+            parse_alegra_journal_id_for_api('901018375:journal:28'),
+            ('901018375', '28'),
+        )
+        self.assertEqual(parse_alegra_journal_id_for_api('901018375:34'), (None, None))
+
     def test_parse_valor_entero(self):
         self.assertEqual(parse_valor_entero('1500000'), 1500000)
         self.assertEqual(parse_valor_entero('1,500,000'), 1500000)

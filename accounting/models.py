@@ -112,12 +112,30 @@ class Facturas(models.Model):
         ('Tierras','Tierras'),
     ), null=True,blank=True)
     alegra_bill_id = models.CharField(max_length=64, null=True, blank=True, unique=True, db_index=True)
+    ALEGRA_DOC_BILL = 'bill'
+    ALEGRA_DOC_JOURNAL = 'journal'
+    ALEGRA_DOCUMENT_TYPE_CHOICES = (
+        ('', '—'),
+        (ALEGRA_DOC_BILL, 'Bill (documento compra / webhook)'),
+        (ALEGRA_DOC_JOURNAL, 'Journal (comprobante manual)'),
+    )
+    alegra_document_type = models.CharField(
+        max_length=16,
+        choices=ALEGRA_DOCUMENT_TYPE_CHOICES,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Origen del id en Alegra: bill vía webhook o journal al radicar manual.',
+    )
     alegra_bill_deleted = models.BooleanField(default=False)
     alegra_bill_deleted_at = models.DateTimeField(null=True, blank=True)
     alegra_journal_detalle = models.TextField(
         null=True,
         blank=True,
-        help_text='JSON: líneas CxP del journal Alegra para pago detallado en tesorería.',
+        help_text=(
+            'JSON por tercero al radicar desde journal: id_tercero, valor, account_code (PUC CxP), '
+            'account_codes; usado en tesorería y en POST /payments (categories).'
+        ),
     )
 
     GASTO_APROB_PENDIENTE_ASIGNACION = 'pendiente_asignacion'
@@ -274,7 +292,14 @@ class Pagos(models.Model):
     cuenta = models.ForeignKey(cuentas_pagos,on_delete=models.PROTECT,related_name='cuenta_pago')
     empresa = models.ForeignKey(empresas,on_delete=models.PROTECT,related_name='empresa_pago')
     soporte_pago = models.FileField(upload_to='Facturas/Soportes de pago', null=True, blank=True, storage=PRIVATE_MEDIA_STORAGE)
-    
+    alegra_payment_id = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Id del pago en Alegra (POST /payments), tras envío exitoso desde integración.',
+    )
+
     class Meta:
         verbose_name = 'Pago'
         verbose_name_plural = 'Pagos'

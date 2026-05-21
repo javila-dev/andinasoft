@@ -11,6 +11,7 @@ from django.core.cache import cache
 from accounting.models import Anticipos, Pagos, transferencias_companias
 from alegra_integration.builders import CommissionBuilder, ExpensePaymentBuilder, GttBuilder, ReceiptPaymentBuilder
 from alegra_integration.client import AlegraMCPClient
+from alegra_integration.pago_link import sync_pago_from_alegra_document
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 from alegra_integration.models import (
     AlegraContactIndex,
@@ -178,6 +179,7 @@ class AlegraIntegrationService:
                 doc.response = {'skipped_reason': 'already_sent', 'existing_document_id': existing_sent.pk}
                 doc.alegra_id = existing_sent.alegra_id
                 doc.save(update_fields=['status', 'response', 'alegra_id', 'updated_at'])
+                sync_pago_from_alegra_document(doc)
                 skipped += 1
                 documents.append(self._document_summary(doc))
                 continue
@@ -200,6 +202,7 @@ class AlegraIntegrationService:
                 doc.error = ''
                 doc.sent_at = timezone.now()
                 doc.save(update_fields=['status', 'response', 'alegra_id', 'error', 'sent_at', 'updated_at'])
+                sync_pago_from_alegra_document(doc)
                 sent += 1
             except AlegraIntegrationError as exc:
                 doc.status = AlegraDocument.STATUS_FAILED

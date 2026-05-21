@@ -11,7 +11,12 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from accounting.models import Facturas, Pagos, history_facturas
 from andinasoft.models import empresas
-from alegra_integration.bill_mapping import map_bill_to_factura_fields
+from alegra_integration.bill_mapping import (
+    ALEGRA_DOC_BILL,
+    deactivate_alegra_bill_mapping,
+    link_alegra_document,
+    map_bill_to_factura_fields,
+)
 from alegra_integration.bill_pdf import sync_factura_from_alegra_bill
 
 logger = logging.getLogger(__name__)
@@ -112,6 +117,7 @@ def process_inbound_post(empresa_nit, payload):
 
 @transaction.atomic
 def _handle_new_bill(empresa, composite_alegra_id, bill):
+    alegra_numeric = str(bill.get('id') or '').strip()
     if Facturas.objects.filter(alegra_bill_id=composite_alegra_id).exists():
         fac = Facturas.objects.get(alegra_bill_id=composite_alegra_id)
         if (
@@ -123,6 +129,8 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
             fac.save(update_fields=['gasto_aprobacion_estado'])
         if not fac.soporte_radicado:
             _schedule_bill_pdf_download(str(empresa.pk), str(bill.get('id') or '').strip(), fac.pk)
+        link_alegra_document(empresa, fac, document_type=ALEGRA_DOC_BILL, alegra_numeric_id=alegra_numeric)
+        fac.save(update_fields=['alegra_document_type'])
         return {'processed': True, 'idempotent': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite_alegra_id}
 
     fields = map_bill_to_factura_fields(bill)
@@ -134,6 +142,7 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
     fac = Facturas.objects.create(
         empresa=empresa,
         alegra_bill_id=composite_alegra_id,
+        alegra_document_type=ALEGRA_DOC_BILL,
         cuenta_por_pagar=None,
         secuencia_cxp=None,
         oficina=None,
@@ -151,7 +160,9 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
             accion=f'Creada desde webhook Alegra new-bill ({composite_alegra_id}); pendiente asignación oficina/aprobador',
             ubicacion='Contabilidad',
         )
-    _schedule_bill_pdf_download(str(empresa.pk), str(bill.get('id') or '').strip(), fac.pk)
+    _schedule_bill_pdf_download(str(empresa.pk), alegra_numeric, fac.pk)
+    link_alegra_document(empresa, fac, document_type=ALEGRA_DOC_BILL, alegra_numeric_id=alegra_numeric)
+    fac.save(update_fields=['alegra_document_type'])
     return {'processed': True, 'created': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite_alegra_id}
 
 
@@ -167,7 +178,9 @@ def _handle_edit_bill(composite_alegra_id, bill):
         setattr(fac, key, value)
     fac.alegra_bill_deleted = False
     fac.alegra_bill_deleted_at = None
+    fac.alegra_document_type = ALEGRA_DOC_BILL
     fac.save()
+    link_alegra_document(fac.empresa, fac, document_type=ALEGRA_DOC_BILL, alegra_numeric_id=str(bill.get('id') or '').strip())
 
     user = _history_user()
     if user:
@@ -201,5 +214,6 @@ def _handle_delete_bill(composite_alegra_id):
             )
         return {'processed': True, 'deleted_soft': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite_alegra_id}
 
+    deactivate_alegra_bill_mapping(fac.empresa_id, fac.pk)
     fac.delete()
     return {'processed': True, 'deleted_hard': True, 'factura_pk': None, 'alegra_bill_id': composite_alegra_id}

@@ -1,6 +1,7 @@
 from alegra_integration.exceptions import AlegraConfigurationError
 import re
 
+from alegra_integration.bill_mapping import ALEGRA_DOC_BILL, parse_alegra_bill_id_for_api
 from alegra_integration.models import AlegraContactIndex, AlegraMapping
 from django.db.models import Q
 
@@ -83,6 +84,92 @@ class MappingResolver:
     def category_for_code(self, account_code, *, required=True):
         return self.get(AlegraMapping.CATEGORY, local_code=str(account_code), required=required)
 
+    def category_for_puc_code(self, account_code, *, required=False):
+        """
+        Categoría Alegra para un código PUC (egreso / journal).
+        Orden: local_code exacto → interfaz cxp_credito_1 (descripción «{código} · …») → interfaz por cuenta_credito_1 → default_cxp.
+        """
+        code = str(account_code or '').strip()
+        if not code:
+            if required:
+                raise AlegraConfigurationError(
+                    f'Código PUC vacío para categoría Alegra (empresa {self.empresa.pk}).'
+                )
+            return None
+
+        cat_id = self.get(AlegraMapping.CATEGORY, local_code=code, required=False)
+        if cat_id:
+            return cat_id
+
+        row = (
+            AlegraMapping.objects.filter(
+                empresa_id=self.empresa.pk,
+                proyecto__isnull=True,
+                mapping_type=AlegraMapping.CATEGORY,
+                local_code='cxp_credito_1',
+                active=True,
+                description__startswith=code,
+            )
+            .order_by('-updated_at')
+            .first()
+        )
+        if row:
+            return row.alegra_id
+
+        from accounting.models import info_interfaces
+
+        iface = info_interfaces.objects.filter(
+            empresa_id=self.empresa.pk,
+            cuenta_credito_1=code,
+        ).first()
+        if iface:
+            cat_id = self.get(
+                AlegraMapping.CATEGORY,
+                local_model='accounting.info_interfaces',
+                local_pk=str(iface.pk),
+                local_code='cxp_credito_1',
+                required=False,
+            )
+            if cat_id:
+                return cat_id
+
+        cat_id = self.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=False)
+        if cat_id or not required:
+            return cat_id
+        raise AlegraConfigurationError(
+            f'Falta mapeo Alegra categoría para cuenta PUC {code} en empresa {self.empresa.pk}. '
+            f'Configure en Referencias → Egresos (interfaces o código {code}).'
+        )
+
+    def sync_puc_category_mapping(self, account_code, alegra_category_id=None, *, description=''):
+        """
+        Persiste PUC → categoría Alegra (como bill en webhook).
+        Si no se pasa alegra_category_id, lo resuelve vía interfaces Referencias / default_cxp.
+        """
+        code = str(account_code or '').strip()
+        if not code:
+            return None
+        cat_id = str(alegra_category_id or '').strip() or None
+        if not cat_id:
+            cat_id = self.category_for_puc_code(code, required=False)
+        if not cat_id:
+            return None
+        desc = (description or '').strip()[:255] or code
+        AlegraMapping.objects.update_or_create(
+            empresa_id=self.empresa.pk,
+            proyecto=None,
+            mapping_type=AlegraMapping.CATEGORY,
+            local_model='',
+            local_pk='',
+            local_code=code,
+            defaults={
+                'alegra_id': cat_id,
+                'description': desc,
+                'active': True,
+            },
+        )
+        return cat_id
+
     def contact_for_cliente(self, cliente_id):
         return self.get(AlegraMapping.CONTACT, local_model='andinasoft.clientes', local_pk=cliente_id)
 
@@ -150,10 +237,37 @@ class MappingResolver:
     def payment_method(self, local_method, required=True):
         return self.get(AlegraMapping.PAYMENT_METHOD, local_code=local_method, required=required)
 
-    def bill_for_factura(self, factura_id, required=False):
-        return self.get(
+    def bill_for_factura(self, factura_id, required=False, *, factura=None):
+        """
+        Id numérico del bill en Alegra para POST /payments (bills[]).
+        Orden: AlegraMapping → factura tipo bill con alegra_bill_id.
+        """
+        mapped = self.get(
             AlegraMapping.BILL,
             local_model='accounting.Facturas',
-            local_pk=factura_id,
-            required=required,
+            local_pk=str(factura_id),
+            required=False,
         )
+        if mapped:
+            return mapped
+        fac = factura
+        if fac is None:
+            from accounting.models import Facturas
+            fac = Facturas.objects.filter(pk=factura_id).first()
+        if not fac:
+            if required:
+                raise AlegraConfigurationError(
+                    f'No hay radicado {factura_id} para resolver bill en empresa {self.empresa.pk}.'
+                )
+            return None
+        doc_type = (getattr(fac, 'alegra_document_type', None) or '').strip()
+        if doc_type and doc_type != ALEGRA_DOC_BILL:
+            return None
+        _, bill_id = parse_alegra_bill_id_for_api(fac.alegra_bill_id)
+        if bill_id:
+            return bill_id
+        if required:
+            raise AlegraConfigurationError(
+                f'El radicado {factura_id} no tiene bill de Alegra enlazado (tipo={doc_type or "sin tipo"}).'
+            )
+        return None

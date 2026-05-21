@@ -7,6 +7,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounting.models import Facturas, GastoAprobador, history_facturas
+from alegra_integration.bill_mapping import ALEGRA_DOC_JOURNAL
+from accounting.journal_cxp import persist_journal_cxp_mappings, serializar_detalle_journal_pago
 from andina.decorators import check_groups
 from andinasoft.models import empresas
 
@@ -142,6 +144,7 @@ def factura_a_dict(fac):
         'empresa_nombre': getattr(fac.empresa, 'nombre', '') or str(fac.empresa_id),
         'descripcion': fac.descripcion,
         'alegra_bill_id': alegra_bill,
+        'alegra_document_type': getattr(fac, 'alegra_document_type', '') or '',
         'alegra_id': alegra_id_para_tabla(alegra_bill),
         'oficina': fac.oficina or '',
         'gasto_aprobacion_estado': fac.gasto_aprobacion_estado,
@@ -235,7 +238,7 @@ def crear_radicado_gasto_alegra(
 ):
     """
     Radicado manual (p. ej. journal en Alegra sin webhook): origen Alegra + asignación en un paso.
-    alegra_journal_detalle: lista dicts {id_tercero, nombre_tercero, valor, vencimiento} para tesorería.
+    alegra_journal_detalle: JSON o lista con CxP por tercero (id_tercero, valor, account_code PUC).
     """
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         raise PermissionError('Solo Contabilidad puede crear radicados Alegra.')
@@ -267,17 +270,21 @@ def crear_radicado_gasto_alegra(
     detalle_json = None
     if alegra_journal_detalle is not None:
         if isinstance(alegra_journal_detalle, str):
-            detalle_json = alegra_journal_detalle.strip() or None
+            raw = alegra_journal_detalle.strip()
+            if raw:
+                try:
+                    rows = json.loads(raw)
+                    if isinstance(rows, list):
+                        rows = persist_journal_cxp_mappings(empresa, rows)
+                        detalle_json = json.dumps(rows, ensure_ascii=False)
+                    else:
+                        detalle_json = raw
+                except (TypeError, ValueError):
+                    detalle_json = raw
         else:
-            slim = []
-            for row in alegra_journal_detalle:
-                slim.append({
-                    'id_tercero': row.get('id_tercero'),
-                    'nombre_tercero': row.get('nombre_tercero'),
-                    'valor': row.get('valor'),
-                    'vencimiento': row.get('vencimiento', 1),
-                })
-            detalle_json = json.dumps(slim, ensure_ascii=False)
+            rows = serializar_detalle_journal_pago(alegra_journal_detalle)
+            rows = persist_journal_cxp_mappings(empresa, rows)
+            detalle_json = json.dumps(rows, ensure_ascii=False)
 
     fac = Facturas.objects.create(
         empresa=empresa,
@@ -293,6 +300,7 @@ def crear_radicado_gasto_alegra(
         fechacausa=fecha_factura,
         origen='Alegra',
         alegra_bill_id=alegra_bill_id,
+        alegra_document_type=ALEGRA_DOC_JOURNAL,
         alegra_journal_detalle=detalle_json,
         soporte_radicado=soporte,
         gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,

@@ -660,36 +660,66 @@ class ExpensePaymentBuilder:
             contact_id=contact_id,
             numeration_id=self.resolver.numeration('expense_payment', required=False),
         )
-        bill_id = self.resolver.bill_for_factura(factura.pk, required=False)
+        bill_id = self.resolver.bill_for_factura(factura.pk, required=False, factura=factura)
         if bill_id:
             built.payload['bills'] = [{'id': bill_id, 'amount': _money(pago.valor)}]
-        else:
-            category_code = factura.cuenta_por_pagar.cuenta_credito_1 if factura.cuenta_por_pagar else None
-            if not category_code:
-                raise AlegraBuildError(f'La factura {factura.pk} no tiene cuenta por pagar para mapear categoria.')
-            # 1) Try mapping per interface (concept)
-            interface_id = getattr(factura, 'cuenta_por_pagar_id', None)
-            cat_id = None
-            if interface_id:
-                cat_id = self.resolver.get(
-                    AlegraMapping.CATEGORY,
-                    local_model='accounting.info_interfaces',
-                    local_pk=str(interface_id),
-                    local_code='cxp_credito_1',
-                    required=False,
+            return built
+
+        from accounting.journal_cxp import categoria_alegra_para_pago_journal, detalle_pago_desde_factura
+        from alegra_integration.bill_mapping import ALEGRA_DOC_JOURNAL
+
+        doc_type = (getattr(factura, 'alegra_document_type', '') or '').strip()
+        if not doc_type and ':journal:' in (getattr(factura, 'alegra_bill_id', None) or ''):
+            doc_type = ALEGRA_DOC_JOURNAL
+        journal_detalle = detalle_pago_desde_factura(factura)
+        if doc_type == ALEGRA_DOC_JOURNAL or journal_detalle:
+            cat_id = categoria_alegra_para_pago_journal(self.resolver, factura, pago)
+            if cat_id:
+                built.payload['categories'] = [{
+                    'id': cat_id,
+                    'quantity': 1,
+                    'price': _money(pago.valor),
+                    'observations': f'PAGO FACT {factura.nrofactura}',
+                }]
+                return built
+            if journal_detalle:
+                from accounting.journal_cxp import _fila_detalle_para_pago
+                row = _fila_detalle_para_pago(journal_detalle, factura, pago) or {}
+                puc = (row.get('account_code') or '').strip()
+                raise AlegraBuildError(
+                    f'La factura {factura.pk} tiene detalle journal (cuenta PUC {puc or "?"}) '
+                    f'pero falta mapeo en Alegra → Referencias → Egresos.'
                 )
-            # 2) Try mapping by account code
-            if not cat_id:
-                cat_id = self.resolver.category_for_code(category_code, required=False)
-            if not cat_id:
-                # Company-level fallback (configure in UI): default account for CXP payments.
-                cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp')
-            built.payload['categories'] = [{
-                'id': cat_id,
-                'quantity': 1,
-                'price': _money(pago.valor),
-                'observations': f'PAGO FACT {factura.nrofactura}',
-            }]
+
+        category_code = factura.cuenta_por_pagar.cuenta_credito_1 if factura.cuenta_por_pagar else None
+        if not category_code:
+            raise AlegraBuildError(
+                f'La factura {factura.pk} no tiene cuenta por pagar ni detalle journal CxP para mapear categoría.'
+            )
+        interface_id = getattr(factura, 'cuenta_por_pagar_id', None)
+        cat_id = None
+        if interface_id:
+            cat_id = self.resolver.get(
+                AlegraMapping.CATEGORY,
+                local_model='accounting.info_interfaces',
+                local_pk=str(interface_id),
+                local_code='cxp_credito_1',
+                required=False,
+            )
+        if not cat_id:
+            cat_id = self.resolver.category_for_puc_code(category_code, required=False)
+        if not cat_id:
+            cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=False)
+        if not cat_id:
+            raise AlegraBuildError(
+                f'La factura {factura.pk} tiene cuenta {category_code} sin mapeo en Alegra → Referencias → Egresos.'
+            )
+        built.payload['categories'] = [{
+            'id': cat_id,
+            'quantity': 1,
+            'price': _money(pago.valor),
+            'observations': f'PAGO FACT {factura.nrofactura}',
+        }]
         return built
 
     def _from_pago_intercompany(self, pago, factura, empresa_origen_id, empresa_pago_id):

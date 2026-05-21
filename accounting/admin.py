@@ -55,9 +55,10 @@ class adminIntercomp(admin.ModelAdmin):
     
 @admin.register(models.Pagos)   
 class adminPagos(admin.ModelAdmin):
-    list_display = ['pk','fecha_pago','nroradicado','valor','usuario']
-    list_filter = ['empresa','cuenta']
-    search_fields  = ['nroradicado__pk','nroradicado__nombretercero']
+    list_display = ['pk', 'fecha_pago', 'nroradicado', 'valor', 'alegra_payment_id', 'usuario']
+    list_filter = ['empresa', 'cuenta']
+    search_fields = ['nroradicado__pk', 'nroradicado__nombretercero', 'alegra_payment_id']
+    readonly_fields = ['alegra_payment_id']
     date_hierarchy = 'fecha_pago'
     
 @admin.register(models.Anticipos)

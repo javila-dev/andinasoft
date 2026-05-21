@@ -1,7 +1,12 @@
 """Tests extracción CxP desde journals Alegra (payloads reales)."""
 from django.test import SimpleTestCase
 
-from accounting.journal_cxp import extraer_lineas_cxp, parsear_journal_para_radicado
+from accounting.journal_cxp import (
+    categoria_alegra_para_pago_journal,
+    extraer_lineas_cxp,
+    parsear_journal_para_radicado,
+    serializar_detalle_journal_pago,
+)
 
 # Journal 7 — arriendo, un proveedor, retención excluida
 JOURNAL_7 = {
@@ -181,6 +186,13 @@ class JournalCxpTests(SimpleTestCase):
         self.assertEqual(len(lineas), 1)
         self.assertEqual(lineas[0]['id_tercero'], '31425903')
         self.assertEqual(lineas[0]['valor'], 2412500)
+        self.assertEqual(lineas[0]['account_code'], '22050501')
+
+    def test_serializar_detalle_incluye_account_code(self):
+        lineas = extraer_lineas_cxp(JOURNAL_7)
+        slim = serializar_detalle_journal_pago(lineas)
+        self.assertEqual(slim[0]['account_code'], '22050501')
+        self.assertNotIn('lineas', slim[0])
 
     def test_journal_7_radicado(self):
         r = parsear_journal_para_radicado(JOURNAL_7)
