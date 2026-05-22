@@ -388,6 +388,7 @@ class AlegraMCPClient:
                 'supportDocument': self._rest_list_all('/number-templates', extra_params={'documentType': 'supportDocument'}),
                 'bill': self._rest_list_all('/number-templates', extra_params={'documentType': 'bill'}),
             },
+            'retentions': self._rest_list_all('/retentions'),
         }
 
     def _rest_journal_numerations(self, *, max_pages=120, stop_after_pages_without_new=10):

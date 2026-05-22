@@ -228,6 +228,11 @@
           <a href="https://developer.alegra.com/reference/post_bills" target="_blank" rel="noopener">documento soporte</a>
           (Colombia). Configura numeración en <a href="/accounting/alegra/references">Referencias → GTT</a>.
         </small>
+        <small class="text-muted d-block mt-1" id="commissionDocHint" style="display:none">
+          Externos → <a href="https://developer.alegra.com/reference/post_bills" target="_blank" rel="noopener">documento soporte</a>;
+          internos → journal (débito comisión / crédito CxP). Configura en
+          <a href="/accounting/alegra/references">Referencias → Comisiones</a>.
+        </small>
       </div>
 
       <!-- Fechas + acciones -->
@@ -736,6 +741,7 @@ function selectDocType(btn) {
   $('#proyectoRequired').toggle(needProj);
   $('#proyectoOptional').toggle(!needProj);
   $('#gttDocHint').toggle(currentDocType === 'gtt');
+  $('#commissionDocHint').toggle(currentDocType === 'commission');
 }
 
 function onEmpresaChange() { loadHistory(); }

@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_DOWN
 from django.db.models import Sum
 
 from accounting.models import Anticipos, Facturas, Pagos, cuentas_intercompanias, transferencias_companias
-from alegra_integration.exceptions import AlegraBuildError
+from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.models import AlegraDocument, AlegraMapping
 from andinasoft.models import Detalle_gtt, Gtt, asesores, clientes, cuentas_pagos, empresas
@@ -48,6 +48,12 @@ def _journal_entry(*, account_id, description, debit, credit, client_id=None):
 
 def _nonzero(value):
     return Decimal(value or 0) != 0
+
+
+def _commission_payment_value(commission, mode):
+    if mode == 'gross':
+        return _money(commission.comision)
+    return _money(commission.pagoneto)
 
 
 def _empresa_pk(value):
@@ -148,6 +154,19 @@ class ReceiptPaymentBuilder:
             interco_cxc = self.resolver.category_for_code(cxc_code)
         return interco_cxc
 
+    def _contact_id_empresa_intercompany(self, empresa_nit, *, label='contraparte'):
+        """Contacto Alegra de la empresa del grupo (NIT = empresas.pk) donde ingresó el efectivo."""
+        nit = str(empresa_nit or '').strip()
+        if not nit:
+            raise AlegraBuildError(f'Falta NIT de empresa {label} para el asiento intercompany del recibo.')
+        try:
+            return self.resolver.contact_for_empresa(nit)
+        except AlegraConfigurationError as exc:
+            raise AlegraBuildError(
+                f'Falta mapeo de contacto Alegra para la empresa {nit} ({label}). '
+                f'Sincroniza o enlaza el contacto en Referencias.'
+            ) from exc
+
     def build(self, receipt):
         if receipt.valor <= 0:
             raise AlegraBuildError('El recibo no tiene valor positivo.')
@@ -166,13 +185,11 @@ class ReceiptPaymentBuilder:
         numeration_id = self.resolver.numeration('receipt_cash')
         cost_center_id = self.resolver.cost_center_for_project(required=False)
 
-        fp = formas_pago.objects.using(self.proyecto.pk).filter(descripcion=receipt.formapago).first()
-        cuenta = None
-        if fp and getattr(fp, 'cuenta_asociada_id', None):
-            # `formas_pago` vive en la BD del proyecto; `cuentas_pagos` en la BD principal.
-            cuenta = cuentas_pagos.objects.filter(pk=fp.cuenta_asociada_id).first()
+        forma_pago = (receipt.formapago or '').strip()
+        if not forma_pago:
+            raise AlegraBuildError(f'El recibo {receipt.numrecibo} no tiene forma de pago.')
 
-        # POST /journals: super asiento — débito banco/caja o CxC interco, créditos anticipo por titular.
+        # POST /journals: débito por forma de pago (mapeo en Referencias), créditos anticipo por titular.
         total = Decimal(receipt.valor or 0).quantize(Decimal('0.01'))
         if total <= 0:
             raise AlegraBuildError('El recibo no tiene valor positivo.')
@@ -212,20 +229,13 @@ class ReceiptPaymentBuilder:
         if fecha_pago:
             observations = f'{observations} · F.pago {fecha_pago}'.strip()
 
-        empresa_origen_id = _empresa_pk(self.empresa)
-        empresa_banco_id = self._cuenta_empresa_id(cuenta)
-        debit_interco = bool(cuenta and empresa_banco_id and empresa_banco_id != empresa_origen_id)
-
-        if debit_interco:
-            debit_account = self._resolve_interco_cxc_for_bank(empresa_origen_id, empresa_banco_id)
-            observations = f'{observations} · INTERCO banco {empresa_banco_id}'.strip()
-        elif cuenta and getattr(cuenta, 'nro_cuentacontable', None):
-            debit_account = self.resolver.category_for_code(cuenta.nro_cuentacontable)
-        else:
-            debit_account = self.resolver.get(
-                AlegraMapping.CATEGORY,
-                local_code=f'bank_category:{self.proyecto.pk}:{receipt.formapago or "default"}',
-            )
+        try:
+            forma_cfg = self.resolver.receipt_forma_pago_config(forma_pago)
+        except AlegraConfigurationError as exc:
+            raise AlegraBuildError(
+                f'{exc} Configure la forma de pago «{forma_pago}» en Referencias → Recibos.'
+            ) from exc
+        debit_account = forma_cfg['category_id']
 
         # Credit account: configured "anticipos de clientes"
         credit_account = self.resolver.get(AlegraMapping.CATEGORY, local_code='receipt_client_advance')
@@ -237,7 +247,23 @@ class ReceiptPaymentBuilder:
         if remainder != 0:
             amounts[0] = (amounts[0] + remainder).quantize(Decimal('0.01'))
 
-        debit_client_id = self.resolver.contact_for_cliente(titular_ids[0])
+        if forma_cfg.get('intercompany'):
+            counterparty_nit = (forma_cfg.get('counterparty_nit') or '').strip()
+            if not counterparty_nit:
+                raise AlegraBuildError(
+                    f'La forma de pago «{forma_pago}» está marcada como intercompany pero no tiene NIT '
+                    f'contraparte en Referencias → Recibos.'
+                )
+            try:
+                debit_client_id = self.resolver.contact_for_empresa(counterparty_nit)
+            except AlegraConfigurationError as exc:
+                raise AlegraBuildError(
+                    f'{exc} Enlaza el contacto de la empresa {counterparty_nit} en Referencias.'
+                ) from exc
+            observations = f'{observations} · INTERCO {counterparty_nit}'.strip()
+        else:
+            debit_client_id = self.resolver.contact_for_cliente(titular_ids[0])
+
         entries = [
             {
                 'id': debit_account,
@@ -268,6 +294,13 @@ class ReceiptPaymentBuilder:
             'observations': observations[:500],
             'status': 'open',
             'entries': entries,
+        }
+        payload['__local'] = {
+            'forma_pago': forma_pago,
+            'debit_category_id': debit_account,
+            'credit_category_id': credit_account,
+            'intercompany': bool(forma_cfg.get('intercompany')),
+            'counterparty_nit': (forma_cfg.get('counterparty_nit') or '').strip() or None,
         }
 
         return BuiltDocument(
@@ -310,21 +343,14 @@ class ReceiptPaymentBuilder:
         if remainder != 0:
             amounts[0] = (amounts[0] + remainder).quantize(Decimal('0.01'))
 
-        debit_code = None
-        debit_interco = False
-        empresa_banco_id = ''
+        forma_pago = (getattr(receipt, 'formapago', None) or '').strip()
+        puc_local = ''
         try:
-            fp = formas_pago.objects.using(self.proyecto.pk).filter(descripcion=getattr(receipt, 'formapago', None)).first()
-            cuenta = None
-            if fp and getattr(fp, 'cuenta_asociada_id', None):
-                cuenta = cuentas_pagos.objects.filter(pk=fp.cuenta_asociada_id).first()
-            empresa_origen_id = _empresa_pk(self.empresa)
-            empresa_banco_id = self._cuenta_empresa_id(cuenta)
-            debit_interco = bool(cuenta and empresa_banco_id and empresa_banco_id != empresa_origen_id)
-            if cuenta and getattr(cuenta, 'nro_cuentacontable', None) and not debit_interco:
-                debit_code = str(cuenta.nro_cuentacontable)
+            fp = formas_pago.objects.using(self.proyecto.pk).filter(descripcion=forma_pago).first()
+            if fp:
+                puc_local = (getattr(fp, 'cuenta_contable', None) or '').strip()
         except Exception:
-            debit_code = None
+            puc_local = ''
 
         desc_t1 = ''
         try:
@@ -341,10 +367,9 @@ class ReceiptPaymentBuilder:
             'numrecibo': getattr(receipt, 'numrecibo', None),
             'fecha': _date(getattr(receipt, 'fecha', None)),
             'fecha_pago': _date(getattr(receipt, 'fecha_pago', None)),
-            'forma_pago': getattr(receipt, 'formapago', None),
-            'debit_account_code': debit_code,
-            'debit_intercompany': debit_interco,
-            'empresa_banco': empresa_banco_id or None,
+            'forma_pago': forma_pago or None,
+            'puc_local': puc_local or None,
+            'debit_mapping': 'receipt_debit',
             'credit_account_config': 'receipt_client_advance',
             'concepto': getattr(receipt, 'concepto', None),
             'titulares': [
@@ -379,41 +404,65 @@ class InternalCommissionAdvanceBuilder:
         self.proyecto = proyecto
         self.resolver = resolver or MappingResolver(empresa, proyecto)
 
+    def _debit_category_id(self, doc):
+        mapped = self.resolver.get(AlegraMapping.CATEGORY, local_code='commission_debit', required=False)
+        if mapped:
+            return mapped
+        return self.resolver.category_for_code(doc.cuenta_aux1)
+
+    def _credit_category_id(self, doc):
+        mapped = self.resolver.get(AlegraMapping.CATEGORY, local_code='commission_credit', required=False)
+        if mapped:
+            return mapped
+        return self.resolver.category_for_code(doc.cuenta_inmora)
+
     def build(self, commission, asesor):
         doc = consecutivos.objects.using(self.proyecto.pk).get(documento='COMISIONES')
-        value = _money(commission.pagoneto)
+        amount_mode = self.resolver.commission_amount_source(for_tipo='internal', default='net')
+        value = _commission_payment_value(commission, amount_mode)
         if value <= 0:
-            raise AlegraBuildError('La comision interna no tiene pago neto positivo.')
+            field = 'comision' if amount_mode == 'gross' else 'pagoneto'
+            raise AlegraBuildError(
+                f'La comision interna no tiene valor positivo ({field}, modo={amount_mode}).'
+            )
         contact_id = self.resolver.contact_for_asesor(asesor.pk)
         cost_center_id = self.resolver.cost_center_for_project(required=False)
-        debit_account = self.resolver.category_for_code(doc.cuenta_aux1)
-        credit_account = self.resolver.category_for_code(doc.cuenta_inmora)
+        debit_account = self._debit_category_id(doc)
+        credit_account = self._credit_category_id(doc)
         numeration_id = self.resolver.numeration('commission_journal')
-        description = f'ANTICIPO COMISION {asesor.nombre} {self.proyecto.pk} {commission.fecha}'
+        description = f'COMISION {asesor.nombre} {self.proyecto.pk} {commission.fecha}'
         entries = [
-            {
-                'id': debit_account,
-                'description': description,
-                'debit': value,
-                'client': {'id': contact_id},
-            },
-            {
-                'id': credit_account,
-                'description': description,
-                'credit': value,
-                'client': {'id': contact_id},
-            },
+            _journal_entry(
+                account_id=debit_account,
+                description=description,
+                debit=value,
+                credit=0,
+                client_id=contact_id,
+            ),
+            _journal_entry(
+                account_id=credit_account,
+                description=description,
+                debit=0,
+                credit=value,
+                client_id=contact_id,
+            ),
         ]
         if cost_center_id:
             for entry in entries:
                 entry['costCenter'] = {'id': cost_center_id}
 
-        payload = {
-            'date': _date(commission.fecha),
-            'reference': f'COM-{self.proyecto.pk}-{commission.id_pago}',
-            'observations': description[:500],
-            'idNumeration': numeration_id,
-            'entries': entries,
+        payload = _journal_payload(
+            numeration_id=numeration_id,
+            date=_date(commission.fecha),
+            reference=f'COM-{self.proyecto.pk}-{commission.id_pago}',
+            observations=description,
+            entries=entries,
+        )
+        payload['__local'] = {
+            'amount_mode': amount_mode,
+            'amount': value,
+            'commission_debit_category_id': debit_account,
+            'commission_credit_category_id': credit_account,
         }
         return BuiltDocument(
             document_type='commission_internal_advance',
@@ -427,34 +476,49 @@ class InternalCommissionAdvanceBuilder:
 
     def local_payload(self, commission, asesor):
         doc = consecutivos.objects.using(self.proyecto.pk).get(documento='COMISIONES')
+        amount_mode = self.resolver.commission_amount_source(for_tipo='internal', default='net')
         return {
-            'tipo': 'comision_interna_anticipo',
+            'tipo': 'comision_interna_journal',
             'proyecto': getattr(self.proyecto, 'pk', None),
             'fecha': _date(getattr(commission, 'fecha', None)),
             'asesor': {'id': getattr(asesor, 'pk', None), 'nombre': getattr(asesor, 'nombre', None)},
             'debit_account_code': getattr(doc, 'cuenta_aux1', None),
             'credit_account_code': getattr(doc, 'cuenta_inmora', None),
-            'valor': _money(getattr(commission, 'pagoneto', 0)),
+            'amount_mode': amount_mode,
+            'valor': _commission_payment_value(commission, amount_mode),
         }
 
 
 class ExternalCommissionSupportDocumentBuilder:
+    """
+    Documento soporte (Colombia) por comisión de asesor externo — POST /bills.
+    """
+
     def __init__(self, empresa, proyecto, resolver=None):
         self.empresa = empresa
         self.proyecto = proyecto
         self.resolver = resolver or MappingResolver(empresa, proyecto)
 
+    def _expense_category_id(self, doc):
+        mapped = self.resolver.get(AlegraMapping.CATEGORY, local_code='commission_expense', required=False)
+        if mapped:
+            return mapped
+        return self.resolver.category_for_code(doc.cuenta_capital)
+
     def build(self, commission, asesor):
         doc = consecutivos.objects.using(self.proyecto.pk).get(documento='COMISIONES')
-        gross = _money(commission.comision)
-        if gross <= 0:
-            raise AlegraBuildError('La comision externa no tiene valor bruto positivo.')
+        amount_mode = self.resolver.commission_amount_source(for_tipo='external', default='gross')
+        amount = _commission_payment_value(commission, amount_mode)
+        if amount <= 0:
+            field = 'comision' if amount_mode == 'gross' else 'pagoneto'
+            raise AlegraBuildError(
+                f'La comision externa no tiene valor positivo ({field}, modo={amount_mode}).'
+            )
 
         provider_id = self.resolver.contact_for_asesor(asesor.pk)
         cost_center_id = self.resolver.cost_center_for_project(required=False)
-        numeration_id = self.resolver.numeration('support_document')
-        expense_category = self.resolver.category_for_code(doc.cuenta_capital)
-        retention_id = self.resolver.retention('commission_retefuente', required=bool(commission.retefuente))
+        numeration_id = self.resolver.numeration('commission_support_document')
+        expense_category = self._expense_category_id(doc)
 
         payload = {
             'date': _date(commission.fecha),
@@ -467,16 +531,26 @@ class ExternalCommissionSupportDocumentBuilder:
                     {
                         'id': expense_category,
                         'quantity': 1,
-                        'price': gross,
-                        'observations': f'COMISION {self.proyecto.pk} {commission.idadjudicacion or ""}'.strip(),
+                        'price': amount,
+                        'observations': f'COMISION {self.proyecto.pk} {getattr(commission, "idadjudicacion", "") or ""}'.strip(),
                     }
                 ]
             },
         }
         if cost_center_id:
             payload['costCenter'] = {'id': cost_center_id}
-        if _nonzero(commission.retefuente):
-            payload['retentions'] = [{'id': retention_id, 'amount': _money(commission.retefuente)}]
+
+        retefuente_amount = _money(commission.retefuente)
+        if amount_mode == 'gross' and _nonzero(commission.retefuente):
+            retention_id = self.resolver.retention('commission_retefuente', required=True)
+            payload['retentions'] = [{'id': retention_id, 'amount': retefuente_amount}]
+
+        payload['__local'] = {
+            'commission_expense_category_id': expense_category,
+            'amount_mode': amount_mode,
+            'amount': amount,
+            'retefuente': retefuente_amount if amount_mode == 'gross' else 0,
+        }
 
         return BuiltDocument(
             document_type='commission_external_support',

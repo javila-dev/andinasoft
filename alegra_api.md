@@ -21,7 +21,7 @@ Documentación del módulo `alegra_integration` y flujos relacionados en `accoun
 2. Los IDs de Alegra vienen de `AlegraMapping` / `MappingResolver`, no del PUC legacy directo.
 3. `local_key` es idempotencia: no cambiar formatos sin migración.
 4. Documentos `status=sent` no se reenvían ni se degradan a `valid` en preview.
-5. Journals intercompany y recibos usan **`numberTemplate`** (string ID); no confundir con `idNumeration` de comisiones internas.
+5. Journals (recibos, intercompany y comisiones internas) usan **`numberTemplate`** (string ID) y `status: open`.
 6. `POST /payments` no lleva `amount` en la raíz: el valor va en `bills[].amount` o `categories[].price`.
 
 ---
@@ -84,7 +84,7 @@ Base: `/accounting/alegra/`
 | Ruta | Uso |
 |------|-----|
 | `GET /` | Dashboard: preview, enviar, tabla documentos, historial lotes |
-| `GET /references` | Mapeos bancos, categorías, numeraciones, interfaces CxP, intercompany, GTT, recibos |
+| `GET /references` | Mapeos bancos, categorías, numeraciones, interfaces CxP, intercompany, GTT, recibos, comisiones |
 
 ### Operación (JSON + sesión)
 
@@ -116,7 +116,8 @@ Tipos: `receipt` | `commission` | `gtt` | `expense`.
 
 ### Referencias (API)
 
-- `GET /references/data?empresa=&type=banks|categories|cost_centers|number_templates`
+- `GET /references/data?empresa=&type=banks|categories|cost_centers|number_templates|retentions|journal_numerations`
+- `POST /references/save-retention-mapping` — retenciones (p. ej. `commission_retefuente`)
 - `GET /references/mappings?...`
 - `GET /references/local-accounts?empresa=`
 - `POST /references/save-bank-mapping`
@@ -350,13 +351,43 @@ Radicados webhook: `/accounting/gastos-alegra/asignar/`, `/aprobar/`. Tope `empr
 - `POST /journals`
 - **`numberTemplate`** (string, mapeo `receipt_cash`), **`status: open`**
 - Fecha = `Recaudos_general.fecha` (no `fecha_pago`)
-- Débito banco o **CxC interco** si banco es de otra empresa; créditos anticipo cliente divididos por titular adjudicación
-- Mapeo anticipo: `receipt_client_advance` (Referencias, por proyecto)
+
+**Débito (sin cadenas banco/interco automáticas):** por forma de pago del recibo.
+
+1. `Recaudos_general.formapago` → fila en `formas_pago` del **proyecto** (BD proyecto).
+2. Mapeo en Referencias → Recibos: `AlegraMapping` `category`, `local_model=andinasoft.formas_pago`, `local_pk=<descripcion>`, `local_code=receipt_debit` → id categoría Alegra (banco, puente datáfono, pasarela, etc.).
+3. `MappingResolver.receipt_debit_for_forma_pago()` — si falta mapeo, preview inválido con mensaje claro.
+
+La columna `formas_pago.cuenta_contable` (PUC SIIGO) se muestra en Referencias solo como referencia; **no** resuelve el débito.
+
+**Crédito:** `receipt_client_advance` (anticipo clientes), repartido por titular de adjudicación.
+
+**Contacto débito:**
+- Forma **normal:** primer titular (`contact_for_cliente`).
+- Forma **intercompany** (checkbox en Referencias + NIT contraparte en `alegra_payload` del mapeo `receipt_debit`): contacto de la empresa del grupo (`contact_for_empresa(NIT)`), típicamente la dueña del banco donde cayó el efectivo. Los créditos de anticipo siguen usando el titular.
+
+API: `GET /references/receipt-formas-pago?empresa=&proyecto=` — incluye `intercompany`, `counterparty_nit`.
+
+Al guardar (lote, Referencias → Recibos): `POST /references/save-receipt-formas-pago` con `{ empresa, proyecto, formas: [{ forma, alegra_id, description, intercompany, counterparty_nit }] }`.
+
+También: `POST /references/save-category-mapping` por fila (mismo payload intercompany).
 
 ### Comisiones
 
-- Interno: journal con **`idNumeration`** (distinto a recibos/interco)
-- Externo: `POST /bills` + `numberTemplate`, retenciones, etc.
+Fuente: `Pagocomision` vía `CALL detalle_comisiones_fecha`. Routing por `asesor.tipo_asesor`. Configuración por proyecto en **Referencias → Comisiones**.
+
+| Tipo asesor | Envío Alegra | Mapeos clave |
+|-------------|--------------|--------------|
+| **Externo** | `POST /bills` (documento soporte, como GTT) | `commission_support_document`, `commission_expense`, `commission_retefuente` (empresa) |
+| **Interno** | `POST /journals` (`numberTemplate` + `status: open`, como recibos) | `commission_journal`, `commission_debit`, `commission_credit` |
+
+**Valor del pago** (por proyecto y tipo de asesor): `commission_amount_source_external` / `commission_amount_source_internal` (`gross` → `comision`; `net` → `pagoneto`). Si solo existe el mapeo legado `commission_amount_source`, se usa como respaldo para ambos.
+
+- **Externo + bruto:** línea `purchases.categories[].price` = `comision`; si `retefuente > 0`, `retentions[]` con mapeo `commission_retefuente` ([GET /retentions](https://developer.alegra.com/reference/get_retentions)).
+- **Externo + neto:** línea = `pagoneto`; **no** se envía `retentions[]`.
+- **Interno:** débito cuenta comisión, crédito cuenta por pagar; mismo valor según modo neto/bruto.
+
+Ref. documento soporte: [POST /bills](https://developer.alegra.com/reference/post_bills) (`numberTemplate` obligatorio).
 
 ### GTT
 
@@ -472,10 +503,18 @@ Lado **empresa del gasto**: débito concepto CxP (`client` = proveedor), crédit
 
 | `local_code` | Uso | Campo en payload journal |
 |--------------|-----|---------------------------|
-| `receipt_cash` | Recibos | `numberTemplate` |
+| `receipt_cash` | Recibos · numeración | `numberTemplate` |
+| `receipt_debit` + `local_model=andinasoft.formas_pago` + `local_pk=<forma>` | Recibos · débito por forma de pago | `entries[].id` |
+| `receipt_client_advance` | Recibos · crédito anticipo | `entries[].id` |
 | `interco_journal` | Intercompany | `numberTemplate` |
-| `commission_journal` | Comisión interna | `idNumeration` |
+| `commission_journal` | Comisión interna (journal) | `numberTemplate` |
+| `commission_support_document` | Comisión externa (documento soporte) | `numberTemplate.id` en bills |
 | `gtt_support_document` | GTT | `numberTemplate.id` en bills |
+| `commission_amount_source_external` | Base valor documento soporte | — (config CATEGORY) |
+| `commission_amount_source_internal` | Base valor journal interno | — (config CATEGORY) |
+| `commission_expense` | Gasto en documento soporte | `purchases.categories` |
+| `commission_debit` / `commission_credit` | Asiento interno | `entries` |
+| `commission_retefuente` | Retención (modo bruto) | `retentions[].id` |
 | `expense_payment`, `expense_anticipo` | Opcional en payments | `numberTemplate.id` |
 
 ### Bills

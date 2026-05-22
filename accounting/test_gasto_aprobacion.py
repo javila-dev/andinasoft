@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
+from unittest.mock import patch
+import json
 
 from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra,
@@ -163,3 +165,29 @@ class GastoAprobacionTests(TestCase):
         self.factura.save(update_fields=['gasto_aprobado'])
         pendiente = Facturas.objects.filter(q).filter(pk=self.factura.pk).exists()
         self.assertTrue(pendiente)
+
+    @patch('accounting.gasto_aprobacion_views.AlegraMCPClient')
+    def test_journal_preview_advierte_journal_duplicado(self, client_cls):
+        from django.contrib.auth.models import Group
+        from accounting.gasto_aprobacion_views import ajax_gastos_alegra_journal_preview
+        from accounting.test_journal_cxp import JOURNAL_7
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:journal:7'
+        self.factura.alegra_document_type = Facturas.ALEGRA_DOC_JOURNAL
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+
+        client_cls.return_value.get_journal.return_value = JOURNAL_7
+
+        req = self.factory.get('/', {'empresa': self.empresa.pk, 'journal_id': '7'})
+        req.user = self.contable
+        resp = ajax_gastos_alegra_journal_preview(req)
+        data = json.loads(resp.content)
+
+        self.assertTrue(data['ok'])
+        self.assertTrue(data['duplicate_journal'])
+        self.assertEqual(data['alegra_bill_id'], f'{self.empresa.pk}:journal:7')
+        self.assertEqual(data['radicado_existente']['pk'], self.factura.pk)
+        self.assertIn('radicado', data)

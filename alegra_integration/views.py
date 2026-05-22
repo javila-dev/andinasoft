@@ -19,6 +19,7 @@ from alegra_integration.models import (
 )
 from alegra_integration.services import AlegraIntegrationService, ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX, ALEGRA_WEBHOOK_EVENTS
 from andinasoft.models import cuentas_pagos, empresas, proyectos, clientes, asesores
+from andinasoft.shared_models import formas_pago
 from accounting.models import cuentas_intercompanias, info_interfaces
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.client import AlegraMCPClient
@@ -287,6 +288,8 @@ def references_data(request):
             return JsonResponse({'journal_numerations': data.get('journal_numerations', [])})
         if ref_type in ('number_templates', 'numerations', 'numeration'):
             return JsonResponse({'number_templates': data.get('number_templates', {})})
+        if ref_type == 'retentions':
+            return JsonResponse({'retentions': data.get('retentions', [])})
 
         return JsonResponse(data)
     except empresas.DoesNotExist:
@@ -443,6 +446,45 @@ def references_save_bank_mapping(request):
         return _error_response(exc, status=500)
 
 
+def _upsert_receipt_forma_debit_mapping(
+    *,
+    empresa_id,
+    proyecto,
+    forma,
+    alegra_id,
+    description='',
+    intercompany=False,
+    counterparty_nit='',
+):
+    forma = (forma or '').strip()
+    alegra_id = (alegra_id or '').strip()
+    if not forma or not alegra_id:
+        raise ValueError('forma y alegra_id son requeridos')
+    intercompany = bool(intercompany)
+    counterparty_nit = (counterparty_nit or '').strip()
+    if intercompany and not counterparty_nit:
+        raise ValueError(
+            f'Indica el NIT de la empresa contraparte para la forma de pago «{forma}» (intercompany).'
+        )
+    alegra_payload = {'intercompany': intercompany}
+    if intercompany:
+        alegra_payload['counterparty_nit'] = counterparty_nit
+    return AlegraMapping.objects.update_or_create(
+        empresa_id=empresa_id,
+        proyecto=proyecto,
+        mapping_type=AlegraMapping.CATEGORY,
+        local_model='andinasoft.formas_pago',
+        local_pk=forma,
+        local_code='receipt_debit',
+        defaults={
+            'alegra_id': alegra_id,
+            'description': (description or forma)[:255],
+            'alegra_payload': alegra_payload,
+            'active': True,
+        },
+    )
+
+
 @login_required
 @require_http_methods(['POST'])
 def references_save_category_mapping(request):
@@ -460,6 +502,30 @@ def references_save_category_mapping(request):
             return JsonResponse({'detail': 'empresa, local_code y alegra_id son requeridos'}, status=400)
 
         proyecto = proyectos.objects.get(pk=proyecto_id) if proyecto_id else None
+
+        if local_model == 'andinasoft.formas_pago' and local_code == 'receipt_debit':
+            if not proyecto_id:
+                return JsonResponse({'detail': 'proyecto es requerido para formas de pago de recibos'}, status=400)
+            try:
+                m, created = _upsert_receipt_forma_debit_mapping(
+                    empresa_id=empresa_id,
+                    proyecto=proyecto,
+                    forma=local_pk,
+                    alegra_id=alegra_id,
+                    description=description,
+                    intercompany=bool(payload.get('intercompany')),
+                    counterparty_nit=(payload.get('counterparty_nit') or '').strip(),
+                )
+            except ValueError as exc:
+                return JsonResponse({'detail': str(exc)}, status=400)
+            return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk})
+
+        defaults = {
+            'alegra_id': alegra_id,
+            'description': (description or local_code)[:255],
+            'active': True,
+        }
+
         m, created = AlegraMapping.objects.update_or_create(
             empresa_id=empresa_id,
             proyecto=proyecto,
@@ -467,13 +533,101 @@ def references_save_category_mapping(request):
             local_model=local_model,
             local_pk=local_pk,
             local_code=local_code,
-            defaults={
-                'alegra_id': alegra_id,
-                'description': (description or local_code)[:255],
-                'active': True,
-            },
+            defaults=defaults,
         )
         return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk})
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def references_save_receipt_formas_pago(request):
+    """Guarda en lote los mapeos débito/intercompany de formas de pago (recibos)."""
+    try:
+        payload = _payload(request)
+        empresa_id = (payload.get('empresa') or '').strip()
+        proyecto_id = (payload.get('proyecto') or '').strip()
+        items = payload.get('formas') or []
+        if not empresa_id or not proyecto_id:
+            return JsonResponse({'detail': 'empresa y proyecto son requeridos'}, status=400)
+        if not isinstance(items, list):
+            return JsonResponse({'detail': 'formas debe ser una lista'}, status=400)
+
+        proyecto = proyectos.objects.get(pk=proyecto_id)
+        saved = 0
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            forma = (item.get('forma') or item.get('descripcion') or '').strip()
+            alegra_id = (item.get('alegra_id') or item.get('catId') or '').strip()
+            if not forma or not alegra_id:
+                continue
+            try:
+                _upsert_receipt_forma_debit_mapping(
+                    empresa_id=empresa_id,
+                    proyecto=proyecto,
+                    forma=forma,
+                    alegra_id=alegra_id,
+                    description=(item.get('description') or item.get('catLabel') or forma).strip(),
+                    intercompany=bool(item.get('intercompany')),
+                    counterparty_nit=(item.get('counterparty_nit') or '').strip(),
+                )
+                saved += 1
+            except ValueError as exc:
+                return JsonResponse({'detail': str(exc), 'saved': saved}, status=400)
+
+        return JsonResponse({'ok': True, 'saved': saved})
+    except proyectos.DoesNotExist:
+        return JsonResponse({'detail': 'Proyecto no encontrado'}, status=404)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['GET'])
+def references_receipt_formas_pago(request):
+    """
+    Formas de pago del proyecto (tabla local) con mapeo Alegra de débito por recibo.
+    """
+    try:
+        empresa_id = (request.GET.get('empresa') or '').strip()
+        proyecto_id = (request.GET.get('proyecto') or '').strip()
+        if not empresa_id:
+            return JsonResponse({'detail': 'Empresa requerida'}, status=400)
+        if not proyecto_id:
+            return JsonResponse({'detail': 'Proyecto requerido'}, status=400)
+
+        proyectos.objects.get(pk=proyecto_id)
+        formas = formas_pago.objects.using(proyecto_id).all().order_by('descripcion')
+        maps = {
+            m.local_pk: m
+            for m in AlegraMapping.objects.filter(
+                empresa_id=empresa_id,
+                proyecto_id=proyecto_id,
+                mapping_type=AlegraMapping.CATEGORY,
+                local_model='andinasoft.formas_pago',
+                local_code='receipt_debit',
+                active=True,
+            )
+        }
+        rows = []
+        for forma in formas:
+            desc = (forma.descripcion or '').strip()
+            m = maps.get(desc)
+            extra = m.alegra_payload if m and isinstance(m.alegra_payload, dict) else {}
+            rows.append({
+                'descripcion': desc,
+                'cuenta_contable': (forma.cuenta_contable or '').strip(),
+                'cuenta_banco': (forma.cuenta_banco or '').strip() or None,
+                'alegra_category_id': m.alegra_id if m else '',
+                'alegra_category_label': (m.description or '').strip() if m else '',
+                'intercompany': bool(extra.get('intercompany')),
+                'counterparty_nit': str(extra.get('counterparty_nit') or '').strip(),
+            })
+        return JsonResponse({'proyecto': proyecto_id, 'formas_pago': rows, 'total': len(rows)})
+    except proyectos.DoesNotExist:
+        return JsonResponse({'detail': 'Proyecto no encontrado'}, status=404)
     except Exception as exc:
         return _error_response(exc, status=500)
 
@@ -554,6 +708,37 @@ def references_save_numeration_mapping(request):
             empresa_id=empresa_id,
             proyecto=proyecto,
             mapping_type=AlegraMapping.NUMERATION,
+            local_model='',
+            local_pk='',
+            local_code=local_code,
+            defaults={
+                'alegra_id': alegra_id,
+                'description': (description or local_code)[:255],
+                'active': True,
+            },
+        )
+        return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk})
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def references_save_retention_mapping(request):
+    try:
+        payload = _payload(request)
+        empresa_id = (payload.get('empresa') or '').strip()
+        local_code = (payload.get('local_code') or '').strip()
+        alegra_id = (payload.get('alegra_id') or '').strip()
+        description = (payload.get('description') or '').strip()
+
+        if not empresa_id or not local_code or not alegra_id:
+            return JsonResponse({'detail': 'empresa, local_code y alegra_id son requeridos'}, status=400)
+
+        m, created = AlegraMapping.objects.update_or_create(
+            empresa_id=empresa_id,
+            proyecto=None,
+            mapping_type=AlegraMapping.RETENTION,
             local_model='',
             local_pk='',
             local_code=local_code,

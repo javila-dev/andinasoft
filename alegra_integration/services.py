@@ -186,7 +186,6 @@ class AlegraIntegrationService:
 
             existing_sent = AlegraDocument.objects.filter(
                 empresa=doc.empresa,
-                proyecto=doc.proyecto,
                 document_type=doc.document_type,
                 local_key=doc.local_key,
                 status=AlegraDocument.STATUS_SENT,
@@ -1044,11 +1043,21 @@ class AlegraIntegrationService:
             source_pk=str(source_pk),
             status=AlegraDocument.STATUS_SENT,
         )
-        if proyecto:
-            qs = qs.filter(proyecto_id=proyecto.pk)
-        else:
-            qs = qs.filter(proyecto__isnull=True)
+        if self._document_source_scoped_by_proyecto(source_model):
+            if proyecto:
+                qs = qs.filter(proyecto_id=proyecto.pk)
+            else:
+                qs = qs.filter(proyecto__isnull=True)
         return list(qs.order_by('pk'))
+
+    @staticmethod
+    def _document_source_scoped_by_proyecto(source_model):
+        """Fuentes por proyecto (recibos/comisiones/GTT). Egresos son a nivel empresa."""
+        return source_model in (
+            'andinasoft.Recaudos_general',
+            'andinasoft.Pagocomision',
+            'andinasoft.Detalle_gtt',
+        )
 
     def _safe_build(self, builder, source, *, empresa, proyecto):
         source_model = f'{source.__class__._meta.app_label}.{source.__class__.__name__}'
@@ -1093,9 +1102,9 @@ class AlegraIntegrationService:
 
     @transaction.atomic
     def _upsert_document(self, batch, empresa, proyecto, *, document_type, source_model, source_pk, local_key, payload, operation, transport, status, error):
+        # unique_alegra_document_local_key = (empresa, document_type, local_key) — sin proyecto
         existing = AlegraDocument.objects.filter(
             empresa=empresa,
-            proyecto=proyecto,
             document_type=document_type,
             local_key=local_key,
         ).first()
@@ -1106,10 +1115,10 @@ class AlegraIntegrationService:
 
         doc, _ = AlegraDocument.objects.update_or_create(
             empresa=empresa,
-            proyecto=proyecto,
             document_type=document_type,
             local_key=local_key,
             defaults={
+                'proyecto': proyecto,
                 'batch': batch,
                 'source_model': source_model,
                 'source_pk': source_pk,

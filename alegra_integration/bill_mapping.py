@@ -220,7 +220,7 @@ def map_bill_to_factura_fields(bill):
     else:
         number_str = ''
 
-    client = bill.get('client') or {}
+    client = bill.get('client') or bill.get('provider') or {}
     identification = (client.get('identification') or '').strip()
     if not identification and client.get('id') is not None:
         identification = str(client.get('id')).strip()

@@ -19,6 +19,7 @@ from accounting.gasto_aprobacion import (
     crear_radicado_gasto_alegra,
     empresa_config_sin_aprobador,
     factura_a_dict,
+    normalizar_alegra_bill_id,
     parse_aprobador_user_id_opcional,
     usuario_es_aprobador_gasto,
 )
@@ -159,6 +160,10 @@ def ajax_gastos_alegra_journal_preview(request):
         empresa = empresas.objects.get(pk=empresa_id)
     except empresas.DoesNotExist:
         return _json_error('Empresa no encontrada.', 404)
+
+    alegra_ref = normalizar_alegra_bill_id(empresa_id, journal_id, es_radicado_manual=True)
+    fac_existente = Facturas.objects.filter(alegra_bill_id=alegra_ref).select_related('empresa').first()
+
     try:
         client = AlegraMCPClient(empresa)
         journal = client.get_journal(journal_id)
@@ -166,6 +171,9 @@ def ajax_gastos_alegra_journal_preview(request):
             'ok': True,
             'empresa': empresa_id,
             'journal_id': journal_id,
+            'alegra_bill_id': alegra_ref,
+            'radicado_existente': factura_a_dict(fac_existente) if fac_existente else None,
+            'duplicate_journal': fac_existente is not None,
         }
         try:
             radicado = parsear_journal_para_radicado(journal)

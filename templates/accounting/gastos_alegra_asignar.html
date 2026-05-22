@@ -125,6 +125,7 @@
             </div>
           </div>
           <div id="crearJournalStatus" class="small text-muted"></div>
+          <div id="crearJournalDuplicate" class="alert alert-warning py-2 small d-none mb-0 mt-2"></div>
           <div id="crearCxpBox" class="d-none mt-2">
             <span class="small font-weight-bold">CxP detectadas (pasivo orden 2)</span>
             <div class="table-responsive mt-1">
@@ -374,6 +375,8 @@ function resetFormCrear() {
   $('#crearJournalDetalle').val('');
   $('#crearJournalDetalleHint').addClass('d-none').text('');
   $('#crearJournalStatus').text('');
+  $('#crearJournalDuplicate').addClass('d-none').empty();
+  $('#btnConfirmarCrear').prop('disabled', false);
   $('#crearCxpBox').addClass('d-none');
   $('#tablaCrearCxp tbody').empty();
   $('#crearAprobador').html('<option value="">Seleccione empresa primero</option>');
@@ -461,6 +464,8 @@ $(function() {
     }
     const $btn = $('#btnCrearJournalConsult').prop('disabled', true);
     $('#crearJournalStatus').text('Consultando Alegra…');
+    $('#crearJournalDuplicate').addClass('d-none').empty();
+    $('#btnConfirmarCrear').prop('disabled', false);
     $('#crearCxpBox').addClass('d-none');
     $.get('/accounting/ajax/gastos-alegra/journal-preview', {
       empresa: empresa,
@@ -477,11 +482,26 @@ $(function() {
         }
         const r = data.radicado;
         aplicarRadicadoDesdeJournal(r);
-        $('#crearJournalStatus').html(
+        let statusHtml =
           '<span class="text-success">Comprobante #' + journalId + ' — ' +
           r.cantidad_terceros + ' CxP, total $' + Number(r.valor).toLocaleString('es-CO') +
-          '</span>'
-        );
+          '</span>';
+        if (data.duplicate_journal && data.radicado_existente) {
+          const ex = data.radicado_existente;
+          const ref = data.alegra_bill_id || (empresa + ':journal:' + journalId);
+          $('#crearJournalDuplicate').removeClass('d-none').html(
+            '<strong>Ya existe un radicado con este journal.</strong> ' +
+            'Referencia Alegra <code>' + escapeHtml(ref) + '</code> → ' +
+            'radicado <strong>#' + ex.pk + '</strong>' +
+            (ex.nrofactura ? ' (factura ' + escapeHtml(ex.nrofactura) + ')' : '') +
+            '. No puede crear otro con el mismo id.'
+          );
+          $('#btnConfirmarCrear').prop('disabled', true);
+        } else {
+          $('#crearJournalDuplicate').addClass('d-none').empty();
+          $('#btnConfirmarCrear').prop('disabled', false);
+        }
+        $('#crearJournalStatus').html(statusHtml);
         loadAprobadores(empresa, $('#crearAprobador'), $('#hintCrearSinAprob'));
       })
       .fail(function(xhr) {
@@ -497,6 +517,10 @@ $(function() {
       e.preventDefault();
       consultarJournalEnModal();
     }
+  });
+  $('#crearRefAlegra, #crearEmpresa').on('input change', function() {
+    $('#crearJournalDuplicate').addClass('d-none').empty();
+    $('#btnConfirmarCrear').prop('disabled', false);
   });
 
   $('#btnNuevoRadicado').on('click', function() {

@@ -41,10 +41,32 @@ class ResolverStub:
     def retention(self, retention_code, required=True):
         return f'ret-{retention_code}'
 
+    def commission_amount_source(self, *, for_tipo, default='net', required=False):
+        if for_tipo == 'external':
+            return getattr(self, '_amount_source_external', default)
+        return getattr(self, '_amount_source_internal', default)
+
+    def receipt_forma_pago_config(self, forma_pago_descripcion, *, required=True):
+        return {
+            'category_id': getattr(self, '_receipt_debit_id', 'cat-receipt-debit'),
+            'intercompany': getattr(self, '_receipt_interco', False),
+            'counterparty_nit': getattr(self, '_receipt_interco_nit', ''),
+        }
+
+    def receipt_debit_for_forma_pago(self, forma_pago_descripcion, *, required=True):
+        return self.receipt_forma_pago_config(forma_pago_descripcion, required=required)['category_id']
+
     def payment_method(self, local_method, required=True):
         return 'transfer'
 
     def get(self, *args, **kwargs):
+        code = kwargs.get('local_code', '')
+        if code == 'commission_expense':
+            return 'cat-commission-expense'
+        if code == 'commission_debit':
+            return 'cat-commission-debit'
+        if code == 'commission_credit':
+            return 'cat-commission-credit'
         return 'mapped-id'
 
 
@@ -103,7 +125,7 @@ class BuilderTests(SimpleTestCase):
         self.assertEqual(len(built.payload['entries']), 3)
         self.assertEqual(built.payload['entries'][0]['debit'], 102300.0)
         self.assertEqual(built.payload['entries'][0]['credit'], 0)
-        self.assertEqual(built.payload['entries'][0]['id'], 'mapped-id')
+        self.assertEqual(built.payload['entries'][0]['id'], 'cat-receipt-debit')
         self.assertEqual(built.payload['entries'][0]['client'], 'client-123')
         self.assertEqual(built.payload['entries'][1]['credit'], 51150.0)
         self.assertEqual(built.payload['entries'][1]['debit'], 0)
@@ -111,35 +133,19 @@ class BuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['entries'][2]['credit'], 51150.0)
         self.assertEqual(built.payload['entries'][2]['client'], 'client-999')
 
-    @patch('alegra_integration.builders.cuentas_intercompanias')
-    @patch('alegra_integration.builders.Recaudos')
-    @patch('alegra_integration.builders.formas_pago')
-    @patch('alegra_integration.builders.cuentas_pagos')
     @patch('alegra_integration.builders.MappingResolver')
     @patch('alegra_integration.builders.clientes')
-    def test_receipt_intercompany_bank_uses_cxc_not_bank_mapping(
-        self, clientes_model, resolver_cls, cuentas_pagos_model, formas_pago, recaudos, interco_model,
-    ):
-        class IntercoResolver(ResolverStub):
-            def get(self, mapping_type, **kwargs):
-                local_code = kwargs.get('local_code', '')
-                if local_code == 'receipt_client_advance':
-                    return 'cat-advance'
-                if local_code == 'interco_cxc:900999111':
-                    return 'cat-interco-cxc'
-                return super().get(mapping_type, **kwargs)
+    def test_receipt_debit_uses_forma_pago_mapping(self, clientes_model, resolver_cls):
+        class FormaResolver(ResolverStub):
+            def receipt_forma_pago_config(self, forma_pago_descripcion, *, required=True):
+                return {
+                    'category_id': 'cat-dataphone-bridge',
+                    'intercompany': False,
+                    'counterparty_nit': '',
+                }
 
-        resolver_cls.return_value = IntercoResolver()
+        resolver_cls.return_value = FormaResolver()
         clientes_model.objects.filter.return_value.first.return_value = SimpleNamespace(nombrecompleto='Titular')
-        cuenta = SimpleNamespace(pk=6, nro_cuentacontable='110505', nit_empresa_id=SimpleNamespace(pk='900999111'))
-        cuentas_pagos_model.objects.filter.return_value.first.return_value = cuenta
-        formas_pago.objects.using.return_value.filter.return_value.first.return_value = SimpleNamespace(
-            cuenta_asociada_id=6,
-        )
-        rel = SimpleNamespace(pk=1, cuenta_por_cobrar=13051001, cuenta_por_pagar=22051001)
-        interco_qs = Mock()
-        interco_qs.first.return_value = rel
-        interco_model.objects.filter.return_value = interco_qs
 
         receipt = SimpleNamespace(
             pk=10989,
@@ -148,7 +154,39 @@ class BuilderTests(SimpleTestCase):
             numrecibo='RC-99',
             fecha=datetime.date(2026, 5, 1),
             fecha_pago=datetime.date(2026, 5, 1),
-            formapago='TRANSFERENCIA',
+            formapago='Datafono',
+            concepto='',
+        )
+        receipt.info_adj = lambda: SimpleNamespace(idtercero1='123', idtercero2='', idtercero3='', idtercero4='')
+
+        built = ReceiptPaymentBuilder(self.empresa, self.proyecto).build(receipt)
+
+        self.assertEqual(built.payload['entries'][0]['id'], 'cat-dataphone-bridge')
+        self.assertEqual(built.payload['__local']['forma_pago'], 'Datafono')
+        self.assertEqual(built.payload['entries'][0]['client'], 'client-123')
+
+    @patch('alegra_integration.builders.MappingResolver')
+    @patch('alegra_integration.builders.clientes')
+    def test_receipt_intercompany_debit_uses_empresa_contact(self, clientes_model, resolver_cls):
+        class IntercoFormaResolver(ResolverStub):
+            def receipt_forma_pago_config(self, forma_pago_descripcion, *, required=True):
+                return {
+                    'category_id': 'cat-interco-cxc',
+                    'intercompany': True,
+                    'counterparty_nit': '900999111',
+                }
+
+        resolver_cls.return_value = IntercoFormaResolver()
+        clientes_model.objects.filter.return_value.first.return_value = SimpleNamespace(nombrecompleto='Titular')
+
+        receipt = SimpleNamespace(
+            pk=10990,
+            valor=Decimal('500000'),
+            idtercero='123',
+            numrecibo='RC-100',
+            fecha=datetime.date(2026, 5, 1),
+            fecha_pago=datetime.date(2026, 5, 1),
+            formapago='TRANSFERENCIA INTERCO',
             concepto='',
         )
         receipt.info_adj = lambda: SimpleNamespace(idtercero1='123', idtercero2='', idtercero3='', idtercero4='')
@@ -156,8 +194,11 @@ class BuilderTests(SimpleTestCase):
         built = ReceiptPaymentBuilder(self.empresa, self.proyecto).build(receipt)
 
         self.assertEqual(built.payload['entries'][0]['id'], 'cat-interco-cxc')
-        self.assertIn('INTERCO banco 900999111', built.payload['observations'])
-        self.assertEqual(built.payload['entries'][1]['id'], 'cat-advance')
+        self.assertEqual(built.payload['entries'][0]['client'], 'company-900999111')
+        self.assertNotEqual(built.payload['entries'][0]['client'], 'client-123')
+        self.assertIn('INTERCO 900999111', built.payload['observations'])
+        self.assertEqual(built.payload['__local']['intercompany'], True)
+        self.assertEqual(built.payload['entries'][1]['client'], 'client-123')
 
     @patch('alegra_integration.builders.asesores')
     @patch('alegra_integration.builders.consecutivos')
@@ -181,12 +222,18 @@ class BuilderTests(SimpleTestCase):
 
         self.assertEqual(built.operation, 'accounting__createJournal')
         self.assertEqual(built.document_type, 'commission_internal_advance')
+        self.assertEqual(built.payload['numberTemplate'], 'num-commission_journal')
+        self.assertEqual(built.payload['status'], 'open')
+        self.assertNotIn('idNumeration', built.payload)
         self.assertEqual(built.payload['entries'][0]['debit'], 50000.0)
-        self.assertEqual(built.payload['entries'][0]['id'], 'cat-133005')
+        self.assertEqual(built.payload['entries'][0]['id'], 'cat-commission-debit')
+        self.assertEqual(built.payload['entries'][0]['client'], 'adviser-111')
         self.assertEqual(built.payload['entries'][1]['credit'], 50000.0)
+        self.assertEqual(built.payload['entries'][1]['id'], 'cat-commission-credit')
 
     @patch('alegra_integration.builders.consecutivos')
     def test_external_commission_builds_support_document(self, consecutivos):
+        self.resolver._amount_source_external = 'gross'
         consecutivos.objects.using.return_value.get.return_value = SimpleNamespace(cuenta_capital='529505')
         asesor = SimpleNamespace(pk='222', nombre='ASESOR EXTERNO', tipo_asesor='Externo')
         commission = SimpleNamespace(
@@ -194,6 +241,7 @@ class BuilderTests(SimpleTestCase):
             id_pago=88,
             idadjudicacion='ADJ1',
             comision=Decimal('120000'),
+            pagoneto=Decimal('106800'),
             retefuente=Decimal('13200'),
             fecha=datetime.date(2026, 4, 4),
         )
@@ -202,9 +250,32 @@ class BuilderTests(SimpleTestCase):
 
         self.assertEqual(built.operation, 'POST /bills')
         self.assertEqual(built.payload['provider']['id'], 'adviser-222')
-        self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-gtt-expense')
-        self.assertEqual(built.payload['__local']['gtt_cxp_category_id'], 'cat-gtt-cxp')
+        self.assertEqual(built.payload['numberTemplate'], {'id': 'num-commission_support_document'})
+        self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-commission-expense')
+        self.assertEqual(built.payload['purchases']['categories'][0]['price'], 120000.0)
+        self.assertEqual(built.payload['__local']['amount_mode'], 'gross')
         self.assertEqual(built.payload['retentions'][0]['id'], 'ret-commission_retefuente')
+
+    @patch('alegra_integration.builders.consecutivos')
+    def test_external_commission_net_omits_retentions(self, consecutivos):
+        self.resolver._amount_source_external = 'net'
+        consecutivos.objects.using.return_value.get.return_value = SimpleNamespace(cuenta_capital='529505')
+        asesor = SimpleNamespace(pk='222', nombre='ASESOR EXTERNO', tipo_asesor='Externo')
+        commission = SimpleNamespace(
+            idgestor='222',
+            id_pago=89,
+            idadjudicacion='',
+            comision=Decimal('120000'),
+            pagoneto=Decimal('106800'),
+            retefuente=Decimal('13200'),
+            fecha=datetime.date(2026, 4, 5),
+        )
+
+        built = ExternalCommissionSupportDocumentBuilder(self.empresa, self.proyecto, self.resolver).build(commission, asesor)
+
+        self.assertEqual(built.payload['purchases']['categories'][0]['price'], 106800.0)
+        self.assertNotIn('retentions', built.payload)
+        self.assertEqual(built.payload['__local']['amount_mode'], 'net')
 
     @patch('alegra_integration.builders.consecutivos')
     def test_gtt_builds_support_document(self, consecutivos):
