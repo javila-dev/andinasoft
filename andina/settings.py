@@ -262,6 +262,16 @@ N8N_WEBHOOK_PLINK_COUNT = os.getenv(
     'N8N_WEBHOOK_PLINK_COUNT',
     f'{N8N_BASE_URL}/webhook/plink-count'
 )
+N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION = os.getenv(
+    'N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION',
+    f'{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-asignacion',
+)
+N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION = os.getenv(
+    'N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION',
+    f'{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-aprobacion',
+)
+N8N_ALEGRA_NOTIFICATIONS_ENABLED = env_bool('N8N_ALEGRA_NOTIFICATIONS_ENABLED', LIVE)
+ANDINA_PUBLIC_BASE_URL = os.getenv('ANDINA_PUBLIC_BASE_URL', '').rstrip('/')
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 

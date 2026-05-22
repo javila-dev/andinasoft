@@ -395,6 +395,13 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
         accion=accion[:255],
         ubicacion='Contabilidad',
     )
+    if aprobador_uid:
+        from accounting.gasto_n8n_notify import notify_gasto_pendiente_aprobacion
+
+        notify_gasto_pendiente_aprobacion(
+            factura.pk,
+            assigned_by_user_id=request.user.pk,
+        )
     return factura
 
 

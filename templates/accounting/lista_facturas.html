@@ -259,8 +259,7 @@
                     $('#modalHistory').modal('show')
                     break;    
                 case "ver":
-                    // "Ver Factura" (soporte radicado): usar modal + fetch on-demand (Alegra)
-                    openFacturaSoporteModal(line.pk);
+                    openRadicadoSoporte(line);
                     break;  
                 case "pagos":
                     tablaListaPagos.ajax.url(

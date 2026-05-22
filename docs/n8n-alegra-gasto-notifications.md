@@ -1,0 +1,157 @@
+# Notificaciones n8n — gastos Alegra
+
+Webhooks **salientes** desde Django hacia n8n para avisar contables y aprobadores en el flujo de gastos con origen Alegra.
+
+Los flujos de email/WhatsApp/Slack los construyes en n8n; acá solo se define el contrato JSON y los puntos de disparo.
+
+## Variables de entorno
+
+| Variable | Descripción | Default (dev) |
+|----------|-------------|---------------|
+| `N8N_BASE_URL` | Base n8n | `http://localhost:5678` |
+| `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION` | URL webhook contables | `{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-asignacion` |
+| `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION` | URL webhook aprobador | `{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-aprobacion` |
+| `N8N_ALEGRA_NOTIFICATIONS_ENABLED` | Activa/desactiva envíos | `False` en dev, `True` si `LIVE=1` |
+| `ANDINA_PUBLIC_BASE_URL` | Base para links en el payload | vacío → paths relativos |
+
+## Destinatarios
+
+### Contables (`pendiente_asignacion`)
+
+Configurar en Django Admin → **Notificaciones contables gasto Alegra** (`GastoContableNotificacion`): usuario + empresa + activo.
+
+Si no hay filas activas para la empresa, **no se envía** el webhook (se registra warning en logs).
+
+### Aprobadores (`pendiente_aprobacion`)
+
+El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoAprobador` autoriza quién puede ser asignado).
+
+## Cuándo se dispara cada evento
+
+| Evento | Dispara | No dispara |
+|--------|---------|------------|
+| `gasto_alegra.pendiente_asignacion` | Webhook Alegra `new-bill` crea radicado nuevo | `new-bill` idempotente (bill ya existía en mismo estado) |
+| | Import `import_factura_from_alegra_bill` crea radicado | Import reconcilia existente |
+| | `new-bill` idempotente que pasa de `no_aplica` → `pendiente_asignacion` | `edit-bill`, `delete-bill` |
+| `gasto_alegra.pendiente_aprobacion` | Contabilidad asigna oficina **con** aprobador | Asignación sin aprobador (auto-aprobado) |
+| *(fuera de alcance)* | — | Aprobador confirma en `aprobar_gasto_alegra` |
+
+**PDF:** puede descargarse en un `on_commit` posterior. El payload incluye `factura.soporte_pdf_listo` (boolean).
+
+## POST 1 — Pendiente asignación
+
+**URL:** `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION`  
+**Content-Type:** `application/json`
+
+```json
+{
+  "event": "gasto_alegra.pendiente_asignacion",
+  "occurred_at": "2026-05-21T15:30:00-05:00",
+  "trigger": "webhook_new_bill",
+  "empresa": {
+    "nit": "901018375",
+    "nombre": "Empresa ejemplo"
+  },
+  "factura": {
+    "pk": 17369,
+    "nrofactura": "FCII327559",
+    "nombretercero": "PROVEEDOR SA",
+    "idtercero": "800144355",
+    "fechafactura": "2026-05-04",
+    "fecharadicado": "2026-05-21",
+    "valor": 142456,
+    "descripcion": "...",
+    "origen": "Alegra",
+    "alegra_bill_id": "901018375:1",
+    "alegra_id": "1",
+    "alegra_document_type": "bill",
+    "gasto_aprobacion_estado": "pendiente_asignacion",
+    "oficina": "",
+    "soporte_pdf_listo": false
+  },
+  "alegra_bill": {
+    "id": "1",
+    "total": 142456,
+    "state": "open",
+    "provider_name": "PROVEEDOR SA",
+    "provider_identification": "800144355",
+    "number": "FCII327559"
+  },
+  "recipients": [
+    {
+      "role": "contabilidad",
+      "user_id": 12,
+      "username": "contable1",
+      "email": "contable1@empresa.co",
+      "name": "María Contable"
+    }
+  ],
+  "links": {
+    "asignar": "https://app.example/accounting/gastos-alegra/asignar/"
+  }
+}
+```
+
+Valores de `trigger`: `webhook_new_bill`, `import_bill`.
+
+`alegra_bill` puede omitirse si no hay snapshot del bill (p. ej. algunos imports).
+
+## POST 2 — Pendiente aprobación
+
+**URL:** `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION`
+
+```json
+{
+  "event": "gasto_alegra.pendiente_aprobacion",
+  "occurred_at": "2026-05-21T16:00:00-05:00",
+  "trigger": "asignacion_contable",
+  "empresa": {
+    "nit": "901018375",
+    "nombre": "Empresa ejemplo"
+  },
+  "factura": {
+    "pk": 17369,
+    "nrofactura": "FCII327559",
+    "nombretercero": "PROVEEDOR SA",
+    "valor": 142456,
+    "oficina": "MEDELLIN",
+    "gasto_aprobacion_estado": "pendiente_aprobacion",
+    "gasto_aprobacion_comentario_contable": "Revisar soporte",
+    "alegra_bill_id": "901018375:1",
+    "alegra_id": "1",
+    "soporte_pdf_listo": true
+  },
+  "assigned_by": {
+    "role": "contabilidad",
+    "user_id": 8,
+    "username": "contable1",
+    "email": "contable1@empresa.co",
+    "name": "María Contable"
+  },
+  "recipients": [
+    {
+      "role": "aprobador",
+      "user_id": 5,
+      "username": "jefe.area",
+      "email": "jefe@empresa.co",
+      "name": "Jefe Área"
+    }
+  ],
+  "links": {
+    "aprobar": "https://app.example/accounting/gastos-alegra/aprobar/"
+  }
+}
+```
+
+## Código relacionado
+
+- Despacho: [`accounting/gasto_n8n_notify.py`](../accounting/gasto_n8n_notify.py)
+- Hooks ingesta Alegra: [`alegra_integration/webhook_bills.py`](../alegra_integration/webhook_bills.py)
+- Asignación/aprobación: [`accounting/gasto_aprobacion.py`](../accounting/gasto_aprobacion.py)
+- Admin destinatarios contables: `GastoContableNotificacion` en Django Admin
+
+## Notas para n8n
+
+1. Los POST son fire-and-forget (timeout 5 s); errores HTTP se loguean en Django, no reintentan automáticamente.
+2. Puedes ramificar por `event` aunque las URLs ya sean distintas.
+3. Si `ANDINA_PUBLIC_BASE_URL` está vacío, `links.*` vendrá como path relativo (`/accounting/gastos-alegra/...`).

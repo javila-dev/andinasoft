@@ -56,6 +56,36 @@ class GastoAprobador(models.Model):
         return f'{self.user} @ {emp}'
 
 
+class GastoContableNotificacion(models.Model):
+    """Usuarios contables que reciben avisos n8n cuando llega un gasto Alegra pendiente de asignación."""
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='gasto_contable_notificacion_entries',
+        db_constraint=False,
+    )
+    empresa = models.ForeignKey(
+        empresas,
+        on_delete=models.CASCADE,
+        related_name='gasto_contable_notificaciones',
+        db_constraint=False,
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Notificación contable gasto Alegra'
+        verbose_name_plural = 'Notificaciones contables gasto Alegra'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'empresa'],
+                name='unique_gasto_contable_notif_user_empresa',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.user} @ {self.empresa_id}'
+
+
 class Facturas(models.Model):
     nroradicado = models.AutoField(db_column='NroRadicado', primary_key=True)
     fecharadicado = models.DateField(db_column='FechaRadica',auto_now_add=True,blank=True) 

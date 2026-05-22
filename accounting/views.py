@@ -2937,8 +2937,16 @@ def ajax_info_facturas(request):
                     'descripcion',
                     'origen',
                 )
+                radicado_ids = [line['radicado'] for line in obj_facturas]
+                factura_meta = {}
+                if radicado_ids:
+                    for fac in Facturas.objects.filter(pk__in=radicado_ids).only(
+                        'pk', 'soporte_radicado', 'origen', 'alegra_document_type', 'alegra_bill_id',
+                    ):
+                        factura_meta[fac.pk] = fac
 
                 for idx, line in enumerate(obj_facturas):
+                    fac = factura_meta.get(line.get('radicado'))
                     list_mvto.append({
                         'id': idx,
                         'pk': line.get('radicado'),
@@ -2952,6 +2960,10 @@ def ajax_info_facturas(request):
                         'saldo': f"{line.get('saldo') or 0:,}",
                         'descripcion': line.get('descripcion'),
                         'tipo': line.get('origen'),
+                        'origen': line.get('origen'),
+                        'soporte': _media_url(fac.soporte_radicado) if fac else '',
+                        'alegra_document_type': getattr(fac, 'alegra_document_type', '') or '' if fac else '',
+                        'alegra_bill_id': getattr(fac, 'alegra_bill_id', '') or '' if fac else '',
                     })
                                 
             data = {
@@ -3002,46 +3014,66 @@ def ajax_data_factura(request):
             status = 'ready' if obj_factura.soporte_radicado else 'missing'
             message = ''
 
-            # Opción A: al dar click "Ver soporte" podemos intentar traer PDF desde Alegra si aún no existe.
-            if ensure_soporte and not obj_factura.soporte_radicado and getattr(obj_factura, 'alegra_bill_id', None):
-                try:
-                    from django.core.cache import cache
-                    from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
-                except Exception:
-                    cache = None
-                    attach_bill_pdf_from_alegra = None
+            # On-demand: solo bills Alegra sin PDF local (journals y radicados normales usan S3).
+            if ensure_soporte and not obj_factura.soporte_radicado and obj_factura.origen == 'Alegra':
+                from alegra_integration.bill_mapping import (
+                    ALEGRA_DOC_BILL,
+                    infer_alegra_document_type,
+                    parse_alegra_bill_id_for_api,
+                )
 
-                throttle_key = f'alegra:soporte:radicado:{obj_factura.pk}'
-                throttled = bool(cache.get(throttle_key)) if cache else False
-                if throttled:
-                    status = 'throttled'
-                    message = 'Aún no disponible. Ya se intentó hace poco; intenta de nuevo en unos minutos.'
-                elif attach_bill_pdf_from_alegra:
-                    # Mark throttle early to avoid bursts on repeated clicks.
-                    if cache:
-                        cache.set(throttle_key, True, timeout=60 * 3)
+                doc_type = (obj_factura.alegra_document_type or '').strip()
+                if not doc_type:
+                    doc_type = infer_alegra_document_type(obj_factura.alegra_bill_id)
+                alegra_numeric_id = None
+                if doc_type == ALEGRA_DOC_BILL:
+                    _, alegra_numeric_id = parse_alegra_bill_id_for_api(obj_factura.alegra_bill_id)
+
+                if doc_type == ALEGRA_DOC_BILL and alegra_numeric_id:
                     try:
-                        # alegra_bill_id se guarda como "{NIT}:{bill_id}"
-                        raw = str(obj_factura.alegra_bill_id or '')
-                        alegra_numeric_id = raw.split(':', 1)[1] if ':' in raw else raw
-                        ok = attach_bill_pdf_from_alegra(obj_factura.empresa, alegra_numeric_id, obj_factura)
-                        if ok and obj_factura.soporte_radicado:
-                            status = 'ready'
-                            message = 'Soporte descargado desde Alegra.'
-                        else:
-                            status = 'pending'
-                            message = 'Alegra todavía no publica el PDF. Intenta de nuevo en unos minutos.'
+                        from django.core.cache import cache
+                        from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
                     except Exception:
+                        cache = None
+                        attach_bill_pdf_from_alegra = None
+
+                    throttle_key = f'alegra:soporte:radicado:{obj_factura.pk}'
+                    throttled = bool(cache.get(throttle_key)) if cache else False
+                    if throttled:
+                        status = 'throttled'
+                        message = 'Aún no disponible. Ya se intentó hace poco; intenta de nuevo en unos minutos.'
+                    elif attach_bill_pdf_from_alegra:
+                        if cache:
+                            cache.set(throttle_key, True, timeout=60 * 3)
+                        try:
+                            ok = attach_bill_pdf_from_alegra(
+                                obj_factura.empresa, alegra_numeric_id, obj_factura,
+                            )
+                            if ok and obj_factura.soporte_radicado:
+                                status = 'ready'
+                                message = 'Soporte descargado desde Alegra.'
+                            else:
+                                status = 'pending'
+                                message = 'Alegra todavía no publica el PDF. Intenta de nuevo en unos minutos.'
+                        except Exception:
+                            status = 'error'
+                            message = 'No fue posible descargar el soporte desde Alegra. Intenta más tarde.'
+                    else:
                         status = 'error'
-                        message = 'No fue posible descargar el soporte desde Alegra. Intenta más tarde.'
+                        message = 'No se pudo inicializar el cliente de descarga de soporte Alegra.'
+                elif doc_type != ALEGRA_DOC_BILL:
+                    status = 'missing'
+                    message = 'Este radicado Alegra no tiene PDF adjunto.'
                 else:
-                    status = 'error'
-                    message = 'No se pudo inicializar el cliente de descarga de soporte Alegra.'
+                    status = 'missing'
+                    message = 'No hay referencia de bill Alegra para descargar el soporte.'
 
             data = {
                 'pk': obj_factura.pk,
                 'status': status,
                 'message': message,
+                'origen': obj_factura.origen or '',
+                'alegra_document_type': getattr(obj_factura, 'alegra_document_type', '') or '',
                 'soporte_radicado': _media_url(obj_factura.soporte_radicado),
                 'soporte_causacion': _media_url(obj_factura.soporte_causacion),
                 'data': serializers.serialize('json', [obj_factura]),
@@ -3296,6 +3328,9 @@ def ajax_lista_facturas(request):
                     'saldo':saldo,
                     'ubicacion':ubicacion,
                     'soporte':_media_url(factura.soporte_radicado),
+                    'origen': factura.origen or '',
+                    'alegra_document_type': getattr(factura, 'alegra_document_type', '') or '',
+                    'alegra_bill_id': getattr(factura, 'alegra_bill_id', '') or '',
                     'oficina':factura.oficina,
                     'soporte_causacion':_media_url(factura.soporte_causacion)
                 })
@@ -3806,6 +3841,10 @@ def ajax_lista_pagos(request):
                     'soporte_causacion':sc,
                     'oficina':line.nroradicado.oficina,
                     'tipo_rad':line.nroradicado.origen,
+                    'origen': line.nroradicado.origen or '',
+                    'pk_factura': line.nroradicado.pk,
+                    'alegra_document_type': getattr(line.nroradicado, 'alegra_document_type', '') or '',
+                    'alegra_bill_id': getattr(line.nroradicado, 'alegra_bill_id', '') or '',
                 })
                 i+=0
             data = {

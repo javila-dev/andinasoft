@@ -713,8 +713,13 @@
                     window.open(ruta, 'Soporte pago ' + ruta.pk, params)
                     break;
                 case "ver_rad":
-                    // Prefer usar modal + fetch on-demand (Alegra)
-                    openFacturaSoporteModal(line.pk_factura || line.nroradicado || line.pk || line.factura_pk || line.factura);
+                    openRadicadoSoporte({
+                        pk: line.pk_factura || line.nroradicado || line.pk,
+                        soporte: line.soporte_radicado,
+                        origen: line.origen || line.tipo_rad,
+                        alegra_document_type: line.alegra_document_type,
+                        alegra_bill_id: line.alegra_bill_id,
+                    });
                     break;
                 case "ver_causacion":
                     var ruta = resolveMediaUrl(line.soporte_causacion)

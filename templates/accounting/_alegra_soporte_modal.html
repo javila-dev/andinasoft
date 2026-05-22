@@ -11,7 +11,7 @@
         <div id="alegraSoporteModalBody" class="small text-muted">
           <div class="d-flex align-items-center">
             <div class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></div>
-            <div>Estamos consultando Alegra para descargar el PDF del radicado.</div>
+            <div>Consultando Alegra para descargar el PDF del bill…</div>
           </div>
         </div>
       </div>
@@ -25,11 +25,36 @@
 </div>
 
 <script>
-  // Reusa resolveMediaUrl si existe en la página; si no, fallback minimal.
   function __resolveMediaUrlFallback(pathOrUrl) {
     if (!pathOrUrl) return '';
     if (String(pathOrUrl).startsWith('http://') || String(pathOrUrl).startsWith('https://')) return String(pathOrUrl);
     return String(pathOrUrl);
+  }
+
+  function __openRadicadoPdfWindow(url, pk) {
+    if (!url) return false;
+    const params = 'status=no,location=no,toolbar=no,menubar=no,width=900,height=700,left=100,top=60';
+    window.open(url, 'Soporte radicado ' + pk, params);
+    return true;
+  }
+
+  function __lineSoporteUrl(line) {
+    if (!line) return '';
+    return line.soporte || line.soporte_radicado || '';
+  }
+
+  function __lineOrigen(line) {
+    if (!line) return '';
+    return line.origen || line.tipo || line.tipo_rad || '';
+  }
+
+  function __lineAlegraDocType(line) {
+    if (!line) return '';
+    if (line.alegra_document_type) return String(line.alegra_document_type);
+    const bid = String(line.alegra_bill_id || '');
+    if (bid.indexOf(':journal:') >= 0) return 'journal';
+    if (__lineOrigen(line) === 'Alegra' && bid.indexOf(':') >= 0) return 'bill';
+    return '';
   }
 
   function __alegraModalSet(state) {
@@ -47,6 +72,42 @@
     btnOpen.disabled = !!state.disableOpen;
   }
 
+  /**
+   * Abre el soporte del radicado según origen/tipo:
+   * - No Alegra o journal con PDF en S3 → window.open directo
+   * - Alegra bill sin PDF → modal + GET Alegra on-demand
+   */
+  function openRadicadoSoporte(line) {
+    const pk = String((line && (line.pk || line.radicado)) || '').trim();
+    if (!pk) return;
+
+    const resolve = (typeof resolveMediaUrl === 'function') ? resolveMediaUrl : __resolveMediaUrlFallback;
+    const url = resolve(__lineSoporteUrl(line));
+    if (url) {
+      __openRadicadoPdfWindow(url, pk);
+      return;
+    }
+
+    const origen = __lineOrigen(line);
+    if (origen !== 'Alegra') {
+      alert('Este radicado no tiene soporte PDF adjunto.');
+      return;
+    }
+
+    const docType = __lineAlegraDocType(line);
+    if (docType === 'journal') {
+      alert('Este gasto Alegra (journal) no tiene PDF adjunto en el radicado.');
+      return;
+    }
+
+    if (docType === 'bill') {
+      openFacturaSoporteModal(pk);
+      return;
+    }
+
+    alert('Este radicado no tiene soporte PDF adjunto.');
+  }
+
   async function openFacturaSoporteModal(radicadoPk) {
     const pk = String(radicadoPk || '').trim();
     if (!pk) return;
@@ -57,7 +118,7 @@
       html:
         '<div class="d-flex align-items-center small text-muted">' +
           '<div class="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></div>' +
-          '<div>Estamos consultando Alegra para descargar el PDF del radicado.</div>' +
+          '<div>Consultando Alegra para descargar el PDF del bill…</div>' +
         '</div>',
       showRetry: false,
       showOpen: false,
@@ -76,31 +137,19 @@
         showRetry: true,
         showOpen: false,
       });
-      // bind retry
       document.getElementById('alegraSoporteBtnRetry').onclick = () => openFacturaSoporteModal(pk);
       return;
     }
 
-    const urlRaw = (data && data.soporte_radicado) ? data.soporte_radicado : '';
     const resolve = (typeof resolveMediaUrl === 'function') ? resolveMediaUrl : __resolveMediaUrlFallback;
-    const url = resolve(urlRaw);
+    const url = resolve((data && data.soporte_radicado) ? data.soporte_radicado : '');
 
     if (data.status === 'ready' && url) {
-      __alegraModalSet({
-        title: 'Soporte listo',
-        html: '<div class="small text-muted">Se encontró el PDF del radicado.</div>',
-        showRetry: false,
-        showOpen: true,
-      });
-      document.getElementById('alegraSoporteBtnOpen').onclick = () => {
-        const params = `status=no,location=no,toolbar=no,menubar=no,width=900,height=700,left=100,top=60`;
-        window.open(url, 'Soporte radicado ' + pk, params);
-        $('#alegraSoporteModal').modal('hide');
-      };
+      __openRadicadoPdfWindow(url, pk);
+      $('#alegraSoporteModal').modal('hide');
       return;
     }
 
-    // Missing / pending / throttled / error
     const msg = (data && data.message) ? data.message : 'Aún no está disponible.';
     const title = (data.status === 'throttled') ? 'Espera un momento' :
                   (data.status === 'error') ? 'No fue posible descargar' :
@@ -115,4 +164,3 @@
     document.getElementById('alegraSoporteBtnRetry').onclick = () => openFacturaSoporteModal(pk);
   }
 </script>
-

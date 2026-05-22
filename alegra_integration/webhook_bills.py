@@ -9,6 +9,11 @@ import logging
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from accounting.gasto_aprobacion import factura_a_dict
+from accounting.gasto_n8n_notify import (
+    build_alegra_bill_snapshot,
+    notify_gasto_pendiente_asignacion,
+)
 from accounting.models import Facturas, Pagos, history_facturas
 from andinasoft.models import empresas
 from alegra_integration.bill_mapping import (
@@ -119,6 +124,12 @@ def import_factura_from_alegra_bill(empresa, alegra_numeric_id, *, sync_pdf=True
             ubicacion='Contabilidad',
         )
 
+    notify_gasto_pendiente_asignacion(
+        fac.pk,
+        trigger='import_bill',
+        alegra_bill_snapshot=build_alegra_bill_snapshot(bill_data),
+    )
+
     return {
         'created': True,
         'factura_pk': fac.pk,
@@ -222,6 +233,7 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
     alegra_numeric = str(bill.get('id') or '').strip()
     if Facturas.objects.filter(alegra_bill_id=composite_alegra_id).exists():
         fac = Facturas.objects.get(alegra_bill_id=composite_alegra_id)
+        entered_asignacion = False
         if (
             fac.origen == 'Alegra'
             and not fac.gasto_aprobado
@@ -229,10 +241,17 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
         ):
             fac.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_ASIGNACION
             fac.save(update_fields=['gasto_aprobacion_estado'])
+            entered_asignacion = True
         if not fac.soporte_radicado:
             _schedule_bill_pdf_download(str(empresa.pk), str(bill.get('id') or '').strip(), fac.pk)
         link_alegra_document(empresa, fac, document_type=ALEGRA_DOC_BILL, alegra_numeric_id=alegra_numeric)
         fac.save(update_fields=['alegra_document_type'])
+        if entered_asignacion:
+            notify_gasto_pendiente_asignacion(
+                fac.pk,
+                trigger='webhook_new_bill',
+                alegra_bill_snapshot=build_alegra_bill_snapshot(bill),
+            )
         return {'processed': True, 'idempotent': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite_alegra_id}
 
     fields = map_bill_to_factura_fields(bill)
@@ -265,6 +284,11 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
     _schedule_bill_pdf_download(str(empresa.pk), alegra_numeric, fac.pk)
     link_alegra_document(empresa, fac, document_type=ALEGRA_DOC_BILL, alegra_numeric_id=alegra_numeric)
     fac.save(update_fields=['alegra_document_type'])
+    notify_gasto_pendiente_asignacion(
+        fac.pk,
+        trigger='webhook_new_bill',
+        alegra_bill_snapshot=build_alegra_bill_snapshot(bill),
+    )
     return {'processed': True, 'created': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite_alegra_id}
 
 

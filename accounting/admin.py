@@ -28,6 +28,14 @@ class adminGastoAprobador(admin.ModelAdmin):
     autocomplete_fields = ['user']
 
 
+@admin.register(models.GastoContableNotificacion)
+class adminGastoContableNotificacion(admin.ModelAdmin):
+    list_display = ['pk', 'user', 'empresa', 'activo']
+    list_filter = ['activo', 'empresa']
+    search_fields = ['user__username', 'user__email', 'empresa__pk']
+    autocomplete_fields = ['user']
+
+
 @admin.register(models.Facturas)
 class adminFacts(admin.ModelAdmin):
     list_display = [
