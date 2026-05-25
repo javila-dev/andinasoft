@@ -71,7 +71,7 @@ alegra_integration/
 
 - `accounting/journal_cxp.py` — extracción CxP de journals Alegra, `alegra_journal_detalle`, mapeo PUC→categoría.
 - `accounting/gasto_aprobacion*.py`, `gasto_n8n_notify.py`, `gasto_poll.py` — aprobación gastos Alegra, webhooks n8n, polling in-app.
-- Admin: `GastoAprobador` (incl. `telefono`), `GastoContableNotificacion`.
+- Admin: `GastoAprobador` (incl. `telefono`), `GastoContableNotificacion`, `GastoTesoreriaNotificacion`.
 - Campos en `Facturas`: `alegra_bill_id`, `alegra_document_type`, `alegra_journal_detalle`, …
 - Campos en `Pagos`: `alegra_payment_id` (migración `0086`).
 
@@ -351,7 +351,8 @@ Estados en `Facturas.gasto_aprobacion_estado`: `pendiente_asignacion` → `pendi
 | Modelo | Admin | Para qué |
 |--------|-------|----------|
 | `GastoAprobador` | Aprobadores de gasto Alegra | Quién puede ser asignado como aprobador. Campo **`telefono`** (ej. `573001234567`, sin `+`) → va en `recipients[].telefono` del webhook **pendiente_aprobacion** para WhatsApp en n8n. Prioridad: fila de la **misma empresa** del radicado; si no hay, fila con empresa vacía (todas). |
-| `GastoContableNotificacion` | Notificaciones contables gasto Alegra | Quién recibe el webhook **pendiente_asignacion** y el polling in-app. Sin filas activas para la empresa → no se envía POST a n8n. |
+| `GastoContableNotificacion` | Notificaciones contables gasto Alegra | Quién recibe el webhook **pendiente_asignacion** y el polling in-app (contabilidad). Sin filas activas para la empresa → no se envía POST a n8n. |
+| `GastoTesoreriaNotificacion` | Notificación tesorería gasto Alegra | **Una fila por usuario**; M2M `empresas` y M2M `oficinas` (`GastoNotificacionOficina`: MONTERIA, MEDELLIN). Polling cuando el radicado pasa a `aprobado`. |
 
 Los grupos Django **Contabilidad** / permisos de facturas controlan la **UI** de asignar; los avisos n8n usan solo las tablas anteriores.
 
@@ -399,6 +400,20 @@ Con la app abierta (sesión activa), el navegador consulta cada **60 s** si hay 
 | Página asignar | Sin toast si la URL es `/accounting/gastos-alegra/asignar/` |
 
 Código: `accounting/gasto_poll.py`, vista `ajax_gastos_alegra_notificaciones_poll`, partial `templates/accounting/_gasto_alegra_poll.html`.
+
+#### Tesorería — gastos aprobados (polling)
+
+Cuando un radicado Alegra pasa a `gasto_aprobacion_estado=aprobado` (aprobador o auto-aprobación sin aprobador), los usuarios con fila activa en **`GastoTesoreriaNotificacion`** reciben toast si el radicado coincide con **empresa** y **oficina** configuradas (M2M; no hace falta una fila por cada combinación).
+
+| Aspecto | Detalle |
+|---------|---------|
+| Admin | `GastoTesoreriaNotificacion`: usuario (único), empresas y oficinas (filter horizontal), activo |
+| Endpoint | `GET /accounting/ajax/gastos-alegra/tesoreria-notificaciones-poll?since_ts=` (ISO 8601) |
+| Filtro | `origen=Alegra`, `aprobado`, `gasto_aprobado_en > since_ts`, empresa ∈ M2M, `oficina` ∈ M2M |
+| Sin empresas u oficinas en M2M | `{ "enabled": false }` |
+| Watermark | `sessionStorage` clave `alegra_gasto_tesoreria_poll_since_ts` (`max_ts` de la respuesta) |
+| Toast | Enlace a `/accounting/pagarfactura`; sin toast en esa página |
+| Código | `accounting/gasto_tesoreria_poll.py`, `_gasto_tesoreria_poll.html` |
 
 ### APIs internas (Andina recibe del navegador)
 
@@ -532,7 +547,30 @@ Si se asignó aprobador, Django dispara el webhook n8n **pendiente_aprobacion** 
 
 Errores habituales: `403` sin permiso / no es el aprobador asignado; `400` estado distinto de `pendiente_aprobacion` o radicado con pagos.
 
-#### Aprobar desde n8n / WhatsApp (Andina recibe de n8n)
+#### Aprobar con un clic (WhatsApp — recomendado)
+
+`GET /accounting/gastos-alegra/aprobar-link/<radicado>/<token>/`  
+Sin sesión Django ni CSRF. **Un GET = aprobación** (respuesta `text/plain`).
+
+El token va firmado en la URL (HMAC + expiración). Se genera al asignar y llega en el webhook `pendiente_aprobacion` como `links.aprobar`:
+
+```
+https://app.example/accounting/gastos-alegra/aprobar-link/17369/<token>/
+```
+
+| Aspecto | Detalle |
+|---------|---------|
+| Seguridad | Token ligado a `radicado` + `gasto_aprobador_asignado`; expira (`GASTO_APROBACION_LINK_MAX_AGE`, default 72 h) |
+| Secreto firma | `GASTO_APROBACION_LINK_SECRET` o `N8N_WEBHOOK_GASTO_APROBACION_SECRET` o `SECRET_KEY` |
+| Respuesta OK | `Gasto #17369 (PROVEEDOR SA) aprobado correctamente.` |
+| Ya aprobado | `200` idempotente: `… ya estaba aprobado.` |
+| JSON opcional | `Accept: application/json` o `?format=json` |
+
+**Flujo n8n:** Webhook `pendiente_aprobacion` → WhatsApp con `{{ $json.links.aprobar }}` → el aprobador abre el link. **No hace falta** mantener hilo conversacional ni llamar otro endpoint.
+
+`links.aprobar_ui` sigue apuntando a la pantalla web de aprobación (sesión Django).
+
+#### Aprobar desde n8n / WhatsApp (POST legacy)
 
 `POST /accounting/webhooks/n8n/gasto-aprobacion`  
 `Content-Type: application/json`  
@@ -589,7 +627,7 @@ Sin ninguna configuración válida → `401`.
 }
 ```
 
-**Flujo WhatsApp sugerido en n8n:** nodo Webhook `alegra-gasto-pendiente-aprobacion` (con Header Auth = `N8N_WEBHOOK_AUTH_TOKEN`) → mensaje a `recipients[0].telefono` → si confirma → HTTP Request `POST` a Andina con `Authorization: Token …` (APIToken) o `X-Andina-Webhook-Secret`.
+**Flujo WhatsApp sugerido en n8n:** nodo Webhook `alegra-gasto-pendiente-aprobacion` → mensaje a `recipients[0].telefono` con el link `links.aprobar` (un clic). El POST legacy abajo solo si necesitas aprobar server-side con `Authorization: Token …` (APIToken) o `X-Andina-Webhook-Secret`.
 
 **Andina → n8n (todos los POST salientes, incl. gastos Alegra y upload movimientos):** envían `Authorization: {N8N_WEBHOOK_AUTH_PREFIX} {N8N_WEBHOOK_AUTH_TOKEN}` si el token está en `.env`. Código: `accounting/n8n_http.py`.
 
@@ -611,6 +649,8 @@ Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N
 | `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION` | URL Webhook n8n — contables |
 | `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION` | URL Webhook n8n — aprobador (puede ser `/webhook-test/<uuid>`) |
 | `N8N_WEBHOOK_GASTO_APROBACION_SECRET` | **Entrante** opcional: `X-Andina-Webhook-Secret`. O usar `Authorization: Token` (`APIToken` Admin) |
+| `GASTO_APROBACION_LINK_SECRET` | Firma de `links.aprobar` (un clic). Default: secret webhook o `SECRET_KEY` |
+| `GASTO_APROBACION_LINK_MAX_AGE` | Segundos de validez del link (default `259200` = 72 h) |
 | `ANDINA_PUBLIC_BASE_URL` | Base absoluta para `links.asignar` / `links.aprobar` (si vacío → path relativo) |
 
 #### Objeto `recipients[]` (todos los eventos)
@@ -699,7 +739,8 @@ Cada destinatario incluye siempre:
 | `trigger` | `webhook_new_bill` (webhook Alegra), `import_bill` (`import_alegra_bill`), o idempotente `no_aplica`→`pendiente_asignacion` |
 | `recipients` | Usuarios activos en `GastoContableNotificacion` para esa `empresa.nit`; si vacío, **no se envía** el POST |
 | `recipients[].telefono` | Siempre presente; vacío para contables |
-| `alegra_bill` | Solo si hubo snapshot del bill en el webhook/import; puede faltar |
+| `alegra_bill` | En `pendiente_asignacion`: snapshot del webhook Alegra. En `pendiente_aprobacion`: snapshot mínimo desde la factura (`total` = `valor`) |
+| `factura.valor` / `factura.total` / `factura.pago_neto` | Enteros COP; `total` es alias de `valor` para plantillas n8n |
 | `factura.soporte_pdf_listo` | `true` si ya hay archivo en `soporte_radicado` (el PDF async puede llegar después) |
 | `factura.soporte_pdf_url` | URL en **Andina** para descarga por n8n (`GET .../webhooks/n8n/gastos-alegra/soporte-pdf/<radicado>`). No expone el bucket S3 privado |
 | `links.soporte_pdf` | Misma URL; en n8n **HTTP Request** GET con `Authorization: Bearer <N8N_WEBHOOK_AUTH_TOKEN>` (igual que el POST saliente) |

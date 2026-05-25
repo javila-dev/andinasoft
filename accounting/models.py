@@ -92,6 +92,51 @@ class GastoContableNotificacion(models.Model):
         return f'{self.user} @ {self.empresa_id}'
 
 
+class GastoNotificacionOficina(models.Model):
+    """Catálogo de oficinas para filtros M2M (MONTERIA, MEDELLIN, …)."""
+    codigo = models.CharField(max_length=32, primary_key=True)
+    etiqueta = models.CharField(max_length=64)
+
+    class Meta:
+        verbose_name = 'Oficina notificación gasto'
+        verbose_name_plural = 'Oficinas notificación gasto'
+
+    def __str__(self):
+        return self.etiqueta or self.codigo
+
+
+class GastoTesoreriaNotificacion(models.Model):
+    """
+    Usuarios de tesorería que reciben aviso in-app cuando un gasto Alegra queda aprobado.
+    Una fila por usuario; empresas y oficinas vía M2M.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='gasto_tesoreria_notificacion',
+        db_constraint=False,
+    )
+    empresas = models.ManyToManyField(
+        empresas,
+        blank=True,
+        related_name='gasto_tesoreria_notificaciones',
+        db_constraint=False,
+    )
+    oficinas = models.ManyToManyField(
+        GastoNotificacionOficina,
+        blank=True,
+        related_name='tesoreria_notificaciones',
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Notificación tesorería gasto Alegra'
+        verbose_name_plural = 'Notificaciones tesorería gasto Alegra'
+
+    def __str__(self):
+        return f'{self.user} (tesorería Alegra)'
+
+
 class Facturas(models.Model):
     nroradicado = models.AutoField(db_column='NroRadicado', primary_key=True)
     fecharadicado = models.DateField(db_column='FechaRadica',auto_now_add=True,blank=True) 

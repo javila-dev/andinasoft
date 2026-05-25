@@ -279,6 +279,9 @@ N8N_WEBHOOK_AUTH_TOKEN = os.getenv('N8N_WEBHOOK_AUTH_TOKEN', os.getenv('N8N_API_
 N8N_WEBHOOK_AUTH_PREFIX = os.getenv('N8N_WEBHOOK_AUTH_PREFIX', 'Bearer').strip() or 'Bearer'
 # Entrante: n8n → Andina (aprobar gasto). Alternativa: Authorization: Token <APIToken en Admin>
 N8N_WEBHOOK_GASTO_APROBACION_SECRET = os.getenv('N8N_WEBHOOK_GASTO_APROBACION_SECRET', '').strip()
+# Links de un clic (WhatsApp): firma HMAC; default = secret webhook o SECRET_KEY
+GASTO_APROBACION_LINK_SECRET = os.getenv('GASTO_APROBACION_LINK_SECRET', '').strip()
+GASTO_APROBACION_LINK_MAX_AGE = int(os.getenv('GASTO_APROBACION_LINK_MAX_AGE', str(72 * 3600)))
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 

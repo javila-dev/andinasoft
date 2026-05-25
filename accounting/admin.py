@@ -36,6 +36,31 @@ class adminGastoContableNotificacion(admin.ModelAdmin):
     autocomplete_fields = ['user']
 
 
+@admin.register(models.GastoNotificacionOficina)
+class adminGastoNotificacionOficina(admin.ModelAdmin):
+    list_display = ['codigo', 'etiqueta']
+    search_fields = ['codigo', 'etiqueta']
+
+
+@admin.register(models.GastoTesoreriaNotificacion)
+class adminGastoTesoreriaNotificacion(admin.ModelAdmin):
+    list_display = ['pk', 'user', 'activo', 'empresas_list', 'oficinas_list']
+    list_filter = ['activo']
+    search_fields = ['user__username', 'user__email']
+    autocomplete_fields = ['user']
+    filter_horizontal = ['empresas', 'oficinas']
+
+    def empresas_list(self, obj):
+        return ', '.join(str(e.pk) for e in obj.empresas.all()[:8])
+
+    empresas_list.short_description = 'Empresas'
+
+    def oficinas_list(self, obj):
+        return ', '.join(o.codigo for o in obj.oficinas.all())
+
+    oficinas_list.short_description = 'Oficinas'
+
+
 @admin.register(models.Facturas)
 class adminFacts(admin.ModelAdmin):
     list_display = [

@@ -378,3 +378,73 @@ class GastoAlegraSugerenciasAsignacionTests(TestCase):
         self.assertEqual(data['historial'], [])
         self.assertEqual(data['sugerencia']['oficina'], '')
         self.assertIsNone(data['sugerencia']['aprobador_id'])
+
+
+@override_settings(
+    GASTO_APROBACION_LINK_SECRET='test-link-secret',
+    GASTO_APROBACION_LINK_MAX_AGE=3600,
+)
+class GastoAprobacionLinkTests(TestCase):
+    def setUp(self):
+        self.empresa = empresas.objects.create(
+            Nit='900000003',
+            nombre='Empresa Link',
+            alegra_enabled=True,
+        )
+        self.aprobador = User.objects.create_user('aprobador3', password='x')
+        GastoAprobador.objects.create(user=self.aprobador, empresa=self.empresa, activo=True)
+        self.factura = Facturas.objects.create(
+            empresa=self.empresa,
+            nrofactura='F-LINK',
+            idtercero='789',
+            nombretercero='Proveedor Link',
+            fechafactura='2026-05-01',
+            fechavenc='2026-05-15',
+            valor=75000,
+            pago_neto=75000,
+            origen='Alegra',
+            oficina='MEDELLIN',
+            gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+            gasto_aprobador_asignado=self.aprobador,
+            gasto_aprobado=False,
+        )
+        self.factory = RequestFactory()
+
+    def _link_parts(self):
+        from accounting.gasto_aprobacion_link import build_gasto_aprobacion_link_token
+
+        token = build_gasto_aprobacion_link_token(self.factura.pk, self.aprobador.pk)
+        path = f'/accounting/gastos-alegra/aprobar-link/{self.factura.pk}/{token}/'
+        return path, token
+
+    def test_link_aprobar_ok(self):
+        from accounting.gasto_aprobacion_views import gasto_aprobacion_link_aprobar
+
+        path, token = self._link_parts()
+        req = self.factory.get(path)
+        resp = gasto_aprobacion_link_aprobar(req, self.factura.pk, token)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b'aprobado correctamente', resp.content)
+        self.factura.refresh_from_db()
+        self.assertTrue(self.factura.gasto_aprobado)
+
+    def test_link_token_invalido(self):
+        from accounting.gasto_aprobacion_views import gasto_aprobacion_link_aprobar
+
+        path, token = self._link_parts()
+        req = self.factory.get(path)
+        resp = gasto_aprobacion_link_aprobar(req, self.factura.pk, 'token-invalido')
+        self.assertEqual(resp.status_code, 403)
+
+    def test_link_idempotente_si_ya_aprobado(self):
+        from accounting.gasto_aprobacion_views import gasto_aprobacion_link_aprobar
+
+        self.factura.gasto_aprobado = True
+        self.factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_APROBADO
+        self.factura.save(update_fields=['gasto_aprobado', 'gasto_aprobacion_estado'])
+        path, token = self._link_parts()
+        req = self.factory.get(path)
+        resp = gasto_aprobacion_link_aprobar(req, self.factura.pk, token)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b'ya estaba aprobado', resp.content)
+

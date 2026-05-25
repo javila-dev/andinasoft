@@ -133,13 +133,18 @@ def alegra_id_para_tabla(alegra_bill_id):
 
 def factura_a_dict(fac):
     alegra_bill = fac.alegra_bill_id or ''
+    valor = int(fac.valor or 0)
+    pago_neto = int(fac.pago_neto if fac.pago_neto is not None else valor)
     return {
         'pk': fac.pk,
         'nrofactura': fac.nrofactura,
         'nombretercero': fac.nombretercero,
         'fechafactura': fac.fechafactura.isoformat() if fac.fechafactura else '',
+        'fechavenc': fac.fechavenc.isoformat() if fac.fechavenc else '',
         'fecharadicado': fac.fecharadicado.isoformat() if fac.fecharadicado else '',
-        'valor': fac.valor,
+        'valor': valor,
+        'pago_neto': pago_neto,
+        'total': valor,
         'empresa': fac.empresa_id,
         'empresa_nombre': getattr(fac.empresa, 'nombre', '') or str(fac.empresa_id),
         'descripcion': fac.descripcion,

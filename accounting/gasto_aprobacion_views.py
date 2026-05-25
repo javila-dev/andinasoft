@@ -8,7 +8,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.http import FileResponse, JsonResponse
+from django.core import signing
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
@@ -19,6 +20,7 @@ from django.utils.dateparse import parse_date
 logger = logging.getLogger(__name__)
 
 from accounting.gasto_poll import poll_gastos_alegra_notificaciones
+from accounting.gasto_tesoreria_poll import poll_gastos_tesoreria_aprobados
 from accounting.n8n_http import n8n_inbound_authorized
 from accounting.gasto_aprobacion import (
     aprobadores_para_empresa,
@@ -33,6 +35,7 @@ from accounting.gasto_aprobacion import (
     parse_aprobador_user_id_opcional,
     usuario_es_aprobador_gasto,
 )
+from accounting.gasto_aprobacion_link import verify_gasto_aprobacion_link_token
 from accounting.journal_cxp import (
     detalle_pago_desde_factura,
     parsear_journal_para_radicado,
@@ -100,6 +103,16 @@ def ajax_gastos_alegra_notificaciones_poll(request):
     payload = poll_gastos_alegra_notificaciones(request.user, since_pk=since_pk)
     if payload.get('enabled'):
         payload['since_pk'] = since_pk
+    return JsonResponse(payload)
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_tesoreria_notificaciones_poll(request):
+    since_ts = (request.GET.get('since_ts') or '').strip() or None
+    payload = poll_gastos_tesoreria_aprobados(request.user, since_ts=since_ts)
+    if payload.get('enabled'):
+        payload['since_ts'] = since_ts or ''
     return JsonResponse(payload)
 
 
@@ -457,6 +470,75 @@ def ajax_gastos_alegra_aprobar(request):
         return _json_error(exc, 400)
     except Exception as exc:
         return _json_error(exc, 500)
+
+
+def _link_aprobacion_response(request, *, ok, message, factura=None, status=200):
+    wants_json = (
+        'application/json' in (request.headers.get('Accept') or '')
+        or (request.GET.get('format') or '').strip().lower() == 'json'
+    )
+    payload = {'ok': ok, 'message': message}
+    if factura is not None:
+        payload['factura'] = factura_a_dict(factura)
+    if wants_json:
+        return JsonResponse(payload, status=status)
+    return HttpResponse(message, content_type='text/plain; charset=utf-8', status=status)
+
+
+@csrf_exempt
+@require_http_methods(['GET'])
+def gasto_aprobacion_link_aprobar(request, radicado_pk, token):
+    """
+    Aprobación en un clic (WhatsApp): GET con token firmado en la URL.
+    GET /accounting/gastos-alegra/aprobar-link/<radicado>/<token>/
+    """
+    try:
+        fac = Facturas.objects.select_related('empresa', 'gasto_aprobador_asignado').get(pk=radicado_pk)
+    except Facturas.DoesNotExist:
+        return _link_aprobacion_response(
+            request, ok=False, message='Radicado no encontrado.', status=404,
+        )
+
+    aprobador = fac.gasto_aprobador_asignado
+    if not aprobador or not aprobador.is_active:
+        return _link_aprobacion_response(
+            request, ok=False, message='Este gasto no tiene aprobador asignado activo.', status=400,
+        )
+
+    try:
+        verify_gasto_aprobacion_link_token(radicado_pk, aprobador.pk, token)
+    except signing.SignatureExpired:
+        return _link_aprobacion_response(
+            request, ok=False, message='El enlace de aprobación expiró.', status=403,
+        )
+    except signing.BadSignature:
+        return _link_aprobacion_response(
+            request, ok=False, message='Enlace de aprobación inválido.', status=403,
+        )
+
+    if Pagos.objects.filter(nroradicado=fac).exists():
+        return _link_aprobacion_response(
+            request, ok=False, message='El radicado ya tiene pagos asociados.', status=400,
+        )
+
+    if fac.gasto_aprobacion_estado == Facturas.GASTO_APROB_APROBADO:
+        msg = f'Gasto #{fac.pk} ({fac.nombretercero}) ya estaba aprobado.'
+        return _link_aprobacion_response(request, ok=True, message=msg, factura=fac)
+
+    try:
+        with transaction.atomic():
+            aprobar_gasto_alegra_para_usuario(fac, aprobador, canal='link/WhatsApp')
+        msg = f'Gasto #{fac.pk} ({fac.nombretercero}) aprobado correctamente.'
+        return _link_aprobacion_response(request, ok=True, message=msg, factura=fac)
+    except PermissionError as exc:
+        return _link_aprobacion_response(request, ok=False, message=str(exc), status=403)
+    except ValueError as exc:
+        return _link_aprobacion_response(request, ok=False, message=str(exc), status=400)
+    except Exception:
+        logger.exception('gasto_aprobacion_link_aprobar radicado=%s', radicado_pk)
+        return _link_aprobacion_response(
+            request, ok=False, message='Error al aprobar el gasto.', status=500,
+        )
 
 
 @csrf_exempt

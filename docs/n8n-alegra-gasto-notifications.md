@@ -37,7 +37,7 @@ El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoA
 | | Import `import_factura_from_alegra_bill` crea radicado | Import reconcilia existente |
 | | `new-bill` idempotente que pasa de `no_aplica` → `pendiente_asignacion` | `edit-bill`, `delete-bill` |
 | `gasto_alegra.pendiente_aprobacion` | Contabilidad asigna oficina **con** aprobador | Asignación sin aprobador (auto-aprobado) |
-| Aprobación WhatsApp | n8n → `POST /accounting/webhooks/n8n/gasto-aprobacion` | UI web con sesión (`/ajax/gastos-alegra/aprobar`) |
+| Aprobación WhatsApp | Aprobador abre `links.aprobar` (GET firmado) | UI web (`links.aprobar_ui`) o `POST .../gasto-aprobacion` |
 
 **PDF:** puede descargarse en un `on_commit` posterior. El payload incluye `factura.soporte_pdf_listo` y, si ya hay archivo, `factura.soporte_pdf_url` + `links.soporte_pdf` apuntan a **Andina** (no al bucket S3 privado):
 
@@ -146,12 +146,21 @@ Valores de `trigger`: `webhook_new_bill`, `import_bill`.
     "nrofactura": "FCII327559",
     "nombretercero": "PROVEEDOR SA",
     "valor": 142456,
+    "pago_neto": 142456,
+    "total": 142456,
     "oficina": "MEDELLIN",
     "gasto_aprobacion_estado": "pendiente_aprobacion",
     "gasto_aprobacion_comentario_contable": "Revisar soporte",
     "alegra_bill_id": "901018375:1",
     "alegra_id": "1",
     "soporte_pdf_listo": true
+  },
+  "alegra_bill": {
+    "id": "1",
+    "total": 142456,
+    "number": "FCII327559",
+    "provider_name": "PROVEEDOR SA",
+    "provider_identification": "800144355"
   },
   "assigned_by": {
     "role": "contabilidad",
@@ -171,7 +180,8 @@ Valores de `trigger`: `webhook_new_bill`, `import_bill`.
     }
   ],
   "links": {
-    "aprobar": "https://app.example/accounting/gastos-alegra/aprobar/"
+    "aprobar": "https://app.example/accounting/gastos-alegra/aprobar-link/17369/<token>/",
+    "aprobar_ui": "https://app.example/accounting/gastos-alegra/aprobar/"
   }
 }
 ```

@@ -55,6 +55,8 @@ class GastoN8nNotifyTests(TestCase):
             valor=100000,
             pago_neto=100000,
             origen='Alegra',
+            alegra_bill_id=f'{self.empresa.pk}:99',
+            alegra_document_type='bill',
             gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
             gasto_aprobado=False,
         )
@@ -88,7 +90,12 @@ class GastoN8nNotifyTests(TestCase):
         self.assertEqual(payload['recipients'][0]['email'], 'aprobador@test.co')
         self.assertEqual(payload['recipients'][0]['telefono'], '573001112233')
         self.assertEqual(payload['assigned_by']['user_id'], self.contable.pk)
-        self.assertIn('https://app.test/accounting/gastos-alegra/aprobar/', payload['links']['aprobar'])
+        self.assertEqual(payload['factura']['valor'], 100000)
+        self.assertEqual(payload['factura']['total'], 100000)
+        self.assertEqual(payload['alegra_bill']['total'], 100000)
+        self.assertIn('https://app.test/accounting/gastos-alegra/aprobar-link/', payload['links']['aprobar'])
+        self.assertIn('aprobar_ui', payload['links'])
+        self.assertIn('/accounting/gastos-alegra/aprobar/', payload['links']['aprobar_ui'])
 
     @patch('accounting.gasto_n8n_notify.requests.post')
     def test_asignar_sin_aprobador_no_dispara_aprobacion(self, mock_post):

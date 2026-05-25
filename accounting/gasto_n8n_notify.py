@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from django.db.models import Q
 
+from accounting.gasto_aprobacion_link import build_gasto_aprobacion_direct_link
 from accounting.models import Facturas, GastoAprobador, GastoContableNotificacion
 from accounting.n8n_http import n8n_outbound_headers
 
@@ -118,6 +119,23 @@ def _soporte_pdf_url(factura):
     return _public_url(f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{factura.pk}')
 
 
+def _alegra_bill_snapshot_from_factura(factura):
+    """Snapshot mínimo para n8n (p. ej. plantillas que usan alegra_bill.total)."""
+    from accounting.gasto_aprobacion import alegra_id_para_tabla
+
+    alegra_id = alegra_id_para_tabla(factura.alegra_bill_id or '')
+    if not alegra_id:
+        return None
+    valor = int(factura.valor or 0)
+    return {
+        'id': alegra_id,
+        'total': valor,
+        'number': (factura.nrofactura or '').strip(),
+        'provider_name': (factura.nombretercero or '').strip(),
+        'provider_identification': (factura.idtercero or '').strip(),
+    }
+
+
 def _factura_payload(factura):
     from accounting.gasto_aprobacion import factura_a_dict
 
@@ -131,6 +149,9 @@ def _factura_payload(factura):
 
 def _notification_links(factura, *, base_links):
     links = dict(base_links)
+    direct = build_gasto_aprobacion_direct_link(factura, public_url_fn=_public_url)
+    if direct:
+        links['aprobar'] = direct
     url = _soporte_pdf_url(factura)
     if url:
         links['soporte_pdf'] = url
@@ -268,11 +289,15 @@ def notify_gasto_pendiente_aprobacion(factura_pk, *, assigned_by_user_id, trigge
                 assigned_by = _user_recipient(u, 'contabilidad')
         extra = {
             'links': _notification_links(
-                factura, base_links={'aprobar': _public_url('/accounting/gastos-alegra/aprobar/')},
+                factura,
+                base_links={'aprobar_ui': _public_url('/accounting/gastos-alegra/aprobar/')},
             ),
         }
         if assigned_by:
             extra['assigned_by'] = assigned_by
+        bill_snap = _alegra_bill_snapshot_from_factura(factura)
+        if bill_snap:
+            extra['alegra_bill'] = bill_snap
         payload = build_gasto_notification_payload(
             factura,
             event='gasto_alegra.pendiente_aprobacion',
