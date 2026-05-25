@@ -3957,27 +3957,31 @@ def acciones_venta(request,proyecto,contrato):
                     (cc_jefep,porc_jefep,15),
                     (cc_jefev,porc_jefev,13)
                     ]
+                cargos_fijos_ids = {
+                    str(fijo.idcargo) for fijo in cargos_fijos
+                }
                 if request.POST.get('grabar-escala'):
                     try:
-                        for valor in values:
-                            if valor[0]!='':
-                                AsignacionComisiones.objects.using(proyecto).create(id_comision=f'{valor[2]}-{contrato}',
-                                                                                    idadjudicacion=contrato,
-                                                                                    fecha=datetime.datetime.today(),
-                                                                                    idgestor=valor[0],
-                                                                                    idcargo=valor[2],
-                                                                                    comision=valor[1],
-                                                                                    usuario='Activo',
-                                                                                    )
-                        for fijo in cargos_fijos:
-                            AsignacionComisiones.objects.using(proyecto).create(id_comision=f'{fijo.idcargo}-{contrato}',
-                                                                                    idadjudicacion=contrato,
-                                                                                    fecha=datetime.datetime.today(),
-                                                                                    idgestor=fijo.cc_fija,
-                                                                                    idcargo=fijo.idcargo,
-                                                                                    comision=fijo.porc_fijo,
-                                                                                    usuario='Activo',
-                                                                                    )
+                        with transaction.atomic(using=proyecto):
+                            for valor in values:
+                                if valor[0] != '' and str(valor[2]) not in cargos_fijos_ids:
+                                    AsignacionComisiones.objects.using(proyecto).create(id_comision=f'{valor[2]}-{contrato}',
+                                                                                        idadjudicacion=contrato,
+                                                                                        fecha=datetime.datetime.today(),
+                                                                                        idgestor=valor[0],
+                                                                                        idcargo=valor[2],
+                                                                                        comision=valor[1],
+                                                                                        usuario='Activo',
+                                                                                        )
+                            for fijo in cargos_fijos:
+                                AsignacionComisiones.objects.using(proyecto).create(id_comision=f'{fijo.idcargo}-{contrato}',
+                                                                                        idadjudicacion=contrato,
+                                                                                        fecha=datetime.datetime.today(),
+                                                                                        idgestor=fijo.cc_fija,
+                                                                                        idcargo=fijo.idcargo,
+                                                                                        comision=fijo.porc_fijo,
+                                                                                        usuario='Activo',
+                                                                                        )
                         alerta=True
                         mensaje='La Escala fue asignada de forma correcta'
                         titulo='¡Todo salio a la perfeccion!'
@@ -9809,33 +9813,40 @@ def comisiones_ajax(request):
             cargos = request.POST.getlist('cargo_comision')
             porcentajes = request.POST.getlist('porcentaje_comision')
             asesores = request.POST.getlist('asesor_comision')
-            
-            obj_comis = AsignacionComisiones.objects.using(proyecto)
-            for i in range(0, len(asesores)):
-                cargo = cargos[i]
-                cc = asesores[i]
-                porc = porcentajes[i]
-                if porc != "" and porc != None:
-                    obj_comis.create(id_comision=f'{cargo}-{contrato}',
-                                                    idadjudicacion=contrato,
-                                                    fecha=datetime.datetime.today(),
-                                                    idgestor=cc,
-                                                    idcargo=cargo,
-                                                    comision=porc,
-                                                    usuario='Activo',
-                                                    )
-                
-            cargos_fijos = CargosFijos.objects.using(proyecto).all()
-            
-            for fijo in cargos_fijos:
-                obj_comis.create(id_comision=f'{fijo.idcargo}-{contrato}',
-                                                idadjudicacion=contrato,
-                                                fecha=datetime.datetime.today(),
-                                                idgestor=fijo.cc_fija,
-                                                idcargo=fijo.idcargo,
-                                                comision=fijo.porc_fijo,
-                                                usuario='Activo',
-                                                )
+
+            cargos_fijos_ids = {
+                str(pk) for pk in
+                CargosFijos.objects.using(proyecto).values_list('idcargo', flat=True)
+            }
+
+            with transaction.atomic(using=proyecto):
+                for i in range(0, len(asesores)):
+                    cargo = str(cargos[i])
+                    cc = asesores[i]
+                    porc = porcentajes[i]
+                    if cargo in cargos_fijos_ids:
+                        continue
+                    if porc != "" and porc != None:
+                        AsignacionComisiones.objects.using(proyecto).create(
+                            id_comision=f'{cargo}-{contrato}',
+                            idadjudicacion=contrato,
+                            fecha=datetime.datetime.today(),
+                            idgestor=cc,
+                            idcargo=cargo,
+                            comision=porc,
+                            usuario='Activo',
+                        )
+
+                for fijo in CargosFijos.objects.using(proyecto).all():
+                    AsignacionComisiones.objects.using(proyecto).create(
+                        id_comision=f'{fijo.idcargo}-{contrato}',
+                        idadjudicacion=contrato,
+                        fecha=datetime.datetime.today(),
+                        idgestor=fijo.cc_fija,
+                        idcargo=fijo.idcargo,
+                        comision=fijo.porc_fijo,
+                        usuario='Activo',
+                    )
                 
             data = {
                 

@@ -1102,13 +1102,16 @@
                 success: function(response){
                     setTimeout(() => {
                         $('#alerta-general').modal('show')
-                        document.getElementById('mensaje-alerta').innerHTML = 'La escala fue asignada con exito';
-                        document.getElementById('titulo-alerta').innerHTML = 'Listo!';
+                        document.getElementById('mensaje-alerta').innerHTML = response.msj || 'La escala fue asignada con exito';
+                        document.getElementById('titulo-alerta').innerHTML = response.title || 'Listo!';
                     }, 1600);
                     
                 },
                 error: function(response) {
-                    console.log(response.responseText)
+                    let data = response.responseJSON || {}
+                    $('#alerta-general').modal('show')
+                    document.getElementById('mensaje-alerta').innerHTML = data.msj || 'No se pudo guardar la escala de comisiones.';
+                    document.getElementById('titulo-alerta').innerHTML = data.title || 'Error';
                 },
                 complete:function(){
                     setTimeout(() => {

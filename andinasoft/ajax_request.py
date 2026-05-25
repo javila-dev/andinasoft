@@ -4,6 +4,8 @@ from django.shortcuts import render, redirect
 from django.core import serializers
 from django.conf import settings
 from django.urls import path, include
+from django.db import transaction
+from django.db.utils import IntegrityError
 from django.db.models import Avg, Max, Min, Sum, Q
 from openpyxl.styles import Font
 from andinasoft.utilities import Utilidades
@@ -308,8 +310,15 @@ def cargos_comisiones(request):
             tipo_escala = request.GET.get('tipo_escala')
             contrato = request.GET.get('venta')
             if tipo_escala == 'variable':
-                obj_escala = AsignacionComisiones.objects.using(proyecto).filter(idadjudicacion=contrato
-                            ).exclude(Q(idcargo=10)|Q(idcargo=11)|Q(idcargo=111)|Q(idcargo=12)|Q(idcargo=40))
+                cargos_fijos_ids = [
+                    str(pk) for pk in
+                    CargosFijos.objects.using(proyecto).values_list('idcargo', flat=True)
+                ]
+                obj_escala = AsignacionComisiones.objects.using(proyecto).filter(
+                    idadjudicacion=contrato
+                )
+                if cargos_fijos_ids:
+                    obj_escala = obj_escala.exclude(idcargo__in=cargos_fijos_ids)
                 data = []
                 for carg in obj_escala:
                     data.append({
@@ -340,33 +349,48 @@ def cargos_comisiones(request):
         tasa = request.POST.getlist('comision')
         
         
-        escala_asignada = AsignacionComisiones.objects.using(proyecto).filter(idadjudicacion=venta)
-        print(escala_asignada)
-        if escala_asignada.exists():
-            for cargo in escala_asignada:
-                cargo.delete()
-        
-        for i in range(len(cargos)):
-            cargo = cargos[i].split(' - ')[0]
-            gestor = gestores[i].split(' - ')[0]
-            
-            AsignacionComisiones.objects.using(proyecto).create(
-                id_comision=f'{cargo}-{venta}',
-                usuario = 'Activo',idadjudicacion = venta,
-                comision = tasa[i], idgestor = gestores[i],
-                idcargo = cargo
-            )
-        
-        cargos_fijos=CargosFijos.objects.using(proyecto).all()
-        for fijo in cargos_fijos:
-            AsignacionComisiones.objects.using(proyecto).create(id_comision=f'{fijo.idcargo}-{venta}',
-                                            idadjudicacion=venta,
-                                            fecha=datetime.datetime.today(),
-                                            idgestor=fijo.cc_fija,
-                                            idcargo=fijo.idcargo,
-                                            comision=fijo.porc_fijo,
-                                            usuario='Activo',
-                                            )
+        cargos_fijos_ids = {
+            str(pk) for pk in
+            CargosFijos.objects.using(proyecto).values_list('idcargo', flat=True)
+        }
+
+        try:
+            with transaction.atomic(using=proyecto):
+                AsignacionComisiones.objects.using(proyecto).filter(
+                    idadjudicacion=venta
+                ).delete()
+
+                for i in range(len(cargos)):
+                    cargo = cargos[i].split(' - ')[0]
+                    if cargo in cargos_fijos_ids:
+                        continue
+
+                    AsignacionComisiones.objects.using(proyecto).create(
+                        id_comision=f'{cargo}-{venta}',
+                        usuario='Activo',
+                        idadjudicacion=venta,
+                        comision=tasa[i],
+                        idgestor=gestores[i].split(' - ')[0],
+                        idcargo=cargo,
+                        fecha=datetime.datetime.today(),
+                    )
+
+                for fijo in CargosFijos.objects.using(proyecto).all():
+                    AsignacionComisiones.objects.using(proyecto).create(
+                        id_comision=f'{fijo.idcargo}-{venta}',
+                        idadjudicacion=venta,
+                        fecha=datetime.datetime.today(),
+                        idgestor=fijo.cc_fija,
+                        idcargo=fijo.idcargo,
+                        comision=fijo.porc_fijo,
+                        usuario='Activo',
+                    )
+        except IntegrityError:
+            return JsonResponse({
+                'title': 'Error',
+                'msj': 'No se pudo guardar la escala. Verifica que no haya cargos duplicados.',
+                'class': 'toast-error',
+            }, status=400)
             
         data = {
             'title':'Listo',
