@@ -315,47 +315,72 @@ def notify_gasto_pendiente_asignacion(factura_pk, *, trigger, alegra_bill_snapsh
     transaction.on_commit(_after_commit)
 
 
+def _send_gasto_pendiente_aprobacion_webhook(factura_pk, *, assigned_by_user_id, trigger='asignacion_contable'):
+    """
+    POST a N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION (mismo evento/trigger que asignación inicial).
+    Retorna True si se envió el POST, False si se omitió (aprobador inactivo, sin fila, etc.).
+    """
+    factura = Facturas.objects.select_related(
+        'empresa', 'gasto_aprobador_asignado', 'gasto_asignado_por',
+    ).filter(pk=factura_pk).first()
+    if not factura or not factura.gasto_aprobador_asignado_id:
+        logger.warning(
+            'n8n gasto pendiente_aprobacion: sin factura o aprobador pk=%s',
+            factura_pk,
+        )
+        return False
+    aprobador = factura.gasto_aprobador_asignado
+    if not aprobador or not aprobador.is_active:
+        logger.warning(
+            'n8n gasto pendiente_aprobacion: aprobador inactivo factura_pk=%s',
+            factura_pk,
+        )
+        return False
+    assigned_by = None
+    if assigned_by_user_id:
+        User = get_user_model()
+        u = User.objects.filter(pk=assigned_by_user_id).first()
+        if u:
+            assigned_by = _user_recipient(u, 'contabilidad')
+    extra = {
+        'links': _notification_links(
+            factura,
+            base_links={'aprobar_ui': _public_url('/accounting/gastos-alegra/aprobar/')},
+        ),
+    }
+    if assigned_by:
+        extra['assigned_by'] = assigned_by
+    bill_snap = _alegra_bill_snapshot_from_factura(factura)
+    if bill_snap:
+        extra['alegra_bill'] = bill_snap
+    payload = build_gasto_notification_payload(
+        factura,
+        event='gasto_alegra.pendiente_aprobacion',
+        trigger=trigger,
+        recipients=[_aprobador_recipient(aprobador, factura.empresa_id)],
+        extra=extra,
+    )
+    url = settings.N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION
+    logger.info(
+        'n8n gasto pendiente_aprobacion: enviando pk=%s trigger=%s url=%s aprobador=%s',
+        factura_pk,
+        trigger,
+        url,
+        aprobador.pk,
+    )
+    _post_n8n(url, payload)
+    return True
+
+
 def notify_gasto_pendiente_aprobacion(factura_pk, *, assigned_by_user_id, trigger='asignacion_contable'):
     if not _notifications_enabled():
         return
 
     def _after_commit():
-        factura = Facturas.objects.select_related(
-            'empresa', 'gasto_aprobador_asignado', 'gasto_asignado_por',
-        ).filter(pk=factura_pk).first()
-        if not factura or not factura.gasto_aprobador_asignado_id:
-            return
-        aprobador = factura.gasto_aprobador_asignado
-        if not aprobador or not aprobador.is_active:
-            logger.warning(
-                'n8n gasto pendiente_aprobacion: aprobador inactivo factura_pk=%s',
-                factura_pk,
-            )
-            return
-        assigned_by = None
-        if assigned_by_user_id:
-            User = get_user_model()
-            u = User.objects.filter(pk=assigned_by_user_id).first()
-            if u:
-                assigned_by = _user_recipient(u, 'contabilidad')
-        extra = {
-            'links': _notification_links(
-                factura,
-                base_links={'aprobar_ui': _public_url('/accounting/gastos-alegra/aprobar/')},
-            ),
-        }
-        if assigned_by:
-            extra['assigned_by'] = assigned_by
-        bill_snap = _alegra_bill_snapshot_from_factura(factura)
-        if bill_snap:
-            extra['alegra_bill'] = bill_snap
-        payload = build_gasto_notification_payload(
-            factura,
-            event='gasto_alegra.pendiente_aprobacion',
+        _send_gasto_pendiente_aprobacion_webhook(
+            factura_pk,
+            assigned_by_user_id=assigned_by_user_id,
             trigger=trigger,
-            recipients=[_aprobador_recipient(aprobador, factura.empresa_id)],
-            extra=extra,
         )
-        _post_n8n(settings.N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION, payload)
 
     transaction.on_commit(_after_commit)

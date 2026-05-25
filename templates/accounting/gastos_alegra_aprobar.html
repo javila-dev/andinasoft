@@ -333,9 +333,12 @@ $(function() {
           aprobador_id: aprobador_id,
           comentario_contable: $('#txtComentarioReasignar').val()
         }),
-        success: function() {
+        success: function(res) {
           $('#modalReasignar').modal('hide');
-          showAlert('success', 'Asignación corregida. Se notificó al aprobador por n8n.');
+          var msg = res.notifico_aprobador
+            ? 'Asignación corregida. Se notificó al nuevo aprobador por n8n.'
+            : 'Asignación corregida (sin cambio de aprobador; no se envió aviso n8n).';
+          showAlert('success', msg);
           loadTable();
         },
         error: function(xhr) {

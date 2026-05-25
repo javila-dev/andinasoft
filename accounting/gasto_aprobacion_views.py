@@ -485,7 +485,11 @@ def ajax_gastos_alegra_reasignar(request):
             aprobador_user_id=aprobador_id,
             comentario_contable=comentario,
         )
-        return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+        return JsonResponse({
+            'ok': True,
+            'factura': factura_a_dict(fac),
+            'notifico_aprobador': bool(getattr(fac, '_gasto_reasignacion_notifico_aprobador', False)),
+        })
     except Facturas.DoesNotExist:
         return _json_error('Radicado no encontrado.', 404)
     except PermissionError as exc:

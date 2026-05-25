@@ -487,7 +487,7 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
 def reasignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, comentario_contable=''):
     """
     Corrige oficina y/o aprobador de un gasto ya enviado a aprobación.
-    Dispara webhook n8n pendiente_aprobacion al nuevo aprobador.
+    Dispara webhook n8n pendiente_aprobacion solo si cambia el aprobador.
     """
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         raise PermissionError('Solo Contabilidad puede reasignar oficina y aprobador.')
@@ -512,53 +512,62 @@ def reasignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, come
     sin_cambios = (
         factura.oficina == oficina
         and factura.gasto_aprobador_asignado_id == aprobador.pk
-        and (not comentario or comentario == (factura.gasto_aprobacion_comentario_contable or ''))
+        and comentario == (factura.gasto_aprobacion_comentario_contable or '')
     )
     if sin_cambios:
         raise ValueError('No hay cambios respecto a la asignación actual.')
 
     aprobador_anterior = factura.gasto_aprobador_asignado
+    aprobador_anterior_id = factura.gasto_aprobador_asignado_id
     oficina_anterior = factura.oficina or '—'
-    factura.oficina = oficina
-    factura.gasto_aprobador_asignado = aprobador
-    factura.gasto_asignado_por = request.user
-    factura.gasto_asignado_en = timezone.now()
-    if comentario:
-        factura.gasto_aprobacion_comentario_contable = comentario
+    cambio_aprobador = aprobador_anterior_id != aprobador.pk
 
-    factura.save(update_fields=[
-        'oficina',
-        'gasto_aprobador_asignado',
-        'gasto_asignado_por',
-        'gasto_asignado_en',
-        'gasto_aprobacion_comentario_contable',
-    ])
+    with transaction.atomic():
+        factura.oficina = oficina
+        factura.gasto_aprobador_asignado = aprobador
+        factura.gasto_asignado_por = request.user
+        factura.gasto_asignado_en = timezone.now()
+        if comentario != (factura.gasto_aprobacion_comentario_contable or ''):
+            factura.gasto_aprobacion_comentario_contable = comentario
 
-    label_ant = (
-        aprobador_anterior.get_full_name() or aprobador_anterior.username
-    ) if aprobador_anterior else '—'
-    label_nuevo = aprobador.get_full_name() or aprobador.username
-    accion = (
-        f'Reasignó oficina {oficina} y aprobador {label_nuevo} '
-        f'(antes: {oficina_anterior} / {label_ant})'
-    )
-    if comentario:
-        accion += f'. Nota: {comentario[:200]}'
+        factura.save(update_fields=[
+            'oficina',
+            'gasto_aprobador_asignado',
+            'gasto_asignado_por',
+            'gasto_asignado_en',
+            'gasto_aprobacion_comentario_contable',
+        ])
 
-    history_facturas.objects.create(
-        factura=factura,
-        usuario=request.user,
-        accion=accion[:255],
-        ubicacion='Contabilidad',
-    )
+        label_ant = (
+            aprobador_anterior.get_full_name() or aprobador_anterior.username
+        ) if aprobador_anterior else '—'
+        label_nuevo = aprobador.get_full_name() or aprobador.username
+        if cambio_aprobador:
+            accion = (
+                f'Reasignó aprobador a {label_nuevo} (antes: {label_ant})'
+                f' · oficina {oficina} (antes: {oficina_anterior})'
+            )
+        else:
+            accion = f'Corrigió oficina a {oficina} (antes: {oficina_anterior}) · aprobador {label_nuevo}'
+        if comentario:
+            accion += f'. Nota: {comentario[:200]}'
 
-    from accounting.gasto_n8n_notify import notify_gasto_pendiente_aprobacion
+        history_facturas.objects.create(
+            factura=factura,
+            usuario=request.user,
+            accion=accion[:255],
+            ubicacion='Contabilidad',
+        )
 
-    notify_gasto_pendiente_aprobacion(
-        factura.pk,
-        assigned_by_user_id=request.user.pk,
-        trigger='reasignacion_contable',
-    )
+        if cambio_aprobador:
+            from accounting.gasto_n8n_notify import notify_gasto_pendiente_aprobacion
+
+            notify_gasto_pendiente_aprobacion(
+                factura.pk,
+                assigned_by_user_id=request.user.pk,
+            )
+
+    factura._gasto_reasignacion_notifico_aprobador = cambio_aprobador
     return factura
 
 

@@ -191,8 +191,32 @@ class GastoAprobacionTests(TestCase):
         mock_notify.assert_called_once_with(
             self.factura.pk,
             assigned_by_user_id=self.contable.pk,
-            trigger='reasignacion_contable',
         )
+
+    @patch('accounting.gasto_n8n_notify.notify_gasto_pendiente_aprobacion')
+    def test_reasignar_solo_oficina_no_dispara_n8n(self, mock_notify):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+
+        asignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MONTERIA',
+            aprobador_user_id=self.aprobador.pk,
+        )
+        mock_notify.reset_mock()
+
+        reasignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MEDELLIN',
+            aprobador_user_id=self.aprobador.pk,
+        )
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.oficina, 'MEDELLIN')
+        mock_notify.assert_not_called()
 
     def test_filtro_alegra_operable(self):
         from django.db.models import Q
