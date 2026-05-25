@@ -7,6 +7,7 @@ import json
 from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra,
     asignar_gasto_alegra,
+    reasignar_gasto_alegra,
     sugerencias_asignacion_gasto_alegra,
     empresa_config_sin_aprobador,
     normalizar_alegra_bill_id,
@@ -156,6 +157,43 @@ class GastoAprobacionTests(TestCase):
         self.assertTrue(self.factura.gasto_aprobado)
         self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_APROBADO)
 
+    @patch('accounting.gasto_n8n_notify.notify_gasto_pendiente_aprobacion')
+    def test_reasignar_oficina_y_aprobador_dispara_n8n(self, mock_notify):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        otro = User.objects.create_user('aprobador2', password='x')
+        GastoAprobador.objects.create(user=otro, empresa=self.empresa, activo=True)
+
+        asignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MONTERIA',
+            aprobador_user_id=self.aprobador.pk,
+        )
+        mock_notify.reset_mock()
+
+        reasignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MEDELLIN',
+            aprobador_user_id=otro.pk,
+            comentario_contable='Corrección de oficina',
+        )
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.oficina, 'MEDELLIN')
+        self.assertEqual(self.factura.gasto_aprobador_asignado, otro)
+        self.assertEqual(
+            self.factura.gasto_aprobacion_estado,
+            Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+        )
+        mock_notify.assert_called_once_with(
+            self.factura.pk,
+            assigned_by_user_id=self.contable.pk,
+            trigger='reasignacion_contable',
+        )
+
     def test_filtro_alegra_operable(self):
         from django.db.models import Q
 
@@ -299,6 +337,70 @@ class WebhookN8nGastoAprobacionTests(TestCase):
         )
         resp = webhook_n8n_gasto_soporte_pdf(req, self.factura.pk)
         self.assertEqual(resp.status_code, 404)
+
+    @override_settings(
+        N8N_WEBHOOK_GASTO_APROBACION_SECRET='test-secret-n8n',
+    )
+    def test_ajax_soporte_pdf_aprobador(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from accounting.gasto_aprobacion_views import ajax_gastos_alegra_soporte_pdf
+
+        self.factura.gasto_aprobador_asignado = self.aprobador
+        self.factura.save(update_fields=['gasto_aprobador_asignado'])
+        self.factura.soporte_radicado.save(
+            'test-soporte.pdf',
+            SimpleUploadedFile('test-soporte.pdf', b'%PDF-1.4', content_type='application/pdf'),
+        )
+        req = self.factory.get(
+            f'/accounting/ajax/gastos-alegra/soporte-pdf/{self.factura.pk}',
+        )
+        req.user = self.aprobador
+        resp = ajax_gastos_alegra_soporte_pdf(req, self.factura.pk)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'application/pdf')
+        b''.join(resp.streaming_content)
+
+    def test_ajax_soporte_pdf_sin_permiso(self):
+        from accounting.gasto_aprobacion_views import ajax_gastos_alegra_soporte_pdf
+
+        otro = User.objects.create_user('otro_pdf', password='x')
+        req = self.factory.get(
+            f'/accounting/ajax/gastos-alegra/soporte-pdf/{self.factura.pk}',
+            HTTP_ACCEPT='application/json',
+        )
+        req.user = otro
+        resp = ajax_gastos_alegra_soporte_pdf(req, self.factura.pk)
+        self.assertEqual(resp.status_code, 403)
+
+    @override_settings(
+        N8N_WEBHOOK_GASTO_APROBACION_SECRET='test-secret-n8n',
+        N8N_WEBHOOK_AUTH_TOKEN='n8n-bearer-dl',
+        N8N_WEBHOOK_AUTH_PREFIX='Bearer',
+    )
+    @patch('accounting.gasto_n8n_notify._attach_soporte_from_alegra', return_value=True)
+    @patch('accounting.gasto_n8n_notify._soporte_radicado_legible')
+    def test_webhook_soporte_pdf_reintenta_alegra_si_storage_falla(
+        self, mock_legible, mock_attach,
+    ):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from accounting.gasto_aprobacion_views import webhook_n8n_gasto_soporte_pdf
+
+        self.factura.soporte_radicado.save(
+            'test-soporte.pdf',
+            SimpleUploadedFile('test-soporte.pdf', b'%PDF-1.4', content_type='application/pdf'),
+        )
+        mock_legible.side_effect = [False, True]
+
+        req = self.factory.get(
+            f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{self.factura.pk}',
+            HTTP_AUTHORIZATION='Bearer n8n-bearer-dl',
+        )
+        resp = webhook_n8n_gasto_soporte_pdf(req, self.factura.pk)
+        self.assertEqual(resp.status_code, 200)
+        mock_attach.assert_called_once()
+        mock_attach.assert_called_with(self.factura, force=True)
 
     def test_webhook_aprobador_no_asignado(self):
         otro = User.objects.create_user('otro', password='x')

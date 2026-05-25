@@ -721,7 +721,7 @@ $(function() {
   });
 
   $('#tablaPendientes').on('click', '.btn-soporte', function() {
-    window.open('/accounting/ajax/datafactura?pk=' + $(this).data('pk') + '&ensure_soporte=1', '_blank');
+    window.open('/accounting/ajax/gastos-alegra/soporte-pdf/' + $(this).data('pk'), '_blank', 'noopener');
   });
 
   $('#tablaPendientes').on('click', '.btn-asignar', function() {

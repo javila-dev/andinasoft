@@ -4,7 +4,7 @@ import os
 import tempfile
 import unicodedata
 from django.shortcuts import render
-from django.http import JsonResponse, FileResponse
+from django.http import JsonResponse, FileResponse, HttpResponse
 from django.urls import include, path
 from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.utils.datastructures import MultiValueDictKeyError
@@ -49,6 +49,8 @@ from accounting.gasto_aprobacion_views import (
     ajax_gastos_alegra_aprobadores,
     ajax_gastos_alegra_asignar,
     ajax_gastos_alegra_aprobar,
+    ajax_gastos_alegra_reasignar,
+    ajax_gastos_alegra_soporte_pdf,
     ajax_gastos_alegra_crear,
     ajax_gastos_alegra_journal_preview,
     ajax_gastos_alegra_bill_preview,
@@ -3008,83 +3010,71 @@ def ajax_recibir_factura(request):
 
 @login_required
 def ajax_data_factura(request):
-    if request.method == 'GET':
-        if request.is_ajax():
-            factura = request.GET.get('pk')
+    if request.method != 'GET':
+        return JsonResponse({'detail': 'Método no permitido'}, status=405)
 
-            obj_factura = Facturas.objects.filter(pk=factura).first()
-            if not obj_factura:
-                return JsonResponse({'detail': 'Factura no encontrada'}, status=404)
+    factura = request.GET.get('pk')
+    obj_factura = Facturas.objects.filter(pk=factura).first()
+    if not obj_factura:
+        return JsonResponse({'detail': 'Factura no encontrada'}, status=404)
 
-            ensure_soporte = str(request.GET.get('ensure_soporte') or '').strip() in ('1', 'true', 'True')
-            status = 'ready' if obj_factura.soporte_radicado else 'missing'
+    ensure_soporte = str(request.GET.get('ensure_soporte') or '').strip() in ('1', 'true', 'True')
+    status = 'missing'
+    message = ''
+
+    from accounting.gasto_n8n_notify import (
+        _soporte_radicado_legible,
+        ensure_soporte_radicado_descargable,
+    )
+
+    if ensure_soporte:
+        f, detail, http_status = ensure_soporte_radicado_descargable(obj_factura)
+        if f:
+            status = 'ready'
             message = ''
+        elif http_status == 404:
+            status = 'missing'
+            message = detail or 'Este radicado no tiene soporte PDF.'
+        else:
+            status = 'error' if (http_status or 0) >= 500 else 'pending'
+            message = detail or 'No se pudo obtener el soporte.'
+    elif _soporte_radicado_legible(obj_factura.soporte_radicado):
+        status = 'ready'
+    elif obj_factura.soporte_radicado:
+        status = 'missing'
+        message = 'El soporte no está disponible en storage.'
 
-            # On-demand: solo bills Alegra sin PDF local (journals y radicados normales usan S3).
-            if ensure_soporte and not obj_factura.soporte_radicado and obj_factura.origen == 'Alegra':
-                from alegra_integration.bill_mapping import (
-                    ALEGRA_DOC_BILL,
-                    infer_alegra_document_type,
-                    parse_alegra_bill_id_for_api,
-                )
+    soporte_url = ''
+    if status == 'ready':
+        soporte_url = f'/accounting/ajax/gastos-alegra/soporte-pdf/{obj_factura.pk}'
 
-                doc_type = (obj_factura.alegra_document_type or '').strip()
-                if not doc_type:
-                    doc_type = infer_alegra_document_type(obj_factura.alegra_bill_id)
-                alegra_numeric_id = None
-                if doc_type == ALEGRA_DOC_BILL:
-                    _, alegra_numeric_id = parse_alegra_bill_id_for_api(obj_factura.alegra_bill_id)
+    is_fetch = (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
+    )
+    if ensure_soporte and not is_fetch:
+        if status == 'ready' and soporte_url:
+            from django.shortcuts import redirect
+            return redirect(soporte_url)
+        from django.utils.html import escape
+        return HttpResponse(
+            f'<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Soporte PDF</title></head>'
+            f'<body><p>{escape(message or "No se pudo obtener el soporte PDF.")}</p></body></html>',
+            status=404 if status == 'missing' else 503,
+            content_type='text/html; charset=utf-8',
+        )
 
-                if doc_type == ALEGRA_DOC_BILL and alegra_numeric_id:
-                    try:
-                        from django.core.cache import cache
-                        from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
-                    except Exception:
-                        cache = None
-                        attach_bill_pdf_from_alegra = None
-
-                    throttle_key = f'alegra:soporte:radicado:{obj_factura.pk}'
-                    throttled = bool(cache.get(throttle_key)) if cache else False
-                    if throttled:
-                        status = 'throttled'
-                        message = 'Aún no disponible. Ya se intentó hace poco; intenta de nuevo en unos minutos.'
-                    elif attach_bill_pdf_from_alegra:
-                        if cache:
-                            cache.set(throttle_key, True, timeout=60 * 3)
-                        try:
-                            ok = attach_bill_pdf_from_alegra(
-                                obj_factura.empresa, alegra_numeric_id, obj_factura,
-                            )
-                            if ok and obj_factura.soporte_radicado:
-                                status = 'ready'
-                                message = 'Soporte descargado desde Alegra.'
-                            else:
-                                status = 'pending'
-                                message = 'Alegra todavía no publica el PDF. Intenta de nuevo en unos minutos.'
-                        except Exception:
-                            status = 'error'
-                            message = 'No fue posible descargar el soporte desde Alegra. Intenta más tarde.'
-                    else:
-                        status = 'error'
-                        message = 'No se pudo inicializar el cliente de descarga de soporte Alegra.'
-                elif doc_type != ALEGRA_DOC_BILL:
-                    status = 'missing'
-                    message = 'Este radicado Alegra no tiene PDF adjunto.'
-                else:
-                    status = 'missing'
-                    message = 'No hay referencia de bill Alegra para descargar el soporte.'
-
-            data = {
-                'pk': obj_factura.pk,
-                'status': status,
-                'message': message,
-                'origen': obj_factura.origen or '',
-                'alegra_document_type': getattr(obj_factura, 'alegra_document_type', '') or '',
-                'soporte_radicado': _media_url(obj_factura.soporte_radicado),
-                'soporte_causacion': _media_url(obj_factura.soporte_causacion),
-                'data': serializers.serialize('json', [obj_factura]),
-            }
-            return JsonResponse(data)
+    data = {
+        'pk': obj_factura.pk,
+        'status': status,
+        'message': message,
+        'origen': obj_factura.origen or '',
+        'alegra_document_type': getattr(obj_factura, 'alegra_document_type', '') or '',
+        'soporte_radicado': soporte_url or _media_url(obj_factura.soporte_radicado),
+        'soporte_causacion': _media_url(obj_factura.soporte_causacion),
+        'data': serializers.serialize('json', [obj_factura]),
+    }
+    return JsonResponse(data)
 
 @login_required         
 def ajax_registrar_causacion(request):
@@ -6930,6 +6920,11 @@ urls = [
     path('ajax/gastos-alegra/journal-detalle-radicado', ajax_gastos_alegra_journal_detalle_radicado),
     path('ajax/gastos-alegra/asignar', ajax_gastos_alegra_asignar),
     path('ajax/gastos-alegra/aprobar', ajax_gastos_alegra_aprobar),
+    path('ajax/gastos-alegra/reasignar', ajax_gastos_alegra_reasignar),
+    path(
+        'ajax/gastos-alegra/soporte-pdf/<int:radicado_pk>',
+        ajax_gastos_alegra_soporte_pdf,
+    ),
     path('webhooks/n8n/gasto-aprobacion', webhook_n8n_gasto_aprobacion),
     path(
         'webhooks/n8n/gastos-alegra/soporte-pdf/<int:radicado_pk>',

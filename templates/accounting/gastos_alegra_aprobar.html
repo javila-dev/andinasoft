@@ -24,7 +24,11 @@
     <h4 class="mb-0"><i class="fas fa-check-circle mr-2"></i>Aprobar gastos Alegra</h4>
     <a class="btn btn-sm btn-outline-secondary" href="/accounting/gastos-alegra/asignar/">Asignar gastos</a>
   </div>
+  {% if es_contabilidad %}
+  <p class="text-muted small">Como contabilidad ve todos los gastos pendientes de aprobación. Puede corregir oficina o transferir a otro aprobador si hubo un error; el nuevo aprobador recibe aviso por n8n.</p>
+  {% else %}
   <p class="text-muted small">Gastos asignados a usted para confirmar que procede el pago. Si no ve filas, revise que contabilidad lo haya asignado a su usuario en <a href="/accounting/gastos-alegra/asignar/">Asignar gastos</a>.</p>
+  {% endif %}
   <div id="alertBox"></div>
 
   <div class="form-row mb-3">
@@ -53,6 +57,7 @@
           <th>Empresa</th>
           <th>Proveedor</th>
           <th>Oficina</th>
+          {% if es_contabilidad %}<th>Aprobador</th>{% endif %}
           <th>Valor</th>
           <th>Nota contable</th>
           <th></th>
@@ -77,18 +82,67 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-primary" id="btnVerSoporte">Ver soporte PDF</button>
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
         <button type="button" class="btn btn-success" id="btnConfirmarAprobar">Aprobar gasto</button>
       </div>
     </div>
   </div>
 </div>
+
+{% if es_contabilidad %}
+<div class="modal fade" id="modalReasignar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Corregir asignación #<span id="lblRadReasignar"></span></h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted" id="resumenReasignar"></p>
+        <div class="form-group">
+          <label class="small font-weight-bold">Oficina</label>
+          <select id="selOficinaReasignar" class="form-control form-control-sm" required>
+            <option value="">Seleccione…</option>
+            <option value="MONTERIA">MONTERIA</option>
+            <option value="MEDELLIN">MEDELLIN</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="small font-weight-bold">Aprobador</label>
+          <select id="selAprobadorReasignar" class="form-control form-control-sm" required>
+            <option value="">Cargando…</option>
+          </select>
+        </div>
+        <div class="form-group mb-0">
+          <label class="small font-weight-bold">Comentario para el aprobador</label>
+          <textarea id="txtComentarioReasignar" class="form-control form-control-sm" rows="3" maxlength="2000" placeholder="Opcional: aclaración del cambio"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-primary" id="btnVerSoporteReasignar">Ver soporte PDF</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-warning" id="btnConfirmarReasignar">Guardar y notificar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block js %}
 <script>
 const CSRF = '{{ csrf_token }}';
-let tabla, radicadoActual = null;
+const ES_CONTABILIDAD = {{ es_contabilidad|yesno:"true,false" }};
+let tabla, radicadoActual = null, rowReasignar = null;
+
+function soportePdfUrl(pk) {
+  return '/accounting/ajax/gastos-alegra/soporte-pdf/' + pk;
+}
+
+function openSoportePdf(pk) {
+  window.open(soportePdfUrl(pk), '_blank', 'noopener');
+}
 
 function showAlert(type, html) {
   $('#alertBox').html('<div class="alert alert-' + type + ' alert-dismissible fade show">' + html +
@@ -106,7 +160,54 @@ function setTableLoading(loading) {
   }
 }
 
+function loadAprobadores(empresa, $select, selectedId) {
+  $select.html('<option value="">Cargando…</option>');
+  return $.get('/accounting/ajax/gastos-alegra/aprobadores', { empresa: empresa })
+    .done(function(data) {
+      var opts = (data.aprobadores || []).map(function(a) {
+        return '<option value="' + a.id + '">' + $('<div>').text(a.label).html() + '</option>';
+      }).join('');
+      $select.html(
+        '<option value="">— seleccionar aprobador —</option>' +
+        (opts || '<option disabled>Sin aprobadores en admin</option>')
+      );
+      if (selectedId) $select.val(String(selectedId));
+    })
+    .fail(function(xhr) {
+      $select.html('<option value="">Error al cargar</option>');
+      showAlert('danger', (xhr.responseJSON || {}).detail || 'Error cargando aprobadores');
+    });
+}
+
 $(function() {
+  var columns = [
+    { data: 'pk' },
+    { data: 'empresa_nombre' },
+    { data: 'nombretercero' },
+    { data: 'oficina' },
+  ];
+  if (ES_CONTABILIDAD) {
+    columns.push({
+      data: 'gasto_aprobador_asignado',
+      defaultContent: '—',
+      render: function(t) { return t || '—'; }
+    });
+  }
+  columns.push(
+    { data: 'valor', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
+    { data: 'gasto_aprobacion_comentario_contable', defaultContent: '', render: function(t) {
+      return t ? (t.length > 40 ? t.slice(0, 40) + '…' : t) : '—';
+    }},
+    { data: null, orderable: false, render: function(d, t, row) {
+      var html = '<button class="btn btn-xs btn-success btn-aprobar">Aprobar</button> ' +
+                 '<button class="btn btn-xs btn-outline-secondary btn-soporte">PDF</button>';
+      if (ES_CONTABILIDAD) {
+        html += ' <button class="btn btn-xs btn-outline-warning btn-reasignar">Corregir</button>';
+      }
+      return html;
+    }}
+  );
+
   tabla = $('#tablaPendientes').DataTable({
     processing: true,
     ajax: {
@@ -118,20 +219,7 @@ $(function() {
         showAlert('danger', msg);
       }
     },
-    columns: [
-      { data: 'pk' },
-      { data: 'empresa_nombre' },
-      { data: 'nombretercero' },
-      { data: 'oficina' },
-      { data: 'valor', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
-      { data: 'gasto_aprobacion_comentario_contable', defaultContent: '', render: function(t) {
-        return t ? (t.length > 40 ? t.slice(0, 40) + '…' : t) : '—';
-      }},
-      { data: null, orderable: false, render: function(d, t, row) {
-        return '<button class="btn btn-xs btn-success btn-aprobar">Aprobar</button> ' +
-               '<button class="btn btn-xs btn-outline-secondary btn-soporte">PDF</button>';
-      }}
-    ],
+    columns: columns,
     order: [[0, 'desc']],
     language: {
       url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Spanish.json',
@@ -154,7 +242,11 @@ $(function() {
 
   $('#tablaPendientes').on('click', '.btn-soporte', function() {
     var row = tabla.row($(this).closest('tr')).data();
-    window.open('/accounting/ajax/datafactura?pk=' + row.pk + '&ensure_soporte=1', '_blank');
+    openSoportePdf(row.pk);
+  });
+
+  $('#btnVerSoporte').on('click', function() {
+    if (radicadoActual) openSoportePdf(radicadoActual);
   });
 
   $('#tablaPendientes').on('click', '.btn-aprobar', function() {
@@ -192,6 +284,69 @@ $(function() {
       }
     });
   });
+
+  if (ES_CONTABILIDAD) {
+    $('#tablaPendientes').on('click', '.btn-reasignar', function() {
+      rowReasignar = tabla.row($(this).closest('tr')).data();
+      $('#lblRadReasignar').text(rowReasignar.pk);
+      $('#resumenReasignar').html(
+        '<strong>' + rowReasignar.nombretercero + '</strong> · $' +
+        Number(rowReasignar.valor || 0).toLocaleString('es-CO') +
+        '<br>Actual: <strong>' + (rowReasignar.oficina || '—') + '</strong> · ' +
+        (rowReasignar.gasto_aprobador_asignado || '—')
+      );
+      $('#selOficinaReasignar').val(rowReasignar.oficina || '');
+      $('#txtComentarioReasignar').val(rowReasignar.gasto_aprobacion_comentario_contable || '');
+      loadAprobadores(
+        rowReasignar.empresa,
+        $('#selAprobadorReasignar'),
+        rowReasignar.gasto_aprobador_asignado_id
+      );
+      $('#modalReasignar').modal('show');
+    });
+
+    $('#btnVerSoporteReasignar').on('click', function() {
+      if (rowReasignar) openSoportePdf(rowReasignar.pk);
+    });
+
+    $('#btnConfirmarReasignar').on('click', function() {
+      if (!rowReasignar) return;
+      var oficina = $('#selOficinaReasignar').val();
+      var aprobador_id = $('#selAprobadorReasignar').val();
+      if (!oficina) {
+        showAlert('warning', 'Seleccione la oficina.');
+        return;
+      }
+      if (!aprobador_id) {
+        showAlert('warning', 'Seleccione un aprobador.');
+        return;
+      }
+      var $btn = $(this).prop('disabled', true).html('Guardando…');
+      $.ajax({
+        url: '/accounting/ajax/gastos-alegra/reasignar',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': CSRF },
+        data: JSON.stringify({
+          radicado: rowReasignar.pk,
+          oficina: oficina,
+          aprobador_id: aprobador_id,
+          comentario_contable: $('#txtComentarioReasignar').val()
+        }),
+        success: function() {
+          $('#modalReasignar').modal('hide');
+          showAlert('success', 'Asignación corregida. Se notificó al aprobador por n8n.');
+          loadTable();
+        },
+        error: function(xhr) {
+          showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al reasignar');
+        },
+        complete: function() {
+          $btn.prop('disabled', false).html('Guardar y notificar');
+        }
+      });
+    });
+  }
 });
 </script>
 {% endblock %}

@@ -24,6 +24,19 @@ def usuario_es_aprobador_gasto(user, empresa_id=None):
     return qs.exists()
 
 
+def usuario_puede_ver_soporte_gasto(user, factura):
+    """Contabilidad, aprobador asignado o superuser pueden ver el soporte del radicado."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    if user.groups.filter(name='Contabilidad').exists():
+        return True
+    if factura.gasto_aprobador_asignado_id == user.pk:
+        return True
+    return False
+
+
 def aprobadores_para_empresa(empresa_id):
     qs = GastoAprobador.objects.filter(activo=True).filter(
         Q(empresa_id=empresa_id) | Q(empresa__isnull=True)
@@ -157,6 +170,7 @@ def factura_a_dict(fac):
         'gasto_aprobador_asignado': (
             fac.gasto_aprobador_asignado.get_full_name() or fac.gasto_aprobador_asignado.username
         ) if fac.gasto_aprobador_asignado_id else '',
+        'gasto_aprobador_asignado_id': fac.gasto_aprobador_asignado_id,
         'idtercero': fac.idtercero or '',
     }
 
@@ -467,6 +481,84 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
             factura.pk,
             assigned_by_user_id=request.user.pk,
         )
+    return factura
+
+
+def reasignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, comentario_contable=''):
+    """
+    Corrige oficina y/o aprobador de un gasto ya enviado a aprobación.
+    Dispara webhook n8n pendiente_aprobacion al nuevo aprobador.
+    """
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        raise PermissionError('Solo Contabilidad puede reasignar oficina y aprobador.')
+    if factura.origen != 'Alegra':
+        raise ValueError('Solo aplica a radicados con origen Alegra.')
+    if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_APROBACION:
+        raise ValueError('El radicado no está pendiente de aprobación.')
+    if oficina not in ('MONTERIA', 'MEDELLIN'):
+        raise ValueError('Oficina inválida.')
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    aprobador_uid = parse_aprobador_user_id_opcional(aprobador_user_id)
+    if not aprobador_uid:
+        raise ValueError('Debe indicar un aprobador al reasignar.')
+
+    aprobador = User.objects.filter(pk=aprobador_uid, is_active=True).first()
+    if not aprobador or not usuario_es_aprobador_gasto(aprobador, factura.empresa_id):
+        raise ValueError('El aprobador seleccionado no está autorizado para esta empresa.')
+
+    comentario = (comentario_contable or '').strip()[:2000]
+    sin_cambios = (
+        factura.oficina == oficina
+        and factura.gasto_aprobador_asignado_id == aprobador.pk
+        and (not comentario or comentario == (factura.gasto_aprobacion_comentario_contable or ''))
+    )
+    if sin_cambios:
+        raise ValueError('No hay cambios respecto a la asignación actual.')
+
+    aprobador_anterior = factura.gasto_aprobador_asignado
+    oficina_anterior = factura.oficina or '—'
+    factura.oficina = oficina
+    factura.gasto_aprobador_asignado = aprobador
+    factura.gasto_asignado_por = request.user
+    factura.gasto_asignado_en = timezone.now()
+    if comentario:
+        factura.gasto_aprobacion_comentario_contable = comentario
+
+    factura.save(update_fields=[
+        'oficina',
+        'gasto_aprobador_asignado',
+        'gasto_asignado_por',
+        'gasto_asignado_en',
+        'gasto_aprobacion_comentario_contable',
+    ])
+
+    label_ant = (
+        aprobador_anterior.get_full_name() or aprobador_anterior.username
+    ) if aprobador_anterior else '—'
+    label_nuevo = aprobador.get_full_name() or aprobador.username
+    accion = (
+        f'Reasignó oficina {oficina} y aprobador {label_nuevo} '
+        f'(antes: {oficina_anterior} / {label_ant})'
+    )
+    if comentario:
+        accion += f'. Nota: {comentario[:200]}'
+
+    history_facturas.objects.create(
+        factura=factura,
+        usuario=request.user,
+        accion=accion[:255],
+        ubicacion='Contabilidad',
+    )
+
+    from accounting.gasto_n8n_notify import notify_gasto_pendiente_aprobacion
+
+    notify_gasto_pendiente_aprobacion(
+        factura.pk,
+        assigned_by_user_id=request.user.pk,
+        trigger='reasignacion_contable',
+    )
     return factura
 
 

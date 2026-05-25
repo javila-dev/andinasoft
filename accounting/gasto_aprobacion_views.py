@@ -16,6 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from django.utils.dateparse import parse_date
+from django.utils.html import escape
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,17 @@ from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra_para_usuario,
     asignar_gasto_alegra,
     crear_radicado_gasto_alegra,
+    reasignar_gasto_alegra,
     empresa_config_sin_aprobador,
     factura_a_dict,
     sugerencias_asignacion_gasto_alegra,
     normalizar_alegra_bill_id,
     parse_aprobador_user_id_opcional,
     usuario_es_aprobador_gasto,
+    usuario_puede_ver_soporte_gasto,
 )
 from accounting.gasto_aprobacion_link import verify_gasto_aprobacion_link_token
+from accounting.gasto_n8n_notify import ensure_soporte_radicado_descargable
 from accounting.journal_cxp import (
     detalle_pago_desde_factura,
     parsear_journal_para_radicado,
@@ -84,12 +88,17 @@ def gastos_alegra_asignar(request):
 
 @login_required
 def gastos_alegra_aprobar(request):
-    if not usuario_es_aprobador_gasto(request.user) and not request.user.is_superuser:
+    es_contabilidad = (
+        check_groups(request, ('Contabilidad',), raise_exception=False)
+        or request.user.is_superuser
+    )
+    if not usuario_es_aprobador_gasto(request.user) and not es_contabilidad:
         return render(request, 'accounting/gastos_alegra_denied.html', {
             'mensaje': 'No está configurado como aprobador de gastos Alegra.',
         }, status=403)
     return render(request, 'accounting/gastos_alegra_aprobar.html', {
         'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
+        'es_contabilidad': es_contabilidad,
     })
 
 
@@ -168,20 +177,24 @@ def ajax_gastos_alegra_pendientes_asignar(request):
 @login_required
 @require_http_methods(['GET'])
 def ajax_gastos_alegra_pendientes_aprobar(request):
-    if not usuario_es_aprobador_gasto(request.user) and not request.user.is_superuser:
+    es_contabilidad = (
+        check_groups(request, ('Contabilidad',), raise_exception=False)
+        or request.user.is_superuser
+    )
+    if not usuario_es_aprobador_gasto(request.user) and not es_contabilidad:
         return _json_error('No es aprobador de gastos.', 403)
     empresa = (request.GET.get('empresa') or '').strip()
     qs = Facturas.objects.filter(
         origen='Alegra',
         gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
     ).select_related('empresa', 'gasto_aprobador_asignado', 'gasto_asignado_por')
-    if not request.user.is_superuser:
+    if not es_contabilidad:
         qs = qs.filter(gasto_aprobador_asignado=request.user)
     if empresa:
         qs = qs.filter(empresa_id=empresa)
     qs = qs.order_by('-gasto_asignado_en', '-pk')
     data = [factura_a_dict(f) for f in qs[:500]]
-    return JsonResponse({'data': data})
+    return JsonResponse({'data': data, 'es_contabilidad': es_contabilidad})
 
 
 @login_required
@@ -450,6 +463,90 @@ def ajax_gastos_alegra_asignar(request):
 
 @login_required
 @require_http_methods(['POST'])
+def ajax_gastos_alegra_reasignar(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            body = json.loads(request.body.decode() or '{}')
+        else:
+            body = request.POST
+        radicado = body.get('radicado')
+        oficina = (body.get('oficina') or '').strip()
+        aprobador_id = body.get('aprobador_id')
+        comentario = (body.get('comentario_contable') or '').strip()
+        fac = Facturas.objects.get(pk=radicado)
+        if Pagos.objects.filter(nroradicado=fac).exists():
+            return _json_error('El radicado ya tiene pagos asociados.')
+        reasignar_gasto_alegra(
+            request,
+            factura=fac,
+            oficina=oficina,
+            aprobador_user_id=aprobador_id,
+            comentario_contable=comentario,
+        )
+        return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except Facturas.DoesNotExist:
+        return _json_error('Radicado no encontrado.', 404)
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except (ValueError, TypeError) as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        return _json_error(exc, 500)
+
+
+def _html_or_json_error(request, message, status=404):
+    accept = request.META.get('HTTP_ACCEPT', '')
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in accept:
+        return JsonResponse({'detail': message}, status=status)
+    return HttpResponse(
+        f'<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Soporte PDF</title></head>'
+        f'<body><p>{escape(message)}</p></body></html>',
+        status=status,
+        content_type='text/html; charset=utf-8',
+    )
+
+
+def _servir_soporte_radicado_pdf(request, factura, radicado_pk, *, log_prefix='soporte_pdf'):
+    f, detail, http_status = ensure_soporte_radicado_descargable(factura)
+    if detail:
+        if http_status and http_status >= 500:
+            logger.error(
+                '%s: soporte no legible radicado=%s detail=%s',
+                log_prefix, radicado_pk, detail,
+            )
+        return _html_or_json_error(request, detail, http_status or 404)
+
+    try:
+        handle = f.open('rb')
+    except Exception:
+        logger.exception('%s: no se pudo abrir soporte radicado=%s', log_prefix, radicado_pk)
+        return _html_or_json_error(request, 'No se pudo leer el archivo de soporte.', 503)
+
+    filename = os.path.basename(f.name or '') or f'soporte-radicado-{radicado_pk}.pdf'
+    response = FileResponse(handle, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_soporte_pdf(request, radicado_pk):
+    """
+    Soporte PDF para UI (aprobación / asignación).
+    Storage primero; si no es legible y es bill Alegra, descarga desde Alegra.
+    """
+    factura = get_object_or_404(Facturas.objects.select_related('gasto_aprobador_asignado'), pk=radicado_pk)
+    if not usuario_puede_ver_soporte_gasto(request.user, factura):
+        return _html_or_json_error(request, 'Sin permiso para ver este soporte.', 403)
+    return _servir_soporte_radicado_pdf(
+        request, factura, radicado_pk, log_prefix='ajax_gastos_alegra_soporte_pdf',
+    )
+
+
+@login_required
+@require_http_methods(['POST'])
 def ajax_gastos_alegra_aprobar(request):
     try:
         if request.content_type and 'application/json' in request.content_type:
@@ -554,20 +651,9 @@ def webhook_n8n_gasto_soporte_pdf(request, radicado_pk):
         return err_response
 
     factura = get_object_or_404(Facturas, pk=radicado_pk)
-    f = factura.soporte_radicado
-    if not f:
-        return JsonResponse({'detail': 'Este radicado no tiene soporte PDF.'}, status=404)
-
-    try:
-        handle = f.open('rb')
-    except Exception:
-        logger.exception('webhook_n8n_gasto_soporte_pdf: no se pudo abrir soporte radicado=%s', radicado_pk)
-        return JsonResponse({'detail': 'No se pudo leer el archivo de soporte.'}, status=500)
-
-    filename = os.path.basename(f.name or '') or f'soporte-radicado-{radicado_pk}.pdf'
-    response = FileResponse(handle, content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{filename}"'
-    return response
+    return _servir_soporte_radicado_pdf(
+        request, factura, radicado_pk, log_prefix='webhook_n8n_gasto_soporte_pdf',
+    )
 
 
 @csrf_exempt

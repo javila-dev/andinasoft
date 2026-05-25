@@ -73,14 +73,35 @@ def _empresa_payload(factura):
     }
 
 
-def _try_attach_soporte_from_alegra(factura):
-    """Opcional: descarga PDF de Alegra antes del POST a n8n (N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY)."""
-    if factura.soporte_radicado:
-        return
-    if not getattr(settings, 'N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY', False):
-        return
+def _soporte_radicado_legible(field_file):
+    """True si el FileField apunta a un objeto existente y legible en storage."""
+    if not field_file or not getattr(field_file, 'name', None):
+        return False
+    try:
+        if not field_file.storage.exists(field_file.name):
+            return False
+        with field_file.open('rb'):
+            pass
+        return True
+    except Exception:
+        return False
+
+
+def _attach_soporte_from_alegra(factura, *, force=False):
+    """
+    Descarga PDF desde Alegra a soporte_radicado.
+    force=True: reintenta aunque ya haya ruta en BD (p. ej. archivo ausente en S3).
+    """
+    if not force:
+        if _soporte_radicado_legible(factura.soporte_radicado):
+            return False
+        if not getattr(settings, 'N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY', False):
+            return False
+    elif _soporte_radicado_legible(factura.soporte_radicado):
+        return False
+
     if (factura.origen or '').strip() != 'Alegra':
-        return
+        return False
     from alegra_integration.bill_mapping import (
         ALEGRA_DOC_BILL,
         infer_alegra_document_type,
@@ -91,20 +112,50 @@ def _try_attach_soporte_from_alegra(factura):
         factura.alegra_bill_id,
     )
     if doc_type != ALEGRA_DOC_BILL:
-        return
+        return False
     _, alegra_numeric_id = parse_alegra_bill_id_for_api(factura.alegra_bill_id)
     if not alegra_numeric_id:
-        return
+        return False
     try:
         from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
 
         attach_bill_pdf_from_alegra(factura.empresa, alegra_numeric_id, factura)
         factura.refresh_from_db(fields=['soporte_radicado'])
+        return _soporte_radicado_legible(factura.soporte_radicado)
     except Exception:
         logger.exception(
             'n8n gasto: no se pudo adjuntar soporte Alegra factura_pk=%s',
             factura.pk,
         )
+        return False
+
+
+def _try_attach_soporte_from_alegra(factura):
+    """Opcional: descarga PDF de Alegra antes del POST a n8n (N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY)."""
+    _attach_soporte_from_alegra(factura, force=False)
+
+
+def ensure_soporte_radicado_descargable(factura):
+    """
+    Devuelve (field_file, error_detail, http_status) listo para FileResponse.
+    Reintenta descarga desde Alegra si la ruta en BD no es legible (p. ej. S3).
+    """
+    if _soporte_radicado_legible(factura.soporte_radicado):
+        return factura.soporte_radicado, None, None
+
+    _attach_soporte_from_alegra(factura, force=True)
+    factura.refresh_from_db(fields=['soporte_radicado'])
+
+    if not factura.soporte_radicado or not factura.soporte_radicado.name:
+        return None, 'Este radicado no tiene soporte PDF.', 404
+
+    if not _soporte_radicado_legible(factura.soporte_radicado):
+        return None, (
+            'No se pudo leer el archivo de soporte. '
+            'Verifique storage (S3) o que Alegra tenga el PDF disponible.'
+        ), 503
+
+    return factura.soporte_radicado, None, None
 
 
 def _soporte_pdf_url(factura):
@@ -114,7 +165,7 @@ def _soporte_pdf_url(factura):
     """
     _try_attach_soporte_from_alegra(factura)
     factura.refresh_from_db(fields=['soporte_radicado'])
-    if not factura.soporte_radicado:
+    if not factura.soporte_radicado or not factura.soporte_radicado.name:
         return ''
     return _public_url(f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{factura.pk}')
 
