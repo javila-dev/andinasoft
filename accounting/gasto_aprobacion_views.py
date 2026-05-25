@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 
 from django.conf import settings
@@ -7,7 +8,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
+from django.shortcuts import get_object_or_404
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -17,6 +19,7 @@ from django.utils.dateparse import parse_date
 logger = logging.getLogger(__name__)
 
 from accounting.gasto_poll import poll_gastos_alegra_notificaciones
+from accounting.n8n_http import n8n_inbound_authorized
 from accounting.gasto_aprobacion import (
     aprobadores_para_empresa,
     aprobar_gasto_alegra,
@@ -456,16 +459,33 @@ def ajax_gastos_alegra_aprobar(request):
         return _json_error(exc, 500)
 
 
-def _n8n_gasto_aprobacion_secret_ok(request):
-    expected = (getattr(settings, 'N8N_WEBHOOK_GASTO_APROBACION_SECRET', None) or '').strip()
-    if not expected:
-        return False
-    got = (
-        request.headers.get('X-Andina-Webhook-Secret')
-        or request.META.get('HTTP_X_ANDINA_WEBHOOK_SECRET')
-        or ''
-    ).strip()
-    return got == expected
+@csrf_exempt
+@require_http_methods(['GET'])
+def webhook_n8n_gasto_soporte_pdf(request, radicado_pk):
+    """
+    Descarga del soporte PDF para n8n (bucket S3 privado: la app lee con credenciales AWS).
+    GET /accounting/webhooks/n8n/gastos-alegra/soporte-pdf/<radicado>
+    Auth: mismo Bearer que webhooks salientes, X-Andina-Webhook-Secret o Token APIToken.
+    """
+    ok, err_response = n8n_inbound_authorized(request)
+    if not ok:
+        return err_response
+
+    factura = get_object_or_404(Facturas, pk=radicado_pk)
+    f = factura.soporte_radicado
+    if not f:
+        return JsonResponse({'detail': 'Este radicado no tiene soporte PDF.'}, status=404)
+
+    try:
+        handle = f.open('rb')
+    except Exception:
+        logger.exception('webhook_n8n_gasto_soporte_pdf: no se pudo abrir soporte radicado=%s', radicado_pk)
+        return JsonResponse({'detail': 'No se pudo leer el archivo de soporte.'}, status=500)
+
+    filename = os.path.basename(f.name or '') or f'soporte-radicado-{radicado_pk}.pdf'
+    response = FileResponse(handle, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    return response
 
 
 @csrf_exempt
@@ -474,13 +494,11 @@ def webhook_n8n_gasto_aprobacion(request):
     """
     Entrada desde n8n (p. ej. aprobación por WhatsApp).
     POST /accounting/webhooks/n8n/gasto-aprobacion
-    Header: X-Andina-Webhook-Secret: <N8N_WEBHOOK_GASTO_APROBACION_SECRET>
+    Auth: X-Andina-Webhook-Secret o Authorization: Token <APIToken>
     """
-    if not _n8n_gasto_aprobacion_secret_ok(request):
-        return JsonResponse(
-            {'detail': 'No autorizado o webhook no configurado (N8N_WEBHOOK_GASTO_APROBACION_SECRET).'},
-            status=401,
-        )
+    ok, err_response = n8n_inbound_authorized(request)
+    if not ok:
+        return err_response
 
     try:
         if request.content_type and 'application/json' in request.content_type:

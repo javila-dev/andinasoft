@@ -255,6 +255,51 @@ class WebhookN8nGastoAprobacionTests(TestCase):
         )
         self.assertEqual(resp.status_code, 401)
 
+    @override_settings(
+        N8N_WEBHOOK_GASTO_APROBACION_SECRET='test-secret-n8n',
+        N8N_WEBHOOK_AUTH_TOKEN='n8n-bearer-dl',
+        N8N_WEBHOOK_AUTH_PREFIX='Bearer',
+    )
+    def test_webhook_soporte_pdf_con_bearer(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from accounting.gasto_aprobacion_views import webhook_n8n_gasto_soporte_pdf
+        from accounting.gasto_n8n_notify import build_gasto_notification_payload
+
+        self.factura.soporte_radicado.save(
+            'test-soporte.pdf',
+            SimpleUploadedFile('test-soporte.pdf', b'%PDF-1.4', content_type='application/pdf'),
+        )
+        payload = build_gasto_notification_payload(
+            self.factura,
+            event='gasto_alegra.pendiente_aprobacion',
+            trigger='test',
+            recipients=[],
+        )
+        self.assertIn(
+            f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{self.factura.pk}',
+            payload['factura']['soporte_pdf_url'],
+        )
+
+        req = self.factory.get(
+            f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{self.factura.pk}',
+            HTTP_AUTHORIZATION='Bearer n8n-bearer-dl',
+        )
+        resp = webhook_n8n_gasto_soporte_pdf(req, self.factura.pk)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'application/pdf')
+        b''.join(resp.streaming_content)
+
+    def test_webhook_soporte_pdf_sin_archivo(self):
+        from accounting.gasto_aprobacion_views import webhook_n8n_gasto_soporte_pdf
+
+        req = self.factory.get(
+            f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{self.factura.pk}',
+            HTTP_X_ANDINA_WEBHOOK_SECRET='test-secret-n8n',
+        )
+        resp = webhook_n8n_gasto_soporte_pdf(req, self.factura.pk)
+        self.assertEqual(resp.status_code, 404)
+
     def test_webhook_aprobador_no_asignado(self):
         otro = User.objects.create_user('otro', password='x')
         GastoAprobador.objects.create(user=otro, empresa=self.empresa, activo=True)

@@ -18,6 +18,8 @@ N8N_SETTINGS = {
     'N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION': 'http://n8n.test/pendiente-asignacion',
     'N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION': 'http://n8n.test/pendiente-aprobacion',
     'ANDINA_PUBLIC_BASE_URL': 'https://app.test',
+    'N8N_WEBHOOK_AUTH_TOKEN': 'test-n8n-token',
+    'N8N_WEBHOOK_AUTH_PREFIX': 'Bearer',
 }
 
 
@@ -37,7 +39,9 @@ class GastoN8nNotifyTests(TestCase):
         )
         g, _ = Group.objects.get_or_create(name='Contabilidad')
         self.contable.groups.add(g)
-        GastoAprobador.objects.create(user=self.aprobador, empresa=self.empresa, activo=True)
+        GastoAprobador.objects.create(
+            user=self.aprobador, empresa=self.empresa, activo=True, telefono='573001112233',
+        )
         GastoContableNotificacion.objects.create(
             user=self.contable, empresa=self.empresa, activo=True,
         )
@@ -74,10 +78,15 @@ class GastoN8nNotifyTests(TestCase):
         mock_post.assert_called_once()
         url, kwargs = mock_post.call_args[0][0], mock_post.call_args[1]
         self.assertEqual(url, N8N_SETTINGS['N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION'])
+        self.assertEqual(
+            (kwargs.get('headers') or {}).get('Authorization'),
+            'Bearer test-n8n-token',
+        )
         payload = kwargs['json']
         self.assertEqual(payload['event'], 'gasto_alegra.pendiente_aprobacion')
         self.assertEqual(len(payload['recipients']), 1)
         self.assertEqual(payload['recipients'][0]['email'], 'aprobador@test.co')
+        self.assertEqual(payload['recipients'][0]['telefono'], '573001112233')
         self.assertEqual(payload['assigned_by']['user_id'], self.contable.pk)
         self.assertIn('https://app.test/accounting/gastos-alegra/aprobar/', payload['links']['aprobar'])
 

@@ -22,9 +22,9 @@ class adminConciliaciones(admin.ModelAdmin):
     
 @admin.register(models.GastoAprobador)
 class adminGastoAprobador(admin.ModelAdmin):
-    list_display = ['pk', 'user', 'empresa', 'activo']
+    list_display = ['pk', 'user', 'empresa', 'telefono', 'activo']
     list_filter = ['activo', 'empresa']
-    search_fields = ['user__username', 'user__email', 'empresa__pk']
+    search_fields = ['user__username', 'user__email', 'empresa__pk', 'telefono']
     autocomplete_fields = ['user']
 
 

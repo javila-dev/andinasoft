@@ -11,7 +11,7 @@ Documentación del módulo `alegra_integration` y flujos relacionados en `accoun
 | Egresos `POST /payments` | [Egresos — pagos](#pagos-accountingpagos) | `builders.py` → `ExpensePaymentBuilder` |
 | Intercompany | [Intercompany](#pagos-y-transferencias-intercompany) | `builders.py`, `cuentas_intercompanias` |
 | Webhooks facturas compra | [Webhooks](#webhooks-facturas-de-compra) | `webhook_bills.py`, `bill_mapping.py`, `bill_pdf.py` |
-| Avisos n8n gastos Alegra | [Aprobación gastos Alegra — n8n](#notificaciones-n8n-salientes-gastos-alegra) | `accounting/gasto_n8n_notify.py` |
+| Avisos n8n gastos Alegra | [Aprobación gastos Alegra](#aprobación-gastos-alegra) (modelos Admin, payloads, flujo n8n) | `accounting/gasto_n8n_notify.py` |
 | Radicado journal CxP | [Radicados y tipos](#radicados-facturas-y-tipos-en-alegra) | `accounting/journal_cxp.py` |
 | Recibos (numeración OK) | [Recibos](#recibos-de-caja) | `ReceiptPaymentBuilder` — usa `numberTemplate` |
 | Tests | [Comandos](#comandos-de-verificación) | `alegra_integration/tests.py` |
@@ -70,7 +70,8 @@ alegra_integration/
 **Accounting relacionado:**
 
 - `accounting/journal_cxp.py` — extracción CxP de journals Alegra, `alegra_journal_detalle`, mapeo PUC→categoría.
-- `accounting/gasto_aprobacion*.py` — aprobación gastos webhook.
+- `accounting/gasto_aprobacion*.py`, `gasto_n8n_notify.py`, `gasto_poll.py` — aprobación gastos Alegra, webhooks n8n, polling in-app.
+- Admin: `GastoAprobador` (incl. `telefono`), `GastoContableNotificacion`.
 - Campos en `Facturas`: `alegra_bill_id`, `alegra_document_type`, `alegra_journal_detalle`, …
 - Campos en `Pagos`: `alegra_payment_id` (migración `0086`).
 
@@ -340,7 +341,47 @@ python manage.py backfill_webhook_inbound.py  # ver comando
 
 ## Aprobación gastos Alegra
 
-UI: `/accounting/gastos-alegra/asignar/`, `/accounting/gastos-alegra/aprobar/`. Tope `empresas.alegra_gasto_max_sin_aprobador`. Aprobadores: modelo `GastoAprobador` (Admin). Destinatarios avisos contables: `GastoContableNotificacion` (Admin, por empresa).
+**UI:** `/accounting/gastos-alegra/asignar/` (Contabilidad), `/accounting/gastos-alegra/aprobar/` (aprobador asignado).  
+**Tope sin aprobador:** `empresas.alegra_gasto_max_sin_aprobador` (Admin → empresas).
+
+Estados en `Facturas.gasto_aprobacion_estado`: `pendiente_asignacion` → `pendiente_aprobacion` → `aprobado` (o auto-aprobado al asignar sin aprobador si el valor ≤ tope).
+
+### Modelos Admin (destinatarios y teléfono)
+
+| Modelo | Admin | Para qué |
+|--------|-------|----------|
+| `GastoAprobador` | Aprobadores de gasto Alegra | Quién puede ser asignado como aprobador. Campo **`telefono`** (ej. `573001234567`, sin `+`) → va en `recipients[].telefono` del webhook **pendiente_aprobacion** para WhatsApp en n8n. Prioridad: fila de la **misma empresa** del radicado; si no hay, fila con empresa vacía (todas). |
+| `GastoContableNotificacion` | Notificaciones contables gasto Alegra | Quién recibe el webhook **pendiente_asignacion** y el polling in-app. Sin filas activas para la empresa → no se envía POST a n8n. |
+
+Los grupos Django **Contabilidad** / permisos de facturas controlan la **UI** de asignar; los avisos n8n usan solo las tablas anteriores.
+
+### Flujo n8n (resumen)
+
+```mermaid
+sequenceDiagram
+    participant Alegra
+    participant Andina
+    participant n8n
+    participant Aprobador
+
+    Alegra->>Andina: webhook new-bill
+    Andina->>n8n: POST pendiente_asignacion (contables)
+    Note over n8n: email/WhatsApp a recipients[]
+
+    Andina->>Andina: contable asigna oficina + aprobador
+    Andina->>n8n: POST pendiente_aprobacion (telefono en recipient)
+    n8n->>Aprobador: WhatsApp recipients[0].telefono
+    Aprobador->>n8n: confirma sí
+    n8n->>Andina: POST /webhooks/n8n/gasto-aprobacion
+```
+
+| Paso | Dirección | URL / evento |
+|------|-----------|----------------|
+| 1 | Andina → n8n | `event: gasto_alegra.pendiente_asignacion` |
+| 2 | Andina → n8n | `event: gasto_alegra.pendiente_aprobacion` (incluye `recipients[0].telefono`) |
+| 3 | n8n → Andina | `POST /accounting/webhooks/n8n/gasto-aprobacion` |
+
+Detalle de payloads: [Notificaciones n8n salientes](#notificaciones-n8n-salientes-gastos-alegra). Guía operativa: `docs/n8n-alegra-gasto-notifications.md`.
 
 ### Avisos in-app (polling)
 
@@ -367,7 +408,33 @@ Estas rutas son **entrada a Django** (sesión + CSRF). **No** son webhooks n8n.
 
 `GET /accounting/ajax/gastos-alegra/sugerencias-asignacion`
 
-Query: `radicado` (pk del pendiente) **o** `empresa` + `id_tercero`. Devuelve los **5 últimos** radicados Alegra del mismo NIT/CC ya asignados (misma empresa), y sugiere oficina (la del más reciente) y `aprobador_id` (el del más reciente que tuvo aprobador). La UI de asignar muestra el historial en letra pequeña y precarga los selects.
+Query: `radicado` (pk del pendiente) **o** `empresa` + `id_tercero`.
+
+**Respuesta 200:**
+
+```json
+{
+  "historial": [
+    {
+      "pk": 17300,
+      "nombretercero": "PROVEEDOR SA",
+      "oficina": "MEDELLIN",
+      "valor": 120000,
+      "descripcion": "Servicios consultoría…",
+      "aprobador_id": 5,
+      "aprobador_label": "Jefe Área",
+      "sin_aprobador": false,
+      "fecharadicado": "2026-04-15"
+    }
+  ],
+  "sugerencia": {
+    "oficina": "MEDELLIN",
+    "aprobador_id": 5
+  }
+}
+```
+
+Hasta **5** ítems en `historial` (mismo `idtercero` + empresa, ya asignados). La UI muestra el historial en letra pequeña y precarga oficina/aprobador según `sugerencia`.
 
 #### Asignar oficina y aprobador (Contabilidad)
 
@@ -469,8 +536,16 @@ Errores habituales: `403` sin permiso / no es el aprobador asignado; `400` estad
 
 `POST /accounting/webhooks/n8n/gasto-aprobacion`  
 `Content-Type: application/json`  
-`X-Andina-Webhook-Secret: <valor de N8N_WEBHOOK_GASTO_APROBACION_SECRET en .env>`  
-Sin sesión Django ni CSRF (`@csrf_exempt`). Si el secreto no está configurado o no coincide → `401`.
+Sin sesión Django ni CSRF (`@csrf_exempt`).
+
+**Autenticación (una de dos):**
+
+| Método | Header |
+|--------|--------|
+| API Token (recomendado si ya usas `api_auth`) | `Authorization: Token <clave APIToken>` |
+| Secreto dedicado | `X-Andina-Webhook-Secret: <N8N_WEBHOOK_GASTO_APROBACION_SECRET>` |
+
+Sin ninguna configuración válida → `401`.
 
 **Body que espera Andina:**
 
@@ -490,7 +565,13 @@ Sin sesión Django ni CSRF (`@csrf_exempt`). Si el secreto no está configurado 
 | `aprobador_user_id` | int | sí | Debe ser el `gasto_aprobador_asignado` y usuario activo en `GastoAprobador` |
 | `canal` | string | no | Default `WhatsApp/n8n`; se guarda en `history_facturas` |
 
-En n8n, usa `recipients[0].user_id` del webhook **pendiente_aprobacion** como `aprobador_user_id`, y `factura.pk` como `radicado`.
+**Mapeo desde el webhook `pendiente_aprobacion`:**
+
+| Campo del POST a Andina | Expresión n8n (ejemplo) |
+|-------------------------|-------------------------|
+| `radicado` | `{{ $json.factura.pk }}` |
+| `aprobador_user_id` | `{{ $json.recipients[0].user_id }}` |
+| WhatsApp al aprobador | `{{ $json.recipients[0].telefono }}` (requiere `GastoAprobador.telefono` en Admin) |
 
 **Respuesta 200:**
 
@@ -508,9 +589,9 @@ En n8n, usa `recipients[0].user_id` del webhook **pendiente_aprobacion** como `a
 }
 ```
 
-**Flujo WhatsApp sugerido en n8n:** Webhook `pendiente_aprobacion` → mensaje al aprobador → si responde sí → HTTP Request a esta URL con el body anterior.
+**Flujo WhatsApp sugerido en n8n:** nodo Webhook `alegra-gasto-pendiente-aprobacion` (con Header Auth = `N8N_WEBHOOK_AUTH_TOKEN`) → mensaje a `recipients[0].telefono` → si confirma → HTTP Request `POST` a Andina con `Authorization: Token …` (APIToken) o `X-Andina-Webhook-Secret`.
 
-Variable de entorno: `N8N_WEBHOOK_GASTO_APROBACION_SECRET` (mismo valor en el header del nodo HTTP de n8n).
+**Andina → n8n (todos los POST salientes, incl. gastos Alegra y upload movimientos):** envían `Authorization: {N8N_WEBHOOK_AUTH_PREFIX} {N8N_WEBHOOK_AUTH_TOKEN}` si el token está en `.env`. Código: `accounting/n8n_http.py`.
 
 ---
 
@@ -518,11 +599,40 @@ Variable de entorno: `N8N_WEBHOOK_GASTO_APROBACION_SECRET` (mismo valor en el he
 
 Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N8N_ALEGRA_NOTIFICATIONS_ENABLED=1`. Código: `accounting/gasto_n8n_notify.py`. Copia extendida: `docs/n8n-alegra-gasto-notifications.md`.
 
-| Variable | URL por defecto |
-|----------|-----------------|
-| `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION` | `{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-asignacion` |
-| `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION` | `{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-aprobacion` |
-| `ANDINA_PUBLIC_BASE_URL` | Base para `links.asignar` / `links.aprobar` (si vacío → path relativo) |
+#### Variables de entorno
+
+| Variable | Uso |
+|----------|-----|
+| `N8N_ALEGRA_NOTIFICATIONS_ENABLED` | `1` / `True` para enviar webhooks salientes |
+| `N8N_BASE_URL` | Base n8n (solo referencia al armar URLs) |
+| `N8N_WEBHOOK_AUTH_TOKEN` | Token **saliente** (Andina → n8n): `Authorization: {prefix} {token}`. Usado en gastos Alegra, `N8N_WEBHOOK_UPLOAD_MOVEMENTS`, wompi/plink |
+| `N8N_WEBHOOK_AUTH_PREFIX` | `Bearer` (default) o `Token` |
+| `N8N_WEBHOOK_UPLOAD_MOVEMENTS` | URL webhook carga movimientos bancarios |
+| `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION` | URL Webhook n8n — contables |
+| `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION` | URL Webhook n8n — aprobador (puede ser `/webhook-test/<uuid>`) |
+| `N8N_WEBHOOK_GASTO_APROBACION_SECRET` | **Entrante** opcional: `X-Andina-Webhook-Secret`. O usar `Authorization: Token` (`APIToken` Admin) |
+| `ANDINA_PUBLIC_BASE_URL` | Base absoluta para `links.asignar` / `links.aprobar` (si vacío → path relativo) |
+
+#### Objeto `recipients[]` (todos los eventos)
+
+Cada destinatario incluye siempre:
+
+| Campo | Tipo | Notas |
+|-------|------|--------|
+| `role` | string | `contabilidad` o `aprobador` |
+| `user_id` | int | PK usuario Django |
+| `username` | string | |
+| `email` | string | Puede estar vacío |
+| `name` | string | Nombre completo o username |
+| `telefono` | string | **Aprobador:** `GastoAprobador.telefono`. **Contable:** `""` (no configurado hoy) |
+
+#### Cuándo se dispara cada evento
+
+| `event` | Dispara | No dispara |
+|---------|---------|------------|
+| `gasto_alegra.pendiente_asignacion` | `new-bill` crea radicado; import bill nuevo; `no_aplica`→`pendiente_asignacion` | `new-bill` idempotente; sin filas en `GastoContableNotificacion` |
+| `gasto_alegra.pendiente_aprobacion` | Asignación con aprobador (`POST .../asignar`) | Asignación sin aprobador (auto-aprobado) |
+| *(aprobación)* | n8n llama `POST .../gasto-aprobacion` | UI web `/ajax/gastos-alegra/aprobar` (no envía webhook saliente) |
 
 #### 1) Lo que **recibes en n8n** — pendiente asignación (contables)
 
@@ -566,7 +676,8 @@ Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N
       "user_id": 12,
       "username": "contable1",
       "email": "contable1@empresa.co",
-      "name": "María Contable"
+      "name": "María Contable",
+      "telefono": ""
     }
   ],
   "links": {
@@ -587,8 +698,15 @@ Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N
 |-------|--------|
 | `trigger` | `webhook_new_bill` (webhook Alegra), `import_bill` (`import_alegra_bill`), o idempotente `no_aplica`→`pendiente_asignacion` |
 | `recipients` | Usuarios activos en `GastoContableNotificacion` para esa `empresa.nit`; si vacío, **no se envía** el POST |
+| `recipients[].telefono` | Siempre presente; vacío para contables |
 | `alegra_bill` | Solo si hubo snapshot del bill en el webhook/import; puede faltar |
 | `factura.soporte_pdf_listo` | `true` si ya hay archivo en `soporte_radicado` (el PDF async puede llegar después) |
+| `factura.soporte_pdf_url` | URL en **Andina** para descarga por n8n (`GET .../webhooks/n8n/gastos-alegra/soporte-pdf/<radicado>`). No expone el bucket S3 privado |
+| `links.soporte_pdf` | Misma URL; en n8n **HTTP Request** GET con `Authorization: Bearer <N8N_WEBHOOK_AUTH_TOKEN>` (igual que el POST saliente) |
+
+Opcional en `.env`: `N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY=True` intenta descargar el PDF desde Alegra **antes** del POST a n8n (más lento; solo bills Alegra).
+
+**No** se envía el PDF en base64 dentro del JSON (payload muy pesado). n8n descarga por URL.
 
 #### 2) Lo que **recibes en n8n** — pendiente aprobación (aprobador)
 
@@ -631,7 +749,8 @@ Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N
     "user_id": 8,
     "username": "contable1",
     "email": "contable1@empresa.co",
-    "name": "María Contable"
+    "name": "María Contable",
+    "telefono": ""
   },
   "recipients": [
     {
@@ -639,7 +758,8 @@ Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N
       "user_id": 5,
       "username": "jefe.area",
       "email": "jefe@empresa.co",
-      "name": "Jefe Área"
+      "name": "Jefe Área",
+      "telefono": "573001234567"
     }
   ],
   "links": {
@@ -652,11 +772,18 @@ Django hace `POST` JSON fire-and-forget hacia n8n (timeout 5 s). Activación: `N
 |-------|--------|
 | `trigger` | Siempre `asignacion_contable` hoy |
 | `recipients` | Un solo usuario: `gasto_aprobador_asignado` |
-| `assigned_by` | Contable que llamó `POST .../asignar` |
+| `recipients[].telefono` | **`GastoAprobador.telefono`** (fila empresa del radicado o fila global); obligatorio en Admin para WhatsApp; si vacío, n8n no tiene número |
+| `assigned_by` | Contable que llamó `POST .../asignar` (`telefono` vacío) |
+
+**n8n — campos útiles del payload:**
+
+- Mensaje: `factura.nombretercero`, `factura.nrofactura`, `factura.valor`, `factura.descripcion`, `links.aprobar`
+- WhatsApp: `recipients[0].telefono`
+- Aprobar en Andina: `factura.pk`, `recipients[0].user_id`
 
 #### 3) Aprobación desde n8n → Andina
 
-Andina **no** envía webhook al aprobar; n8n **llama** a Andina con `POST /accounting/webhooks/n8n/gasto-aprobacion` (ver arriba).
+Andina **no** envía webhook al aprobar en UI ni al recibir la aprobación por n8n. Solo **n8n** llama a Andina: `POST /accounting/webhooks/n8n/gasto-aprobacion` (contrato en [Aprobar desde n8n / WhatsApp](#aprobar-desde-n8n--whatsapp-andina-recibe-de-n8n)).
 
 ---
 

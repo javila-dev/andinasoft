@@ -53,6 +53,7 @@ from accounting.gasto_aprobacion_views import (
     ajax_gastos_alegra_bill_preview,
     ajax_gastos_alegra_journal_detalle_radicado,
     webhook_n8n_gasto_aprobacion,
+    webhook_n8n_gasto_soporte_pdf,
 )
 from decimal import Decimal, InvalidOperation
 from apis.nominapp.nominapp_api import period
@@ -6530,10 +6531,13 @@ def _get_wompi_count_from_n8n(empresa_id):
     """
     import requests
     try:
+        from accounting.n8n_http import n8n_outbound_headers
+
         response = requests.get(
             settings.N8N_WEBHOOK_WOMPI_COUNT,
             params={'empresa_id': empresa_id},
-            timeout=10
+            headers=n8n_outbound_headers(),
+            timeout=10,
         )
 
         if response.status_code == 200:
@@ -6559,10 +6563,13 @@ def _get_plink_count_from_n8n(empresa_id):
     """
     import requests
     try:
+        from accounting.n8n_http import n8n_outbound_headers
+
         response = requests.get(
             settings.N8N_WEBHOOK_PLINK_COUNT,
             params={'empresa_id': empresa_id},
-            timeout=10
+            headers=n8n_outbound_headers(),
+            timeout=10,
         )
 
         if response.status_code == 200:
@@ -6815,10 +6822,13 @@ def api_upload_movements(request):
         }
 
         # Llamar webhook n8n sin esperar respuesta (timeout corto)
+        from accounting.n8n_http import n8n_outbound_headers
+
         response = requests.post(
             webhook_url,
             files=files,
             data=data,
+            headers=n8n_outbound_headers(),
             timeout=10  # Solo 10 segundos para iniciar el proceso
         )
 
@@ -6911,6 +6921,10 @@ urls = [
     path('ajax/gastos-alegra/asignar', ajax_gastos_alegra_asignar),
     path('ajax/gastos-alegra/aprobar', ajax_gastos_alegra_aprobar),
     path('webhooks/n8n/gasto-aprobacion', webhook_n8n_gasto_aprobacion),
+    path(
+        'webhooks/n8n/gastos-alegra/soporte-pdf/<int:radicado_pk>',
+        webhook_n8n_gasto_soporte_pdf,
+    ),
     path('principal',principal),
     path('movements',movimientos),
     path('upload-movements',upload_movements),

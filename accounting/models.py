@@ -43,6 +43,12 @@ class GastoAprobador(models.Model):
         help_text='Vacío = puede aprobar gastos de cualquier empresa.',
     )
     activo = models.BooleanField(default=True)
+    telefono = models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        help_text='WhatsApp / SMS para n8n (ej. 573001234567, sin +).',
+    )
 
     class Meta:
         verbose_name = 'Aprobador de gasto Alegra'

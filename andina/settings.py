@@ -271,8 +271,13 @@ N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION = os.getenv(
     f'{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-aprobacion',
 )
 N8N_ALEGRA_NOTIFICATIONS_ENABLED = env_bool('N8N_ALEGRA_NOTIFICATIONS_ENABLED', LIVE)
+# Si True, intenta GET Alegra /bills/{id} antes del POST n8n para incluir soporte_pdf_url (más lento).
+N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY = env_bool('N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY', False)
 ANDINA_PUBLIC_BASE_URL = os.getenv('ANDINA_PUBLIC_BASE_URL', '').rstrip('/')
-# Secreto para que n8n apruebe gastos (WhatsApp, etc.): header X-Andina-Webhook-Secret
+# Token para llamar webhooks n8n (upload movimientos, gastos Alegra, etc.): header Authorization
+N8N_WEBHOOK_AUTH_TOKEN = os.getenv('N8N_WEBHOOK_AUTH_TOKEN', os.getenv('N8N_API_TOKEN', '')).strip()
+N8N_WEBHOOK_AUTH_PREFIX = os.getenv('N8N_WEBHOOK_AUTH_PREFIX', 'Bearer').strip() or 'Bearer'
+# Entrante: n8n → Andina (aprobar gasto). Alternativa: Authorization: Token <APIToken en Admin>
 N8N_WEBHOOK_GASTO_APROBACION_SECRET = os.getenv('N8N_WEBHOOK_GASTO_APROBACION_SECRET', '').strip()
 
 # ─── Logging ──────────────────────────────────────────────────────────────────

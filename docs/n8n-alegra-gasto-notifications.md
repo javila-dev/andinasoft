@@ -13,7 +13,9 @@ Los flujos de email/WhatsApp/Slack los construyes en n8n; acá solo se define el
 | `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION` | URL webhook aprobador | `{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-aprobacion` |
 | `N8N_ALEGRA_NOTIFICATIONS_ENABLED` | Activa/desactiva envíos | `False` en dev, `True` si `LIVE=1` |
 | `ANDINA_PUBLIC_BASE_URL` | Base para links en el payload | vacío → paths relativos |
-| `N8N_WEBHOOK_GASTO_APROBACION_SECRET` | Secreto inbound (n8n → Andina, aprobar por WhatsApp) | vacío → endpoint rechaza con 401 |
+| `N8N_WEBHOOK_AUTH_TOKEN` | Token outbound (Andina → n8n), header `Authorization` | vacío → sin header (como antes) |
+| `N8N_WEBHOOK_AUTH_PREFIX` | `Bearer` o `Token` | `Bearer` |
+| `N8N_WEBHOOK_GASTO_APROBACION_SECRET` | Inbound opcional (`X-Andina-Webhook-Secret`) | o `Authorization: Token` con APIToken |
 
 ## Destinatarios
 
@@ -25,7 +27,7 @@ Si no hay filas activas para la empresa, **no se envía** el webhook (se registr
 
 ### Aprobadores (`pendiente_aprobacion`)
 
-El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoAprobador` autoriza quién puede ser asignado).
+El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoAprobador` autoriza quién puede ser asignado). En Admin, complete **Teléfono** en la fila del aprobador (misma empresa o global); n8n lo recibe en `recipients[0].telefono` (formato sugerido: `573001234567`, sin `+`).
 
 ## Cuándo se dispara cada evento
 
@@ -37,12 +39,22 @@ El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoA
 | `gasto_alegra.pendiente_aprobacion` | Contabilidad asigna oficina **con** aprobador | Asignación sin aprobador (auto-aprobado) |
 | Aprobación WhatsApp | n8n → `POST /accounting/webhooks/n8n/gasto-aprobacion` | UI web con sesión (`/ajax/gastos-alegra/aprobar`) |
 
-**PDF:** puede descargarse en un `on_commit` posterior. El payload incluye `factura.soporte_pdf_listo` (boolean).
+**PDF:** puede descargarse en un `on_commit` posterior. El payload incluye `factura.soporte_pdf_listo` y, si ya hay archivo, `factura.soporte_pdf_url` + `links.soporte_pdf` apuntan a **Andina** (no al bucket S3 privado):
+
+`GET {ANDINA_PUBLIC_BASE_URL}/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/<radicado>`
+
+En n8n, nodo **HTTP Request** GET con el **mismo** header `Authorization: Bearer <N8N_WEBHOOK_AUTH_TOKEN>` que el webhook saliente (o `X-Andina-Webhook-Secret` / `Token` APIToken). La app lee el PDF con credenciales AWS y lo devuelve en streaming.
+
+Opcional: `N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY=True` en `.env` para intentar bajar el PDF de Alegra antes del POST.
 
 ## POST entrante — Aprobar desde n8n (Andina recibe)
 
 **URL:** `POST https://<andina>/accounting/webhooks/n8n/gasto-aprobacion`  
-**Header:** `X-Andina-Webhook-Secret: <N8N_WEBHOOK_GASTO_APROBACION_SECRET>`
+**Auth:** `Authorization: Bearer <N8N_WEBHOOK_AUTH_TOKEN>` (mismo que saliente) **o** `Authorization: Token <APIToken>` **o** `X-Andina-Webhook-Secret: <N8N_WEBHOOK_GASTO_APROBACION_SECRET>`
+
+**Saliente (Andina → n8n):** `Authorization: {N8N_WEBHOOK_AUTH_PREFIX} {N8N_WEBHOOK_AUTH_TOKEN}` en todos los POST (mismo token que el Header Auth del Webhook en n8n).
+
+**Descarga PDF (n8n → Andina):** `GET .../webhooks/n8n/gastos-alegra/soporte-pdf/<radicado>` con la misma auth (ver `links.soporte_pdf` en el payload).
 
 ```json
 {
@@ -154,7 +166,8 @@ Valores de `trigger`: `webhook_new_bill`, `import_bill`.
       "user_id": 5,
       "username": "jefe.area",
       "email": "jefe@empresa.co",
-      "name": "Jefe Área"
+      "name": "Jefe Área",
+      "telefono": "573001234567"
     }
   ],
   "links": {

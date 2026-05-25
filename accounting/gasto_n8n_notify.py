@@ -7,7 +7,10 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
-from accounting.models import Facturas, GastoContableNotificacion
+from django.db.models import Q
+
+from accounting.models import Facturas, GastoAprobador, GastoContableNotificacion
+from accounting.n8n_http import n8n_outbound_headers
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +23,36 @@ def contables_notificacion_para_empresa(empresa_id):
     ).select_related('user', 'empresa')
 
 
-def _user_recipient(user, role):
+def _user_recipient(user, role, *, telefono=''):
     name = (user.get_full_name() or '').strip() or user.username
-    return {
+    data = {
         'role': role,
         'user_id': user.pk,
         'username': user.username,
         'email': (user.email or '').strip(),
         'name': name,
+        'telefono': (telefono or '').strip(),
     }
+    return data
+
+
+def _gasto_aprobador_entry(user, empresa_id):
+    """Fila GastoAprobador: empresa específica o global (empresa vacía)."""
+    if not user:
+        return None
+    empresa_id = str(empresa_id or '').strip()
+    base = GastoAprobador.objects.filter(user=user, activo=True)
+    if empresa_id:
+        entry = base.filter(empresa_id=empresa_id).first()
+        if entry:
+            return entry
+    return base.filter(empresa__isnull=True).first()
+
+
+def _aprobador_recipient(user, empresa_id):
+    entry = _gasto_aprobador_entry(user, empresa_id)
+    telefono = (entry.telefono or '').strip() if entry else ''
+    return _user_recipient(user, 'aprobador', telefono=telefono)
 
 
 def _public_url(path):
@@ -48,14 +72,69 @@ def _empresa_payload(factura):
     }
 
 
+def _try_attach_soporte_from_alegra(factura):
+    """Opcional: descarga PDF de Alegra antes del POST a n8n (N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY)."""
+    if factura.soporte_radicado:
+        return
+    if not getattr(settings, 'N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY', False):
+        return
+    if (factura.origen or '').strip() != 'Alegra':
+        return
+    from alegra_integration.bill_mapping import (
+        ALEGRA_DOC_BILL,
+        infer_alegra_document_type,
+        parse_alegra_bill_id_for_api,
+    )
+
+    doc_type = (factura.alegra_document_type or '').strip() or infer_alegra_document_type(
+        factura.alegra_bill_id,
+    )
+    if doc_type != ALEGRA_DOC_BILL:
+        return
+    _, alegra_numeric_id = parse_alegra_bill_id_for_api(factura.alegra_bill_id)
+    if not alegra_numeric_id:
+        return
+    try:
+        from alegra_integration.bill_pdf import attach_bill_pdf_from_alegra
+
+        attach_bill_pdf_from_alegra(factura.empresa, alegra_numeric_id, factura)
+        factura.refresh_from_db(fields=['soporte_radicado'])
+    except Exception:
+        logger.exception(
+            'n8n gasto: no se pudo adjuntar soporte Alegra factura_pk=%s',
+            factura.pk,
+        )
+
+
+def _soporte_pdf_url(factura):
+    """
+    URL para que n8n descargue el PDF vía la app (lee S3 privado con credenciales del servidor).
+    GET con el mismo Authorization Bearer que el webhook saliente.
+    """
+    _try_attach_soporte_from_alegra(factura)
+    factura.refresh_from_db(fields=['soporte_radicado'])
+    if not factura.soporte_radicado:
+        return ''
+    return _public_url(f'/accounting/webhooks/n8n/gastos-alegra/soporte-pdf/{factura.pk}')
+
+
 def _factura_payload(factura):
     from accounting.gasto_aprobacion import factura_a_dict
 
     data = dict(factura_a_dict(factura))
     data['idtercero'] = factura.idtercero or ''
     data['origen'] = factura.origen or ''
-    data['soporte_pdf_listo'] = bool(factura.soporte_radicado)
+    data['soporte_pdf_url'] = _soporte_pdf_url(factura)
+    data['soporte_pdf_listo'] = bool(data['soporte_pdf_url'])
     return data
+
+
+def _notification_links(factura, *, base_links):
+    links = dict(base_links)
+    url = _soporte_pdf_url(factura)
+    if url:
+        links['soporte_pdf'] = url
+    return links
 
 
 def build_alegra_bill_snapshot(bill):
@@ -108,7 +187,10 @@ def _post_n8n(url, payload):
         logger.warning('n8n gasto notify: URL vacía, event=%s', payload.get('event'))
         return
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        timeout = 25 if getattr(settings, 'N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY', False) else 5
+        response = requests.post(
+            url, json=payload, headers=n8n_outbound_headers(content_type_json=True), timeout=timeout,
+        )
         if response.status_code >= 400:
             logger.warning(
                 'n8n gasto notify HTTP %s event=%s factura_pk=%s body=%s',
@@ -143,7 +225,9 @@ def notify_gasto_pendiente_asignacion(factura_pk, *, trigger, alegra_bill_snapsh
             return
         recipients = [_user_recipient(e.user, 'contabilidad') for e in entries]
         extra = {
-            'links': {'asignar': _public_url('/accounting/gastos-alegra/asignar/')},
+            'links': _notification_links(
+                factura, base_links={'asignar': _public_url('/accounting/gastos-alegra/asignar/')},
+            ),
         }
         if alegra_bill_snapshot:
             extra['alegra_bill'] = alegra_bill_snapshot
@@ -183,7 +267,9 @@ def notify_gasto_pendiente_aprobacion(factura_pk, *, assigned_by_user_id, trigge
             if u:
                 assigned_by = _user_recipient(u, 'contabilidad')
         extra = {
-            'links': {'aprobar': _public_url('/accounting/gastos-alegra/aprobar/')},
+            'links': _notification_links(
+                factura, base_links={'aprobar': _public_url('/accounting/gastos-alegra/aprobar/')},
+            ),
         }
         if assigned_by:
             extra['assigned_by'] = assigned_by
@@ -191,7 +277,7 @@ def notify_gasto_pendiente_aprobacion(factura_pk, *, assigned_by_user_id, trigge
             factura,
             event='gasto_alegra.pendiente_aprobacion',
             trigger=trigger,
-            recipients=[_user_recipient(aprobador, 'aprobador')],
+            recipients=[_aprobador_recipient(aprobador, factura.empresa_id)],
             extra=extra,
         )
         _post_n8n(settings.N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION, payload)
