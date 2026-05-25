@@ -41,6 +41,8 @@ from accounting.gasto_aprobacion import alegra_sin_aprobacion_q
 from accounting.gasto_aprobacion_views import (
     gastos_alegra_asignar,
     gastos_alegra_aprobar,
+    ajax_gastos_alegra_notificaciones_poll,
+    ajax_gastos_alegra_sugerencias_asignacion,
     ajax_gastos_alegra_pendientes_asignar,
     ajax_gastos_alegra_pendientes_aprobar,
     ajax_gastos_alegra_aprobadores,
@@ -50,6 +52,7 @@ from accounting.gasto_aprobacion_views import (
     ajax_gastos_alegra_journal_preview,
     ajax_gastos_alegra_bill_preview,
     ajax_gastos_alegra_journal_detalle_radicado,
+    webhook_n8n_gasto_aprobacion,
 )
 from decimal import Decimal, InvalidOperation
 from apis.nominapp.nominapp_api import period
@@ -6896,6 +6899,8 @@ urls = [
     path('alegra/', include('alegra_integration.urls')),
     path('gastos-alegra/asignar/', gastos_alegra_asignar),
     path('gastos-alegra/aprobar/', gastos_alegra_aprobar),
+    path('ajax/gastos-alegra/notificaciones-poll', ajax_gastos_alegra_notificaciones_poll),
+    path('ajax/gastos-alegra/sugerencias-asignacion', ajax_gastos_alegra_sugerencias_asignacion),
     path('ajax/gastos-alegra/pendientes-asignar', ajax_gastos_alegra_pendientes_asignar),
     path('ajax/gastos-alegra/pendientes-aprobar', ajax_gastos_alegra_pendientes_aprobar),
     path('ajax/gastos-alegra/aprobadores', ajax_gastos_alegra_aprobadores),
@@ -6905,6 +6910,7 @@ urls = [
     path('ajax/gastos-alegra/journal-detalle-radicado', ajax_gastos_alegra_journal_detalle_radicado),
     path('ajax/gastos-alegra/asignar', ajax_gastos_alegra_asignar),
     path('ajax/gastos-alegra/aprobar', ajax_gastos_alegra_aprobar),
+    path('webhooks/n8n/gasto-aprobacion', webhook_n8n_gasto_aprobacion),
     path('principal',principal),
     path('movements',movimientos),
     path('upload-movements',upload_movements),

@@ -53,6 +53,7 @@
           {%include 'navbar_simply.html'%}
           <main class='pl-md-3 pl-lg-5'>
             {%include 'alert_right.html'%}
+            {% if user.is_authenticated %}{% include 'accounting/_gasto_alegra_poll.html' %}{% endif %}
             {%block content%}{%endblock%}
           </main>
         </div>

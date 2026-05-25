@@ -272,6 +272,8 @@ N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION = os.getenv(
 )
 N8N_ALEGRA_NOTIFICATIONS_ENABLED = env_bool('N8N_ALEGRA_NOTIFICATIONS_ENABLED', LIVE)
 ANDINA_PUBLIC_BASE_URL = os.getenv('ANDINA_PUBLIC_BASE_URL', '').rstrip('/')
+# Secreto para que n8n apruebe gastos (WhatsApp, etc.): header X-Andina-Webhook-Secret
+N8N_WEBHOOK_GASTO_APROBACION_SECRET = os.getenv('N8N_WEBHOOK_GASTO_APROBACION_SECRET', '').strip()
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 

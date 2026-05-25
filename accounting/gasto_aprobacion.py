@@ -152,7 +152,67 @@ def factura_a_dict(fac):
         'gasto_aprobador_asignado': (
             fac.gasto_aprobador_asignado.get_full_name() or fac.gasto_aprobador_asignado.username
         ) if fac.gasto_aprobador_asignado_id else '',
+        'idtercero': fac.idtercero or '',
     }
+
+
+HISTORICO_ASIGNACION_LIMIT = 5
+
+
+def _qs_historico_asignacion_alegra(empresa_id, id_tercero, *, exclude_pk=None):
+    empresa_id = str(empresa_id or '').strip()
+    id_tercero = str(id_tercero or '').strip()
+    if not empresa_id or not id_tercero:
+        return Facturas.objects.none()
+    qs = (
+        Facturas.objects.filter(
+            origen='Alegra',
+            empresa_id=empresa_id,
+            idtercero=id_tercero,
+            oficina__in=('MONTERIA', 'MEDELLIN'),
+        )
+        .exclude(gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION)
+        .select_related('gasto_aprobador_asignado')
+        .order_by('-gasto_asignado_en', '-pk')
+    )
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs
+
+
+def _historial_item_dict(fac):
+    aprobador = fac.gasto_aprobador_asignado
+    return {
+        'pk': fac.pk,
+        'nombretercero': fac.nombretercero or '',
+        'oficina': fac.oficina or '',
+        'valor': fac.valor,
+        'descripcion': (fac.descripcion or '').strip(),
+        'aprobador_id': fac.gasto_aprobador_asignado_id,
+        'aprobador_label': (
+            (aprobador.get_full_name() or aprobador.username) if aprobador else ''
+        ),
+        'sin_aprobador': not fac.gasto_aprobador_asignado_id,
+        'fecharadicado': fac.fecharadicado.isoformat() if fac.fecharadicado else '',
+    }
+
+
+def sugerencias_asignacion_gasto_alegra(empresa_id, id_tercero, *, exclude_pk=None):
+    """
+    Historial reciente del mismo tercero/empresa (ya asignados) y sugerencia de oficina/aprobador.
+    Oficina: la del radicado más reciente. Aprobador: el del más reciente que tuvo aprobador asignado.
+    """
+    qs = _qs_historico_asignacion_alegra(empresa_id, id_tercero, exclude_pk=exclude_pk)
+    facturas = list(qs[:HISTORICO_ASIGNACION_LIMIT])
+    historial = [_historial_item_dict(f) for f in facturas]
+    sugerencia = {'oficina': '', 'aprobador_id': None}
+    if facturas:
+        sugerencia['oficina'] = facturas[0].oficina or ''
+        for fac in facturas:
+            if fac.gasto_aprobador_asignado_id:
+                sugerencia['aprobador_id'] = fac.gasto_aprobador_asignado_id
+                break
+    return {'historial': historial, 'sugerencia': sugerencia}
 
 
 def _validar_fechas_radicado(fecha_factura, fecha_vencimiento):
@@ -405,18 +465,24 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
     return factura
 
 
-def aprobar_gasto_alegra(request, *, factura):
+def aprobar_gasto_alegra_para_usuario(factura, user, *, canal=''):
+    """
+    Aprueba un gasto Alegra (misma regla que la UI).
+    `canal` se anota en historial (p. ej. WhatsApp/n8n).
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        raise PermissionError('Usuario no válido.')
     if factura.origen != 'Alegra':
         raise ValueError('Solo aplica a radicados con origen Alegra.')
     if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_APROBACION:
         raise ValueError('El radicado no está pendiente de aprobación.')
-    if factura.gasto_aprobador_asignado_id != request.user.pk and not request.user.is_superuser:
+    if factura.gasto_aprobador_asignado_id != user.pk and not getattr(user, 'is_superuser', False):
         raise PermissionError('Solo el aprobador asignado puede aprobar este gasto.')
-    if not usuario_es_aprobador_gasto(request.user, factura.empresa_id):
+    if not usuario_es_aprobador_gasto(user, factura.empresa_id):
         raise PermissionError('No está autorizado como aprobador de gastos.')
 
     factura.gasto_aprobado = True
-    factura.gasto_aprobado_por = request.user
+    factura.gasto_aprobado_por = user
     factura.gasto_aprobado_en = timezone.now()
     factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_APROBADO
     factura.save(
@@ -427,10 +493,15 @@ def aprobar_gasto_alegra(request, *, factura):
             'gasto_aprobacion_estado',
         ]
     )
+    nota_canal = f' ({canal})' if (canal or '').strip() else ''
     history_facturas.objects.create(
         factura=factura,
-        usuario=request.user,
-        accion=f'Gasto aprobado para pago (oficina {factura.oficina})',
+        usuario=user,
+        accion=f'Gasto aprobado para pago (oficina {factura.oficina}){nota_canal}'[:255],
         ubicacion='Contabilidad',
     )
     return factura
+
+
+def aprobar_gasto_alegra(request, *, factura):
+    return aprobar_gasto_alegra_para_usuario(factura, request.user)

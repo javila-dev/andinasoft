@@ -13,6 +13,7 @@ Los flujos de email/WhatsApp/Slack los construyes en n8n; acá solo se define el
 | `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION` | URL webhook aprobador | `{N8N_BASE_URL}/webhook/alegra-gasto-pendiente-aprobacion` |
 | `N8N_ALEGRA_NOTIFICATIONS_ENABLED` | Activa/desactiva envíos | `False` en dev, `True` si `LIVE=1` |
 | `ANDINA_PUBLIC_BASE_URL` | Base para links en el payload | vacío → paths relativos |
+| `N8N_WEBHOOK_GASTO_APROBACION_SECRET` | Secreto inbound (n8n → Andina, aprobar por WhatsApp) | vacío → endpoint rechaza con 401 |
 
 ## Destinatarios
 
@@ -34,11 +35,30 @@ El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoA
 | | Import `import_factura_from_alegra_bill` crea radicado | Import reconcilia existente |
 | | `new-bill` idempotente que pasa de `no_aplica` → `pendiente_asignacion` | `edit-bill`, `delete-bill` |
 | `gasto_alegra.pendiente_aprobacion` | Contabilidad asigna oficina **con** aprobador | Asignación sin aprobador (auto-aprobado) |
-| *(fuera de alcance)* | — | Aprobador confirma en `aprobar_gasto_alegra` |
+| Aprobación WhatsApp | n8n → `POST /accounting/webhooks/n8n/gasto-aprobacion` | UI web con sesión (`/ajax/gastos-alegra/aprobar`) |
 
 **PDF:** puede descargarse en un `on_commit` posterior. El payload incluye `factura.soporte_pdf_listo` (boolean).
 
-## POST 1 — Pendiente asignación
+## POST entrante — Aprobar desde n8n (Andina recibe)
+
+**URL:** `POST https://<andina>/accounting/webhooks/n8n/gasto-aprobacion`  
+**Header:** `X-Andina-Webhook-Secret: <N8N_WEBHOOK_GASTO_APROBACION_SECRET>`
+
+```json
+{
+  "accion": "aprobar",
+  "radicado": 17369,
+  "aprobador_user_id": 5,
+  "canal": "WhatsApp"
+}
+```
+
+- `radicado` = `factura.pk` del webhook `pendiente_aprobacion`
+- `aprobador_user_id` = `recipients[0].user_id` del mismo evento
+
+Contrato completo y respuestas: [`alegra_api.md`](../alegra_api.md) (sección *Aprobar desde n8n / WhatsApp*).
+
+## POST saliente 1 — Pendiente asignación
 
 **URL:** `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_ASIGNACION`  
 **Content-Type:** `application/json`
@@ -96,7 +116,7 @@ Valores de `trigger`: `webhook_new_bill`, `import_bill`.
 
 `alegra_bill` puede omitirse si no hay snapshot del bill (p. ej. algunos imports).
 
-## POST 2 — Pendiente aprobación
+## POST saliente 2 — Pendiente aprobación
 
 **URL:** `N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION`
 

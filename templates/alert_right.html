@@ -6,24 +6,31 @@ style='right: 10px;top:50px;max-width: 500px'>
     </button>
 </div>
 <script>
-  function cerrarAlerta(){
-    $('#general-right-alert').removeClass('show')
-    $('#general-right-alert').removeClass('alert-danger')
-    $('#general-right-alert').removeClass('alert-success')
-    $('#general-right-alert').removeClass('alert-info')
-    $('#general-right-alert').removeClass('alert-warning')
-    $('#general-right-alert').removeClass('alert-primary')
-    $('#general-right-alert').removeClass('alert-secondary')
-    $('#general-right-alert').removeClass('alert-dark')
-    $('#general-right-alert').removeClass('alert-light')
-    $('#general-right-alert').removeClass('alert-white')
+  var ANDINA_ALERT_CLASSES = [
+    'alert-danger', 'alert-success', 'alert-info', 'alert-warning',
+    'alert-primary', 'alert-secondary', 'alert-dark', 'alert-light', 'alert-white'
+  ];
+
+  function limpiarClasesAlertaRight() {
+    var $el = $('#general-right-alert');
+    $el.removeClass('show');
+    ANDINA_ALERT_CLASSES.forEach(function (c) { $el.removeClass(c); });
   }
+
+  function cerrarAlerta() {
+    limpiarClasesAlertaRight();
+  }
+
+  window.showAndinaToast = function (title, html, alertClass) {
+    limpiarClasesAlertaRight();
+    $('#alert-title').text(title || '');
+    $('#alert-data').html(html || '');
+    $('#general-right-alert').addClass('show').addClass(alertClass || 'alert-info');
+  };
+
   $(document).ready(function(){
     if('{{topalert.alert}}'){
-      cerrarAlerta()
-      $('#alert-title').text('{{topalert.title}}')
-      $('#alert-data').html('{{topalert.message|escapejs}}')
-      $('#general-right-alert').addClass('show').addClass('{{topalert.class}}')
+      showAndinaToast('{{topalert.title}}', '{{topalert.message|escapejs}}', '{{topalert.class}}');
     }
   });
 </script>

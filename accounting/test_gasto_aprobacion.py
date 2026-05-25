@@ -1,11 +1,13 @@
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
+from django.utils import timezone
 from unittest.mock import patch
 import json
 
 from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra,
     asignar_gasto_alegra,
+    sugerencias_asignacion_gasto_alegra,
     empresa_config_sin_aprobador,
     normalizar_alegra_bill_id,
     normalizar_id_tercero,
@@ -191,3 +193,143 @@ class GastoAprobacionTests(TestCase):
         self.assertEqual(data['alegra_bill_id'], f'{self.empresa.pk}:journal:7')
         self.assertEqual(data['radicado_existente']['pk'], self.factura.pk)
         self.assertIn('radicado', data)
+
+
+@override_settings(N8N_WEBHOOK_GASTO_APROBACION_SECRET='test-secret-n8n')
+class WebhookN8nGastoAprobacionTests(TestCase):
+    def setUp(self):
+        self.empresa = empresas.objects.create(
+            Nit='900000002',
+            nombre='Empresa Webhook',
+            alegra_enabled=True,
+        )
+        self.contable = User.objects.create_user('contable2', password='x')
+        self.aprobador = User.objects.create_user('aprobador2', password='x')
+        GastoAprobador.objects.create(user=self.aprobador, empresa=self.empresa, activo=True)
+        self.factura = Facturas.objects.create(
+            empresa=self.empresa,
+            nrofactura='F-WA',
+            idtercero='456',
+            nombretercero='Proveedor WA',
+            fechafactura='2026-05-01',
+            fechavenc='2026-05-15',
+            valor=50000,
+            pago_neto=50000,
+            origen='Alegra',
+            oficina='MEDELLIN',
+            gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+            gasto_aprobador_asignado=self.aprobador,
+            gasto_aprobado=False,
+        )
+        self.factory = RequestFactory()
+
+    def _post_webhook(self, payload, secret='test-secret-n8n'):
+        from accounting.gasto_aprobacion_views import webhook_n8n_gasto_aprobacion
+
+        req = self.factory.post(
+            '/accounting/webhooks/n8n/gasto-aprobacion',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_X_ANDINA_WEBHOOK_SECRET=secret,
+        )
+        return webhook_n8n_gasto_aprobacion(req)
+
+    def test_webhook_aprobar_ok(self):
+        resp = self._post_webhook({
+            'accion': 'aprobar',
+            'radicado': self.factura.pk,
+            'aprobador_user_id': self.aprobador.pk,
+            'canal': 'WhatsApp',
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.content)
+        self.assertTrue(data['ok'])
+        self.factura.refresh_from_db()
+        self.assertTrue(self.factura.gasto_aprobado)
+        self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_APROBADO)
+
+    def test_webhook_secret_invalido(self):
+        resp = self._post_webhook(
+            {'radicado': self.factura.pk, 'aprobador_user_id': self.aprobador.pk},
+            secret='wrong',
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_webhook_aprobador_no_asignado(self):
+        otro = User.objects.create_user('otro', password='x')
+        GastoAprobador.objects.create(user=otro, empresa=self.empresa, activo=True)
+        resp = self._post_webhook({
+            'radicado': self.factura.pk,
+            'aprobador_user_id': otro.pk,
+        })
+        self.assertEqual(resp.status_code, 403)
+
+
+class GastoAlegraSugerenciasAsignacionTests(TestCase):
+    def setUp(self):
+        self.empresa = empresas.objects.create(
+            Nit='900000010',
+            nombre='Empresa Sugerencias',
+            alegra_enabled=True,
+        )
+        self.contable = User.objects.create_user('contable_sug', password='x')
+        self.aprobador = User.objects.create_user('aprobador_sug', password='x')
+        GastoAprobador.objects.create(user=self.aprobador, empresa=self.empresa, activo=True)
+        from django.contrib.auth.models import Group
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura_pendiente = Facturas.objects.create(
+            empresa=self.empresa,
+            nrofactura='F-PEND',
+            idtercero='901111111',
+            nombretercero='Proveedor Hist',
+            fechafactura='2026-05-01',
+            fechavenc='2026-05-15',
+            valor=50000,
+            pago_neto=50000,
+            origen='Alegra',
+            gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
+            gasto_aprobado=False,
+        )
+        self.factura_hist = Facturas.objects.create(
+            empresa=self.empresa,
+            nrofactura='F-HIST',
+            idtercero='901111111',
+            nombretercero='Proveedor Hist',
+            fechafactura='2026-04-01',
+            fechavenc='2026-04-15',
+            valor=120000,
+            pago_neto=120000,
+            origen='Alegra',
+            descripcion='Servicios de consultoría mensual',
+            gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+            gasto_aprobado=False,
+            oficina='MEDELLIN',
+        )
+        self.factura_hist.gasto_aprobador_asignado = self.aprobador
+        self.factura_hist.gasto_asignado_en = timezone.now()
+        self.factura_hist.save(update_fields=[
+            'gasto_aprobador_asignado', 'gasto_asignado_en', 'oficina',
+        ])
+
+    def test_sugerencias_desde_historial_mismo_tercero(self):
+        data = sugerencias_asignacion_gasto_alegra(
+            self.empresa.Nit,
+            '901111111',
+            exclude_pk=self.factura_pendiente.pk,
+        )
+        self.assertEqual(len(data['historial']), 1)
+        self.assertEqual(data['historial'][0]['pk'], self.factura_hist.pk)
+        self.assertEqual(data['historial'][0]['oficina'], 'MEDELLIN')
+        self.assertEqual(data['sugerencia']['oficina'], 'MEDELLIN')
+        self.assertEqual(data['sugerencia']['aprobador_id'], self.aprobador.pk)
+
+    def test_sin_historial_sugerencia_vacia(self):
+        data = sugerencias_asignacion_gasto_alegra(
+            self.empresa.Nit,
+            '999999999',
+            exclude_pk=self.factura_pendiente.pk,
+        )
+        self.assertEqual(data['historial'], [])
+        self.assertEqual(data['sugerencia']['oficina'], '')
+        self.assertIsNone(data['sugerencia']['aprobador_id'])

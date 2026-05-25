@@ -44,6 +44,20 @@
   }
   #tablaPendientes .btn-xs { font-size: 10px; padding: 0.1rem 0.35rem; }
   #comentarioContable { min-height: 80px; }
+  .historial-asignacion {
+    font-size: 10px;
+    line-height: 1.35;
+    color: #6c757d;
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 0.4rem 0.5rem;
+    margin-bottom: 0.75rem;
+    max-height: 7rem;
+    overflow-y: auto;
+  }
+  .historial-asignacion .hist-line { margin-bottom: 0.2rem; }
+  .historial-asignacion .hist-line:last-child { margin-bottom: 0; }
+  .sugerencia-hint { font-size: 10px; color: #17a2b8; }
 </style>
 {% endblock %}
 {% block content %}
@@ -178,6 +192,8 @@
           <input type="file" id="crearSoporte" class="form-control-file form-control-sm" accept=".pdf,application/pdf" required>
         </div>
         <hr>
+        <div id="crearHistorialAsignacion" class="historial-asignacion d-none"></div>
+        <p id="crearSugerenciaHint" class="sugerencia-hint d-none mb-2"></p>
         <div class="form-row">
           <div class="form-group col-md-4">
             <label class="font-weight-bold small">Oficina <span class="text-danger">*</span></label>
@@ -217,6 +233,8 @@
       </div>
       <div class="modal-body">
         <p class="small text-muted mb-2" id="resumenRad"></p>
+        <div id="asignarHistorialBox" class="historial-asignacion d-none"></div>
+        <p id="asignarSugerenciaHint" class="sugerencia-hint d-none mb-2"></p>
         <div class="form-group">
           <label class="font-weight-bold small">Oficina <span class="text-danger">*</span></label>
           <select id="selOficina" class="form-control">
@@ -307,6 +325,84 @@ function confirmarRegistroSinAprobador(data, valor, onOk) {
   if (window.confirm(msg)) {
     onOk();
   }
+}
+
+const DESC_HIST_MAX = 42;
+
+function truncarTexto(s, max) {
+  var t = String(s || '').trim();
+  if (t.length <= max) return t;
+  return t.slice(0, max) + '…';
+}
+
+function renderHistorialAsignacion(items) {
+  if (!items || !items.length) {
+    return { html: '', hint: '' };
+  }
+  var lines = items.map(function (h) {
+    var desc = truncarTexto(h.descripcion, DESC_HIST_MAX);
+    var aprob = h.sin_aprobador
+      ? 'sin aprobador'
+      : (h.aprobador_label || 'aprobador #' + h.aprobador_id);
+    return '<div class="hist-line">#' + h.pk + ' · ' + escapeHtml(h.nombretercero || '—') +
+      ' · <strong>' + escapeHtml(h.oficina) + '</strong> · $' +
+      Number(h.valor || 0).toLocaleString('es-CO') +
+      (desc ? ' · <em>' + escapeHtml(desc) + '</em>' : '') +
+      ' · ' + escapeHtml(aprob) + '</div>';
+  }).join('');
+  return {
+    html: '<div class="font-weight-bold text-secondary mb-1">Últimos asignados (mismo tercero)</div>' + lines,
+    hint: '',
+  };
+}
+
+function aplicarSugerenciaAsignacion(data, $oficina, $aprobador, $hintSug, $boxHist) {
+  var rendered = renderHistorialAsignacion(data.historial || []);
+  if ($boxHist && $boxHist.length) {
+    if (rendered.html) {
+      $boxHist.html(rendered.html).removeClass('d-none');
+    } else {
+      $boxHist.addClass('d-none').empty();
+    }
+  }
+  var sug = (data && data.sugerencia) || {};
+  var parts = [];
+  if (sug.oficina) {
+    $oficina.val(sug.oficina);
+    parts.push('oficina ' + sug.oficina);
+  }
+  if (sug.aprobador_id != null && sug.aprobador_id !== '') {
+    if ($aprobador.find('option[value="' + sug.aprobador_id + '"]').length) {
+      $aprobador.val(String(sug.aprobador_id));
+      parts.push('aprobador sugerido');
+    }
+  } else if (sug.oficina && $aprobador.find('option[value=""]').length) {
+    $aprobador.val('');
+    parts.push('sin aprobador (como el más reciente)');
+  }
+  if ($hintSug && $hintSug.length) {
+    if (parts.length) {
+      $hintSug.text('Sugerido según historial: ' + parts.join(', ') + '.').removeClass('d-none');
+    } else if ((data.historial || []).length) {
+      $hintSug.text('Historial disponible; revise oficina y aprobador.').removeClass('d-none');
+    } else {
+      $hintSug.addClass('d-none').text('');
+    }
+  }
+}
+
+function loadSugerenciasAsignacion(params, $oficina, $aprobador, $hintSug, $boxHist) {
+  if ($boxHist && $boxHist.length) {
+    $boxHist.removeClass('d-none').html('<span class="text-muted">Consultando historial…</span>');
+  }
+  if ($hintSug && $hintSug.length) $hintSug.addClass('d-none').text('');
+  return $.get('/accounting/ajax/gastos-alegra/sugerencias-asignacion', params)
+    .done(function (data) {
+      aplicarSugerenciaAsignacion(data, $oficina, $aprobador, $hintSug, $boxHist);
+    })
+    .fail(function () {
+      if ($boxHist && $boxHist.length) $boxHist.addClass('d-none').empty();
+    });
 }
 
 function loadAprobadores(empresa, $select, $hint) {
@@ -502,7 +598,7 @@ $(function() {
           $('#btnConfirmarCrear').prop('disabled', false);
         }
         $('#crearJournalStatus').html(statusHtml);
-        loadAprobadores(empresa, $('#crearAprobador'), $('#hintCrearSinAprob'));
+        refrescarSugerenciasCrear();
       })
       .fail(function(xhr) {
         const detail = (xhr.responseJSON || {}).detail || ('Error ' + xhr.status);
@@ -530,8 +626,31 @@ $(function() {
     if (emp) loadAprobadores(emp, $('#crearAprobador'), $('#hintCrearSinAprob'));
   });
 
-  $('#crearEmpresa').on('change', function() {
-    loadAprobadores($(this).val(), $('#crearAprobador'), $('#hintCrearSinAprob'));
+  var crearSugerenciasTimer = null;
+  function refrescarSugerenciasCrear() {
+    var empresa = ($('#crearEmpresa').val() || '').trim();
+    var idTercero = ($('#crearIdTercero').val() || '').trim();
+    if (!empresa || !/^\d+$/.test(idTercero)) {
+      $('#crearHistorialAsignacion').addClass('d-none').empty();
+      $('#crearSugerenciaHint').addClass('d-none').text('');
+      return $.Deferred().resolve();
+    }
+    return loadAprobadores(empresa, $('#crearAprobador'), $('#hintCrearSinAprob'))
+      .always(function () {
+        loadSugerenciasAsignacion(
+          { empresa: empresa, id_tercero: idTercero },
+          $('#crearOficina'),
+          $('#crearAprobador'),
+          $('#crearSugerenciaHint'),
+          $('#crearHistorialAsignacion')
+        );
+      });
+  }
+
+  $('#crearEmpresa').on('change', refrescarSugerenciasCrear);
+  $('#crearIdTercero').on('change input', function() {
+    clearTimeout(crearSugerenciasTimer);
+    crearSugerenciasTimer = setTimeout(refrescarSugerenciasCrear, 400);
   });
 
   function enviarCrearRadicado() {
@@ -613,9 +732,21 @@ $(function() {
     $('#lblRad').text(row.pk);
     $('#resumenRad').text(row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO'));
     $('#selOficina').val('');
+    $('#selAprobador').val('');
     $('#comentarioContable').val('');
+    $('#asignarHistorialBox').addClass('d-none').empty();
+    $('#asignarSugerenciaHint').addClass('d-none').text('');
     $('#modalAsignar').modal('show');
-    loadAprobadores(empresaRad, $('#selAprobador'), $('#hintAsignarSinAprob'));
+    loadAprobadores(empresaRad, $('#selAprobador'), $('#hintAsignarSinAprob'))
+      .always(function () {
+        loadSugerenciasAsignacion(
+          { radicado: radicadoActual },
+          $('#selOficina'),
+          $('#selAprobador'),
+          $('#asignarSugerenciaHint'),
+          $('#asignarHistorialBox')
+        );
+      });
   });
 
   function enviarAsignacion(oficina, aprobador_id) {

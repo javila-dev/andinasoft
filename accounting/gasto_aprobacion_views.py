@@ -2,23 +2,30 @@ import json
 import logging
 import re
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from django.utils.dateparse import parse_date
 
 logger = logging.getLogger(__name__)
 
+from accounting.gasto_poll import poll_gastos_alegra_notificaciones
 from accounting.gasto_aprobacion import (
     aprobadores_para_empresa,
     aprobar_gasto_alegra,
+    aprobar_gasto_alegra_para_usuario,
     asignar_gasto_alegra,
     crear_radicado_gasto_alegra,
     empresa_config_sin_aprobador,
     factura_a_dict,
+    sugerencias_asignacion_gasto_alegra,
     normalizar_alegra_bill_id,
     parse_aprobador_user_id_opcional,
     usuario_es_aprobador_gasto,
@@ -78,6 +85,52 @@ def gastos_alegra_aprobar(request):
     return render(request, 'accounting/gastos_alegra_aprobar.html', {
         'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
     })
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_notificaciones_poll(request):
+    try:
+        since_pk = int(request.GET.get('since_pk') or 0)
+    except (TypeError, ValueError):
+        since_pk = 0
+    payload = poll_gastos_alegra_notificaciones(request.user, since_pk=since_pk)
+    if payload.get('enabled'):
+        payload['since_pk'] = since_pk
+    return JsonResponse(payload)
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_sugerencias_asignacion(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    radicado = (request.GET.get('radicado') or '').strip()
+    empresa_id = (request.GET.get('empresa') or '').strip()
+    id_tercero = (request.GET.get('id_tercero') or '').strip()
+    exclude_pk = None
+    if radicado:
+        try:
+            exclude_pk = int(radicado)
+        except (TypeError, ValueError):
+            return JsonResponse({'detail': 'radicado inválido'}, status=400)
+        fac = Facturas.objects.filter(pk=exclude_pk).only(
+            'pk', 'empresa_id', 'idtercero', 'origen',
+        ).first()
+        if not fac:
+            return JsonResponse({'detail': 'Radicado no encontrado'}, status=404)
+        if fac.origen != 'Alegra':
+            return JsonResponse({'detail': 'Solo aplica a radicados Alegra'}, status=400)
+        empresa_id = fac.empresa_id
+        id_tercero = fac.idtercero or ''
+    if not empresa_id or not id_tercero:
+        return JsonResponse({
+            'detail': 'Indique radicado o empresa e id_tercero',
+        }, status=400)
+    payload = sugerencias_asignacion_gasto_alegra(
+        empresa_id, id_tercero, exclude_pk=exclude_pk,
+    )
+    return JsonResponse(payload)
 
 
 @login_required
@@ -400,4 +453,88 @@ def ajax_gastos_alegra_aprobar(request):
     except ValueError as exc:
         return _json_error(exc, 400)
     except Exception as exc:
+        return _json_error(exc, 500)
+
+
+def _n8n_gasto_aprobacion_secret_ok(request):
+    expected = (getattr(settings, 'N8N_WEBHOOK_GASTO_APROBACION_SECRET', None) or '').strip()
+    if not expected:
+        return False
+    got = (
+        request.headers.get('X-Andina-Webhook-Secret')
+        or request.META.get('HTTP_X_ANDINA_WEBHOOK_SECRET')
+        or ''
+    ).strip()
+    return got == expected
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def webhook_n8n_gasto_aprobacion(request):
+    """
+    Entrada desde n8n (p. ej. aprobación por WhatsApp).
+    POST /accounting/webhooks/n8n/gasto-aprobacion
+    Header: X-Andina-Webhook-Secret: <N8N_WEBHOOK_GASTO_APROBACION_SECRET>
+    """
+    if not _n8n_gasto_aprobacion_secret_ok(request):
+        return JsonResponse(
+            {'detail': 'No autorizado o webhook no configurado (N8N_WEBHOOK_GASTO_APROBACION_SECRET).'},
+            status=401,
+        )
+
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            body = json.loads(request.body.decode() or '{}')
+        else:
+            body = request.POST.dict()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return JsonResponse({'detail': 'JSON inválido.'}, status=400)
+
+    accion = str(body.get('accion') or body.get('action') or 'aprobar').strip().lower()
+    if accion != 'aprobar':
+        return JsonResponse(
+            {'detail': f'Acción no soportada: {accion}. Use accion=aprobar.'},
+            status=400,
+        )
+
+    try:
+        radicado = int(body.get('radicado'))
+    except (TypeError, ValueError):
+        return JsonResponse({'detail': 'radicado (entero) es requerido.'}, status=400)
+
+    try:
+        aprobador_user_id = int(body.get('aprobador_user_id'))
+    except (TypeError, ValueError):
+        return JsonResponse({'detail': 'aprobador_user_id (entero) es requerido.'}, status=400)
+
+    canal = str(body.get('canal') or 'WhatsApp/n8n').strip()[:64]
+
+    User = get_user_model()
+    aprobador = User.objects.filter(pk=aprobador_user_id, is_active=True).first()
+    if not aprobador:
+        return JsonResponse({'detail': 'aprobador_user_id no encontrado o inactivo.'}, status=404)
+
+    try:
+        fac = Facturas.objects.select_related('empresa', 'gasto_aprobador_asignado').get(pk=radicado)
+    except Facturas.DoesNotExist:
+        return JsonResponse({'detail': 'Radicado no encontrado.'}, status=404)
+
+    if Pagos.objects.filter(nroradicado=fac).exists():
+        return JsonResponse({'detail': 'El radicado ya tiene pagos asociados.'}, status=400)
+
+    try:
+        with transaction.atomic():
+            aprobar_gasto_alegra_para_usuario(fac, aprobador, canal=canal)
+        return JsonResponse({
+            'ok': True,
+            'accion': 'aprobar',
+            'canal': canal,
+            'factura': factura_a_dict(fac),
+        })
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except ValueError as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        logger.exception('webhook_n8n_gasto_aprobacion radicado=%s', radicado)
         return _json_error(exc, 500)
