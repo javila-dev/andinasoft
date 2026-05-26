@@ -37,6 +37,7 @@ El destinatario es el usuario asignado en `asignar_gasto_alegra` (modelo `GastoA
 | | Import `import_factura_from_alegra_bill` crea radicado | Import reconcilia existente |
 | | `new-bill` idempotente que pasa de `no_aplica` → `pendiente_asignacion` | `edit-bill`, `delete-bill` |
 | `gasto_alegra.pendiente_aprobacion` | Contabilidad asigna oficina **con** aprobador | Asignación sin aprobador (auto-aprobado) |
+| | Contabilidad **reasigna** aprobador (corregir) | Reasignación solo de oficina (mismo aprobador) |
 | Aprobación WhatsApp | Aprobador abre `links.aprobar` (GET firmado) | UI web (`links.aprobar_ui`) o `POST .../gasto-aprobacion` |
 
 **PDF:** puede descargarse en un `on_commit` posterior. El payload incluye `factura.soporte_pdf_listo` y, si ya hay archivo, `factura.soporte_pdf_url` + `links.soporte_pdf` apuntan a **Andina** (no al bucket S3 privado):
@@ -185,6 +186,10 @@ Valores de `trigger`: `webhook_new_bill`, `import_bill`.
   }
 }
 ```
+
+Valores de `trigger`: `asignacion_contable` (primera asignación), `reasignacion_contable` (corrección de aprobador). **n8n debe tratar ambos igual** para enviar WhatsApp/PDF al `recipients[0]` actual; `reasignacion_contable` incluye además `previous_approver` con el aprobador anterior.
+
+Antes del POST, Django intenta asegurar el PDF (`links.soporte_pdf` / `factura.soporte_pdf_url`) descargándolo de Alegra si no está legible en storage.
 
 ## Código relacionado
 

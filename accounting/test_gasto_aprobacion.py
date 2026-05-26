@@ -315,6 +315,8 @@ class GastoAprobacionTests(TestCase):
         mock_notify.assert_called_once_with(
             self.factura.pk,
             assigned_by_user_id=self.contable.pk,
+            trigger='reasignacion_contable',
+            previous_approver_user_id=self.aprobador.pk,
         )
 
     @patch('accounting.gasto_n8n_notify.notify_gasto_pendiente_aprobacion')

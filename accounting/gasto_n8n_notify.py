@@ -315,9 +315,16 @@ def notify_gasto_pendiente_asignacion(factura_pk, *, trigger, alegra_bill_snapsh
     transaction.on_commit(_after_commit)
 
 
-def _send_gasto_pendiente_aprobacion_webhook(factura_pk, *, assigned_by_user_id, trigger='asignacion_contable'):
+def _send_gasto_pendiente_aprobacion_webhook(
+    factura_pk,
+    *,
+    assigned_by_user_id,
+    trigger='asignacion_contable',
+    previous_approver_user_id=None,
+):
     """
-    POST a N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION (mismo evento/trigger que asignación inicial).
+    POST a N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION.
+    Mismo payload que asignacion inicial; reasignacion usa trigger distinto para n8n.
     Retorna True si se envió el POST, False si se omitió (aprobador inactivo, sin fila, etc.).
     """
     factura = Facturas.objects.select_related(
@@ -336,6 +343,10 @@ def _send_gasto_pendiente_aprobacion_webhook(factura_pk, *, assigned_by_user_id,
             factura_pk,
         )
         return False
+    # Mismo criterio que soporte en UI: reintentar Alegra si el PDF no es legible aun.
+    _attach_soporte_from_alegra(factura, force=True)
+    factura.refresh_from_db(fields=['soporte_radicado'])
+
     assigned_by = None
     if assigned_by_user_id:
         User = get_user_model()
@@ -350,6 +361,11 @@ def _send_gasto_pendiente_aprobacion_webhook(factura_pk, *, assigned_by_user_id,
     }
     if assigned_by:
         extra['assigned_by'] = assigned_by
+    if previous_approver_user_id:
+        User = get_user_model()
+        prev = User.objects.filter(pk=previous_approver_user_id).first()
+        if prev:
+            extra['previous_approver'] = _aprobador_recipient(prev, factura.empresa_id)
     bill_snap = _alegra_bill_snapshot_from_factura(factura)
     if bill_snap:
         extra['alegra_bill'] = bill_snap
@@ -362,17 +378,24 @@ def _send_gasto_pendiente_aprobacion_webhook(factura_pk, *, assigned_by_user_id,
     )
     url = settings.N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION
     logger.info(
-        'n8n gasto pendiente_aprobacion: enviando pk=%s trigger=%s url=%s aprobador=%s',
+        'n8n gasto pendiente_aprobacion: enviando pk=%s trigger=%s url=%s aprobador=%s soporte_listo=%s',
         factura_pk,
         trigger,
         url,
         aprobador.pk,
+        bool((payload.get('factura') or {}).get('soporte_pdf_listo')),
     )
     _post_n8n(url, payload)
     return True
 
 
-def notify_gasto_pendiente_aprobacion(factura_pk, *, assigned_by_user_id, trigger='asignacion_contable'):
+def notify_gasto_pendiente_aprobacion(
+    factura_pk,
+    *,
+    assigned_by_user_id,
+    trigger='asignacion_contable',
+    previous_approver_user_id=None,
+):
     if not _notifications_enabled():
         return
 
@@ -381,6 +404,7 @@ def notify_gasto_pendiente_aprobacion(factura_pk, *, assigned_by_user_id, trigge
             factura_pk,
             assigned_by_user_id=assigned_by_user_id,
             trigger=trigger,
+            previous_approver_user_id=previous_approver_user_id,
         )
 
     transaction.on_commit(_after_commit)

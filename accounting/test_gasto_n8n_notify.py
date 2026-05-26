@@ -98,6 +98,51 @@ class GastoN8nNotifyTests(TestCase):
         self.assertIn('/accounting/gastos-alegra/aprobar/', payload['links']['aprobar_ui'])
 
     @patch('accounting.gasto_n8n_notify.requests.post')
+    def test_reasignar_aprobador_mismo_payload_que_asignar(self, mock_post):
+        from accounting.gasto_aprobacion import reasignar_gasto_alegra
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        otro = User.objects.create_user(
+            'aprobador2', password='x', email='aprobador2@test.co',
+        )
+        GastoAprobador.objects.create(
+            user=otro, empresa=self.empresa, activo=True, telefono='573009998877',
+        )
+        self.factura.soporte_radicado.save(
+            'test-soporte.pdf',
+            SimpleUploadedFile('test-soporte.pdf', b'%PDF-1.4', content_type='application/pdf'),
+        )
+        with captureOnCommitCallbacks(execute=True):
+            asignar_gasto_alegra(
+                self._request(self.contable),
+                factura=self.factura,
+                oficina='MEDELLIN',
+                aprobador_user_id=self.aprobador.pk,
+            )
+        mock_post.reset_mock()
+
+        with captureOnCommitCallbacks(execute=True):
+            reasignar_gasto_alegra(
+                self._request(self.contable),
+                factura=self.factura,
+                oficina='MEDELLIN',
+                aprobador_user_id=otro.pk,
+                comentario_contable='Correccion',
+            )
+
+        mock_post.assert_called_once()
+        payload = mock_post.call_args[1]['json']
+        self.assertEqual(payload['event'], 'gasto_alegra.pendiente_aprobacion')
+        self.assertEqual(payload['trigger'], 'reasignacion_contable')
+        self.assertEqual(payload['recipients'][0]['user_id'], otro.pk)
+        self.assertEqual(payload['recipients'][0]['telefono'], '573009998877')
+        self.assertEqual(payload['previous_approver']['user_id'], self.aprobador.pk)
+        self.assertTrue(payload['factura']['soporte_pdf_listo'])
+        self.assertIn('soporte_pdf', payload['links'])
+        self.assertIn('aprobar', payload['links'])
+        self.assertIn(f'/aprobar-link/{self.factura.pk}/', payload['links']['aprobar'])
+
+    @patch('accounting.gasto_n8n_notify.requests.post')
     def test_asignar_sin_aprobador_no_dispara_aprobacion(self, mock_post):
         self.empresa.alegra_gasto_max_sin_aprobador = 500_000
         self.empresa.save(update_fields=['alegra_gasto_max_sin_aprobador'])

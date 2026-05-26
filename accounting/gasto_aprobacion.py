@@ -739,6 +739,8 @@ def reasignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, come
             notify_gasto_pendiente_aprobacion(
                 factura.pk,
                 assigned_by_user_id=request.user.pk,
+                trigger='reasignacion_contable',
+                previous_approver_user_id=aprobador_anterior_id,
             )
 
     factura._gasto_reasignacion_notifico_aprobador = cambio_aprobador
