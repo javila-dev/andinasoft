@@ -6,8 +6,15 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounting.models import Facturas, GastoAprobador, history_facturas
-from alegra_integration.bill_mapping import ALEGRA_DOC_JOURNAL
+from accounting.models import Facturas, GastoAprobador, Pagos, history_facturas
+from alegra_integration.bill_mapping import (
+    ALEGRA_DOC_BILL,
+    ALEGRA_DOC_JOURNAL,
+    bill_pago_neto_canje,
+    deactivate_alegra_bill_mapping,
+    parse_alegra_bill_id_for_api,
+)
+from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError
 from accounting.journal_cxp import persist_journal_cxp_mappings, serializar_detalle_journal_pago
 from andina.decorators import check_groups
 from andinasoft.models import empresas
@@ -132,6 +139,49 @@ def alegra_sin_aprobacion_q():
     return Q(origen='Alegra', gasto_aprobado=False)
 
 
+def aplicar_aprobacion_automatica_alegra_saldo_cero(factura, user, *, motivo=''):
+    """
+    Factura Alegra con pago_neto=0 (saldo CxP ya cubierto en Alegra): salta asignación y
+    aprobación contable; queda disponible en tesorería.
+    """
+    if factura.origen != 'Alegra' or factura.gasto_aprobado:
+        return False
+    pago_neto = int(factura.pago_neto if factura.pago_neto is not None else (factura.valor or 0))
+    if pago_neto != 0:
+        return False
+    if factura.gasto_aprobacion_estado not in (
+        Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
+        Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+    ):
+        return False
+
+    now = timezone.now()
+    factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_APROBADO
+    factura.gasto_aprobado = True
+    factura.gasto_aprobado_por = user
+    factura.gasto_aprobado_en = now
+    factura.save(
+        update_fields=[
+            'gasto_aprobacion_estado',
+            'gasto_aprobado',
+            'gasto_aprobado_por',
+            'gasto_aprobado_en',
+        ]
+    )
+    if user:
+        accion = (
+            motivo
+            or 'Saldo CxP en cero (pagada en Alegra); aprobación automática para tesorería'
+        )
+        history_facturas.objects.create(
+            factura=factura,
+            usuario=user,
+            accion=accion[:255],
+            ubicacion='Contabilidad',
+        )
+    return True
+
+
 def alegra_id_para_tabla(alegra_bill_id):
     """Id visible en UI: bill numérico (28) o journal:11."""
     raw = (alegra_bill_id or '').strip()
@@ -172,6 +222,7 @@ def factura_a_dict(fac):
         ) if fac.gasto_aprobador_asignado_id else '',
         'gasto_aprobador_asignado_id': fac.gasto_aprobador_asignado_id,
         'idtercero': fac.idtercero or '',
+        'gasto_es_canje': bool(getattr(fac, 'gasto_es_canje', False)),
     }
 
 
@@ -213,6 +264,8 @@ def _historial_item_dict(fac):
         ),
         'sin_aprobador': not fac.gasto_aprobador_asignado_id,
         'fecharadicado': fac.fecharadicado.isoformat() if fac.fecharadicado else '',
+        'es_canje': bool(getattr(fac, 'gasto_es_canje', False)),
+        'pago_neto': int(fac.pago_neto if fac.pago_neto is not None else (fac.valor or 0)),
     }
 
 
@@ -224,14 +277,63 @@ def sugerencias_asignacion_gasto_alegra(empresa_id, id_tercero, *, exclude_pk=No
     qs = _qs_historico_asignacion_alegra(empresa_id, id_tercero, exclude_pk=exclude_pk)
     facturas = list(qs[:HISTORICO_ASIGNACION_LIMIT])
     historial = [_historial_item_dict(f) for f in facturas]
-    sugerencia = {'oficina': '', 'aprobador_id': None}
+    sugerencia = {'oficina': '', 'aprobador_id': None, 'es_canje': False}
     if facturas:
         sugerencia['oficina'] = facturas[0].oficina or ''
         for fac in facturas:
             if fac.gasto_aprobador_asignado_id:
                 sugerencia['aprobador_id'] = fac.gasto_aprobador_asignado_id
                 break
+        sugerencia['es_canje'] = any(getattr(f, 'gasto_es_canje', False) for f in facturas)
     return {'historial': historial, 'sugerencia': sugerencia}
+
+
+def consultar_pago_neto_canje_alegra(factura):
+    """
+    GET /bills/{id} y calcula pago_neto para canje (balance − totalPaid).
+    Solo bills Alegra; el contador debe marcar canje manualmente.
+    """
+    if factura.origen != 'Alegra':
+        raise ValueError('Canje solo aplica a radicados con origen Alegra.')
+    doc_type = (getattr(factura, 'alegra_document_type', '') or '').strip()
+    if doc_type and doc_type != ALEGRA_DOC_BILL:
+        raise ValueError('Canje solo aplica a documentos soporte (bill) de Alegra.')
+    if ':journal:' in (factura.alegra_bill_id or ''):
+        raise ValueError('Canje no aplica a comprobantes journal.')
+    _, bill_id = parse_alegra_bill_id_for_api(factura.alegra_bill_id)
+    if not bill_id:
+        raise ValueError('El radicado no tiene un bill Alegra asociado.')
+    from alegra_integration.client import AlegraMCPClient
+
+    try:
+        client = AlegraMCPClient(factura.empresa)
+        bill = client.get_bill(bill_id)
+    except AlegraConfigurationError as exc:
+        raise ValueError(str(exc)) from exc
+    except AlegraClientError as exc:
+        raise ValueError(f'No se pudo consultar Alegra GET /bills/{bill_id}: {exc}') from exc
+    if not isinstance(bill, dict):
+        raise ValueError('Respuesta inválida de Alegra GET /bills.')
+    balance = int(bill.get('balance') or 0) if bill.get('balance') is not None else 0
+    total_paid = int(bill.get('totalPaid') or 0)
+    pago_neto = bill_pago_neto_canje(bill)
+    return {
+        'bill_id': bill_id,
+        'balance': balance,
+        'totalPaid': total_paid,
+        'total': int(bill.get('total') or 0),
+        'status': (bill.get('status') or bill.get('state') or '').strip(),
+        'pago_neto': pago_neto,
+        'pago_neto_anterior': int(factura.pago_neto if factura.pago_neto is not None else (factura.valor or 0)),
+    }
+
+
+def _parse_es_canje_flag(raw):
+    if raw is True or raw == 1:
+        return True
+    if isinstance(raw, str):
+        return raw.strip().lower() in ('1', 'true', 'yes', 'on', 'si', 'sí')
+    return False
 
 
 def _validar_fechas_radicado(fecha_factura, fecha_vencimiento):
@@ -402,7 +504,15 @@ def crear_radicado_gasto_alegra(
     return fac
 
 
-def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, comentario_contable=''):
+def asignar_gasto_alegra(
+    request,
+    *,
+    factura,
+    oficina,
+    aprobador_user_id=None,
+    comentario_contable='',
+    es_canje=False,
+):
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         raise PermissionError('Solo Contabilidad puede asignar aprobador y oficina.')
     if factura.origen != 'Alegra':
@@ -415,10 +525,25 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
     User = get_user_model()
     aprobador_uid = parse_aprobador_user_id_opcional(aprobador_user_id)
 
+    canje_info = None
+    if es_canje:
+        canje_info = consultar_pago_neto_canje_alegra(factura)
+        factura.gasto_es_canje = True
+        factura.pago_neto = canje_info['pago_neto']
+        if canje_info['pago_neto'] == 0:
+            aprobador_uid = None
+
     factura.oficina = oficina
     factura.gasto_asignado_por = request.user
     factura.gasto_asignado_en = timezone.now()
     factura.gasto_aprobacion_comentario_contable = (comentario_contable or '').strip()[:2000]
+
+    canje_suffix = ''
+    if es_canje and canje_info:
+        canje_suffix = (
+            f' · canje (Alegra balance ${canje_info["balance"]:,}, '
+            f'totalPaid ${canje_info["totalPaid"]:,} → pago neto ${canje_info["pago_neto"]:,})'
+        )
 
     if aprobador_uid:
         aprobador = User.objects.filter(pk=aprobador_uid).first()
@@ -440,12 +565,17 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
             'gasto_aprobado_por',
             'gasto_aprobado_en',
         ]
+        if es_canje:
+            update_fields.extend(['gasto_es_canje', 'pago_neto'])
         accion = (
             f'Asignó oficina {oficina} y aprobador {aprobador.get_full_name() or aprobador.username}'
+            + canje_suffix
             + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
         )
     else:
-        validar_gasto_sin_aprobador(factura.empresa, factura.valor)
+        omitir_tope = es_canje and int(factura.pago_neto or 0) == 0
+        if not omitir_tope:
+            validar_gasto_sin_aprobador(factura.empresa, factura.valor)
         factura.gasto_aprobador_asignado = None
         factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_APROBADO
         factura.gasto_aprobado = True
@@ -462,10 +592,20 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
             'gasto_aprobado_por',
             'gasto_aprobado_en',
         ]
-        accion = (
-            f'Asignó oficina {oficina} sin aprobador (aprobación automática)'
-            + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
-        )
+        if es_canje:
+            update_fields.extend(['gasto_es_canje', 'pago_neto'])
+        if omitir_tope:
+            accion = (
+                f'Asignó oficina {oficina} · canje sin pago tesorería (pago neto $0)'
+                + canje_suffix
+                + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
+            )
+        else:
+            accion = (
+                f'Asignó oficina {oficina} sin aprobador (aprobación automática)'
+                + canje_suffix
+                + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
+            )
 
     factura.save(update_fields=update_fields)
     history_facturas.objects.create(
@@ -482,6 +622,39 @@ def asignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id=None, c
             assigned_by_user_id=request.user.pk,
         )
     return factura
+
+
+@transaction.atomic
+def eliminar_gasto_alegra_pendiente_asignacion(request, *, factura):
+    """
+    Elimina un radicado Alegra aún pendiente de asignación (sin pagos).
+    No borra el documento en Alegra; solo el registro local y el mapeo bill.
+    """
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        raise PermissionError('Solo Contabilidad puede eliminar radicados Alegra.')
+    if factura.origen != 'Alegra':
+        raise ValueError('Solo aplica a radicados con origen Alegra.')
+    if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_ASIGNACION:
+        raise ValueError('Solo se pueden eliminar radicados pendientes de asignación.')
+    if Pagos.objects.filter(nroradicado=factura).exists():
+        raise ValueError('No se puede eliminar: el radicado ya tiene pagos registrados.')
+
+    resumen = {
+        'pk': factura.pk,
+        'nrofactura': factura.nrofactura,
+        'nombretercero': factura.nombretercero,
+        'valor': int(factura.valor or 0),
+        'alegra_bill_id': factura.alegra_bill_id or '',
+    }
+    empresa_id = factura.empresa_id
+    factura_pk = factura.pk
+    alegra_bill_id = factura.alegra_bill_id
+
+    if alegra_bill_id:
+        deactivate_alegra_bill_mapping(empresa_id, factura_pk)
+    factura.delete()
+
+    return resumen
 
 
 def reasignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, comentario_contable=''):

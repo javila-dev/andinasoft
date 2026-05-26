@@ -209,6 +209,34 @@ def is_placeholder_descripcion(descripcion):
     return is_stale_alegra_descripcion(descripcion)
 
 
+def bill_pago_neto_canje(bill):
+    """
+    Pago neto tesorería cuando contabilidad marca canje manualmente.
+    Consulta GET /bills/{id} con totalPaid y balance actualizados.
+    """
+    if not isinstance(bill, dict):
+        return 0
+    balance = _parse_int(bill.get('balance')) if bill.get('balance') is not None else 0
+    total_paid = _parse_int(bill.get('totalPaid'))
+    return max(0, balance - total_paid)
+
+
+def bill_saldo_por_pagar(bill):
+    """
+    Saldo CxP pendiente en Alegra → pago_neto local (lo que tesorería debe pagar).
+    Usa balance cuando viene en el payload; si no, total − totalPaid.
+    """
+    if not isinstance(bill, dict):
+        return 0
+    if bill.get('balance') is not None:
+        return max(0, _parse_int(bill.get('balance')))
+    total = _parse_int(bill.get('total'))
+    subtotal = _parse_int(bill.get('subtotal'))
+    total_paid = _parse_int(bill.get('totalPaid'))
+    base = total if total else subtotal
+    return max(0, base - total_paid)
+
+
 def map_bill_to_factura_fields(bill):
     """
     Campos locales derivados de un bill (webhook o GET /bills/{id}).
@@ -228,13 +256,8 @@ def map_bill_to_factura_fields(bill):
     nombre = (client.get('name') or '')[:255]
     bid = str(bill.get('id') or '').strip()
 
-    if bill.get('balance') is not None:
-        valor = _parse_int(bill.get('balance'))
-    else:
-        total = _parse_int(bill.get('total'))
-        subtotal = _parse_int(bill.get('subtotal'))
-        valor = total if total else subtotal
-    pago_neto = valor
+    pago_neto = bill_saldo_por_pagar(bill)
+    valor = pago_neto
 
     fecha_fact = parse_date(str(bill.get('date') or '')[:10]) if bill.get('date') else None
     if not fecha_fact:
@@ -290,7 +313,10 @@ def enrich_factura_from_bill_data(factura, bill_data):
         factura.idtercero = mapped['idtercero']
         update_fields.append('idtercero')
 
+    skip_pago = bool(getattr(factura, 'gasto_es_canje', False))
     for key in ('valor', 'pago_neto', 'fechafactura', 'fechavenc', 'fechacausa', 'nrocausa'):
+        if skip_pago and key == 'pago_neto':
+            continue
         new_val = mapped.get(key)
         if new_val is None:
             continue

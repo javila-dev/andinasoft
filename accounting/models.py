@@ -265,6 +265,7 @@ class Facturas(models.Model):
         db_constraint=False,
     )
     gasto_aprobado_en = models.DateTimeField(null=True, blank=True)
+    gasto_es_canje = models.BooleanField(default=False, db_index=True)
 
     class Meta:
         verbose_name = 'Factura'

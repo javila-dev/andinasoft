@@ -9,7 +9,8 @@ import logging
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from accounting.gasto_aprobacion import factura_a_dict
+from django.utils import timezone
+
 from accounting.gasto_n8n_notify import (
     build_alegra_bill_snapshot,
     notify_gasto_pendiente_asignacion,
@@ -119,7 +120,7 @@ def import_factura_from_alegra_bill(empresa, alegra_numeric_id, *, sync_pdf=True
             usuario=user,
             accion=(
                 f'Creada desde Alegra GET /bills/{alegra_numeric} ({composite}); '
-                f'pendiente asignación oficina/aprobador'
+                'pendiente asignación oficina/aprobador'
             ),
             ubicacion='Contabilidad',
         )
@@ -301,6 +302,8 @@ def _handle_edit_bill(composite_alegra_id, bill):
     fields = map_bill_to_factura_fields(bill)
     fields.pop('origen', None)
     for key, value in fields.items():
+        if key == 'pago_neto' and getattr(fac, 'gasto_es_canje', False):
+            continue
         setattr(fac, key, value)
     fac.alegra_bill_deleted = False
     fac.alegra_bill_deleted_at = None

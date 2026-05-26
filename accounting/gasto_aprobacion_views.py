@@ -28,6 +28,8 @@ from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra,
     aprobar_gasto_alegra_para_usuario,
     asignar_gasto_alegra,
+    consultar_pago_neto_canje_alegra,
+    eliminar_gasto_alegra_pendiente_asignacion,
     crear_radicado_gasto_alegra,
     reasignar_gasto_alegra,
     empresa_config_sin_aprobador,
@@ -35,6 +37,7 @@ from accounting.gasto_aprobacion import (
     sugerencias_asignacion_gasto_alegra,
     normalizar_alegra_bill_id,
     parse_aprobador_user_id_opcional,
+    _parse_es_canje_flag,
     usuario_es_aprobador_gasto,
     usuario_puede_ver_soporte_gasto,
 )
@@ -156,6 +159,26 @@ def ajax_gastos_alegra_sugerencias_asignacion(request):
         empresa_id, id_tercero, exclude_pk=exclude_pk,
     )
     return JsonResponse(payload)
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_canje_preview(request):
+    """Vista previa pago neto canje (GET Alegra) al marcar checkbox en asignación."""
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    radicado = (request.GET.get('radicado') or '').strip()
+    if not radicado:
+        return _json_error('radicado es requerido.', 400)
+    try:
+        fac = Facturas.objects.select_related('empresa').get(pk=int(radicado))
+    except (Facturas.DoesNotExist, TypeError, ValueError):
+        return _json_error('Radicado no encontrado.', 404)
+    try:
+        data = consultar_pago_neto_canje_alegra(fac)
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    return JsonResponse({'ok': True, 'radicado': fac.pk, **data})
 
 
 @login_required
@@ -440,6 +463,7 @@ def ajax_gastos_alegra_asignar(request):
         oficina = (body.get('oficina') or '').strip()
         aprobador_id = body.get('aprobador_id')
         comentario = (body.get('comentario_contable') or '').strip()
+        es_canje = _parse_es_canje_flag(body.get('es_canje'))
         fac = Facturas.objects.get(pk=radicado)
         if Pagos.objects.filter(nroradicado=fac).exists():
             return _json_error('El radicado ya tiene pagos asociados.')
@@ -449,8 +473,33 @@ def ajax_gastos_alegra_asignar(request):
             oficina=oficina,
             aprobador_user_id=parse_aprobador_user_id_opcional(aprobador_id),
             comentario_contable=comentario,
+            es_canje=es_canje,
         )
         return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except Facturas.DoesNotExist:
+        return _json_error('Radicado no encontrado.', 404)
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except (ValueError, TypeError) as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        return _json_error(exc, 500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajax_gastos_alegra_eliminar(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            body = json.loads(request.body.decode() or '{}')
+        else:
+            body = request.POST
+        radicado = body.get('radicado')
+        fac = Facturas.objects.get(pk=radicado)
+        resumen = eliminar_gasto_alegra_pendiente_asignacion(request, factura=fac)
+        return JsonResponse({'ok': True, 'eliminado': resumen})
     except Facturas.DoesNotExist:
         return _json_error('Radicado no encontrado.', 404)
     except PermissionError as exc:

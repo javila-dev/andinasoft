@@ -5,6 +5,8 @@ from unittest.mock import patch
 import json
 
 from accounting.gasto_aprobacion import (
+    aplicar_aprobacion_automatica_alegra_saldo_cero,
+    eliminar_gasto_alegra_pendiente_asignacion,
     aprobar_gasto_alegra,
     asignar_gasto_alegra,
     reasignar_gasto_alegra,
@@ -114,6 +116,124 @@ class GastoAprobacionTests(TestCase):
         with self.assertRaises(ValueError) as ctx:
             validar_gasto_sin_aprobador(self.empresa, 100_000)
         self.assertIn('supera', str(ctx.exception).lower())
+
+    def test_aprobacion_automatica_saldo_cero(self):
+        self.factura.valor = 0
+        self.factura.pago_neto = 0
+        self.factura.save(update_fields=['valor', 'pago_neto'])
+        ok = aplicar_aprobacion_automatica_alegra_saldo_cero(self.factura, self.contable)
+        self.assertTrue(ok)
+        self.factura.refresh_from_db()
+        self.assertTrue(self.factura.gasto_aprobado)
+        self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_APROBADO)
+        self.assertIsNotNone(self.factura.gasto_aprobado_en)
+
+    def test_aprobacion_automatica_saldo_cero_no_aplica_con_pago(self):
+        ok = aplicar_aprobacion_automatica_alegra_saldo_cero(self.factura, self.contable)
+        self.assertFalse(ok)
+        self.factura.refresh_from_db()
+        self.assertFalse(self.factura.gasto_aprobado)
+
+    @patch('accounting.gasto_aprobacion.consultar_pago_neto_canje_alegra')
+    def test_asignar_es_canje_pago_neto_cero_auto_aprobado(self, mock_canje):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:43'
+        self.factura.alegra_document_type = 'bill'
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+        mock_canje.return_value = {
+            'bill_id': '43',
+            'balance': 0,
+            'totalPaid': 4039466,
+            'total': 4450893,
+            'status': 'closed',
+            'pago_neto': 0,
+            'pago_neto_anterior': 4039466,
+        }
+
+        asignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MEDELLIN',
+            aprobador_user_id=self.aprobador.pk,
+            es_canje=True,
+        )
+        self.factura.refresh_from_db()
+        self.assertTrue(self.factura.gasto_es_canje)
+        self.assertEqual(self.factura.pago_neto, 0)
+        self.assertTrue(self.factura.gasto_aprobado)
+        self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_APROBADO)
+        self.assertIsNone(self.factura.gasto_aprobador_asignado_id)
+
+    def test_sugerencias_incluye_es_canje(self):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        prev = Facturas.objects.create(
+            empresa=self.empresa,
+            nrofactura='F-PREV',
+            idtercero='123',
+            nombretercero='Proveedor SA',
+            fechafactura='2026-05-01',
+            fechavenc='2026-05-15',
+            valor=50000,
+            pago_neto=0,
+            origen='Alegra',
+            oficina='MEDELLIN',
+            gasto_es_canje=True,
+            gasto_aprobacion_estado=Facturas.GASTO_APROB_APROBADO,
+            gasto_aprobado=True,
+            gasto_asignado_en=timezone.now(),
+        )
+        data = sugerencias_asignacion_gasto_alegra(
+            self.empresa.pk, '123', exclude_pk=self.factura.pk,
+        )
+        self.assertTrue(data['sugerencia']['es_canje'])
+        self.assertTrue(data['historial'][0]['es_canje'])
+
+    def test_eliminar_pendiente_asignacion(self):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:99'
+        self.factura.save(update_fields=['alegra_bill_id'])
+        pk = self.factura.pk
+        resumen = eliminar_gasto_alegra_pendiente_asignacion(
+            self._request(self.contable),
+            factura=self.factura,
+        )
+        self.assertEqual(resumen['pk'], pk)
+        self.assertFalse(Facturas.objects.filter(pk=pk).exists())
+
+    def test_eliminar_rechaza_si_tiene_pagos(self):
+        from django.contrib.auth.models import Group
+        from accounting.models import Pagos
+        from andinasoft.models import cuentas_pagos
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        cuenta = cuentas_pagos.objects.create(
+            nro_cuentacontable='11100501',
+            cuentabanco='transfer',
+            nit_empresa=self.empresa,
+        )
+        Pagos.objects.create(
+            nroradicado=self.factura,
+            valor=1000,
+            usuario=self.contable,
+            fecha_pago='2026-05-01',
+            empresa=self.empresa,
+            cuenta=cuenta,
+        )
+        with self.assertRaises(ValueError):
+            eliminar_gasto_alegra_pendiente_asignacion(
+                self._request(self.contable),
+                factura=self.factura,
+            )
 
     def test_asignar_sin_aprobador_auto_aprobado(self):
         from django.contrib.auth.models import Group

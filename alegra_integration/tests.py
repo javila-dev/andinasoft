@@ -584,6 +584,58 @@ class WebhookBillMappingTests(SimpleTestCase):
         }
         fields = map_bill_to_factura_fields(bill)
         self.assertEqual(fields['valor'], 0)
+        self.assertEqual(fields['pago_neto'], 0)
+
+    def test_pago_neto_sin_balance_usa_total_menos_total_paid(self):
+        from alegra_integration.bill_mapping import bill_saldo_por_pagar, map_bill_to_factura_fields
+
+        bill = {
+            'id': '43',
+            'date': '2026-05-20',
+            'total': 4450893,
+            'totalPaid': 4450893,
+            'client': {'identification': '900727672', 'name': 'Proveedor'},
+        }
+        self.assertEqual(bill_saldo_por_pagar(bill), 0)
+        fields = map_bill_to_factura_fields(bill)
+        self.assertEqual(fields['pago_neto'], 0)
+        self.assertEqual(fields['valor'], 0)
+
+    def test_pago_neto_usa_balance_no_total(self):
+        from alegra_integration.bill_mapping import map_bill_to_factura_fields
+
+        bill = {
+            'id': '43',
+            'date': '2026-05-20',
+            'subtotal': 3740246,
+            'total': 4450893,
+            'totalPaid': 0,
+            'balance': 4039466,
+            'client': {'identification': '900727672', 'name': 'SUMAS IGUALES'},
+            'numberTemplate': {'number': '43'},
+        }
+        fields = map_bill_to_factura_fields(bill)
+        self.assertEqual(fields['pago_neto'], 4039466)
+        self.assertEqual(fields['valor'], 4039466)
+        self.assertNotEqual(fields['pago_neto'], 4450893)
+
+    def test_pago_neto_canje_balance_cero_total_paid(self):
+        from alegra_integration.bill_mapping import bill_pago_neto_canje
+
+        bill = {
+            'id': '43',
+            'total': 4450893,
+            'totalPaid': 4039466,
+            'balance': 0,
+            'status': 'closed',
+        }
+        self.assertEqual(bill_pago_neto_canje(bill), 0)
+
+    def test_pago_neto_canje_escenario_balance_igual_total_paid(self):
+        from alegra_integration.bill_mapping import bill_pago_neto_canje
+
+        bill = {'balance': 4039466, 'totalPaid': 4039466}
+        self.assertEqual(bill_pago_neto_canje(bill), 0)
 
     def test_infer_document_type(self):
         from alegra_integration.bill_mapping import (

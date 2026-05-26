@@ -43,6 +43,18 @@
     font-size: 10px;
   }
   #tablaPendientes .btn-xs { font-size: 10px; padding: 0.1rem 0.35rem; }
+  #tablaPendientes .btn-icon {
+    font-size: 11px;
+    padding: 0.2rem 0.45rem;
+    line-height: 1;
+    min-width: 1.75rem;
+  }
+  #tablaPendientes .btn-group-acciones .btn + .btn { margin-left: 0.2rem; }
+  .modal-footer .btn-icon-modal {
+    min-width: 2.25rem;
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+  }
   #comentarioContable { min-height: 80px; }
   .historial-asignacion {
     font-size: 10px;
@@ -84,7 +96,9 @@
       <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btnNuevoRadicado">
         <i class="fas fa-plus mr-1"></i>Nuevo radicado
       </button>
-      <button type="button" class="btn btn-sm btn-primary mb-1" id="btnReload">Actualizar</button>
+      <button type="button" class="btn btn-sm btn-primary mb-1" id="btnReload" data-toggle="tooltip" data-placement="top" title="Actualizar lista">
+        <i class="fas fa-sync-alt"></i><span class="sr-only">Actualizar</span>
+      </button>
     </div>
   </div>
 
@@ -235,6 +249,18 @@
         <p class="small text-muted mb-2" id="resumenRad"></p>
         <div id="asignarHistorialBox" class="historial-asignacion d-none"></div>
         <p id="asignarSugerenciaHint" class="sugerencia-hint d-none mb-2"></p>
+        <div id="asignarCanjeBox" class="form-group d-none border rounded bg-light p-2 mb-2">
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="chkEsCanje">
+            <label class="custom-control-label font-weight-bold small" for="chkEsCanje">
+              Es canje (pagado con cuenta de canje en Alegra)
+            </label>
+          </div>
+          <small class="text-muted d-block mt-1">
+            Consulta Alegra y recalcula pago neto = balance − totalPaid. Si queda en $0, va directo a tesorería sin aprobador.
+          </small>
+          <div id="asignarCanjePreview" class="small mt-2 text-muted"></div>
+        </div>
         <div class="form-group">
           <label class="font-weight-bold small">Oficina <span class="text-danger">*</span></label>
           <select id="selOficina" class="form-control">
@@ -255,9 +281,18 @@
           <textarea id="comentarioContable" class="form-control" maxlength="2000" placeholder="Opcional"></textarea>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="btnConfirmarAsignar">Guardar asignación</button>
+      <div class="modal-footer d-flex justify-content-between">
+        <button type="button" class="btn btn-outline-danger btn-sm btn-icon-modal" id="btnEliminarAsignar" data-toggle="tooltip" data-placement="top" title="Eliminar radicado">
+          <i class="fas fa-trash-alt"></i><span class="sr-only">Eliminar radicado</span>
+        </button>
+        <div>
+          <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-toggle="tooltip" data-placement="top" title="Cancelar">
+            <i class="fas fa-times"></i><span class="sr-only">Cancelar</span>
+          </button>
+          <button type="button" class="btn btn-success btn-sm btn-icon-modal" id="btnConfirmarAsignar" data-toggle="tooltip" data-placement="top" title="Guardar asignación">
+            <i class="fas fa-save"></i><span class="sr-only">Guardar asignación</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -267,12 +302,50 @@
 {% block js %}
 <script>
 const CSRF = '{{ csrf_token }}';
-let tabla, radicadoActual = null, empresaRad = '', radicadoValor = 0;
+let tabla, radicadoActual = null, empresaRad = '', radicadoValor = 0, radicadoEsBill = false, radicadoRow = null;
 const OPT_SIN_APROB = '<option value="">— Sin aprobador (aprobación automática) —</option>';
 
 function showAlert(type, html) {
   $('#alertBox').html('<div class="alert alert-' + type + ' alert-dismissible fade show">' + html +
     '<button type="button" class="close" data-dismiss="alert">&times;</button></div>');
+}
+
+function mensajeConfirmacionEliminar(row) {
+  return (
+    '¿Eliminar el radicado #' + row.pk + '?\n\n' +
+    'Proveedor: ' + (row.nombretercero || '—') + '\n' +
+    'Factura: ' + (row.nrofactura || '—') + '\n' +
+    'Valor: $' + Number(row.valor || 0).toLocaleString('es-CO') + '\n\n' +
+    'Esta acción no se puede deshacer.\n' +
+    'Solo se elimina el registro en AndinaSoft; el documento en Alegra no se borra.'
+  );
+}
+
+function eliminarRadicado(pk, onOk) {
+  $.ajax({
+    url: '/accounting/ajax/gastos-alegra/eliminar',
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ radicado: pk }),
+    success: function(res) {
+      if (typeof onOk === 'function') onOk(res);
+    },
+    error: function(xhr) {
+      showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al eliminar el radicado');
+    }
+  });
+}
+
+function confirmarYEliminarRadicado(row, onSuccessExtra) {
+  if (!row || !row.pk) return;
+  if (!window.confirm(mensajeConfirmacionEliminar(row))) return;
+  eliminarRadicado(row.pk, function(res) {
+    var el = res.eliminado || {};
+    showAlert('success', 'Radicado #' + el.pk + ' eliminado.');
+    if (typeof onSuccessExtra === 'function') onSuccessExtra();
+    loadTable();
+  });
 }
 
 function updateHintSinAprob(data, $hint) {
@@ -347,6 +420,10 @@ function renderHistorialAsignacion(items) {
     return '<div class="hist-line">#' + h.pk + ' · ' + escapeHtml(h.nombretercero || '—') +
       ' · <strong>' + escapeHtml(h.oficina) + '</strong> · $' +
       Number(h.valor || 0).toLocaleString('es-CO') +
+      (h.pago_neto != null && h.pago_neto !== h.valor
+        ? ' <span class="text-muted">(pago neto $' + Number(h.pago_neto).toLocaleString('es-CO') + ')</span>'
+        : '') +
+      (h.es_canje ? ' · <span class="badge badge-info">canje</span>' : '') +
       (desc ? ' · <em>' + escapeHtml(desc) + '</em>' : '') +
       ' · ' + escapeHtml(aprob) + '</div>';
   }).join('');
@@ -388,7 +465,44 @@ function aplicarSugerenciaAsignacion(data, $oficina, $aprobador, $hintSug, $boxH
     } else {
       $hintSug.addClass('d-none').text('');
     }
+    if (sug.es_canje && $('#chkEsCanje').length) {
+      $hintSug.append(' Este tercero tuvo gastos marcados como canje antes.');
+    }
   }
+  if (sug.es_canje && $('#chkEsCanje').length && radicadoEsBill) {
+    $('#chkEsCanje').prop('checked', true);
+    refrescarCanjePreview();
+  }
+}
+
+function resetCanjeAsignar() {
+  $('#chkEsCanje').prop('checked', false);
+  $('#asignarCanjePreview').text('');
+  $('#asignarCanjeBox').addClass('d-none');
+}
+
+function refrescarCanjePreview() {
+  var $prev = $('#asignarCanjePreview');
+  if (!$('#chkEsCanje').is(':checked') || !radicadoActual) {
+    $prev.text('');
+    return $.Deferred().resolve();
+  }
+  $prev.html('<span class="text-muted">Consultando Alegra…</span>');
+  return $.get('/accounting/ajax/gastos-alegra/canje-preview', { radicado: radicadoActual })
+    .done(function(data) {
+      var html =
+        'Alegra bill <strong>' + escapeHtml(data.bill_id) + '</strong> · ' +
+        'balance $' + Number(data.balance).toLocaleString('es-CO') + ' · ' +
+        'totalPaid $' + Number(data.totalPaid).toLocaleString('es-CO') +
+        ' → <strong>pago neto $' + Number(data.pago_neto).toLocaleString('es-CO') + '</strong>';
+      if (data.pago_neto === 0) {
+        html += ' <span class="text-success">(sin pago tesorería)</span>';
+      }
+      $prev.html(html);
+    })
+    .fail(function(xhr) {
+      $prev.html('<span class="text-danger">' + escapeHtml((xhr.responseJSON || {}).detail || 'Error consultando Alegra') + '</span>');
+    });
 }
 
 function loadSugerenciasAsignacion(params, $oficina, $aprobador, $hintSug, $boxHist) {
@@ -445,6 +559,24 @@ function escapeHtml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function btnAccionIcon(cls, icon, title, attrs) {
+  return '<button type="button" class="btn btn-xs btn-icon ' + cls + '" ' +
+    'data-toggle="tooltip" data-placement="top" title="' + escapeHtml(title) + '" ' +
+    (attrs || '') + '>' +
+    '<i class="fas ' + icon + '" aria-hidden="true"></i>' +
+    '<span class="sr-only">' + escapeHtml(title) + '</span></button>';
+}
+
+function initTooltipsEn($root) {
+  ($root || $(document)).find('[data-toggle="tooltip"]').each(function() {
+    var $t = $(this);
+    if ($t.data('bs.tooltip')) {
+      $t.tooltip('dispose');
+    }
+    $t.tooltip({ container: 'body' });
+  });
 }
 
 function cellTruncado(text, maxLen) {
@@ -537,15 +669,25 @@ $(function() {
       { data: 'nrofactura', className: 'col-c', render: function(v) { return cellTruncado(v, 14); } },
       { data: 'fechafactura', className: 'col-c' },
       { data: 'valor', className: 'col-c text-nowrap', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
-      { data: null, className: 'col-c text-nowrap', orderable: false, render: function(d, t, row) {
-        return '<button class="btn btn-xs btn-outline-primary btn-asignar" data-pk="' + row.pk + '">Asignar</button> ' +
-               '<button class="btn btn-xs btn-outline-secondary btn-soporte" data-pk="' + row.pk + '">PDF</button>';
+      { data: null, className: 'col-c text-nowrap btn-group-acciones', orderable: false, render: function(d, t, row) {
+        var pk = row.pk;
+        return btnAccionIcon('btn-outline-primary btn-asignar', 'fa-clipboard-check', 'Asignar', 'data-pk="' + pk + '"') +
+          btnAccionIcon('btn-outline-secondary btn-soporte', 'fa-file-pdf', 'Ver PDF soporte', 'data-pk="' + pk + '"') +
+          btnAccionIcon('btn-outline-danger btn-eliminar', 'fa-trash-alt', 'Eliminar radicado', 'data-pk="' + pk + '"');
       }}
     ],
     order: [[0, 'desc']],
     autoWidth: false,
     scrollX: true,
+    drawCallback: function() {
+      initTooltipsEn($('#tablaPendientes tbody'));
+    },
     language: { url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Spanish.json' }
+  });
+
+  initTooltipsEn($('#btnReload'));
+  $('#modalAsignar').on('shown.bs.modal', function() {
+    initTooltipsEn($('#modalAsignar .modal-footer'));
   });
 
   $('#btnReload').on('click', loadTable);
@@ -724,16 +866,31 @@ $(function() {
     window.open('/accounting/ajax/gastos-alegra/soporte-pdf/' + $(this).data('pk'), '_blank', 'noopener');
   });
 
+  $('#tablaPendientes').on('click', '.btn-eliminar', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    confirmarYEliminarRadicado(tabla.row($(this).closest('tr')).data());
+  });
+
   $('#tablaPendientes').on('click', '.btn-asignar', function() {
     const row = tabla.row($(this).closest('tr')).data();
+    radicadoRow = row;
     radicadoActual = row.pk;
     empresaRad = row.empresa;
     radicadoValor = Number(row.valor) || 0;
+    radicadoEsBill = (row.alegra_document_type || '') === 'bill' && !!(row.alegra_id || '').trim();
     $('#lblRad').text(row.pk);
-    $('#resumenRad').text(row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO'));
+    $('#resumenRad').text(
+      row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO') +
+      (row.pago_neto != null ? ' · pago neto $' + Number(row.pago_neto||0).toLocaleString('es-CO') : '')
+    );
     $('#selOficina').val('');
     $('#selAprobador').val('');
     $('#comentarioContable').val('');
+    resetCanjeAsignar();
+    if (radicadoEsBill) {
+      $('#asignarCanjeBox').removeClass('d-none');
+    }
     $('#asignarHistorialBox').addClass('d-none').empty();
     $('#asignarSugerenciaHint').addClass('d-none').text('');
     $('#modalAsignar').modal('show');
@@ -749,7 +906,9 @@ $(function() {
       });
   });
 
-  function enviarAsignacion(oficina, aprobador_id) {
+  $('#chkEsCanje').on('change', refrescarCanjePreview);
+
+  function enviarAsignacion(oficina, aprobador_id, esCanje) {
     $.ajax({
       url: '/accounting/ajax/gastos-alegra/asignar',
       method: 'POST',
@@ -759,11 +918,16 @@ $(function() {
         radicado: radicadoActual,
         oficina: oficina,
         aprobador_id: aprobador_id,
-        comentario_contable: $('#comentarioContable').val()
+        comentario_contable: $('#comentarioContable').val(),
+        es_canje: !!esCanje
       }),
-      success: function() {
+      success: function(res) {
         $('#modalAsignar').modal('hide');
-        showAlert('success', aprobador_id ? 'Asignación guardada; pendiente de aprobación.' : 'Oficina asignada; gasto aprobado automáticamente.');
+        var fac = res.factura || {};
+        var msg = fac.gasto_aprobacion_estado === 'aprobado'
+          ? 'Asignación guardada; gasto aprobado' + (fac.gasto_es_canje ? ' (canje)' : '') + '.'
+          : 'Asignación guardada; pendiente de aprobación.';
+        showAlert('success', msg);
         loadTable();
       },
       error: function(xhr) {
@@ -775,18 +939,37 @@ $(function() {
   $('#btnConfirmarAsignar').on('click', function() {
     const oficina = $('#selOficina').val();
     const aprobador_id = $('#selAprobador').val();
+    const esCanje = $('#chkEsCanje').is(':checked');
     if (!oficina) {
       showAlert('warning', 'La oficina es obligatoria.');
+      return;
+    }
+    if (esCanje && !radicadoEsBill) {
+      showAlert('warning', 'Canje solo aplica a documentos soporte (bill) de Alegra.');
       return;
     }
     if (!aprobador_id) {
       const cfg = $('#selAprobador').data('empresaConfig');
       confirmarRegistroSinAprobador(cfg, radicadoValor, function() {
-        enviarAsignacion(oficina, '');
+        enviarAsignacion(oficina, '', esCanje);
       });
       return;
     }
-    enviarAsignacion(oficina, aprobador_id);
+    if (esCanje) {
+      if (!window.confirm('Marcó este gasto como CANJE. Se consultará Alegra y se recalculará el pago neto. ¿Continuar?')) {
+        return;
+      }
+    }
+    enviarAsignacion(oficina, aprobador_id, esCanje);
+  });
+
+  $('#btnEliminarAsignar').on('click', function() {
+    if (!radicadoRow) return;
+    confirmarYEliminarRadicado(radicadoRow, function() {
+      $('#modalAsignar').modal('hide');
+      radicadoActual = null;
+      radicadoRow = null;
+    });
   });
 });
 </script>
