@@ -279,7 +279,10 @@ def references_data(request):
         if not empresa_id:
             return JsonResponse({'detail': 'Empresa requerida'}, status=400)
 
-        data = AlegraIntegrationService(user=request.user).reference_sync(empresa_id=empresa_id)
+        data = AlegraIntegrationService(user=request.user).reference_sync(
+            empresa_id=empresa_id,
+            ref_type=ref_type or None,
+        )
 
         # Allow fetching individual reference groups.
         if ref_type in ('banks', 'categories', 'cost_centers'):

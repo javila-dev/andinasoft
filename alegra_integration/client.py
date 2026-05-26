@@ -359,39 +359,52 @@ class AlegraMCPClient:
             start += limit
         return items
 
-    def get_reference_data(self):
-        # Prefer REST for reference data: it's more stable than MCP and has fixed endpoints.
-        # NOTE: Not all endpoints support start/limit pagination. In particular, /categories is filter-based.
-        categories = self.rest('GET', '/categories?format=plain')
-        if isinstance(categories, dict) and 'data' in categories:
-            categories = categories['data']
-        if not isinstance(categories, list):
-            categories = []
+    def get_reference_data(self, *, sections=None):
+        """
+        Catálogos Alegra para Referencias.
+        sections: iterable opcional con claves a consultar
+        (banks, categories, cost_centers, journal_numerations, number_templates, retentions).
+        Si es None, consulta todo (puede tardar por journal_numerations).
+        """
+        want = set(sections) if sections is not None else None
+
+        def _include(key):
+            return want is None or key in want
+
+        data = {}
+        if _include('banks'):
+            data['banks'] = self._rest_list_all('/bank-accounts')
+        if _include('categories'):
+            categories = self.rest('GET', '/categories?format=plain')
+            if isinstance(categories, dict) and 'data' in categories:
+                categories = categories['data']
+            if not isinstance(categories, list):
+                categories = []
+            data['categories'] = categories
+        if _include('cost_centers'):
+            data['cost_centers'] = self._rest_list_all('/cost-centers')
+        if _include('journal_numerations'):
+            data['journal_numerations'] = self._rest_journal_numerations()
+        if _include('number_templates'):
+            data['number_templates'] = self._rest_number_templates()
+        if _include('retentions'):
+            data['retentions'] = self._rest_list_all('/retentions')
+        return data
+
+    def _rest_number_templates(self):
         return {
-            'banks': self._rest_list_all('/bank-accounts'),
-            'categories': categories,
-            'cost_centers': self._rest_list_all('/cost-centers'),
-            # Numeraciones contables (journals): Alegra usa idNumeration (no siempre coincide con number-templates).
-            # No existe un endpoint público claro para listarlas, así que extraemos las numeraciones visibles
-            # desde los comprobantes recientes con fields=numberTemplate,type.
-            'journal_numerations': self._rest_journal_numerations(),
-            # Numeraciones (incluye resolutionNumber, prefix, nextInvoiceNumber, etc.)
-            'number_templates': {
-                'invoice': self._rest_list_all('/number-templates', extra_params={'documentType': 'invoice'}),
-                'estimate': self._rest_list_all('/number-templates', extra_params={'documentType': 'estimate'}),
-                'transactionIn': self._rest_list_all('/number-templates', extra_params={'documentType': 'transactionIn'}),
-                'transactionOut': self._rest_list_all('/number-templates', extra_params={'documentType': 'transactionOut'}),
-                'creditNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'creditNote'}),
-                'debitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'debitNote'}),
-                'incomeDebitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'incomeDebitNote'}),
-                # Colombia — documento soporte de proveedor (POST /bills)
-                'supportDocument': self._rest_list_all('/number-templates', extra_params={'documentType': 'supportDocument'}),
-                'bill': self._rest_list_all('/number-templates', extra_params={'documentType': 'bill'}),
-            },
-            'retentions': self._rest_list_all('/retentions'),
+            'invoice': self._rest_list_all('/number-templates', extra_params={'documentType': 'invoice'}),
+            'estimate': self._rest_list_all('/number-templates', extra_params={'documentType': 'estimate'}),
+            'transactionIn': self._rest_list_all('/number-templates', extra_params={'documentType': 'transactionIn'}),
+            'transactionOut': self._rest_list_all('/number-templates', extra_params={'documentType': 'transactionOut'}),
+            'creditNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'creditNote'}),
+            'debitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'debitNote'}),
+            'incomeDebitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'incomeDebitNote'}),
+            'supportDocument': self._rest_list_all('/number-templates', extra_params={'documentType': 'supportDocument'}),
+            'bill': self._rest_list_all('/number-templates', extra_params={'documentType': 'bill'}),
         }
 
-    def _rest_journal_numerations(self, *, max_pages=120, stop_after_pages_without_new=10):
+    def _rest_journal_numerations(self, *, max_pages=40, stop_after_pages_without_new=8):
         """
         Best-effort list of journal numerations (idNumeration) by scanning recent journals.
         Returns unique numberTemplate objects: {id, name, prefix, nextNumber?, type?}.

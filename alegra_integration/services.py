@@ -236,10 +236,25 @@ class AlegraIntegrationService:
         batch.save(update_fields=['success_count', 'error_count', 'summary', 'status', 'completed_at', 'updated_at'])
         return self._batch_response(batch, documents)
 
-    def reference_sync(self, *, empresa_id):
+    @staticmethod
+    def _reference_sections_for_type(ref_type):
+        """Mapeo type= del frontend → claves a consultar en Alegra (evita cargar todo en cada tab)."""
+        key = (ref_type or '').strip().lower()
+        if not key:
+            return None
+        if key in ('banks', 'categories', 'cost_centers', 'retentions'):
+            return {key}
+        if key in ('journal_numerations', 'journal_numeration', 'journals_numerations'):
+            return {'journal_numerations'}
+        if key in ('number_templates', 'numerations', 'numeration'):
+            return {'number_templates'}
+        return None
+
+    def reference_sync(self, *, empresa_id, ref_type=None):
         empresa = empresas.objects.get(pk=empresa_id)
         client = AlegraMCPClient(empresa)
-        return client.get_reference_data()
+        sections = self._reference_sections_for_type(ref_type)
+        return client.get_reference_data(sections=sections)
 
     def contact_sync(self, *, empresa_id):
         empresa = empresas.objects.get(pk=empresa_id)
