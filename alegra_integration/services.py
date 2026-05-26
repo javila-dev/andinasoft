@@ -1063,14 +1063,24 @@ class AlegraIntegrationService:
         source_model = f'{source.__class__._meta.app_label}.{source.__class__.__name__}'
         source_pk = getattr(source, 'pk', None) or getattr(source, 'id_pago', '')
         sent_docs = self._sent_documents_for_source(empresa, proyecto, source_model, source_pk)
-        if sent_docs:
-            return [{'existing_sent': doc} for doc in sent_docs]
+        sent_by_key = {d.local_key: d for d in sent_docs}
+
+        # Pago enviado antes como documento único (expense:pago:{pk}): no reconstruir por tercero.
+        if source_model == 'accounting.Pagos' and sent_docs:
+            legacy_key = f'expense:pago:{source_pk}'
+            legacy_sent = [d for d in sent_docs if d.local_key == legacy_key]
+            if legacy_sent:
+                return [{'existing_sent': doc} for doc in legacy_sent]
 
         try:
             built = builder.build(source)
             built_list = built if isinstance(built, list) else [built]
             out = []
             for b in built_list:
+                existing = sent_by_key.get(b.local_key)
+                if existing:
+                    out.append({'existing_sent': existing})
+                    continue
                 # Attach local debugging payload when available (never sent to Alegra).
                 try:
                     if hasattr(builder, 'local_payload'):

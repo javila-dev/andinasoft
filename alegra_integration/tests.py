@@ -740,6 +740,72 @@ class WebhookBillMappingTests(SimpleTestCase):
                 built = builder._from_pago(pago)
         self.assertEqual(built.payload['categories'][0]['id'], 'cat-22050501')
 
+    def test_expense_payment_journal_multi_tercero_un_pago_por_detalle(self):
+        import json
+        from types import SimpleNamespace
+
+        from accounting.journal_cxp import extraer_lineas_cxp, serializar_detalle_journal_pago
+        from accounting.test_journal_cxp import JOURNAL_11
+        from alegra_integration.builders import ExpensePaymentBuilder
+
+        class JournalResolver(ResolverStub):
+            def bill_for_factura(self, *a, **k):
+                return None
+
+            def numeration(self, document_code, required=True):
+                return 'num-4'
+
+            def category_for_puc_code(self, account_code, required=False):
+                return f'cat-{account_code}'
+
+        lineas = serializar_detalle_journal_pago(extraer_lineas_cxp(JOURNAL_11))
+        factura = SimpleNamespace(
+            pk=17335,
+            idtercero='901018375',
+            nrofactura='J-11',
+            descripcion='COMISIONES',
+            empresa=SimpleNamespace(pk='901018375'),
+            cuenta_por_pagar=None,
+            alegra_bill_id='901018375:journal:11',
+            alegra_document_type='journal',
+            alegra_journal_detalle=json.dumps(lineas),
+        )
+        detalle_rows = [
+            SimpleNamespace(pk=1, id_tercero='1017232868', nombre_tercero='LAURA', valor=801561),
+            SimpleNamespace(pk=2, id_tercero='1037588511', nombre_tercero='JUAN', valor=2404686),
+            SimpleNamespace(pk=3, id_tercero='8130000', nombre_tercero='HAROLD', valor=1311269),
+        ]
+        pago = SimpleNamespace(
+            pk=14906,
+            valor=4517516,
+            fecha_pago=datetime.date(2026, 5, 15),
+            cuenta=SimpleNamespace(pk=1, nro_cuentacontable='11100501', cuentabanco='transfer', nit_empresa_id='901018375'),
+            nroradicado=factura,
+        )
+        builder = ExpensePaymentBuilder(SimpleNamespace(pk='901018375'))
+        builder.resolver = JournalResolver()
+        with patch('alegra_integration.builders.clientes') as mock_cli:
+            mock_cli.objects.filter.return_value.exists.return_value = False
+            with patch('alegra_integration.builders.empresas') as mock_emp:
+                mock_emp.objects.filter.return_value.exists.return_value = False
+                with patch('alegra_integration.builders.asesores') as mock_ase:
+                    mock_ase.objects.filter.return_value.exists.return_value = True
+                    builder.resolver.contact_for_asesor = lambda _x: '175'
+                    with patch.object(builder, '_pagos_detalle', return_value=detalle_rows):
+                        built_list = builder._from_pago(pago)
+        self.assertEqual(len(built_list), 3)
+        keys = {b.local_key for b in built_list}
+        self.assertEqual(keys, {
+            'expense:pago:14906:t:1017232868',
+            'expense:pago:14906:t:1037588511',
+            'expense:pago:14906:t:8130000',
+        })
+        prices = sorted(c['price'] for b in built_list for c in b.payload['categories'])
+        self.assertEqual(prices, [801561.0, 1311269.0, 2404686.0])
+        for b in built_list:
+            self.assertEqual(b.payload['categories'][0]['id'], 'cat-22050501')
+            self.assertNotIn('bills', b.payload)
+
     def test_expense_payment_sin_bill_con_cxp_pone_categories(self):
         """Sin bill en Alegra pero con cuenta_por_pagar: el valor va en categories[].price."""
         from alegra_integration.builders import ExpensePaymentBuilder

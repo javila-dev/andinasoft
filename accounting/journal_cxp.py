@@ -301,24 +301,11 @@ def _descripcion_desde_journal(journal, multi_tercero):
     return obs
 
 
-def _fila_detalle_para_pago(detalle, factura, pago):
-    """Fila de alegra_journal_detalle que corresponde a este pago (tercero / detalle tesorería)."""
-    from accounting.models import pago_detallado_relacionado
-
+def fila_journal_para_tercero(detalle, id_tercero):
+    """Fila de alegra_journal_detalle para un tercero del pago detallado."""
     if not detalle:
         return None
-    target_ident = ''
-    pagos_det = list(pago_detallado_relacionado.objects.filter(pago=pago.pk))
-    if len(pagos_det) == 1:
-        target_ident = _ident_norm(pagos_det[0].id_tercero)
-    elif len(pagos_det) > 1:
-        pago_val = _money(getattr(pago, 'valor', 0))
-        for pd in pagos_det:
-            if _money(pd.valor) == pago_val:
-                target_ident = _ident_norm(pd.id_tercero)
-                break
-    if not target_ident:
-        target_ident = _ident_norm(getattr(factura, 'idtercero', None))
+    target_ident = _ident_norm(id_tercero)
     if target_ident:
         for row in detalle:
             if _ident_norm(row.get('id_tercero')) == target_ident:
@@ -328,15 +315,8 @@ def _fila_detalle_para_pago(detalle, factura, pago):
     return None
 
 
-def categoria_alegra_para_pago_journal(resolver, factura, pago):
-    """
-    Id de categoría Alegra (CxP) para POST /payments cuando el radicado es journal.
-    Usa account_code guardado en alegra_journal_detalle al radicar.
-    """
-    detalle = detalle_pago_desde_factura(factura)
-    if not detalle:
-        return None
-    row = _fila_detalle_para_pago(detalle, factura, pago)
+def categoria_alegra_desde_fila_journal(resolver, row):
+    """Id categoría Alegra (CxP) desde una fila de alegra_journal_detalle."""
     if not row:
         return None
     account_code = (row.get('account_code') or '').strip()
@@ -349,6 +329,32 @@ def categoria_alegra_para_pago_journal(resolver, factura, pago):
     if stored:
         return stored
     return resolver.category_for_puc_code(account_code, required=False)
+
+
+def _fila_detalle_para_pago(detalle, factura, pago):
+    """Fila de alegra_journal_detalle que corresponde a este pago (tercero / detalle tesorería)."""
+    from accounting.models import pago_detallado_relacionado
+
+    if not detalle:
+        return None
+    pagos_det = list(pago_detallado_relacionado.objects.filter(pago=pago.pk))
+    if len(pagos_det) == 1:
+        return fila_journal_para_tercero(detalle, pagos_det[0].id_tercero)
+    if len(pagos_det) > 1:
+        return None
+    return fila_journal_para_tercero(detalle, getattr(factura, 'idtercero', None))
+
+
+def categoria_alegra_para_pago_journal(resolver, factura, pago):
+    """
+    Id de categoría Alegra (CxP) para POST /payments cuando el radicado es journal.
+    Usa account_code guardado en alegra_journal_detalle al radicar.
+    """
+    detalle = detalle_pago_desde_factura(factura)
+    if not detalle:
+        return None
+    row = _fila_detalle_para_pago(detalle, factura, pago)
+    return categoria_alegra_desde_fila_journal(resolver, row)
 
 
 def detalle_pago_desde_factura(factura):

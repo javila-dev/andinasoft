@@ -240,3 +240,12 @@ class JournalCxpTests(SimpleTestCase):
         self.assertEqual(r['valor'], 3518000)
         self.assertEqual(r['id_tercero'], '800197268')
         self.assertIn('RETENCION', r['nro_factura'].upper())
+
+    def test_fila_journal_para_tercero(self):
+        from accounting.journal_cxp import extraer_lineas_cxp, fila_journal_para_tercero, serializar_detalle_journal_pago
+
+        detalle = serializar_detalle_journal_pago(extraer_lineas_cxp(JOURNAL_11))
+        row = fila_journal_para_tercero(detalle, '1037588511')
+        self.assertEqual(row['id_tercero'], '1037588511')
+        self.assertEqual(row['valor'], 2404686)
+        self.assertIsNone(fila_journal_para_tercero(detalle, '9999999999'))

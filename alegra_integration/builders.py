@@ -734,12 +734,25 @@ class ExpensePaymentBuilder:
 
     def build(self, source):
         if isinstance(source, Pagos):
-            return self._from_pago(source)
+            built = self._from_pago(source)
+            return built
         if isinstance(source, Anticipos):
             return self._from_anticipo(source)
         if isinstance(source, transferencias_companias):
             return self._from_transferencia(source)
         raise AlegraBuildError(f'Tipo de egreso no soportado: {source.__class__.__name__}')
+
+    def _pagos_detalle(self, pago):
+        from accounting.models import pago_detallado_relacionado
+
+        return list(pago_detallado_relacionado.objects.filter(pago=pago.pk).order_by('pk'))
+
+    def _local_key_pago(self, pago_pk, id_tercero=None):
+        if id_tercero:
+            from accounting.journal_cxp import _ident_norm
+
+            return f'expense:pago:{pago_pk}:t:{_ident_norm(id_tercero)}'
+        return f'expense:pago:{pago_pk}'
 
     def _base_payment(self, *, date, cuenta, value, description, local_key, source_model, source_pk, contact_id=None, numeration_id=None):
         bank_account_id = self.resolver.bank_account_for_account(cuenta)
@@ -781,6 +794,96 @@ class ExpensePaymentBuilder:
         if empresa_origen_id and empresa_pago_id and empresa_origen_id != empresa_pago_id:
             return self._from_pago_intercompany(pago, factura, empresa_origen_id, empresa_pago_id)
 
+        pagos_det = self._pagos_detalle(pago)
+        if pagos_det:
+            return [self._from_pago_detalle_line(pago, factura, pd) for pd in pagos_det]
+        return self._from_pago_unico(pago, factura)
+
+    def _from_pago_detalle_line(self, pago, factura, pd):
+        """Un POST /payments por tercero del pago detallado (tesorería)."""
+        id_tercero = (pd.id_tercero or '').strip()
+        if not id_tercero:
+            raise AlegraBuildError(f'El pago {pago.pk} tiene una línea de detalle sin id_tercero.')
+        valor_linea = getattr(pd, 'valor', None)
+        if valor_linea is None or _money(valor_linea) <= 0:
+            raise AlegraBuildError(
+                f'El pago {pago.pk} tiene una línea de detalle sin valor para el tercero {id_tercero}.'
+            )
+        contact_id = self._contact_id_for_tercero(self.resolver, id_tercero, required=True)
+        nombre = (getattr(pd, 'nombre_tercero', None) or '').strip()
+        desc_base = f'PAGO FACT {factura.nrofactura} {factura.descripcion or ""}'.strip()
+        if nombre:
+            desc_base = f'{desc_base} · {nombre}'.strip()
+        built = self._base_payment(
+            date=pago.fecha_pago,
+            cuenta=pago.cuenta,
+            value=valor_linea,
+            description=desc_base,
+            local_key=self._local_key_pago(pago.pk, id_tercero),
+            source_model='accounting.Pagos',
+            source_pk=pago.pk,
+            contact_id=contact_id,
+            numeration_id=self.resolver.numeration('expense_payment', required=False),
+        )
+        bill_id = self.resolver.bill_for_factura(factura.pk, required=False, factura=factura)
+        if bill_id:
+            built.payload['bills'] = [{'id': bill_id, 'amount': _money(valor_linea)}]
+            return built
+        cat_id = self._categoria_para_pago_linea(factura, id_tercero)
+        if not cat_id:
+            from accounting.journal_cxp import detalle_pago_desde_factura, fila_journal_para_tercero
+
+            journal_detalle = detalle_pago_desde_factura(factura)
+            row = fila_journal_para_tercero(journal_detalle, id_tercero) if journal_detalle else {}
+            puc = (row.get('account_code') or '').strip()
+            raise AlegraBuildError(
+                f'El pago {pago.pk} (tercero {id_tercero}) no tiene categoría CxP mapeada '
+                f'(cuenta PUC {puc or "?"}). Revise Alegra → Referencias → Egresos.'
+            )
+        built.payload['categories'] = [{
+            'id': cat_id,
+            'quantity': 1,
+            'price': _money(valor_linea),
+            'observations': desc_base[:255],
+        }]
+        return built
+
+    def _categoria_para_pago_linea(self, factura, id_tercero):
+        from accounting.journal_cxp import (
+            categoria_alegra_desde_fila_journal,
+            detalle_pago_desde_factura,
+            fila_journal_para_tercero,
+        )
+        from alegra_integration.bill_mapping import ALEGRA_DOC_JOURNAL
+
+        journal_detalle = detalle_pago_desde_factura(factura)
+        doc_type = (getattr(factura, 'alegra_document_type', '') or '').strip()
+        if not doc_type and ':journal:' in (getattr(factura, 'alegra_bill_id', None) or ''):
+            doc_type = ALEGRA_DOC_JOURNAL
+        if doc_type == ALEGRA_DOC_JOURNAL or journal_detalle:
+            row = fila_journal_para_tercero(journal_detalle, id_tercero) if journal_detalle else None
+            return categoria_alegra_desde_fila_journal(self.resolver, row)
+
+        category_code = factura.cuenta_por_pagar.cuenta_credito_1 if factura.cuenta_por_pagar else None
+        if not category_code:
+            return None
+        interface_id = getattr(factura, 'cuenta_por_pagar_id', None)
+        cat_id = None
+        if interface_id:
+            cat_id = self.resolver.get(
+                AlegraMapping.CATEGORY,
+                local_model='accounting.info_interfaces',
+                local_pk=str(interface_id),
+                local_code='cxp_credito_1',
+                required=False,
+            )
+        if not cat_id:
+            cat_id = self.resolver.category_for_puc_code(category_code, required=False)
+        if not cat_id:
+            cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=False)
+        return cat_id
+
+    def _from_pago_unico(self, pago, factura):
         if not factura or getattr(factura, 'idtercero', None) is None:
             raise AlegraBuildError(f'El pago {pago.pk} no tiene idtercero en su factura/radicado.')
         contact_id = self._contact_id_for_tercero(self.resolver, factura.idtercero, required=True)
@@ -789,7 +892,7 @@ class ExpensePaymentBuilder:
             cuenta=pago.cuenta,
             value=pago.valor,
             description=f'PAGO FACT {factura.nrofactura} {factura.descripcion or ""}',
-            local_key=f'expense:pago:{pago.pk}',
+            local_key=self._local_key_pago(pago.pk),
             source_model='accounting.Pagos',
             source_pk=pago.pk,
             contact_id=contact_id,
@@ -823,7 +926,8 @@ class ExpensePaymentBuilder:
                 puc = (row.get('account_code') or '').strip()
                 raise AlegraBuildError(
                     f'La factura {factura.pk} tiene detalle journal (cuenta PUC {puc or "?"}) '
-                    f'pero falta mapeo en Alegra → Referencias → Egresos.'
+                    f'pero falta mapeo en Alegra → Referencias → Egresos. '
+                    f'Registre el pago en tesorería con detalle por tercero.'
                 )
 
         category_code = factura.cuenta_por_pagar.cuenta_credito_1 if factura.cuenta_por_pagar else None
@@ -831,20 +935,7 @@ class ExpensePaymentBuilder:
             raise AlegraBuildError(
                 f'La factura {factura.pk} no tiene cuenta por pagar ni detalle journal CxP para mapear categoría.'
             )
-        interface_id = getattr(factura, 'cuenta_por_pagar_id', None)
-        cat_id = None
-        if interface_id:
-            cat_id = self.resolver.get(
-                AlegraMapping.CATEGORY,
-                local_model='accounting.info_interfaces',
-                local_pk=str(interface_id),
-                local_code='cxp_credito_1',
-                required=False,
-            )
-        if not cat_id:
-            cat_id = self.resolver.category_for_puc_code(category_code, required=False)
-        if not cat_id:
-            cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=False)
+        cat_id = self._categoria_para_pago_linea(factura, factura.idtercero)
         if not cat_id:
             raise AlegraBuildError(
                 f'La factura {factura.pk} tiene cuenta {category_code} sin mapeo en Alegra → Referencias → Egresos.'
