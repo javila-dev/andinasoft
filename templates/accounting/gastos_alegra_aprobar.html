@@ -2,8 +2,9 @@
 {% load static %}
 {% block title %}Accounting | Aprobar gastos Alegra{% endblock %}
 {% block style %}
+{% include 'accounting/_gasto_alegra_icon_styles.html' %}
 <style>
-  th, td { font-size: 12px; text-align: center; }
+  th, td { text-align: center; }
   #tableWrap { position: relative; min-height: 120px; }
   #tableLoader {
     display: none;
@@ -42,7 +43,9 @@
       </select>
     </div>
     <div class="col-md-2 d-flex align-items-end">
-      <button type="button" class="btn btn-sm btn-primary" id="btnReload">Actualizar</button>
+      <button type="button" class="btn btn-sm btn-primary" id="btnReload" data-tip="Actualizar lista">
+        <i class="fas fa-sync-alt"></i><span class="sr-only">Actualizar</span>
+      </button>
     </div>
   </div>
 
@@ -50,7 +53,7 @@
     <div id="tableLoader" aria-live="polite" aria-busy="true">
       <span class="text-muted"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando gastos…</span>
     </div>
-    <table id="tablaPendientes" class="table table-sm table-hover w-100">
+    <table id="tablaPendientes" class="table table-sm table-hover w-100 gasto-alegra-table">
       <thead>
         <tr>
           <th>Rad</th>
@@ -82,9 +85,15 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-primary" id="btnVerSoporte">Ver soporte PDF</button>
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="btnConfirmarAprobar">Aprobar gasto</button>
+        <button type="button" class="btn btn-outline-primary btn-sm btn-icon-modal" id="btnVerSoporte" data-tip="Ver soporte PDF">
+          <i class="fas fa-file-pdf"></i><span class="sr-only">Ver soporte PDF</span>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-tip="Cancelar">
+          <i class="fas fa-times"></i><span class="sr-only">Cancelar</span>
+        </button>
+        <button type="button" class="btn btn-success btn-sm btn-icon-modal" id="btnConfirmarAprobar" data-tip="Aprobar gasto">
+          <i class="fas fa-check"></i><span class="sr-only">Aprobar gasto</span>
+        </button>
       </div>
     </div>
   </div>
@@ -120,9 +129,15 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline-primary" id="btnVerSoporteReasignar">Ver soporte PDF</button>
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-warning" id="btnConfirmarReasignar">Guardar y notificar</button>
+        <button type="button" class="btn btn-outline-primary btn-sm btn-icon-modal" id="btnVerSoporteReasignar" data-tip="Ver soporte PDF">
+          <i class="fas fa-file-pdf"></i><span class="sr-only">Ver soporte PDF</span>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-tip="Cancelar">
+          <i class="fas fa-times"></i><span class="sr-only">Cancelar</span>
+        </button>
+        <button type="button" class="btn btn-warning btn-sm btn-icon-modal" id="btnConfirmarReasignar" data-tip="Guardar y notificar">
+          <i class="fas fa-paper-plane"></i><span class="sr-only">Guardar y notificar</span>
+        </button>
       </div>
     </div>
   </div>
@@ -149,14 +164,30 @@ function showAlert(type, html) {
     '<button type="button" class="close" data-dismiss="alert">&times;</button></div>');
 }
 
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function btnAccionIcon(cls, icon, title, attrs) {
+  return '<button type="button" class="btn btn-xs btn-icon ' + cls + '" ' +
+    'data-tip="' + escapeHtml(title) + '" ' +
+    (attrs || '') + '>' +
+    '<i class="fas ' + icon + '" aria-hidden="true"></i>' +
+    '<span class="sr-only">' + escapeHtml(title) + '</span></button>';
+}
+
 function setTableLoading(loading) {
   var $btn = $('#btnReload');
   if (loading) {
     $('#tableLoader').addClass('is-visible');
-    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Actualizando…');
+    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i><span class="sr-only">Actualizando</span>');
   } else {
     $('#tableLoader').removeClass('is-visible');
-    $btn.prop('disabled', false).html('Actualizar');
+    $btn.prop('disabled', false).html('<i class="fas fa-sync-alt"></i><span class="sr-only">Actualizar</span>');
   }
 }
 
@@ -198,11 +229,11 @@ $(function() {
     { data: 'gasto_aprobacion_comentario_contable', defaultContent: '', render: function(t) {
       return t ? (t.length > 40 ? t.slice(0, 40) + '…' : t) : '—';
     }},
-    { data: null, orderable: false, render: function(d, t, row) {
-      var html = '<button class="btn btn-xs btn-success btn-aprobar">Aprobar</button> ' +
-                 '<button class="btn btn-xs btn-outline-secondary btn-soporte">PDF</button>';
+    { data: null, className: 'col-c text-nowrap btn-group-acciones', orderable: false, render: function(d, t, row) {
+      var html = btnAccionIcon('btn-outline-success btn-aprobar', 'fa-check', 'Aprobar gasto') +
+        btnAccionIcon('btn-outline-secondary btn-soporte', 'fa-file-pdf', 'Ver PDF soporte');
       if (ES_CONTABILIDAD) {
-        html += ' <button class="btn btn-xs btn-outline-warning btn-reasignar">Corregir</button>';
+        html += btnAccionIcon('btn-outline-warning btn-reasignar', 'fa-user-edit', 'Corregir asignación');
       }
       return html;
     }}
@@ -321,7 +352,7 @@ $(function() {
         showAlert('warning', 'Seleccione un aprobador.');
         return;
       }
-      var $btn = $(this).prop('disabled', true).html('Guardando…');
+      var $btn = $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i><span class="sr-only">Guardando</span>');
       $.ajax({
         url: '/accounting/ajax/gastos-alegra/reasignar',
         method: 'POST',
@@ -345,7 +376,7 @@ $(function() {
           showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al reasignar');
         },
         complete: function() {
-          $btn.prop('disabled', false).html('Guardar y notificar');
+          $btn.prop('disabled', false).html('<i class="fas fa-paper-plane"></i><span class="sr-only">Guardar y notificar</span>');
         }
       });
     });

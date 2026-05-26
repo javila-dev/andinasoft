@@ -674,9 +674,20 @@ class GastoAprobacionLinkTests(TestCase):
         req = self.factory.get(path)
         resp = gasto_aprobacion_link_aprobar(req, self.factura.pk, token)
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b'aprobado correctamente', resp.content)
+        self.assertIn('text/html', resp['Content-Type'])
+        self.assertIn(b'Gasto aprobado', resp.content)
         self.factura.refresh_from_db()
         self.assertTrue(self.factura.gasto_aprobado)
+
+    def test_link_aprobar_ok_text_plain(self):
+        from accounting.gasto_aprobacion_views import gasto_aprobacion_link_aprobar
+
+        path, token = self._link_parts()
+        req = self.factory.get(path + '?format=text')
+        resp = gasto_aprobacion_link_aprobar(req, self.factura.pk, token)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('text/plain', resp['Content-Type'])
+        self.assertIn(b'aprobado correctamente', resp.content)
 
     def test_link_token_invalido(self):
         from accounting.gasto_aprobacion_views import gasto_aprobacion_link_aprobar
@@ -696,5 +707,5 @@ class GastoAprobacionLinkTests(TestCase):
         req = self.factory.get(path)
         resp = gasto_aprobacion_link_aprobar(req, self.factura.pk, token)
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b'ya estaba aprobado', resp.content)
+        self.assertIn(b'Ya estaba aprobado', resp.content)
 

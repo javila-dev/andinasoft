@@ -2,21 +2,8 @@
 {% load static %}
 {% block title %}Accounting | Asignar gastos Alegra{% endblock %}
 {% block style %}
+{% include 'accounting/_gasto_alegra_icon_styles.html' %}
 <style>
-  #tablaPendientes { font-size: 11px; }
-  #tablaPendientes thead th {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    padding: 0.35rem 0.3rem;
-    vertical-align: middle;
-  }
-  #tablaPendientes tbody td {
-    padding: 0.3rem 0.35rem;
-    vertical-align: middle;
-  }
-  #tablaPendientes .col-c { text-align: center; }
   #tablaPendientes .col-desc {
     text-align: left;
     max-width: 200px;
@@ -41,46 +28,6 @@
     white-space: nowrap;
     font-family: Consolas, Monaco, monospace;
     font-size: 10px;
-  }
-  #tablaPendientes .btn-xs { font-size: 10px; padding: 0.1rem 0.35rem; }
-  #tablaPendientes .btn-icon {
-    font-size: 11px;
-    padding: 0.2rem 0.45rem;
-    line-height: 1;
-    min-width: 1.75rem;
-  }
-  #tablaPendientes .btn-group-acciones .btn + .btn { margin-left: 0.2rem; }
-  #tablaPendientes td.btn-group-acciones { overflow: visible; position: relative; }
-  .modal-footer .btn-icon-modal {
-    min-width: 2.25rem;
-    padding-left: 0.55rem;
-    padding-right: 0.55rem;
-  }
-  [data-tip] { position: relative; }
-  [data-tip]::after {
-    content: attr(data-tip);
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #212529;
-    color: #fff;
-    font-size: 10px;
-    font-weight: normal;
-    line-height: 1.2;
-    padding: 0.25rem 0.45rem;
-    border-radius: 0.2rem;
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.12s ease, visibility 0.12s;
-    z-index: 1080;
-    pointer-events: none;
-  }
-  [data-tip]:hover::after,
-  [data-tip]:focus-visible::after {
-    opacity: 1;
-    visibility: visible;
   }
   #comentarioContable { min-height: 80px; }
   .historial-asignacion {
@@ -130,7 +77,7 @@
   </div>
 
   <div class="table-responsive bg-white shadow rounded p-2">
-    <table id="tablaPendientes" class="table table-sm table-hover w-100">
+    <table id="tablaPendientes" class="table table-sm table-hover w-100 gasto-alegra-table">
       <thead>
         <tr>
           <th class="col-c">Rad</th>

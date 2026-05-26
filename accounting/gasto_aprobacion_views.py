@@ -622,17 +622,75 @@ def ajax_gastos_alegra_aprobar(request):
         return _json_error(exc, 500)
 
 
-def _link_aprobacion_response(request, *, ok, message, factura=None, status=200):
-    wants_json = (
-        'application/json' in (request.headers.get('Accept') or '')
-        or (request.GET.get('format') or '').strip().lower() == 'json'
-    )
+def _format_cop(valor):
+    try:
+        n = int(valor or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return '${:,}'.format(n).replace(',', '.')
+
+
+def _factura_link_context(fac):
+    data = factura_a_dict(fac)
+    data['valor_fmt'] = _format_cop(data.get('valor'))
+    pago = data.get('pago_neto')
+    if pago is not None and pago != data.get('valor'):
+        data['pago_neto_fmt'] = _format_cop(pago)
+    return data
+
+
+def _link_aprobacion_response(
+    request,
+    *,
+    ok,
+    message,
+    factura=None,
+    status=200,
+    title='',
+    subtitle='',
+    variant='',
+    footnote='Puede cerrar esta ventana.',
+):
+    fmt = (request.GET.get('format') or '').strip().lower()
+    wants_json = 'application/json' in (request.headers.get('Accept') or '') or fmt == 'json'
+    wants_text = fmt in ('text', 'plain')
+
     payload = {'ok': ok, 'message': message}
     if factura is not None:
         payload['factura'] = factura_a_dict(factura)
     if wants_json:
         return JsonResponse(payload, status=status)
-    return HttpResponse(message, content_type='text/plain; charset=utf-8', status=status)
+    if wants_text:
+        return HttpResponse(message, content_type='text/plain; charset=utf-8', status=status)
+
+    if not variant:
+        if ok and 'ya estaba' in message.lower():
+            variant = 'already'
+        elif ok:
+            variant = 'success'
+        else:
+            variant = 'error'
+    if not title:
+        title = 'Operación completada' if ok else 'No se pudo completar'
+    if not subtitle:
+        subtitle = message
+
+    page_title = title if ok else 'Aprobación de gasto'
+    context = {
+        'ok': ok,
+        'title': title,
+        'subtitle': subtitle,
+        'variant': variant,
+        'footnote': footnote,
+        'page_title': page_title,
+        'factura': _factura_link_context(factura) if factura is not None else None,
+    }
+    return render(
+        request,
+        'accounting/gasto_aprobacion_link_result.html',
+        context,
+        status=status,
+    )
 
 
 @csrf_exempt
@@ -646,48 +704,121 @@ def gasto_aprobacion_link_aprobar(request, radicado_pk, token):
         fac = Facturas.objects.select_related('empresa', 'gasto_aprobador_asignado').get(pk=radicado_pk)
     except Facturas.DoesNotExist:
         return _link_aprobacion_response(
-            request, ok=False, message='Radicado no encontrado.', status=404,
+            request,
+            ok=False,
+            message='Radicado no encontrado.',
+            status=404,
+            title='Gasto no encontrado',
+            subtitle='El enlace no corresponde a un gasto activo. Pida ayuda a contabilidad.',
+            footnote='Si recibió este enlace por WhatsApp, contacte al área contable.',
         )
 
     aprobador = fac.gasto_aprobador_asignado
     if not aprobador or not aprobador.is_active:
         return _link_aprobacion_response(
-            request, ok=False, message='Este gasto no tiene aprobador asignado activo.', status=400,
+            request,
+            ok=False,
+            message='Este gasto no tiene aprobador asignado activo.',
+            status=400,
+            title='No se puede aprobar',
+            subtitle='Este gasto ya no tiene un aprobador asignado.',
+            factura=fac,
+            footnote='Contacte al área contable para más información.',
         )
 
     try:
         verify_gasto_aprobacion_link_token(radicado_pk, aprobador.pk, token)
     except signing.SignatureExpired:
         return _link_aprobacion_response(
-            request, ok=False, message='El enlace de aprobación expiró.', status=403,
+            request,
+            ok=False,
+            message='El enlace de aprobación expiró.',
+            status=403,
+            title='Enlace vencido',
+            subtitle='Este enlace ya no es válido. Solicite uno nuevo a contabilidad.',
+            factura=fac,
+            footnote='Los enlaces de aprobacion tienen vigencia limitada.',
         )
     except signing.BadSignature:
         return _link_aprobacion_response(
-            request, ok=False, message='Enlace de aprobación inválido.', status=403,
+            request,
+            ok=False,
+            message='Enlace de aprobación inválido.',
+            status=403,
+            title='Enlace no válido',
+            subtitle='El enlace parece estar incompleto o modificado.',
+            footnote='Use el enlace completo que recibio por WhatsApp.',
         )
 
     if Pagos.objects.filter(nroradicado=fac).exists():
         return _link_aprobacion_response(
-            request, ok=False, message='El radicado ya tiene pagos asociados.', status=400,
+            request,
+            ok=False,
+            message='El radicado ya tiene pagos asociados.',
+            status=400,
+            title='Gasto ya en proceso de pago',
+            subtitle='Este gasto ya tiene pagos registrados y no puede aprobarse de nuevo.',
+            factura=fac,
+            footnote='Si tiene dudas, contacte a tesorería.',
         )
 
     if fac.gasto_aprobacion_estado == Facturas.GASTO_APROB_APROBADO:
         msg = f'Gasto #{fac.pk} ({fac.nombretercero}) ya estaba aprobado.'
-        return _link_aprobacion_response(request, ok=True, message=msg, factura=fac)
+        return _link_aprobacion_response(
+            request,
+            ok=True,
+            message=msg,
+            factura=fac,
+            title='Ya estaba aprobado',
+            subtitle='Este gasto ya había sido aprobado antes. No necesita hacer nada más.',
+            variant='already',
+        )
 
     try:
         with transaction.atomic():
             aprobar_gasto_alegra_para_usuario(fac, aprobador, canal='link/WhatsApp')
         msg = f'Gasto #{fac.pk} ({fac.nombretercero}) aprobado correctamente.'
-        return _link_aprobacion_response(request, ok=True, message=msg, factura=fac)
+        return _link_aprobacion_response(
+            request,
+            ok=True,
+            message=msg,
+            factura=fac,
+            title='Gasto aprobado',
+            subtitle='Gracias. Tesorería puede continuar con el pago.',
+            variant='success',
+        )
     except PermissionError as exc:
-        return _link_aprobacion_response(request, ok=False, message=str(exc), status=403)
+        return _link_aprobacion_response(
+            request,
+            ok=False,
+            message=str(exc),
+            status=403,
+            title='Sin permiso',
+            subtitle=str(exc),
+            factura=fac,
+            footnote='Contacte al área contable si cree que esto es un error.',
+        )
     except ValueError as exc:
-        return _link_aprobacion_response(request, ok=False, message=str(exc), status=400)
+        return _link_aprobacion_response(
+            request,
+            ok=False,
+            message=str(exc),
+            status=400,
+            title='No se pudo aprobar',
+            subtitle=str(exc),
+            factura=fac,
+        )
     except Exception:
         logger.exception('gasto_aprobacion_link_aprobar radicado=%s', radicado_pk)
         return _link_aprobacion_response(
-            request, ok=False, message='Error al aprobar el gasto.', status=500,
+            request,
+            ok=False,
+            message='Error al aprobar el gasto.',
+            status=500,
+            title='Algo salió mal',
+            subtitle='No pudimos registrar la aprobación. Intente de nuevo en unos minutos.',
+            factura=fac,
+            footnote='Si el problema continúa, avise a contabilidad.',
         )
 
 
