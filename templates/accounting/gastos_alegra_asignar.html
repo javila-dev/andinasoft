@@ -50,10 +50,37 @@
     min-width: 1.75rem;
   }
   #tablaPendientes .btn-group-acciones .btn + .btn { margin-left: 0.2rem; }
+  #tablaPendientes td.btn-group-acciones { overflow: visible; position: relative; }
   .modal-footer .btn-icon-modal {
     min-width: 2.25rem;
     padding-left: 0.55rem;
     padding-right: 0.55rem;
+  }
+  [data-tip] { position: relative; }
+  [data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #212529;
+    color: #fff;
+    font-size: 10px;
+    font-weight: normal;
+    line-height: 1.2;
+    padding: 0.25rem 0.45rem;
+    border-radius: 0.2rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s ease, visibility 0.12s;
+    z-index: 1080;
+    pointer-events: none;
+  }
+  [data-tip]:hover::after,
+  [data-tip]:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
   }
   #comentarioContable { min-height: 80px; }
   .historial-asignacion {
@@ -96,7 +123,7 @@
       <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btnNuevoRadicado">
         <i class="fas fa-plus mr-1"></i>Nuevo radicado
       </button>
-      <button type="button" class="btn btn-sm btn-primary mb-1" id="btnReload" data-toggle="tooltip" data-placement="top" title="Actualizar lista">
+      <button type="button" class="btn btn-sm btn-primary mb-1" id="btnReload" data-tip="Actualizar lista">
         <i class="fas fa-sync-alt"></i><span class="sr-only">Actualizar</span>
       </button>
     </div>
@@ -282,14 +309,14 @@
         </div>
       </div>
       <div class="modal-footer d-flex justify-content-between">
-        <button type="button" class="btn btn-outline-danger btn-sm btn-icon-modal" id="btnEliminarAsignar" data-toggle="tooltip" data-placement="top" title="Eliminar radicado">
+        <button type="button" class="btn btn-outline-danger btn-sm btn-icon-modal" id="btnEliminarAsignar" data-tip="Eliminar radicado">
           <i class="fas fa-trash-alt"></i><span class="sr-only">Eliminar radicado</span>
         </button>
         <div>
-          <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-toggle="tooltip" data-placement="top" title="Cancelar">
+          <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-tip="Cancelar">
             <i class="fas fa-times"></i><span class="sr-only">Cancelar</span>
           </button>
-          <button type="button" class="btn btn-success btn-sm btn-icon-modal" id="btnConfirmarAsignar" data-toggle="tooltip" data-placement="top" title="Guardar asignación">
+          <button type="button" class="btn btn-success btn-sm btn-icon-modal" id="btnConfirmarAsignar" data-tip="Guardar asignación">
             <i class="fas fa-save"></i><span class="sr-only">Guardar asignación</span>
           </button>
         </div>
@@ -563,20 +590,10 @@ function escapeHtml(s) {
 
 function btnAccionIcon(cls, icon, title, attrs) {
   return '<button type="button" class="btn btn-xs btn-icon ' + cls + '" ' +
-    'data-toggle="tooltip" data-placement="top" title="' + escapeHtml(title) + '" ' +
+    'data-tip="' + escapeHtml(title) + '" ' +
     (attrs || '') + '>' +
     '<i class="fas ' + icon + '" aria-hidden="true"></i>' +
     '<span class="sr-only">' + escapeHtml(title) + '</span></button>';
-}
-
-function initTooltipsEn($root) {
-  ($root || $(document)).find('[data-toggle="tooltip"]').each(function() {
-    var $t = $(this);
-    if ($t.data('bs.tooltip')) {
-      $t.tooltip('dispose');
-    }
-    $t.tooltip({ container: 'body' });
-  });
 }
 
 function cellTruncado(text, maxLen) {
@@ -679,15 +696,7 @@ $(function() {
     order: [[0, 'desc']],
     autoWidth: false,
     scrollX: true,
-    drawCallback: function() {
-      initTooltipsEn($('#tablaPendientes tbody'));
-    },
     language: { url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Spanish.json' }
-  });
-
-  initTooltipsEn($('#btnReload'));
-  $('#modalAsignar').on('shown.bs.modal', function() {
-    initTooltipsEn($('#modalAsignar .modal-footer'));
   });
 
   $('#btnReload').on('click', loadTable);
