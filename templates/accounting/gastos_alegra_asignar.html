@@ -280,11 +280,11 @@
           <div class="custom-control custom-checkbox">
             <input type="checkbox" class="custom-control-input" id="chkEsCanje">
             <label class="custom-control-label font-weight-bold small" for="chkEsCanje">
-              Es canje (pagado con cuenta de canje en Alegra)
+              Es canje
             </label>
           </div>
           <small class="text-muted d-block mt-1">
-            Consulta Alegra y recalcula pago neto = balance − totalPaid. Si queda en $0, va directo a tesorería sin aprobador.
+            Marque si el proveedor ya fue pagado con cuenta de canje. Se ajustará cuánto debe pagar tesorería.
           </small>
           <div id="asignarCanjePreview" class="small mt-2 text-muted"></div>
         </div>
@@ -448,7 +448,7 @@ function renderHistorialAsignacion(items) {
       ' · <strong>' + escapeHtml(h.oficina) + '</strong> · $' +
       Number(h.valor || 0).toLocaleString('es-CO') +
       (h.pago_neto != null && h.pago_neto !== h.valor
-        ? ' <span class="text-muted">(pago neto $' + Number(h.pago_neto).toLocaleString('es-CO') + ')</span>'
+        ? ' <span class="text-muted">(a pagar $' + Number(h.pago_neto).toLocaleString('es-CO') + ')</span>'
         : '') +
       (h.es_canje ? ' · <span class="badge badge-info">canje</span>' : '') +
       (desc ? ' · <em>' + escapeHtml(desc) + '</em>' : '') +
@@ -493,7 +493,7 @@ function aplicarSugerenciaAsignacion(data, $oficina, $aprobador, $hintSug, $boxH
       $hintSug.addClass('d-none').text('');
     }
     if (sug.es_canje && $('#chkEsCanje').length) {
-      $hintSug.append(' Este tercero tuvo gastos marcados como canje antes.');
+      $hintSug.append(' Este proveedor ya tuvo gastos en canje.');
     }
   }
   if (sug.es_canje && $('#chkEsCanje').length && radicadoEsBill) {
@@ -514,21 +514,20 @@ function refrescarCanjePreview() {
     $prev.text('');
     return $.Deferred().resolve();
   }
-  $prev.html('<span class="text-muted">Consultando Alegra…</span>');
+  $prev.html('<span class="text-muted">Verificando saldo…</span>');
   return $.get('/accounting/ajax/gastos-alegra/canje-preview', { radicado: radicadoActual })
     .done(function(data) {
-      var html =
-        'Alegra bill <strong>' + escapeHtml(data.bill_id) + '</strong> · ' +
-        'balance $' + Number(data.balance).toLocaleString('es-CO') + ' · ' +
-        'totalPaid $' + Number(data.totalPaid).toLocaleString('es-CO') +
-        ' → <strong>pago neto $' + Number(data.pago_neto).toLocaleString('es-CO') + '</strong>';
-      if (data.pago_neto === 0) {
-        html += ' <span class="text-success">(sin pago tesorería)</span>';
+      var pago = Number(data.pago_neto);
+      var html;
+      if (pago === 0) {
+        html = '<span class="text-success">No requiere pago en tesorería.</span>';
+      } else {
+        html = 'Valor a pagar en tesorería: <strong>$' + pago.toLocaleString('es-CO') + '</strong>';
       }
       $prev.html(html);
     })
     .fail(function(xhr) {
-      $prev.html('<span class="text-danger">' + escapeHtml((xhr.responseJSON || {}).detail || 'Error consultando Alegra') + '</span>');
+      $prev.html('<span class="text-danger">' + escapeHtml((xhr.responseJSON || {}).detail || 'No se pudo verificar el saldo. Intente de nuevo.') + '</span>');
     });
 }
 
@@ -890,8 +889,7 @@ $(function() {
     radicadoEsBill = (row.alegra_document_type || '') === 'bill' && !!(row.alegra_id || '').trim();
     $('#lblRad').text(row.pk);
     $('#resumenRad').text(
-      row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO') +
-      (row.pago_neto != null ? ' · pago neto $' + Number(row.pago_neto||0).toLocaleString('es-CO') : '')
+      row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO')
     );
     $('#selOficina').val('');
     $('#selAprobador').val('');
@@ -934,8 +932,8 @@ $(function() {
         $('#modalAsignar').modal('hide');
         var fac = res.factura || {};
         var msg = fac.gasto_aprobacion_estado === 'aprobado'
-          ? 'Asignación guardada; gasto aprobado' + (fac.gasto_es_canje ? ' (canje)' : '') + '.'
-          : 'Asignación guardada; pendiente de aprobación.';
+          ? (fac.gasto_es_canje ? 'Asignación guardada. Gasto en canje listo para tesorería.' : 'Asignación guardada. Gasto aprobado.')
+          : 'Asignación guardada. Pendiente de aprobación.';
         showAlert('success', msg);
         loadTable();
       },
@@ -954,7 +952,7 @@ $(function() {
       return;
     }
     if (esCanje && !radicadoEsBill) {
-      showAlert('warning', 'Canje solo aplica a documentos soporte (bill) de Alegra.');
+      showAlert('warning', 'La opción canje no aplica a este tipo de documento.');
       return;
     }
     if (!aprobador_id) {
@@ -965,7 +963,7 @@ $(function() {
       return;
     }
     if (esCanje) {
-      if (!window.confirm('Marcó este gasto como CANJE. Se consultará Alegra y se recalculará el pago neto. ¿Continuar?')) {
+      if (!window.confirm('Este gasto es un canje. ¿Desea guardar la asignación?')) {
         return;
       }
     }

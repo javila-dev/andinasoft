@@ -540,10 +540,11 @@ def asignar_gasto_alegra(
 
     canje_suffix = ''
     if es_canje and canje_info:
-        canje_suffix = (
-            f' · canje (Alegra balance ${canje_info["balance"]:,}, '
-            f'totalPaid ${canje_info["totalPaid"]:,} → pago neto ${canje_info["pago_neto"]:,})'
-        )
+        pago = int(canje_info['pago_neto'])
+        if pago == 0:
+            canje_suffix = ' - canje (sin pago en tesoreria)'
+        else:
+            canje_suffix = f' - canje (pago neto ${pago:,})'
 
     if aprobador_uid:
         aprobador = User.objects.filter(pk=aprobador_uid).first()
@@ -596,7 +597,7 @@ def asignar_gasto_alegra(
             update_fields.extend(['gasto_es_canje', 'pago_neto'])
         if omitir_tope:
             accion = (
-                f'Asignó oficina {oficina} · canje sin pago tesorería (pago neto $0)'
+                f'Asignó oficina {oficina}'
                 + canje_suffix
                 + (f'. Nota: {factura.gasto_aprobacion_comentario_contable[:200]}' if factura.gasto_aprobacion_comentario_contable else '')
             )

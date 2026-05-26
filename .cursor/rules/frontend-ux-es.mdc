@@ -1,0 +1,26 @@
+---
+description: Textos de interfaz amigables para usuarios finales (espanol)
+globs: templates/**/*.html
+alwaysApply: false
+---
+
+# UX de interfaz (espanol)
+
+Al escribir o editar plantillas y mensajes visibles al usuario:
+
+- Lenguaje claro para contadores, tesoreria y operadores; no para desarrolladores.
+- Evitar jerga tecnica: nombres de APIs, campos internos (`balance`, `totalPaid`, `bill`, `webhook`), formulas y IDs de sistema salvo que el usuario ya los use en su trabajo diario.
+- Preferir acciones y resultados: "Valor a pagar", "No requiere pago", "Guardado correctamente".
+- Mensajes cortos; el detalle tecnico va en logs, historial interno o documentacion.
+- En textos que se guardan en base de datos, usar solo ASCII o caracteres compatibles con latin1 (evitar `→`, `·`, comillas tipograficas).
+- Tooltips e iconos con etiquetas en espanol simple.
+
+Ejemplo:
+
+```
+// Evitar
+"Consulta Alegra y recalcula pago neto = balance - totalPaid"
+
+// Preferir
+"Marque si el proveedor ya fue pagado con cuenta de canje."
+```

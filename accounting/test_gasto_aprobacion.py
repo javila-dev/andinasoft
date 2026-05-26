@@ -19,7 +19,7 @@ from accounting.gasto_aprobacion import (
     usuario_es_aprobador_gasto,
     validar_gasto_sin_aprobador,
 )
-from accounting.models import Facturas, GastoAprobador
+from accounting.models import Facturas, GastoAprobador, history_facturas
 from andinasoft.models import empresas
 
 User = get_user_model()
@@ -166,6 +166,10 @@ class GastoAprobacionTests(TestCase):
         self.assertTrue(self.factura.gasto_aprobado)
         self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_APROBADO)
         self.assertIsNone(self.factura.gasto_aprobador_asignado_id)
+        hist = history_facturas.objects.filter(factura=self.factura).order_by('-fecha').first()
+        self.assertIsNotNone(hist)
+        self.assertIn('canje', hist.accion.lower())
+        self.assertNotIn('\u2192', hist.accion)
 
     def test_sugerencias_incluye_es_canje(self):
         from django.contrib.auth.models import Group
