@@ -28,6 +28,7 @@ from accounting.gasto_aprobacion import (
     aprobar_gasto_alegra,
     aprobar_gasto_alegra_para_usuario,
     asignar_gasto_alegra,
+    consultar_pago_neto_alegra,
     consultar_pago_neto_canje_alegra,
     eliminar_gasto_alegra_pendiente_asignacion,
     crear_radicado_gasto_alegra,
@@ -163,8 +164,8 @@ def ajax_gastos_alegra_sugerencias_asignacion(request):
 
 @login_required
 @require_http_methods(['GET'])
-def ajax_gastos_alegra_canje_preview(request):
-    """Vista previa pago neto canje (GET Alegra) al marcar checkbox en asignación."""
+def ajax_gastos_alegra_pago_neto_preview(request):
+    """Consulta GET /bills/{id} y devuelve pago_neto antes de asignar (obligatorio en bills)."""
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         return _json_error('Sin permiso Contabilidad.', 403)
     radicado = (request.GET.get('radicado') or '').strip()
@@ -175,10 +176,17 @@ def ajax_gastos_alegra_canje_preview(request):
     except (Facturas.DoesNotExist, TypeError, ValueError):
         return _json_error('Radicado no encontrado.', 404)
     try:
-        data = consultar_pago_neto_canje_alegra(fac)
+        data = consultar_pago_neto_alegra(fac)
     except ValueError as exc:
         return _json_error(str(exc), 400)
     return JsonResponse({'ok': True, 'radicado': fac.pk, **data})
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_canje_preview(request):
+    """Alias retrocompatible de pago-neto-preview."""
+    return ajax_gastos_alegra_pago_neto_preview(request)
 
 
 @login_required

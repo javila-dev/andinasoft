@@ -53,6 +53,14 @@ def parse_alegra_journal_id_for_api(alegra_bill_id):
     return nit, journal_id
 
 
+def es_radicado_bill_alegra(factura):
+    """True si el radicado tiene bill Alegra consultable (GET /bills/{id})."""
+    if getattr(factura, 'origen', None) != 'Alegra':
+        return False
+    _, bill_id = parse_alegra_bill_id_for_api(getattr(factura, 'alegra_bill_id', None))
+    return bool(bill_id)
+
+
 def sync_alegra_bill_mapping(empresa, factura, alegra_numeric_id):
     """
     Enlaza radicado local → id numérico de bill en Alegra (POST /payments bills[]).
@@ -211,7 +219,7 @@ def is_placeholder_descripcion(descripcion):
 
 def bill_pago_neto_canje(bill):
     """
-    Pago neto tesorería cuando contabilidad marca canje manualmente.
+    Pago neto tesorería al asignar gasto (y cuando contabilidad marca canje).
     Consulta GET /bills/{id} con totalPaid y balance actualizados.
     """
     if not isinstance(bill, dict):

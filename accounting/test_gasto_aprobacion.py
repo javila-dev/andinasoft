@@ -9,6 +9,7 @@ from accounting.gasto_aprobacion import (
     eliminar_gasto_alegra_pendiente_asignacion,
     aprobar_gasto_alegra,
     asignar_gasto_alegra,
+    factura_a_dict,
     reasignar_gasto_alegra,
     sugerencias_asignacion_gasto_alegra,
     empresa_config_sin_aprobador,
@@ -134,8 +135,8 @@ class GastoAprobacionTests(TestCase):
         self.factura.refresh_from_db()
         self.assertFalse(self.factura.gasto_aprobado)
 
-    @patch('accounting.gasto_aprobacion.consultar_pago_neto_canje_alegra')
-    def test_asignar_es_canje_pago_neto_cero_auto_aprobado(self, mock_canje):
+    @patch('accounting.gasto_aprobacion.consultar_pago_neto_alegra')
+    def test_asignar_es_canje_pago_neto_cero_auto_aprobado(self, mock_consulta):
         from django.contrib.auth.models import Group
 
         g, _ = Group.objects.get_or_create(name='Contabilidad')
@@ -143,7 +144,7 @@ class GastoAprobacionTests(TestCase):
         self.factura.alegra_bill_id = f'{self.empresa.pk}:43'
         self.factura.alegra_document_type = 'bill'
         self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
-        mock_canje.return_value = {
+        mock_consulta.return_value = {
             'bill_id': '43',
             'balance': 0,
             'totalPaid': 4039466,
@@ -170,6 +171,126 @@ class GastoAprobacionTests(TestCase):
         self.assertIsNotNone(hist)
         self.assertIn('canje', hist.accion.lower())
         self.assertNotIn('\u2192', hist.accion)
+        mock_consulta.assert_called_once_with(self.factura)
+
+    def test_factura_a_dict_requiere_consulta_pago_neto_bill(self):
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:77'
+        self.factura.alegra_document_type = ''
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+        data = factura_a_dict(self.factura)
+        self.assertTrue(data['requiere_consulta_pago_neto_alegra'])
+
+    def test_factura_a_dict_no_requiere_consulta_journal(self):
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:journal:11'
+        self.factura.alegra_document_type = 'journal'
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+        data = factura_a_dict(self.factura)
+        self.assertFalse(data['requiere_consulta_pago_neto_alegra'])
+
+    @patch('accounting.gasto_aprobacion.consultar_pago_neto_alegra')
+    def test_asignar_bill_sin_tipo_documento_consulta_pago_neto(self, mock_consulta):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:88'
+        self.factura.alegra_document_type = ''
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+        mock_consulta.return_value = {
+            'bill_id': '88',
+            'balance': 100000,
+            'totalPaid': 0,
+            'total': 100000,
+            'status': 'open',
+            'pago_neto': 100000,
+            'pago_neto_anterior': 100000,
+        }
+        asignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MEDELLIN',
+            aprobador_user_id=self.aprobador.pk,
+        )
+        mock_consulta.assert_called_once_with(self.factura)
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.pago_neto, 100000)
+
+    @patch('accounting.gasto_aprobacion.consultar_pago_neto_alegra')
+    def test_asignar_bill_siempre_consulta_pago_neto(self, mock_consulta):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:55'
+        self.factura.alegra_document_type = 'bill'
+        self.factura.valor = 500000
+        self.factura.pago_neto = 500000
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type', 'valor', 'pago_neto'])
+        mock_consulta.return_value = {
+            'bill_id': '55',
+            'balance': 350000,
+            'totalPaid': 150000,
+            'total': 500000,
+            'status': 'open',
+            'pago_neto': 200000,
+            'pago_neto_anterior': 500000,
+        }
+
+        asignar_gasto_alegra(
+            self._request(self.contable),
+            factura=self.factura,
+            oficina='MEDELLIN',
+            aprobador_user_id=self.aprobador.pk,
+            es_canje=False,
+        )
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.pago_neto, 200000)
+        self.assertFalse(self.factura.gasto_es_canje)
+        mock_consulta.assert_called_once_with(self.factura)
+
+    @patch('accounting.gasto_aprobacion.consultar_pago_neto_alegra')
+    def test_asignar_bill_falla_si_alegra_no_responde(self, mock_consulta):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:55'
+        self.factura.alegra_document_type = 'bill'
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+        mock_consulta.side_effect = ValueError('No se pudo consultar Alegra GET /bills/55: timeout')
+
+        with self.assertRaises(ValueError) as ctx:
+            asignar_gasto_alegra(
+                self._request(self.contable),
+                factura=self.factura,
+                oficina='MEDELLIN',
+                aprobador_user_id=self.aprobador.pk,
+            )
+        self.assertIn('Alegra', str(ctx.exception))
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.gasto_aprobacion_estado, Facturas.GASTO_APROB_PENDIENTE_ASIGNACION)
+
+    def test_asignar_journal_no_consulta_bill(self):
+        from django.contrib.auth.models import Group
+        from unittest.mock import patch
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.alegra_bill_id = f'{self.empresa.pk}:journal:11'
+        self.factura.alegra_document_type = 'journal'
+        self.factura.pago_neto = 100000
+        self.factura.save(update_fields=['alegra_bill_id', 'alegra_document_type', 'pago_neto'])
+
+        with patch('accounting.gasto_aprobacion.consultar_pago_neto_alegra') as mock_consulta:
+            asignar_gasto_alegra(
+                self._request(self.contable),
+                factura=self.factura,
+                oficina='MEDELLIN',
+                aprobador_user_id=self.aprobador.pk,
+            )
+            mock_consulta.assert_not_called()
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.pago_neto, 100000)
 
     def test_sugerencias_incluye_es_canje(self):
         from django.contrib.auth.models import Group

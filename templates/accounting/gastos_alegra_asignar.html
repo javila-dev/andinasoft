@@ -223,17 +223,18 @@
         <p class="small text-muted mb-2" id="resumenRad"></p>
         <div id="asignarHistorialBox" class="historial-asignacion d-none"></div>
         <p id="asignarSugerenciaHint" class="sugerencia-hint d-none mb-2"></p>
-        <div id="asignarCanjeBox" class="form-group d-none border rounded bg-light p-2 mb-2">
-          <div class="custom-control custom-checkbox">
+        <div id="asignarPagoNetoBox" class="form-group d-none border rounded bg-light p-2 mb-2">
+          <p class="font-weight-bold small mb-1">Valor a pagar en tesorería</p>
+          <div id="asignarPagoNetoPreview" class="small text-muted">Consultando saldo en Alegra…</div>
+          <div class="custom-control custom-checkbox mt-2 mb-0">
             <input type="checkbox" class="custom-control-input" id="chkEsCanje">
-            <label class="custom-control-label font-weight-bold small" for="chkEsCanje">
+            <label class="custom-control-label small" for="chkEsCanje">
               Es canje
             </label>
           </div>
           <small class="text-muted d-block mt-1">
-            Marque si el proveedor ya fue pagado con cuenta de canje. Se ajustará cuánto debe pagar tesorería.
+            Marque si el proveedor ya fue pagado con cuenta de canje.
           </small>
-          <div id="asignarCanjePreview" class="small mt-2 text-muted"></div>
         </div>
         <div class="form-group">
           <label class="font-weight-bold small">Oficina <span class="text-danger">*</span></label>
@@ -276,7 +277,8 @@
 {% block js %}
 <script>
 const CSRF = '{{ csrf_token }}';
-let tabla, radicadoActual = null, empresaRad = '', radicadoValor = 0, radicadoEsBill = false, radicadoRow = null;
+let tabla, radicadoActual = null, empresaRad = '', radicadoValor = 0, radicadoPagoNeto = null;
+let radicadoRequierePagoNetoAlegra = false, radicadoRow = null, pagoNetoPreviewOk = true;
 const OPT_SIN_APROB = '<option value="">— Sin aprobador (aprobación automática) —</option>';
 
 function showAlert(type, html) {
@@ -443,38 +445,70 @@ function aplicarSugerenciaAsignacion(data, $oficina, $aprobador, $hintSug, $boxH
       $hintSug.append(' Este proveedor ya tuvo gastos en canje.');
     }
   }
-  if (sug.es_canje && $('#chkEsCanje').length && radicadoEsBill) {
+  if (sug.es_canje && $('#chkEsCanje').length && radicadoRequierePagoNetoAlegra) {
     $('#chkEsCanje').prop('checked', true);
-    refrescarCanjePreview();
   }
 }
 
-function resetCanjeAsignar() {
-  $('#chkEsCanje').prop('checked', false);
-  $('#asignarCanjePreview').text('');
-  $('#asignarCanjeBox').addClass('d-none');
+function actualizarBtnConfirmarAsignar() {
+  var bloqueado = radicadoRequierePagoNetoAlegra && !pagoNetoPreviewOk;
+  $('#btnConfirmarAsignar').prop('disabled', bloqueado);
 }
 
-function refrescarCanjePreview() {
-  var $prev = $('#asignarCanjePreview');
-  if (!$('#chkEsCanje').is(':checked') || !radicadoActual) {
+function resetPagoNetoAsignar() {
+  $('#chkEsCanje').prop('checked', false);
+  $('#asignarPagoNetoPreview').text('');
+  $('#asignarPagoNetoBox').addClass('d-none');
+  radicadoPagoNeto = null;
+  pagoNetoPreviewOk = true;
+  actualizarBtnConfirmarAsignar();
+}
+
+function refrescarPagoNetoPreview() {
+  var $prev = $('#asignarPagoNetoPreview');
+  if (!radicadoRequierePagoNetoAlegra || !radicadoActual) {
+    radicadoPagoNeto = null;
+    pagoNetoPreviewOk = true;
     $prev.text('');
+    actualizarBtnConfirmarAsignar();
     return $.Deferred().resolve();
   }
-  $prev.html('<span class="text-muted">Verificando saldo…</span>');
-  return $.get('/accounting/ajax/gastos-alegra/canje-preview', { radicado: radicadoActual })
+  pagoNetoPreviewOk = false;
+  radicadoPagoNeto = null;
+  actualizarBtnConfirmarAsignar();
+  $prev.html('<span class="text-muted">Consultando saldo en Alegra…</span>');
+  return $.get('/accounting/ajax/gastos-alegra/pago-neto-preview', { radicado: radicadoActual })
     .done(function(data) {
+      if (data.pago_neto == null || data.pago_neto === undefined || isNaN(Number(data.pago_neto))) {
+        pagoNetoPreviewOk = false;
+        radicadoPagoNeto = null;
+        $prev.html('<span class="text-danger">No se pudo confirmar el valor a pagar en Alegra.</span>');
+        actualizarBtnConfirmarAsignar();
+        return;
+      }
+      pagoNetoPreviewOk = true;
       var pago = Number(data.pago_neto);
+      radicadoPagoNeto = pago;
       var html;
       if (pago === 0) {
         html = '<span class="text-success">No requiere pago en tesorería.</span>';
       } else {
-        html = 'Valor a pagar en tesorería: <strong>$' + pago.toLocaleString('es-CO') + '</strong>';
+        html = 'Valor a pagar: <strong>$' + pago.toLocaleString('es-CO') + '</strong>';
+        if (Number(data.pago_neto_anterior) && pago !== Number(data.pago_neto_anterior)) {
+          html += ' <span class="text-muted">(radicado $' +
+            Number(data.pago_neto_anterior).toLocaleString('es-CO') + ')</span>';
+        }
       }
       $prev.html(html);
+      actualizarBtnConfirmarAsignar();
     })
     .fail(function(xhr) {
-      $prev.html('<span class="text-danger">' + escapeHtml((xhr.responseJSON || {}).detail || 'No se pudo verificar el saldo. Intente de nuevo.') + '</span>');
+      pagoNetoPreviewOk = false;
+      radicadoPagoNeto = null;
+      $prev.html('<span class="text-danger">' +
+        escapeHtml((xhr.responseJSON || {}).detail || 'No se pudo consultar Alegra. No puede asignar hasta confirmar el saldo.') +
+        '</span>');
+      actualizarBtnConfirmarAsignar();
     });
 }
 
@@ -833,7 +867,7 @@ $(function() {
     radicadoActual = row.pk;
     empresaRad = row.empresa;
     radicadoValor = Number(row.valor) || 0;
-    radicadoEsBill = (row.alegra_document_type || '') === 'bill' && !!(row.alegra_id || '').trim();
+    radicadoRequierePagoNetoAlegra = !!row.requiere_consulta_pago_neto_alegra;
     $('#lblRad').text(row.pk);
     $('#resumenRad').text(
       row.nombretercero + ' · ' + row.nrofactura + ' · $' + Number(row.valor||0).toLocaleString('es-CO')
@@ -841,9 +875,9 @@ $(function() {
     $('#selOficina').val('');
     $('#selAprobador').val('');
     $('#comentarioContable').val('');
-    resetCanjeAsignar();
-    if (radicadoEsBill) {
-      $('#asignarCanjeBox').removeClass('d-none');
+    resetPagoNetoAsignar();
+    if (radicadoRequierePagoNetoAlegra) {
+      $('#asignarPagoNetoBox').removeClass('d-none');
     }
     $('#asignarHistorialBox').addClass('d-none').empty();
     $('#asignarSugerenciaHint').addClass('d-none').text('');
@@ -856,11 +890,54 @@ $(function() {
           $('#selAprobador'),
           $('#asignarSugerenciaHint'),
           $('#asignarHistorialBox')
-        );
+        ).always(function() {
+          refrescarPagoNetoPreview();
+        });
       });
   });
 
-  $('#chkEsCanje').on('change', refrescarCanjePreview);
+  function continuarAsignacion(oficina, aprobador_id, esCanje) {
+    if (radicadoRequierePagoNetoAlegra && !pagoNetoPreviewOk) {
+      showAlert('warning', 'Debe confirmar el valor a pagar en Alegra antes de asignar.');
+      refrescarPagoNetoPreview();
+      return;
+    }
+    if (!aprobador_id) {
+      const cfg = $('#selAprobador').data('empresaConfig');
+      var montoTope = radicadoRequierePagoNetoAlegra && radicadoPagoNeto != null ? radicadoPagoNeto : radicadoValor;
+      confirmarRegistroSinAprobador(cfg, montoTope, function() {
+        enviarAsignacion(oficina, '', esCanje);
+      });
+      return;
+    }
+    if (esCanje) {
+      if (!window.confirm('Este gasto es un canje. ¿Desea guardar la asignación?')) {
+        return;
+      }
+    }
+    enviarAsignacion(oficina, aprobador_id, esCanje);
+  }
+
+  $('#btnConfirmarAsignar').on('click', function() {
+    const oficina = $('#selOficina').val();
+    const aprobador_id = $('#selAprobador').val();
+    const esCanje = $('#chkEsCanje').is(':checked');
+    if (!oficina) {
+      showAlert('warning', 'La oficina es obligatoria.');
+      return;
+    }
+    if (esCanje && !radicadoRequierePagoNetoAlegra) {
+      showAlert('warning', 'La opción canje no aplica a este tipo de documento.');
+      return;
+    }
+    if (radicadoRequierePagoNetoAlegra) {
+      refrescarPagoNetoPreview().always(function() {
+        continuarAsignacion(oficina, aprobador_id, esCanje);
+      });
+      return;
+    }
+    continuarAsignacion(oficina, aprobador_id, esCanje);
+  });
 
   function enviarAsignacion(oficina, aprobador_id, esCanje) {
     $.ajax({
@@ -889,33 +966,6 @@ $(function() {
       }
     });
   }
-
-  $('#btnConfirmarAsignar').on('click', function() {
-    const oficina = $('#selOficina').val();
-    const aprobador_id = $('#selAprobador').val();
-    const esCanje = $('#chkEsCanje').is(':checked');
-    if (!oficina) {
-      showAlert('warning', 'La oficina es obligatoria.');
-      return;
-    }
-    if (esCanje && !radicadoEsBill) {
-      showAlert('warning', 'La opción canje no aplica a este tipo de documento.');
-      return;
-    }
-    if (!aprobador_id) {
-      const cfg = $('#selAprobador').data('empresaConfig');
-      confirmarRegistroSinAprobador(cfg, radicadoValor, function() {
-        enviarAsignacion(oficina, '', esCanje);
-      });
-      return;
-    }
-    if (esCanje) {
-      if (!window.confirm('Este gasto es un canje. ¿Desea guardar la asignación?')) {
-        return;
-      }
-    }
-    enviarAsignacion(oficina, aprobador_id, esCanje);
-  });
 
   $('#btnEliminarAsignar').on('click', function() {
     if (!radicadoRow) return;
