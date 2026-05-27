@@ -5126,11 +5126,19 @@ def acciones_venta(request,proyecto,contrato):
                         }
                         filename = f'{proyecto}_pagare_{contrato}.pdf'
                         pdf_file = pdf_gen_weasy(f'pdf/{proyecto}/pagare.html', context_pagare, filename)
+                    pagare_filename = f'{proyecto}_pagare_{contrato}.pdf'
+                    if proyecto != 'Oasis' and _should_use_storage_for_tmp() and os.path.isfile(ruta):
+                        from django.core.files.base import ContentFile
+                        storage_key = f'tmp/{pagare_filename}'
+                        with open(ruta, 'rb') as pdf_file:
+                            if default_storage.exists(storage_key):
+                                default_storage.delete(storage_key)
+                            default_storage.save(storage_key, ContentFile(pdf_file.read()))
                     alerta=True
                     mensaje='Descarga el Pagaré aqui'
                     titulo='¡Listo!'
                     link=True
-                    ruta_link=_tmp_download_url(f'{proyecto}_pagare_{contrato}.pdf')
+                    ruta_link=_tmp_download_url(pagare_filename)
                 if request.POST.get('impVerificacion'):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_verificacion_{contrato}.pdf'
                     parametro=obj_parametro.get(descripcion='formasVerificacionManual')
