@@ -30,6 +30,7 @@ urlpatterns = [
     path('batches/', views.batch_list, name='alegra-batch-list'),
     path('batches/<int:batch_id>', views.batch_detail, name='alegra-batch-detail'),
     path('batches/<int:batch_id>/send', views.batch_send, name='alegra-batch-send'),
+    path('batches/<int:batch_id>/send-one', views.batch_send_one, name='alegra-batch-send-one'),
     path('contact-sync', views.contact_sync, name='alegra-contact-sync'),
     path('contact-link', views.contact_link, name='alegra-contact-link'),
     path('contact-link/lookup-local', views.contact_link_lookup_local, name='alegra-contact-link-lookup-local'),

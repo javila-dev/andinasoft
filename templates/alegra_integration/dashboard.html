@@ -39,6 +39,44 @@
   .doc-row-sent    { background: rgba(0,123,255,.04); }
   .doc-row-valid   { background: rgba(40,167,69,.04); }
   .doc-row-skipped { background: rgba(255,193,7,.04); }
+  .doc-row-sending {
+    background: rgba(23,162,184,.12) !important;
+    box-shadow: inset 3px 0 0 #17a2b8;
+    animation: sendPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes sendPulse {
+    0%, 100% { background-color: rgba(23,162,184,.08); }
+    50%      { background-color: rgba(23,162,184,.18); }
+  }
+  .doc-row-just-updated {
+    animation: rowFlash .9s ease-out;
+  }
+  @keyframes rowFlash {
+    0%   { background-color: rgba(40,167,69,.28); }
+    100% { background-color: transparent; }
+  }
+  tr.doc-row-failed.doc-row-just-updated {
+    animation-name: rowFlashFail;
+  }
+  @keyframes rowFlashFail {
+    0%   { background-color: rgba(220,53,69,.28); }
+    100% { background-color: transparent; }
+  }
+
+  .send-live-strip {
+    background: linear-gradient(90deg, rgba(23,162,184,.08), rgba(40,167,69,.06));
+    border-bottom: 1px solid #bee5eb;
+    padding: 10px 16px;
+    font-size: .875rem;
+  }
+  .send-live-strip .progress { height: 6px; border-radius: 3px; background: #e9ecef; }
+  .send-live-key {
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    background: rgba(255,255,255,.7);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
 
   .local-key {
     font-family: 'Consolas', monospace;
@@ -316,8 +354,9 @@
       <div id="sendProgressBar" style="display:none">
         <div class="progress send-progress">
           <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
-            role="progressbar" style="width:100%"></div>
+            id="sendProgressFill" role="progressbar" style="width:0%"></div>
         </div>
+        <div id="sendProgressLabel" class="text-muted text-center py-1" style="font-size:11px;background:#f8f9fa"></div>
       </div>
       <!-- contact sync progress bar (hidden) -->
       <div id="contactProgressBar" style="display:none">
@@ -344,7 +383,20 @@
           <button class="btn btn-outline-warning filter-btn" data-filter="skipped" onclick="filterDocs(this)">Omitidos</button>
         </div>
       </div>
-      <div class="table-responsive" style="max-height:520px;overflow-y:auto">
+      <div id="sendLiveStrip" class="send-live-strip" style="display:none">
+        <div class="d-flex align-items-center justify-content-between flex-wrap" style="gap:8px">
+          <div>
+            <i class="fas fa-paper-plane text-info mr-1 fa-spin-custom" id="sendLiveIcon"></i>
+            <span id="sendLiveText">Enviando…</span>
+          </div>
+          <strong id="sendLiveCounter" class="text-info">0 / 0</strong>
+        </div>
+        <div class="progress mt-2">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+            id="sendLiveFill" role="progressbar" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="table-responsive" style="max-height:520px;overflow-y:auto" id="docsTableWrap">
         <table class="table table-sm table-hover mb-0" id="docsTable">
           <thead class="thead-light">
             <tr>
@@ -692,6 +744,7 @@ const STATUS_CFG = {
   sent:       { label: 'Enviado',       cls: 'primary',   icon: 'paper-plane' },
   failed:     { label: 'Fallido',       cls: 'danger',    icon: 'exclamation-circle' },
   skipped:    { label: 'Omitido',       cls: 'warning',   icon: 'forward' },
+  sending:    { label: 'Enviando…',     cls: 'info',      icon: 'spinner' },
   processing: { label: 'Procesando',    cls: 'info',      icon: 'spinner' },
   preview:    { label: 'Vista previa',  cls: 'info',      icon: 'eye' },
   done:       { label: 'Completado',    cls: 'success',   icon: 'check-double' },
@@ -777,8 +830,9 @@ function warn(msg) {
 // ── Badges / labels ────────────────────────────
 function statusBadge(status) {
   const cfg = STATUS_CFG[status] || { label: status, cls: 'secondary', icon: 'circle' };
+  const spin = (status === 'sending' || status === 'processing') ? ' fa-spin' : '';
   return `<span class="badge badge-${cfg.cls}" style="font-size:11px">
-            <i class="fas fa-${cfg.icon} mr-1"></i>${cfg.label}
+            <i class="fas fa-${cfg.icon}${spin} mr-1"></i>${cfg.label}
           </span>`;
 }
 
@@ -884,8 +938,9 @@ function buildDocRows(docs) {
 
     // Use a stable index into allDocs for the detail modal.
     const globalIdx = allDocs.indexOf(doc);
+    const docIdAttr = doc.id ? ` data-doc-id="${doc.id}"` : '';
     tbody.append(`
-      <tr class="${rowCls}" data-status="${doc.status}" data-idx="${globalIdx}">
+      <tr class="${rowCls}" data-status="${doc.status}" data-idx="${globalIdx}"${docIdAttr}>
         <td>${statusBadge(doc.status)}</td>
         <td><small class="text-muted">${escHtml(DOC_LABELS[doc.document_type] || doc.document_type)}</small></td>
         <td><span class="local-key" title="${escHtml(doc.local_key)}">${escHtml(doc.local_key)}</span></td>
@@ -1071,6 +1126,160 @@ function confirmSend() {
   $('#confirmSendModal').modal('show');
 }
 
+function countSendableDocs(retry_failed) {
+  return (allDocs || []).filter(d =>
+    d.status === 'valid' || (retry_failed && d.status === 'failed')
+  ).length;
+}
+
+function mergeDocUpdate(updated) {
+  if (!updated) return -1;
+  const idx = allDocs.findIndex(d =>
+    (updated.id && d.id === updated.id) || d.local_key === updated.local_key
+  );
+  if (idx >= 0) {
+    allDocs[idx] = Object.assign({}, allDocs[idx], updated);
+  }
+  return idx;
+}
+
+function findNextSendableDoc(retry_failed) {
+  return (allDocs || []).find(d =>
+    d.status === 'valid' || (retry_failed && d.status === 'failed')
+  );
+}
+
+function docRowEl(doc) {
+  if (!doc) return $();
+  if (doc.id) {
+    const $byId = $(`#docsBody tr[data-doc-id="${doc.id}"]`);
+    if ($byId.length) return $byId;
+  }
+  const idx = allDocs.findIndex(d => d.local_key === doc.local_key);
+  if (idx >= 0) {
+    return $(`#docsBody tr[data-idx="${idx}"]`);
+  }
+  return $();
+}
+
+function ensureDocRowVisible(doc) {
+  if (!doc) return;
+  let filtered = getFilteredDocs();
+  let filtIdx = filtered.findIndex(d =>
+    (doc.id && d.id === doc.id) || d.local_key === doc.local_key
+  );
+  if (filtIdx < 0 && docsFilter !== 'all') {
+    $('.filter-btn[data-filter="all"]').addClass('active');
+    $('.filter-btn').not('[data-filter="all"]').removeClass('active');
+    docsFilter = 'all';
+    filtered = getFilteredDocs();
+    filtIdx = filtered.findIndex(d =>
+      (doc.id && d.id === doc.id) || d.local_key === doc.local_key
+    );
+  }
+  if (filtIdx < 0) return;
+  const page = Math.floor(filtIdx / DOCS_PER_PAGE) + 1;
+  if (docsPage !== page) {
+    docsPage = page;
+    renderDocsPage();
+  }
+}
+
+function setDocRowSending(doc, on) {
+  const $row = docRowEl(doc);
+  if (!$row.length) return;
+  if (on) {
+    $row.addClass('doc-row-sending').removeClass('doc-row-just-updated');
+    $row.attr('data-status', 'sending');
+    $row.find('td:first').html(statusBadge('sending'));
+  } else {
+    $row.removeClass('doc-row-sending');
+  }
+}
+
+function patchDocRow(doc) {
+  if (!doc) return;
+  mergeDocUpdate(doc);
+  let $row = docRowEl(doc);
+  if (!$row.length) {
+    renderDocsPage();
+    $row = docRowEl(doc);
+  }
+  if (!$row.length) return;
+
+  const rowCls = {
+    invalid: 'doc-row-invalid',
+    failed: 'doc-row-failed',
+    sent: 'doc-row-sent',
+    valid: 'doc-row-valid',
+    skipped: 'doc-row-skipped',
+  }[doc.status] || '';
+
+  $row.attr('class', rowCls).attr('data-status', doc.status);
+  $row.removeClass('doc-row-sending').addClass('doc-row-just-updated');
+  setTimeout(function() { $row.removeClass('doc-row-just-updated'); }, 1000);
+
+  const errorCell = doc.error
+    ? `<span class="error-inline" title="${escHtml(doc.error)}">${escHtml(doc.error)}</span>`
+    : '<span class="text-muted" style="font-size:12px">—</span>';
+  const alegraId = doc.alegra_id
+    ? `<code style="font-size:11px">${escHtml(doc.alegra_id)}</code>`
+    : '<span class="text-muted">—</span>';
+
+  $row.find('td').eq(0).html(statusBadge(doc.status));
+  $row.find('td').eq(4).html(alegraId);
+  $row.find('td').eq(5).html(errorCell);
+
+  const wrap = document.getElementById('docsTableWrap');
+  if (wrap && $row.length) {
+    const rowTop = $row[0].offsetTop;
+    const rowBottom = rowTop + $row[0].offsetHeight;
+    if (rowTop < wrap.scrollTop || rowBottom > wrap.scrollTop + wrap.clientHeight) {
+      $row[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+}
+
+function updateLiveMetricsDuringSend() {
+  const sent = allDocs.filter(d => d.status === 'sent').length;
+  const failed = allDocs.filter(d => d.status === 'failed').length;
+  const skipped = allDocs.filter(d => d.status === 'skipped').length;
+  $('#metricOk').text(sent);
+  $('#metricOkLabel').text('Enviados');
+  $('#metricErr').text(failed);
+  $('#metricErrLabel').text('Fallidos');
+  $('#metricSkipped').text(skipped);
+}
+
+function updateSendProgressUI(processed, planned, currentDoc) {
+  const pct = planned ? Math.min(100, Math.round((processed / planned) * 100)) : 0;
+  const label = planned
+    ? `${processed} de ${planned} procesado(s) · ${pct}%`
+    : `${processed} procesado(s)`;
+  $('#sendProgressFill, #sendLiveFill').css('width', pct + '%');
+  $('#sendProgressLabel').text(label);
+  $('#sendLiveCounter').text(planned ? `${processed} / ${planned}` : String(processed));
+  if (currentDoc && currentDoc.local_key) {
+    $('#sendLiveText').html(
+      'Enviando <span class="send-live-key">' + escHtml(currentDoc.local_key) + '</span>…'
+    );
+  } else if (processed >= planned && planned > 0) {
+    $('#sendLiveText').text('Finalizando…');
+  }
+}
+
+function showSendLiveUI(show) {
+  if (show) {
+    $('#sendLiveStrip, #sendProgressBar').show();
+    $('#resultsZone').show();
+    $('#metricOkLabel').text('Enviados');
+    $('#metricErrLabel').text('Fallidos');
+  } else {
+    $('#sendLiveStrip').hide();
+    $('#sendProgressLabel').text('');
+  }
+}
+
 function doSend() {
   $('#confirmSendModal').modal('hide');
 
@@ -1082,30 +1291,120 @@ function doSend() {
   log('info', `Empresa: <strong>${escHtml($('#selEmpresa option:selected').text())}</strong>`);
   if (p.proyecto) log('info', `Proyecto: <strong>${escHtml(p.proyecto)}</strong>`);
   logSep();
-  log('loading', 'Enviando documentos — esto puede tomar unos segundos&hellip;');
+
+  const planned = countSendableDocs(retry_failed);
 
   setBusy('send', true);
-  $('#sendProgressBar').show();
+  showSendLiveUI(true);
+  $('#sendProgressFill, #sendLiveFill').css('width', '0%');
+  updateSendProgressUI(0, planned, null);
+  $('#sendLiveText').text('Preparando envío…');
+
+  let processedSoFar = 0;
+
+  function finishSend(data) {
+    setBusy('send', false);
+    showSendLiveUI(false);
+    $('#sendProgressBar').hide();
+    onSendSuccess(data);
+  }
+
+  function failSend(xhr) {
+    setBusy('send', false);
+    showSendLiveUI(false);
+    $('#sendProgressBar').hide();
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    logSep();
+    log('error', `Error: <strong>${escHtml(msg)}</strong>`);
+    if (currentBatchId) {
+      log('warning', 'Puede reintentar; los documentos ya enviados no se duplican.');
+      loadBatchDetail(currentBatchId);
+    }
+  }
+
+  function sendOne(batchId) {
+    const nextDoc = findNextSendableDoc(retry_failed);
+    if (nextDoc) {
+      ensureDocRowVisible(nextDoc);
+      setDocRowSending(nextDoc, true);
+      updateSendProgressUI(processedSoFar, planned, nextDoc);
+    }
+
+    $.ajax({
+      url: `${API.batches}${batchId}/send-one`,
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ retry_failed }),
+      success: function(data) {
+        currentBatchId = (data.batch || {}).id || batchId;
+        currentBatchStatus = (data.batch || {}).status;
+        if (data.document) {
+          if (nextDoc) setDocRowSending(nextDoc, false);
+          patchDocRow(data.document);
+          processedSoFar++;
+          updateSendProgressUI(processedSoFar, planned, null);
+          const st = data.document.status || '';
+          const lvl = st === 'sent' ? 'success' : (st === 'failed' ? 'error' : 'dim');
+          log(lvl, `[${processedSoFar}/${planned}] ${escHtml(data.document.local_key)} → ${escHtml(st)}`);
+          updateLiveMetricsDuringSend();
+        }
+        if (data.complete) {
+          if (data.documents) {
+            allDocs = data.documents;
+            renderDocuments(allDocs);
+          }
+          $('#sendLiveText').text('Envío completado');
+          $('#sendLiveFill, #sendProgressFill').css('width', '100%');
+          finishSend(data);
+        } else {
+          sendOne(batchId);
+        }
+      },
+      error: function(xhr) {
+        if (nextDoc) setDocRowSending(nextDoc, false);
+        failSend(xhr);
+      },
+    });
+  }
+
+  function startSequential(batchId) {
+    const n = countSendableDocs(retry_failed) || planned;
+    log('loading', `Enviando <strong>${n}</strong> documento(s) — ver progreso en la tabla.`);
+    $('#sendLiveText').text('Iniciando envío…');
+    sendOne(batchId);
+  }
 
   const useBatchSend = (currentBatchId != null && String(currentBatchStatus || '') === 'preview');
-  const url = useBatchSend ? `${API.batches}${currentBatchId}/send` : API.send;
-  const body = useBatchSend ? { retry_failed } : p;
+  if (useBatchSend) {
+    if (!planned) {
+      setBusy('send', false);
+      showSendLiveUI(false);
+      log('warning', 'No hay documentos válidos para enviar.');
+      return;
+    }
+    startSequential(currentBatchId);
+    return;
+  }
 
+  log('loading', 'Generando lote antes de enviar&hellip;');
   $.ajax({
-    url: url, method: 'POST',
+    url: API.preview,
+    method: 'POST',
     contentType: 'application/json',
     headers: { 'X-CSRFToken': CSRF },
-    data: JSON.stringify(body),
-    success: onSendSuccess,
-    error: function(xhr) {
-      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
-      logSep();
-      log('error', `Error: <strong>${escHtml(msg)}</strong>`);
+    data: JSON.stringify(getPayload()),
+    success: function(data) {
+      onPreviewSuccess(data);
+      if (!countSendableDocs(retry_failed)) {
+        setBusy('send', false);
+        showSendLiveUI(false);
+        log('warning', 'No hay documentos válidos para enviar.');
+        return;
+      }
+      startSequential(currentBatchId);
     },
-    complete: function() {
-      setBusy('send', false);
-      $('#sendProgressBar').hide();
-    }
+    error: failSend,
   });
 }
 

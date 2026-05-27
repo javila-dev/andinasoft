@@ -991,6 +991,29 @@ def batch_detail(request, batch_id):
 
 @login_required
 @require_http_methods(['POST'])
+def batch_send_one(request, batch_id):
+    """
+    Envía un solo documento del lote (evita timeout de Gunicorn en lotes grandes).
+    Repetir hasta complete=true en la respuesta.
+    """
+    try:
+        payload = _payload(request)
+        data = AlegraIntegrationService(user=request.user).send_one_batch_document(
+            batch_id=batch_id,
+            document_id=payload.get('document_id'),
+            retry_failed=payload.get('retry_failed', True),
+        )
+        return JsonResponse(data)
+    except AlegraSyncBatch.DoesNotExist:
+        return JsonResponse({'detail': 'Lote no encontrado'}, status=404)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
 def batch_send(request, batch_id):
     """
     Envia un lote existente (ideal para lotes en status=preview) sin reconstruir documentos.

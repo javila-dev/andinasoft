@@ -163,6 +163,145 @@ class AlegraIntegrationService:
         batch = AlegraSyncBatch.objects.get(pk=int(batch_id))
         return self._send_batch_documents(batch, retry_failed=retry_failed)
 
+    def send_one_batch_document(self, *, batch_id, document_id=None, retry_failed=True):
+        """
+        Envía un solo documento del lote (reinicia timeout HTTP por petición).
+        Repetir hasta complete=True en la respuesta.
+        """
+        batch = AlegraSyncBatch.objects.get(pk=int(batch_id))
+        if batch.status in (AlegraSyncBatch.STATUS_DONE,):
+            totals = self._batch_send_totals(batch)
+            documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
+            return {
+                **self._batch_response(batch, documents),
+                'complete': True,
+                'remaining': totals['pending'],
+                'document': None,
+            }
+
+        if batch.status == AlegraSyncBatch.STATUS_PREVIEW:
+            batch.status = AlegraSyncBatch.STATUS_PROCESSING
+            batch.save(update_fields=['status', 'updated_at'])
+
+        if document_id:
+            doc = batch.documents.filter(pk=int(document_id)).first()
+            if not doc:
+                raise AlegraIntegrationError(f'Documento {document_id} no pertenece al lote {batch_id}.')
+        else:
+            doc = self._next_sendable_batch_document(batch, retry_failed=retry_failed)
+
+        if not doc:
+            self._finalize_batch_send(batch)
+            documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
+            totals = self._batch_send_totals(batch)
+            return {
+                **self._batch_response(batch, documents),
+                'complete': True,
+                'remaining': totals['pending'],
+                'document': None,
+            }
+
+        client_by_empresa = {}
+        self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
+        batch.refresh_from_db()
+
+        remaining = self._count_sendable_batch_documents(batch, retry_failed=retry_failed)
+        complete = remaining == 0
+        if complete:
+            self._finalize_batch_send(batch)
+            batch.refresh_from_db()
+
+        documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
+        return {
+            **self._batch_response(batch, documents),
+            'complete': complete,
+            'remaining': remaining,
+            'document': self._document_summary(doc),
+        }
+
+    def _batch_send_totals(self, batch):
+        qs = batch.documents.all()
+        return {
+            'sent': qs.filter(status=AlegraDocument.STATUS_SENT).count(),
+            'failed': qs.filter(status=AlegraDocument.STATUS_FAILED).count(),
+            'invalid': qs.filter(status=AlegraDocument.STATUS_INVALID).count(),
+            'skipped': qs.filter(status=AlegraDocument.STATUS_SKIPPED).count(),
+            'pending': qs.filter(status=AlegraDocument.STATUS_VALID).count(),
+        }
+
+    def _count_sendable_batch_documents(self, batch, *, retry_failed=True):
+        statuses = [AlegraDocument.STATUS_VALID]
+        if retry_failed:
+            statuses.append(AlegraDocument.STATUS_FAILED)
+        return batch.documents.filter(status__in=statuses).count()
+
+    def _next_sendable_batch_document(self, batch, *, retry_failed=True):
+        statuses = [AlegraDocument.STATUS_VALID]
+        if retry_failed:
+            statuses.append(AlegraDocument.STATUS_FAILED)
+        return batch.documents.filter(status__in=statuses).order_by('id').first()
+
+    def _finalize_batch_send(self, batch):
+        totals = self._batch_send_totals(batch)
+        sent = totals['sent']
+        failed = totals['failed'] + totals['invalid']
+        skipped = totals['skipped']
+        if failed == 0:
+            final_status = AlegraSyncBatch.STATUS_DONE
+        elif sent > 0:
+            final_status = AlegraSyncBatch.STATUS_PARTIAL
+        else:
+            final_status = AlegraSyncBatch.STATUS_FAILED
+        batch.status = final_status
+        batch.success_count = sent
+        batch.error_count = failed
+        batch.summary = {'sent': sent, 'failed': failed, 'skipped': skipped}
+        batch.completed_at = timezone.now()
+        batch.save(update_fields=['status', 'success_count', 'error_count', 'summary', 'completed_at', 'updated_at'])
+
+    def _try_send_batch_document(self, batch, doc, client_by_empresa, *, retry_failed=True):
+        if doc.status == AlegraDocument.STATUS_SENT:
+            return 'skipped'
+        if doc.status == AlegraDocument.STATUS_INVALID:
+            return 'invalid'
+        if doc.status == AlegraDocument.STATUS_FAILED and not retry_failed:
+            return 'skipped'
+
+        existing_sent = AlegraDocument.objects.filter(
+            empresa=doc.empresa,
+            document_type=doc.document_type,
+            local_key=doc.local_key,
+            status=AlegraDocument.STATUS_SENT,
+        ).exclude(pk=doc.pk).first()
+        if existing_sent:
+            doc.status = AlegraDocument.STATUS_SKIPPED
+            doc.response = {'skipped_reason': 'already_sent', 'existing_document_id': existing_sent.pk}
+            doc.alegra_id = existing_sent.alegra_id
+            doc.save(update_fields=['status', 'response', 'alegra_id', 'updated_at'])
+            sync_pago_from_alegra_document(doc)
+            return 'skipped'
+
+        try:
+            emp_id = str(doc.empresa_id)
+            client = client_by_empresa.get(emp_id)
+            if not client:
+                client = AlegraMCPClient(doc.empresa)
+                client_by_empresa[emp_id] = client
+            response = self._send_document(client, doc)
+            doc.status = AlegraDocument.STATUS_SENT
+            doc.response = response
+            doc.alegra_id = self._extract_alegra_id(response)
+            doc.error = ''
+            doc.sent_at = timezone.now()
+            doc.save(update_fields=['status', 'response', 'alegra_id', 'error', 'sent_at', 'updated_at'])
+            sync_pago_from_alegra_document(doc)
+            return 'sent'
+        except AlegraIntegrationError as exc:
+            doc.status = AlegraDocument.STATUS_FAILED
+            doc.error = str(exc)
+            doc.save(update_fields=['status', 'error', 'updated_at'])
+            return 'failed'
+
     def _send_batch_documents(self, batch, *, retry_failed=True):
         batch.status = AlegraSyncBatch.STATUS_PROCESSING
         batch.save(update_fields=['status', 'updated_at'])
@@ -184,46 +323,14 @@ class AlegraIntegrationService:
                 documents.append(self._document_summary(doc))
                 continue
 
-            existing_sent = AlegraDocument.objects.filter(
-                empresa=doc.empresa,
-                document_type=doc.document_type,
-                local_key=doc.local_key,
-                status=AlegraDocument.STATUS_SENT,
-            ).exclude(pk=doc.pk).first()
-            if existing_sent:
-                doc.status = AlegraDocument.STATUS_SKIPPED
-                doc.response = {'skipped_reason': 'already_sent', 'existing_document_id': existing_sent.pk}
-                doc.alegra_id = existing_sent.alegra_id
-                doc.save(update_fields=['status', 'response', 'alegra_id', 'updated_at'])
-                sync_pago_from_alegra_document(doc)
-                skipped += 1
-                documents.append(self._document_summary(doc))
-                continue
-
-            if doc.status == AlegraDocument.STATUS_FAILED and not retry_failed:
-                skipped += 1
-                documents.append(self._document_summary(doc))
-                continue
-
-            try:
-                emp_id = str(doc.empresa_id)
-                client = client_by_empresa.get(emp_id)
-                if not client:
-                    client = AlegraMCPClient(doc.empresa)
-                    client_by_empresa[emp_id] = client
-                response = self._send_document(client, doc)
-                doc.status = AlegraDocument.STATUS_SENT
-                doc.response = response
-                doc.alegra_id = self._extract_alegra_id(response)
-                doc.error = ''
-                doc.sent_at = timezone.now()
-                doc.save(update_fields=['status', 'response', 'alegra_id', 'error', 'sent_at', 'updated_at'])
-                sync_pago_from_alegra_document(doc)
+            outcome = self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
+            if outcome == 'sent':
                 sent += 1
-            except AlegraIntegrationError as exc:
-                doc.status = AlegraDocument.STATUS_FAILED
-                doc.error = str(exc)
-                doc.save(update_fields=['status', 'error', 'updated_at'])
+            elif outcome == 'failed':
+                failed += 1
+            elif outcome == 'skipped':
+                skipped += 1
+            elif outcome == 'invalid':
                 failed += 1
             documents.append(self._document_summary(doc))
 
