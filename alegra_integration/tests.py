@@ -299,6 +299,30 @@ class BuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['__local']['amount_mode'], 'gross')
         self.assertEqual(built.payload['costCenter'], {'id': 'cc-commission-1'})
         self.assertEqual(built.payload['retentions'][0]['id'], 'ret-commission_retefuente')
+        self.assertEqual(built.payload['retentions'][0]['amount'], 12000.0)
+
+    @patch('alegra_integration.builders.consecutivos')
+    def test_external_commission_retefuente_ten_percent_of_gross(self, consecutivos):
+        """Retefuente = 10% del bruto enviado, sin depender de retefuente/provision del SP."""
+        self.resolver._amount_source_external = 'gross'
+        consecutivos.objects.using.return_value.get.return_value = SimpleNamespace(cuenta_capital='529505')
+        asesor = SimpleNamespace(pk='222', nombre='ASESOR EXTERNO', tipo_asesor='Externo')
+        commission = SimpleNamespace(
+            idgestor='222',
+            id_pago=10052,
+            idadjudicacion='ADJ58',
+            comision=Decimal('265125'),
+            pagoneto=Decimal('238612'),
+            retefuente=Decimal('13688'),
+            provision=Decimal('26513'),
+            fecha=datetime.date(2026, 5, 28),
+        )
+
+        built = ExternalCommissionSupportDocumentBuilder(self.empresa, self.proyecto, self.resolver).build(commission, asesor)
+
+        self.assertEqual(built.payload['purchases']['categories'][0]['price'], 265125.0)
+        self.assertEqual(built.payload['retentions'][0]['amount'], 26513.0)
+        self.assertEqual(built.payload['__local']['retefuente'], 26513.0)
 
     @patch('alegra_integration.builders.consecutivos')
     def test_external_commission_net_omits_retentions(self, consecutivos):

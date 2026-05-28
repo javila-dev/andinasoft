@@ -1,4 +1,4 @@
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 from django.db.models import Sum
 
@@ -54,6 +54,14 @@ def _commission_payment_value(commission, mode):
     if mode == 'gross':
         return _money(commission.comision)
     return _money(commission.pagoneto)
+
+
+def _commission_retefuente_from_gross(amount):
+    """10% del valor bruto enviado (misma regla que liquidación de comisiones)."""
+    gross = Decimal(str(amount or 0))
+    if gross <= 0:
+        return 0
+    return _money((gross * Decimal('0.1')).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
 
 
 def _empresa_pk(value):
@@ -550,8 +558,8 @@ class ExternalCommissionSupportDocumentBuilder:
         if cost_center_id:
             payload['costCenter'] = {'id': cost_center_id}
 
-        retefuente_amount = _money(commission.retefuente)
-        if amount_mode == 'gross' and _nonzero(commission.retefuente):
+        retefuente_amount = _commission_retefuente_from_gross(amount) if amount_mode == 'gross' else 0
+        if amount_mode == 'gross' and _nonzero(retefuente_amount):
             retention_id = self.resolver.retention('commission_retefuente', required=True)
             payload['retentions'] = [{'id': retention_id, 'amount': retefuente_amount}]
 
