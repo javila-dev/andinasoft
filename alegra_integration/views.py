@@ -759,6 +759,41 @@ def references_save_retention_mapping(request):
 
 
 @login_required
+@require_http_methods(['POST'])
+def references_save_cost_center_mapping(request):
+    try:
+        payload = _payload(request)
+        empresa_id = (payload.get('empresa') or '').strip()
+        proyecto_id = (payload.get('proyecto') or '').strip()
+        local_code = (payload.get('local_code') or 'commission').strip()
+        alegra_id = (payload.get('alegra_id') or '').strip()
+        description = (payload.get('description') or '').strip()
+
+        if not empresa_id or not proyecto_id or not alegra_id:
+            return JsonResponse({'detail': 'empresa, proyecto y alegra_id son requeridos'}, status=400)
+
+        proyecto = proyectos.objects.get(pk=proyecto_id)
+        m, created = AlegraMapping.objects.update_or_create(
+            empresa_id=empresa_id,
+            proyecto=proyecto,
+            mapping_type=AlegraMapping.COST_CENTER,
+            local_model='andinasoft.proyectos',
+            local_pk=proyecto_id,
+            local_code=local_code,
+            defaults={
+                'alegra_id': alegra_id,
+                'description': (description or local_code)[:255],
+                'active': True,
+            },
+        )
+        return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk})
+    except proyectos.DoesNotExist:
+        return JsonResponse({'detail': 'Proyecto no encontrado'}, status=404)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
 @require_http_methods(['GET'])
 def references_caja_impuestos(request):
     """Impuestos de legalizacion local con mapeos Alegra (tax / retention) para caja."""

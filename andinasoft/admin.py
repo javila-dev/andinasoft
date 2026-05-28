@@ -10,11 +10,11 @@ from andinasoft.shared_models import Inmuebles, ventas_nuevas, Parametros_Operac
 # Register your models here.
 
 class adminAsesores(admin.ModelAdmin):
-    list_display=['cedula','nombre','email','banco','cuenta','rut','cc','direccion',
+    list_display=['cedula','nombre','email','empresa_contable','banco','cuenta','rut','cc','direccion',
     'fecha_nacimiento','estado_civil','nivel_educativo','equipo','estado',
     'fecha_registro','fecha_baja']
     
-    list_filter=['equipo','estado']
+    list_filter=['equipo','estado','empresa_contable']
     search_fields=['nombre','banco']
 
 class adminClientes(admin.ModelAdmin):

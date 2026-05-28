@@ -122,6 +122,15 @@ class asesores(models.Model):
         ('Interno','Interno'),
         ('Externo','Externo'),
     ),help_text='Para que un asesor sea visible en GTT debe estar marcado como Externo')
+    EMPRESA_CONTABLE_DEFAULT = '901018375'
+    empresa_contable = models.ForeignKey(
+        empresas,
+        on_delete=models.PROTECT,
+        related_name='asesores_contables',
+        default=EMPRESA_CONTABLE_DEFAULT,
+        db_column='EmpresaContable',
+        help_text='Empresa que contabiliza y paga las comisiones de este asesor (envío Alegra).',
+    )
     
     def __str__(self):
         return self.nombre.upper()

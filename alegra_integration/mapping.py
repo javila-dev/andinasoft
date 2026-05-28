@@ -64,6 +64,11 @@ class MappingResolver:
                 qs = qs.filter(Q(proyecto=self.proyecto) | Q(proyecto__isnull=True))
             else:
                 qs = qs.filter(proyecto__isnull=True)
+        elif mapping_type == AlegraMapping.COST_CENTER and local_model == 'andinasoft.proyectos':
+            if self.proyecto:
+                qs = qs.filter(proyecto=self.proyecto)
+            else:
+                qs = qs.filter(proyecto__isnull=True)
         else:
             # Default: company-level mapping
             qs = qs.filter(proyecto__isnull=True)
@@ -246,6 +251,18 @@ class MappingResolver:
             AlegraMapping.COST_CENTER,
             local_model='andinasoft.proyectos',
             local_pk=self.proyecto.pk,
+            required=required,
+        )
+
+    def cost_center_for_commission(self, required=False):
+        """Centro de costo por proyecto para comisiones (Referencias → Comisiones)."""
+        if not self.proyecto:
+            return None
+        return self.get(
+            AlegraMapping.COST_CENTER,
+            local_model='andinasoft.proyectos',
+            local_pk=self.proyecto.pk,
+            local_code='commission',
             required=required,
         )
 

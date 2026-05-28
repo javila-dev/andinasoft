@@ -15,7 +15,7 @@ from alegra_integration.builders import (
     ReceiptPaymentBuilder,
 )
 from alegra_integration.client import AlegraMCPClient
-from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError
+from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError, AlegraBuildError
 from accounting.models import gastos_caja
 
 
@@ -37,6 +37,9 @@ class ResolverStub:
 
     def cost_center_for_project(self, required=True):
         return 'cc-1'
+
+    def cost_center_for_commission(self, required=False):
+        return 'cc-commission-1'
 
     def numeration(self, document_code):
         return f'num-{document_code}'
@@ -229,7 +232,9 @@ class BuilderTests(SimpleTestCase):
     @patch('alegra_integration.builders.MappingResolver')
     def test_internal_commission_builds_journal_advance(self, resolver_cls, consecutivos, asesores_model):
         resolver_cls.return_value = self.resolver
-        asesor = SimpleNamespace(pk='111', nombre='ASESOR INTERNO', tipo_asesor='Interno')
+        asesor = SimpleNamespace(
+            pk='111', nombre='ASESOR INTERNO', tipo_asesor='Interno', empresa_contable_id='901018375',
+        )
         asesores_model.objects.get.return_value = asesor
         consecutivos.objects.using.return_value.get.return_value = SimpleNamespace(
             cuenta_aux1='133005',
@@ -254,6 +259,20 @@ class BuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['entries'][0]['client'], 'adviser-111')
         self.assertEqual(built.payload['entries'][1]['credit'], 50000.0)
         self.assertEqual(built.payload['entries'][1]['id'], 'cat-commission-credit')
+        self.assertEqual(built.payload['entries'][0]['costCenter'], {'id': 'cc-commission-1'})
+        self.assertEqual(built.payload['entries'][1]['costCenter'], {'id': 'cc-commission-1'})
+
+    @patch('alegra_integration.builders.asesores')
+    def test_commission_rejects_asesor_other_empresa(self, asesores_model):
+        asesor = SimpleNamespace(
+            pk='111', nombre='ASESOR', tipo_asesor='Interno', empresa_contable_id='900993044',
+        )
+        asesores_model.objects.get.return_value = asesor
+        asesores_model.EMPRESA_CONTABLE_DEFAULT = '901018375'
+        commission = SimpleNamespace(idgestor='111', id_pago=77)
+        with self.assertRaises(AlegraBuildError) as ctx:
+            CommissionBuilder(self.empresa, self.proyecto).build(commission)
+        self.assertIn('900993044', str(ctx.exception))
 
     @patch('alegra_integration.builders.consecutivos')
     def test_external_commission_builds_support_document(self, consecutivos):
@@ -278,6 +297,7 @@ class BuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-commission-expense')
         self.assertEqual(built.payload['purchases']['categories'][0]['price'], 120000.0)
         self.assertEqual(built.payload['__local']['amount_mode'], 'gross')
+        self.assertEqual(built.payload['costCenter'], {'id': 'cc-commission-1'})
         self.assertEqual(built.payload['retentions'][0]['id'], 'ret-commission_retefuente')
 
     @patch('alegra_integration.builders.consecutivos')

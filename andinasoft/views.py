@@ -1016,7 +1016,7 @@ def lista_asesores(request,proyecto):
             obj_asesor.fecha_baja=fecha_retiro
             obj_asesor.estado='Retirado'
             obj_asesor.save()
-    listado_asesores=asesores.objects.filter(estado='Activo',equipo=proyecto)
+    listado_asesores=asesores.objects.filter(estado='Activo',equipo=proyecto).select_related('empresa_contable')
     context={
         'list_asesores':listado_asesores,
         'form':form,
@@ -1037,7 +1037,7 @@ def lista_asesores_general(request,proyecto):
             obj_asesor.fecha_baja=fecha_retiro
             obj_asesor.estado='Retirado'
             obj_asesor.save()
-    listado_asesores=asesores.objects.filter(equipo=proyecto)
+    listado_asesores=asesores.objects.filter(equipo=proyecto).select_related('empresa_contable')
     context={
         'list_asesores':listado_asesores,
         'form':form,

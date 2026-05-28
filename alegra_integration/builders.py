@@ -391,6 +391,15 @@ class CommissionBuilder:
             asesor = asesores.objects.get(pk=commission.idgestor)
         except asesores.DoesNotExist:
             raise AlegraBuildError(f'No existe asesor {commission.idgestor}.')
+        batch_empresa_id = str(getattr(self.empresa, 'pk', self.empresa))
+        asesor_empresa_id = str(
+            getattr(asesor, 'empresa_contable_id', None) or asesores.EMPRESA_CONTABLE_DEFAULT
+        )
+        if asesor_empresa_id != batch_empresa_id:
+            raise AlegraBuildError(
+                f'El asesor {asesor.pk} contabiliza comisiones en {asesor_empresa_id}, '
+                f'no en {batch_empresa_id}.'
+            )
         if asesor.tipo_asesor == 'Interno':
             return InternalCommissionAdvanceBuilder(self.empresa, self.proyecto, self.resolver).build(commission, asesor)
         if asesor.tipo_asesor == 'Externo':
@@ -426,7 +435,7 @@ class InternalCommissionAdvanceBuilder:
                 f'La comision interna no tiene valor positivo ({field}, modo={amount_mode}).'
             )
         contact_id = self.resolver.contact_for_asesor(asesor.pk)
-        cost_center_id = self.resolver.cost_center_for_project(required=False)
+        cost_center_id = self.resolver.cost_center_for_commission(required=False)
         debit_account = self._debit_category_id(doc)
         credit_account = self._credit_category_id(doc)
         numeration_id = self.resolver.numeration('commission_journal')
@@ -463,6 +472,7 @@ class InternalCommissionAdvanceBuilder:
             'amount': value,
             'commission_debit_category_id': debit_account,
             'commission_credit_category_id': credit_account,
+            'cost_center_id': cost_center_id,
         }
         return BuiltDocument(
             document_type='commission_internal_advance',
@@ -516,7 +526,7 @@ class ExternalCommissionSupportDocumentBuilder:
             )
 
         provider_id = self.resolver.contact_for_asesor(asesor.pk)
-        cost_center_id = self.resolver.cost_center_for_project(required=False)
+        cost_center_id = self.resolver.cost_center_for_commission(required=False)
         numeration_id = self.resolver.numeration('commission_support_document')
         expense_category = self._expense_category_id(doc)
 
@@ -550,6 +560,7 @@ class ExternalCommissionSupportDocumentBuilder:
             'amount_mode': amount_mode,
             'amount': amount,
             'retefuente': retefuente_amount if amount_mode == 'gross' else 0,
+            'cost_center_id': cost_center_id,
         }
 
         return BuiltDocument(

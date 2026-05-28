@@ -1174,9 +1174,24 @@ class AlegraIntegrationService:
 
         if document_type == AlegraSyncBatch.DOC_COMMISSION:
             builder = CommissionBuilder(empresa, proyecto)
-            commissions = Pagocomision.objects.using(proyecto.pk).raw(f'CALL detalle_comisiones_fecha("{desde}","{hasta}")')
+            commissions = Pagocomision.objects.using(proyecto.pk).raw(
+                f'CALL detalle_comisiones_fecha("{desde}","{hasta}")'
+            )
+            asesor_ids = {str(c.idgestor) for c in commissions if getattr(c, 'idgestor', None)}
+            empresa_by_asesor = dict(
+                asesores.objects.filter(cedula__in=asesor_ids).values_list(
+                    'cedula', 'empresa_contable_id'
+                )
+            )
+            batch_empresa_id = str(getattr(empresa, 'pk', empresa))
             results = []
             for commission in commissions:
+                gestor_id = str(getattr(commission, 'idgestor', '') or '')
+                asesor_empresa = empresa_by_asesor.get(gestor_id)
+                if asesor_empresa is None:
+                    asesor_empresa = asesores.EMPRESA_CONTABLE_DEFAULT
+                if str(asesor_empresa) != batch_empresa_id:
+                    continue
                 results.extend(self._safe_build(builder, commission, empresa=empresa, proyecto=proyecto))
             return results
 

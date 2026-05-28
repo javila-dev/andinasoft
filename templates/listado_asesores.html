@@ -34,6 +34,7 @@
                         <th>Soportes</th>
                         <th>Estado</th>
                         <th>Tipo</th>
+                        <th>Emp. contable</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -75,6 +76,9 @@
                             data-asesor='{{asesor.cedula}}'>{{asesor.estado}}</a></td>
                         <td class='text-center'><a href='#' 
                                 data-asesor='{{asesor.cedula}}'>{{asesor.tipo_asesor}}</a></td>
+                        <td class='text-center' title="{{ asesor.empresa_contable_id }}">
+                            {{ asesor.empresa_contable.nombre|default:asesor.empresa_contable_id }}
+                        </td>
                     </tr>
                     {%endfor%}
                 </tbody>

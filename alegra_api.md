@@ -121,6 +121,7 @@ Tipos: `receipt` | `commission` | `gtt` | `caja` | `expense`.
 
 - `GET /references/data?empresa=&type=banks|categories|cost_centers|number_templates|retentions|taxes|journal_numerations`
 - `POST /references/save-retention-mapping` — retenciones (p. ej. `commission_retefuente`)
+- `POST /references/save-cost-center-mapping` — centros de costo por proyecto (p. ej. comisiones)
 - `GET /references/mappings?...`
 - `GET /references/local-accounts?empresa=`
 - `POST /references/save-bank-mapping`
@@ -893,12 +894,14 @@ También: `POST /references/save-category-mapping` por fila (mismo payload inter
 
 ### Comisiones
 
-Fuente: `Pagocomision` vía `CALL detalle_comisiones_fecha`. Routing por `asesor.tipo_asesor`. Configuración por proyecto en **Referencias → Comisiones**.
+Fuente: `Pagocomision` vía `CALL detalle_comisiones_fecha`. Routing por `asesor.tipo_asesor`. **Filtro por empresa:** solo entran comisiones cuyo asesor tenga `empresa_contable` igual a la empresa del lote (campo en admin de asesores; default `901018375`). Configuración por proyecto en **Referencias → Comisiones**.
 
 | Tipo asesor | Envío Alegra | Mapeos clave |
 |-------------|--------------|--------------|
 | **Externo** | `POST /bills` (documento soporte, como GTT) | `commission_support_document`, `commission_expense`, `commission_retefuente` (empresa) |
-| **Interno** | `POST /journals` (`numberTemplate` + `status: open`, como recibos) | `commission_journal`, `commission_debit`, `commission_credit` |
+| **Interno** | `POST /journals` (`numberTemplate` + `status: open`, como recibos) | `commission_journal`, `commission_debit`, `commission_credit`, **`commission` (centro de costo)** |
+
+**Centro de costo:** por proyecto en **Referencias → Comisiones** (`local_code=commission`). Se envía en `costCenter` del bill (externos) y en cada línea del journal (internos).
 
 **Valor del pago** (por proyecto y tipo de asesor): `commission_amount_source_external` / `commission_amount_source_internal` (`gross` → `comision`; `net` → `pagoneto`). Si solo existe el mapeo legado `commission_amount_source`, se usa como respaldo para ambos.
 
@@ -1075,6 +1078,7 @@ Lado **empresa del gasto**: débito concepto CxP (`client` = proveedor), crédit
 | `commission_amount_source_internal` | Base valor journal interno | — (config CATEGORY) |
 | `commission_expense` | Gasto en documento soporte | `purchases.categories` |
 | `commission_debit` / `commission_credit` | Asiento interno | `entries` |
+| `commission` (cost_center) | Centro de costo por proyecto | `costCenter` en bill / entries |
 | `commission_retefuente` | Retención (modo bruto) | `retentions[].id` |
 | `expense_payment`, `expense_anticipo` | Opcional en payments | `numberTemplate.id` |
 

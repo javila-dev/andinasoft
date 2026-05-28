@@ -347,6 +347,17 @@
             {% endfor %}
           </select>
         </div>
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Centro de costo</label>
+          <select class="form-control" id="selCommissionCostCenter">
+            <option value="">— seleccionar —</option>
+          </select>
+          <small class="text-muted d-block" id="curCommissionCostCenter">Actual: —</small>
+          <div class="mt-2">
+            <input class="form-control form-control-sm" id="txtCommissionCostCenterManual"
+                   placeholder="ID manual centro de costo Alegra" />
+          </div>
+        </div>
       </div>
 
       <hr class="my-2" />
@@ -816,6 +827,7 @@ const API = {
   saveCategory: '/accounting/alegra/references/save-category-mapping',
   saveNumeration: '/accounting/alegra/references/save-numeration-mapping',
   saveRetention: '/accounting/alegra/references/save-retention-mapping',
+  saveCostCenter: '/accounting/alegra/references/save-cost-center-mapping',
   cajaImpuestos: '/accounting/alegra/references/caja-impuestos',
   saveImpuestoMapping: '/accounting/alegra/references/save-impuesto-mapping',
   catSearch: '/accounting/alegra/references/categories/search',
@@ -1996,6 +2008,72 @@ function loadCommissionRetefuenteCurrent() {
     });
 }
 
+function buildCostCenterOptions(items) {
+  const opts = ['<option value="">— seleccionar —</option>'];
+  (items || []).forEach(cc => {
+    const id = cc.id != null ? String(cc.id) : '';
+    if (!id) return;
+    const name = cc.name || cc.description || '';
+    const code = cc.code ? `${cc.code} · ` : '';
+    opts.push(`<option value="${escHtml(id)}">${escHtml(`${code}${name} (id ${id})`)}</option>`);
+  });
+  return opts.join('');
+}
+
+function loadCommissionCostCenterCurrent() {
+  const empresa = $('#selEmpresa').val();
+  const proyecto = ($('#selCommissionProject').val() || '').trim();
+  if (!empresa || !proyecto) return $.Deferred().resolve().promise();
+  const q = `${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=cost_center` +
+    `&local_model=${encodeURIComponent('andinasoft.proyectos')}` +
+    `&local_pk=${encodeURIComponent(proyecto)}&local_code=commission` +
+    `&proyecto=${encodeURIComponent(proyecto)}`;
+  return $.get(q).done(data => {
+    const m = (data.mappings || [])[0];
+    if (m) {
+      $('#curCommissionCostCenter').text(`Actual: ${m.alegra_id} · ${m.description || ''}`);
+      const val = String(m.alegra_id);
+      if ($('#selCommissionCostCenter option[value="' + val.replace(/"/g,'&quot;') + '"]').length) {
+        $('#selCommissionCostCenter').val(val);
+      } else {
+        $('#txtCommissionCostCenterManual').val(val);
+      }
+    } else {
+      $('#curCommissionCostCenter').text('Actual: —');
+      $('#selCommissionCostCenter').val('');
+      $('#txtCommissionCostCenterManual').val('');
+    }
+  });
+}
+
+function resetCommissionCostCenterUi() {
+  $('#selCommissionCostCenter')
+    .html('<option value="">— Selecciona un proyecto —</option>')
+    .prop('disabled', true);
+  $('#curCommissionCostCenter').text('Actual: —');
+  $('#txtCommissionCostCenterManual').val('');
+}
+
+function loadCommissionCostCenterCatalog() {
+  const empresa = $('#selEmpresa').val();
+  const proyecto = ($('#selCommissionProject').val() || '').trim();
+  if (!empresa || !proyecto) {
+    resetCommissionCostCenterUi();
+    return $.Deferred().resolve().promise();
+  }
+  $('#selCommissionCostCenter').prop('disabled', false).html('<option value="">Cargando…</option>');
+  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=cost_centers`)
+    .done(data => {
+      $('#selCommissionCostCenter').html(buildCostCenterOptions(data.cost_centers || []));
+      return loadCommissionCostCenterCurrent();
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error';
+      showAlert('error', `No se pudieron cargar centros de costo: <strong>${escHtml(msg)}</strong>`);
+      $('#selCommissionCostCenter').html('<option value="">— error al cargar —</option>');
+    });
+}
+
 function loadCommissionMappingsCurrent() {
   return $.when(
     loadCommissionAmountSourceCurrent(),
@@ -2044,6 +2122,7 @@ function ensureCommissionConfigLoaded() {
   $('#selCommissionSupportNumeration').html('<option value="">Cargando…</option>');
   $('#selCommissionJournalNumeration').html('<option value="">Cargando…</option>');
   $('#selCommissionRetefuente').html('<option value="">Cargando…</option>');
+  resetCommissionCostCenterUi();
 
   const journalReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=journal_numerations`);
   const retentionsReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`);
@@ -2067,7 +2146,11 @@ function ensureCommissionConfigLoaded() {
     });
     $('#selCommissionSupportNumeration').html(buildSupportNumerationOptions(uniq));
     $('#selCommissionRetefuente').html(buildRetentionOptions(rData.retentions || []));
-    loadCommissionMappingsCurrent();
+    loadCommissionMappingsCurrent().always(() => {
+      if (($('#selCommissionProject').val() || '').trim()) {
+        loadCommissionCostCenterCatalog();
+      }
+    });
   }).fail(xhr => {
     const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
     showAlert('error', `No se pudieron cargar catálogos: <strong>${escHtml(msg)}</strong>`);
@@ -2118,6 +2201,9 @@ function saveCommissionConfig(ev) {
   const creditLabel = ($('#txtCommissionCreditPick').val() || '').trim();
   const retentionId = ($('#selCommissionRetefuente').val() || '').trim();
   const retentionLabel = $('#selCommissionRetefuente option:selected').text() || retentionId;
+  const costCenterId = ($('#txtCommissionCostCenterManual').val() || '').trim()
+    || ($('#selCommissionCostCenter').val() || '').trim();
+  const costCenterLabel = $('#selCommissionCostCenter option:selected').text() || costCenterId;
 
   if (!supportNumId) { showAlert('error', 'Indica la numeración documento soporte (externos).'); return false; }
   if (!journalNumId) { showAlert('error', 'Indica la numeración del asiento (internos).'); return false; }
@@ -2201,6 +2287,15 @@ function saveCommissionConfig(ev) {
       alegra_id: creditId,
       description: creditLabel || creditId,
     }))
+    .then(() => costCenterId
+      ? postJson(API.saveCostCenter, {
+          empresa,
+          proyecto,
+          local_code: 'commission',
+          alegra_id: costCenterId,
+          description: costCenterLabel || costCenterId,
+        })
+      : $.Deferred().resolve())
     .done(() => {
       showAlert('success', `Configuración de comisiones guardada para <strong>${escHtml(proyecto)}</strong>.`);
       loadCommissionMappingsCurrent();
@@ -3288,7 +3383,11 @@ $('#selGttProject').on('change', function() {
 
 $('#selCommissionProject').on('change', function() {
   if ($('#commissionConfigCard').is(':visible')) {
-    loadCommissionMappingsCurrent();
+    loadCommissionCostCenterCatalog().always(() => {
+      if (($('#selCommissionProject').val() || '').trim()) {
+        loadCommissionMappingsCurrent();
+      }
+    });
   }
 });
 
