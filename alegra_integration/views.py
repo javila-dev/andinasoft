@@ -1050,6 +1050,7 @@ def preview(request):
             document_type=payload.get('document_type'),
             fecha_desde=payload.get('fecha_desde'),
             fecha_hasta=payload.get('fecha_hasta'),
+            caja_id=payload.get('caja_id'),
         )
         return JsonResponse(data)
     except json.JSONDecodeError:
@@ -1073,6 +1074,7 @@ def send(request):
             document_type=payload.get('document_type'),
             fecha_desde=payload.get('fecha_desde'),
             fecha_hasta=payload.get('fecha_hasta'),
+            caja_id=payload.get('caja_id'),
             retry_failed=payload.get('retry_failed', True),
         )
         return JsonResponse(data)

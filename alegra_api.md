@@ -915,7 +915,15 @@ Ref. documento soporte: [POST /bills](https://developer.alegra.com/reference/pos
 
 ### Caja efectivo (legalización)
 
-Fuente: `gastos_caja` con `estado=Legalizado` y `reembolso` asignado, filtrados por `forma_pago.nit_empresa` y rango `fecha_gasto`. Disparo: Dashboard Alegra, tipo lote **`caja`** (sin proyecto obligatorio).
+Fuente: `gastos_caja` filtrados por **`forma_pago`** (caja seleccionada en el dashboard), `forma_pago.nit_empresa` y rango `fecha_gasto`. Disparo: Dashboard Alegra, tipo lote **`caja`** (sin proyecto; obligatorio elegir caja).
+
+**Estados:**
+- **`Revisado`** — contabilidad marca el gasto en Caja efectivo (tras aprobación del aprobador de caja). Alegra envía **`POST /bills`** por gasto en este estado **sin requerir reembolso**.
+- **`Legalizado`** — tras registrar legalización del reembolso. Alegra envía **`POST /journals`** por reembolso (bills ya enviados o pendientes en `Legalizado`).
+
+Para solicitar reembolso, **`Revisado`** se trata igual que **`Aprobado`**.
+
+**Preview / envío:** body JSON incluye `caja_id` (pk de `cuentas_pagos` con `es_caja=true` de la empresa). Se guarda en `batch.summary.caja_id`.
 
 **Flujo por reembolso:**
 

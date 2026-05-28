@@ -1425,10 +1425,11 @@ class CajaGastoBillBuilder:
         return sid
 
     def build(self, gasto):
-        if (gasto.estado or '').strip() != 'Legalizado':
-            raise AlegraBuildError(f'El gasto {gasto.pk} no esta legalizado (estado={gasto.estado}).')
-        if not gasto.reembolso_id:
-            raise AlegraBuildError(f'El gasto {gasto.pk} no tiene reembolso asociado.')
+        estado = (gasto.estado or '').strip()
+        if estado not in (gastos_caja.ESTADO_REVISADO, 'Legalizado'):
+            raise AlegraBuildError(
+                f'El gasto {gasto.pk} debe estar Revisado o Legalizado para enviar bill (estado={gasto.estado}).'
+            )
 
         tipo = (getattr(gasto, 'tipo_documento_soporte', None) or '').strip()
         if tipo not in (gastos_caja.TIPO_DOC_FE, gastos_caja.TIPO_DOC_CUENTA_COBRO):

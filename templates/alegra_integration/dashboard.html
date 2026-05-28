@@ -209,41 +209,12 @@
 
       <div id="formAlert" class="mb-3"></div>
 
-      <!-- Empresa + Proyecto -->
-      <div class="form-row mb-3">
-        <div class="col-md-5">
-          <label class="font-weight-bold" style="font-size:.85rem">
-            Empresa <span class="text-danger">*</span>
-          </label>
-          <select class="form-control" id="selEmpresa" onchange="onEmpresaChange()">
-            <option value="">— Seleccionar empresa —</option>
-            {% for e in empresas %}
-            <option value="{{ e.Nit }}">{{ e.nombre }}</option>
-            {% endfor %}
-          </select>
-          <small class="text-muted">Solo empresas habilitadas en Alegra</small>
-        </div>
-        <div class="col-md-5">
-          <label class="font-weight-bold" style="font-size:.85rem">
-            Proyecto
-            <span id="proyectoRequired" class="text-danger" style="display:none">*</span>
-            <span id="proyectoOptional" class="text-muted" style="font-size:.8rem;font-weight:400"> (opcional para egresos)</span>
-          </label>
-          <select class="form-control" id="selProyecto">
-            <option value="">— Seleccionar proyecto —</option>
-            {% for p in proyectos %}
-            <option value="{{ p.proyecto }}">{{ p.proyecto }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <!-- Tipo de documento -->
+      <!-- Tipo de documento (primera fila) -->
       <div class="form-group mb-3">
         <label class="font-weight-bold" style="font-size:.85rem">
           Tipo de documento <span class="text-danger">*</span>
         </label>
-        <div class="d-flex" style="gap:0">
+        <div class="d-flex flex-wrap" style="gap:0">
           <button type="button" class="btn btn-outline-secondary doc-type-btn active"
             data-type="receipt" onclick="selectDocType(this)">
             <i class="fas fa-receipt mr-1"></i>Recibos de caja
@@ -265,6 +236,10 @@
             <i class="fas fa-cash-register mr-1"></i>Caja efectivo
           </button>
         </div>
+        <small class="text-muted d-block mt-1" id="receiptDocHint" style="display:none">
+          Recibos del proyecto en el rango de fechas. Configura en
+          <a href="/accounting/alegra/references">Referencias → Recibos</a>.
+        </small>
         <small class="text-muted d-block mt-1" id="gttDocHint" style="display:none">
           GTT aprobados del proyecto en el rango de fechas; cada línea se envía como
           <a href="https://developer.alegra.com/reference/post_bills" target="_blank" rel="noopener">documento soporte</a>
@@ -275,12 +250,51 @@
           internos → journal (débito comisión / crédito CxP). Configura en
           <a href="/accounting/alegra/references">Referencias → Comisiones</a>.
         </small>
+        <small class="text-muted d-block mt-1" id="expenseDocHint" style="display:none">
+          Pagos, anticipos y transferencias de la empresa en el rango de fechas.
+        </small>
         <small class="text-muted d-block mt-1" id="cajaDocHint" style="display:none">
-          Solo gastos de caja en estado <strong>Legalizado</strong> en el rango de fechas.
-          Por gasto: factura electronica o cuenta de cobro (<code>POST /bills</code>);
+          Gastos de caja en estado <strong>Revisado</strong> (bills) o <strong>Legalizado</strong> (journals por reembolso) de la caja seleccionada.
+          Por gasto: factura electrónica o cuenta de cobro (<code>POST /bills</code>);
           luego comprobante que cierra CxP (<code>POST /journals</code>).
           Configura en <a href="/accounting/alegra/references">Referencias → Caja efectivo</a>.
         </small>
+      </div>
+
+      <!-- Campos según tipo (segunda fila) -->
+      <div class="form-row mb-3" id="docTypeFieldsRow">
+        <div class="col-md-5" id="empresaFieldWrap">
+          <label class="font-weight-bold" style="font-size:.85rem">
+            Empresa <span class="text-danger">*</span>
+          </label>
+          <select class="form-control" id="selEmpresa" onchange="onEmpresaChange()">
+            <option value="">— Seleccionar empresa —</option>
+            {% for e in empresas %}
+            <option value="{{ e.Nit }}">{{ e.nombre }}</option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">Solo empresas habilitadas en Alegra</small>
+        </div>
+        <div class="col-md-5" id="projFieldWrap">
+          <label class="font-weight-bold" style="font-size:.85rem">
+            Proyecto <span id="proyectoRequired" class="text-danger">*</span>
+          </label>
+          <select class="form-control" id="selProyecto">
+            <option value="">— Seleccionar proyecto —</option>
+            {% for p in proyectos %}
+            <option value="{{ p.proyecto }}">{{ p.proyecto }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-5" id="cajaFieldWrap" style="display:none">
+          <label class="font-weight-bold" style="font-size:.85rem">
+            Caja efectivo <span class="text-danger">*</span>
+          </label>
+          <select class="form-control" id="selCaja">
+            <option value="">— Seleccionar caja —</option>
+          </select>
+          <small class="text-muted">Reembolsos legalizados de esta caja</small>
+        </div>
       </div>
 
       <!-- Fechas + acciones -->
@@ -797,33 +811,94 @@ function logSep() {
 function clearLog() { $('#logContainer').empty(); }
 
 // ── Form helpers ───────────────────────────────
+function updateDocTypeFields() {
+  const t = currentDocType;
+  const isCaja = t === 'caja';
+  const needProj = t === 'receipt' || t === 'commission' || t === 'gtt';
+
+  if (needProj) {
+    $('#projFieldWrap').show();
+  } else {
+    $('#selProyecto').val('');
+    $('#projFieldWrap').hide();
+  }
+
+  if (isCaja) {
+    $('#cajaFieldWrap').show();
+    loadCajasForEmpresa();
+  } else {
+    $('#selCaja').val('');
+    $('#cajaFieldWrap').hide();
+  }
+
+  $('#receiptDocHint').toggle(t === 'receipt');
+  $('#gttDocHint').toggle(t === 'gtt');
+  $('#commissionDocHint').toggle(t === 'commission');
+  $('#expenseDocHint').toggle(t === 'expense');
+  $('#cajaDocHint').toggle(isCaja);
+}
+
 function selectDocType(btn) {
   $('.doc-type-btn').removeClass('active');
   $(btn).addClass('active');
   currentDocType = $(btn).data('type');
-  const needProj = currentDocType !== 'expense' && currentDocType !== 'caja';
-  $('#proyectoRequired').toggle(needProj);
-  $('#proyectoOptional').toggle(!needProj);
-  $('#gttDocHint').toggle(currentDocType === 'gtt');
-  $('#commissionDocHint').toggle(currentDocType === 'commission');
-  $('#cajaDocHint').toggle(currentDocType === 'caja');
+  updateDocTypeFields();
 }
 
-function onEmpresaChange() { loadHistory(); }
+function loadCajasForEmpresa() {
+  const empresa = $('#selEmpresa').val();
+  const $sel = $('#selCaja');
+  const prev = $sel.val();
+  $sel.html('<option value="">— Seleccionar caja —</option>');
+  if (!empresa) return;
+  $.get(`/accounting/alegra/references/local-accounts?empresa=${encodeURIComponent(empresa)}`)
+    .done(function(data) {
+      const cajas = (data.local_accounts || []).filter(a => a.es_caja);
+      if (!cajas.length) {
+        $sel.append('<option value="" disabled>Sin cajas activas para esta empresa</option>');
+        return;
+      }
+      cajas.forEach(function(c) {
+        const label = (c.cuentabanco || `Caja ${c.idcuenta}`) +
+          (c.nro_cuentacontable ? ` · ${c.nro_cuentacontable}` : '');
+        $sel.append(`<option value="${escHtml(String(c.idcuenta))}">${escHtml(label)}</option>`);
+      });
+      if (prev && $sel.find(`option[value="${prev}"]`).length) {
+        $sel.val(prev);
+      }
+    })
+    .fail(function() {
+      $sel.append('<option value="" disabled>Error al cargar cajas</option>');
+    });
+}
+
+function onEmpresaChange() {
+  loadHistory();
+  if (currentDocType === 'caja') loadCajasForEmpresa();
+}
 
 function getPayload() {
-  return {
+  const needProj = currentDocType === 'receipt' || currentDocType === 'commission' || currentDocType === 'gtt';
+  const p = {
     empresa:       $('#selEmpresa').val(),
-    proyecto:      $('#selProyecto').val() || null,
     document_type: currentDocType,
     fecha_desde:   $('#fechaDesde').val(),
     fecha_hasta:   $('#fechaHasta').val(),
   };
+  if (needProj) {
+    p.proyecto = $('#selProyecto').val() || null;
+  }
+  if (currentDocType === 'caja') {
+    p.caja_id = $('#selCaja').val() || null;
+  }
+  return p;
 }
 
 function validatePayload(p) {
   if (!p.empresa) return warn('Selecciona una empresa.');
-  if (currentDocType !== 'expense' && !p.proyecto) return warn('Este tipo de documento requiere un proyecto.');
+  const needProj = currentDocType === 'receipt' || currentDocType === 'commission' || currentDocType === 'gtt';
+  if (needProj && !p.proyecto) return warn('Selecciona un proyecto.');
+  if (currentDocType === 'caja' && !p.caja_id) return warn('Selecciona la caja efectivo.');
   if (!p.fecha_desde || !p.fecha_hasta) return warn('Las fechas son obligatorias.');
   if (p.fecha_desde > p.fecha_hasta)    return warn('La fecha desde no puede ser mayor que la fecha hasta.');
   return true;
@@ -1891,6 +1966,11 @@ function loadBatchDetail(batchId) {
       currentDocType = batch.document_type;
       $('.doc-type-btn').removeClass('active');
       $(`.doc-type-btn[data-type="${batch.document_type}"]`).addClass('active');
+      selectDocType($('.doc-type-btn.active')[0]);
+    }
+    if (batch.summary && batch.summary.caja_id) {
+      loadCajasForEmpresa();
+      $('#selCaja').val(String(batch.summary.caja_id));
     }
     $('#fechaDesde').val(batch.fecha_desde);
     $('#fechaHasta').val(batch.fecha_hasta);

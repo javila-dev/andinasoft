@@ -74,8 +74,10 @@ class AlegraIntegrationService:
     def __init__(self, user=None):
         self.user = user
 
-    def preview(self, *, empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id=None):
-        empresa, proyecto, desde, hasta = self._validate_input(empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id)
+    def preview(self, *, empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id=None, caja_id=None):
+        empresa, proyecto, desde, hasta, caja_id = self._validate_input(
+            empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id, caja_id=caja_id,
+        )
         batch = AlegraSyncBatch.objects.create(
             empresa=empresa,
             proyecto=proyecto,
@@ -86,7 +88,7 @@ class AlegraIntegrationService:
             created_by=self.user if getattr(self.user, 'is_authenticated', False) else None,
         )
 
-        built_results = self._build_documents(empresa, proyecto, document_type, desde, hasta)
+        built_results = self._build_documents(empresa, proyecto, document_type, desde, hasta, caja_id=caja_id)
         ready_to_send = 0
         already_sent = 0
         invalid = 0
@@ -150,16 +152,19 @@ class AlegraIntegrationService:
             'built_ok': ready_to_send + already_sent,
             'invalid': invalid,
         }
+        if caja_id is not None:
+            batch.summary['caja_id'] = caja_id
         batch.save(update_fields=['total_documents', 'success_count', 'error_count', 'summary', 'updated_at'])
         return self._batch_response(batch, documents)
 
-    def send(self, *, empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id=None, retry_failed=True):
+    def send(self, *, empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id=None, caja_id=None, retry_failed=True):
         preview = self.preview(
             empresa_id=empresa_id,
             document_type=document_type,
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
             proyecto_id=proyecto_id,
+            caja_id=caja_id,
         )
         batch = AlegraSyncBatch.objects.get(pk=preview['batch']['id'])
         return self._send_batch_documents(batch, retry_failed=retry_failed)
@@ -1121,7 +1126,7 @@ class AlegraIntegrationService:
             'missing': missing_list,
         }
 
-    def _validate_input(self, empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id):
+    def _validate_input(self, empresa_id, document_type, fecha_desde, fecha_hasta, proyecto_id, caja_id=None):
         if document_type not in dict(AlegraSyncBatch.DOCUMENT_TYPES):
             raise AlegraConfigurationError(f'Tipo de documento no soportado: {document_type}')
         desde = parse_date(str(fecha_desde or ''))
@@ -1137,10 +1142,28 @@ class AlegraIntegrationService:
                 raise AlegraConfigurationError('Este tipo de documento requiere proyecto.')
             proyecto = proyectos.objects.get(pk=proyecto_id)
         elif proyecto_id:
-            proyecto = proyectos.objects.get(pk=proyecto_id)
-        return empresa, proyecto, desde, hasta
+            raise AlegraConfigurationError('Este tipo de documento no usa proyecto.')
 
-    def _build_documents(self, empresa, proyecto, document_type, desde, hasta):
+        validated_caja_id = None
+        if document_type == AlegraSyncBatch.DOC_CAJA:
+            if not caja_id:
+                raise AlegraConfigurationError('Debe seleccionar la caja efectivo.')
+            from andinasoft.models import cuentas_pagos
+            cuenta = cuentas_pagos.objects.filter(
+                pk=caja_id,
+                nit_empresa=empresa,
+                activo=True,
+                es_caja=True,
+            ).first()
+            if not cuenta:
+                raise AlegraConfigurationError('Caja no encontrada o no activa para esta empresa.')
+            validated_caja_id = cuenta.pk
+        elif caja_id:
+            raise AlegraConfigurationError('caja_id solo aplica al tipo caja efectivo.')
+
+        return empresa, proyecto, desde, hasta, validated_caja_id
+
+    def _build_documents(self, empresa, proyecto, document_type, desde, hasta, caja_id=None):
         if document_type == AlegraSyncBatch.DOC_RECEIPT:
             builder = ReceiptPaymentBuilder(empresa, proyecto)
             queryset = Recaudos_general.objects.using(proyecto.pk).filter(fecha__range=(desde, hasta)).order_by('fecha', 'pk')
@@ -1178,9 +1201,26 @@ class AlegraIntegrationService:
         if document_type == AlegraSyncBatch.DOC_CAJA:
             bill_builder = CajaGastoBillBuilder(empresa)
             journal_builder = CajaLegalizationJournalBuilder(empresa)
-            gastos_qs = gastos_caja.objects.filter(
+
+            gastos_bill_qs = gastos_caja.objects.filter(
+                estado__in=(gastos_caja.ESTADO_REVISADO, 'Legalizado'),
+                forma_pago_id=caja_id,
+                forma_pago__nit_empresa=empresa,
+                fecha_gasto__range=(desde, hasta),
+            ).select_related(
+                'reembolso',
+                'reembolso__caja',
+                'tercero',
+                'concepto',
+                'forma_pago',
+                'cuenta_iva',
+                'cuenta_rte',
+            ).order_by('fecha_gasto', 'pk')
+
+            gastos_journal_qs = gastos_caja.objects.filter(
                 estado='Legalizado',
                 reembolso__isnull=False,
+                reembolso__caja_id=caja_id,
                 forma_pago__nit_empresa=empresa,
                 fecha_gasto__range=(desde, hasta),
             ).select_related(
@@ -1192,15 +1232,16 @@ class AlegraIntegrationService:
                 'cuenta_iva',
                 'cuenta_rte',
             ).order_by('reembolso_id', 'fecha_gasto', 'pk')
-            gastos_list = list(gastos_qs)
-            by_reemb = {}
-            for gasto in gastos_list:
-                by_reemb.setdefault(gasto.reembolso_id, []).append(gasto)
+
             results = []
+            for gasto in gastos_bill_qs:
+                results.extend(self._safe_build(bill_builder, gasto, empresa=empresa, proyecto=proyecto))
+
+            by_reemb = {}
+            for gasto in gastos_journal_qs:
+                by_reemb.setdefault(gasto.reembolso_id, []).append(gasto)
             for reemb_id in sorted(by_reemb.keys()):
                 gastos_group = by_reemb[reemb_id]
-                for gasto in gastos_group:
-                    results.extend(self._safe_build(bill_builder, gasto, empresa=empresa, proyecto=proyecto))
                 reembolso = gastos_group[0].reembolso
                 journal_source = {'reembolso': reembolso, 'gastos': gastos_group}
                 results.extend(self._safe_build(journal_builder, journal_source, empresa=empresa, proyecto=proyecto))

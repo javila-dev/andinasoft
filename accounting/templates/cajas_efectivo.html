@@ -57,6 +57,7 @@
                         <th style="width:23%">Tercero</th>
                         <th style="width:28%">Descripcion</th>
                         <th>Concepto</th>
+                        <th style="width:8%">Tipo doc.</th>
                         <th style="text-align: right;">Subtotal</th>
                         <th style="text-align: right;">IVA</th>
                         <th style="text-align: right;">Rte</th>
@@ -66,7 +67,7 @@
                 </thead>
                 <tfoot>
                   <tr>
-                      <th colspan="7" style="text-align: right;">Saldo final</th>
+                      <th colspan="8" style="text-align: right;">Saldo final</th>
                       <th style="text-align: right;"></th>
                       <th></th>
                   </tr>
@@ -254,39 +255,53 @@
         </div>
       </div>
 </div>
-<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuLegal' 
-  style="max-width: 220px;">
-  <a class="dropdown-item" id='ver_soporte' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte</a>
-  <a class="dropdown-item" id='ver_soporte_prov' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Ver id Proveedor</a>
-  <a class="dropdown-item" id='eliminar_leg' href="#"><i class="fas fa-trash"></i>&nbsp;Eliminar</a>
+<div class="dropdown-menu dropdown-menu-right contextmenu ctx-menu-compact" id='contextMenuLegal'>
+  <a class="dropdown-item" data-action="ver_soporte" href="#"><i class="fas fa-file-pdf fa-fw"></i>Soporte</a>
+  <a class="dropdown-item" data-action="ver_soporte_prov" href="#"><i class="fas fa-id-card fa-fw"></i>Proveedor</a>
   <div class="dropdown-divider"></div>
-  <a class="dropdown-item" id='change_support' href="#"><i class="fa fa-exchange"></i>&nbsp;Cambiar soporte</a>
-  <a class="dropdown-item" id='change_concept' href="#"><i class="fas fa-thumbtack"></i>&nbsp;Cambiar concepto</a>
-  <a class="dropdown-item" id='change_tipo_doc' href="#"><i class="fas fa-file-invoice"></i>&nbsp;Tipo de soporte</a>
-  <a class="dropdown-item" id='include_taxes' href="#"><i class="fas fa-percent"></i>&nbsp;IVA y Rte</a>
+  <div class="dropdown-submenu">
+    <a class="dropdown-item dropdown-toggle" href="#" tabindex="-1"><i class="fas fa-pen fa-fw"></i>Editar</a>
+    <div class="dropdown-menu ctx-menu-compact">
+      <a class="dropdown-item disabled" data-action="change_support" id="change_support" href="#">Soporte</a>
+      <a class="dropdown-item disabled" data-action="change_concept" id="change_concept" href="#">Concepto</a>
+      <a class="dropdown-item disabled" data-action="change_tipo_doc" id="change_tipo_doc" href="#">Tipo doc.</a>
+      <a class="dropdown-item disabled" data-action="include_taxes" id="include_taxes" href="#">IVA / Rte</a>
+    </div>
+  </div>
+  {% if es_contabilidad %}
   <div class="dropdown-divider"></div>
-  <a class="dropdown-item" id='approve_gasto' href="#"><i class="fas fa-check"></i>&nbsp;Aprobar</a>
-</div> 
-<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenureemb' 
-  style="max-width: 220px;">
-  <a class="dropdown-item" id='ver_soporte_r' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte</a>
-  <a class="dropdown-item" id='devolver_r' href="#"><i class="fas fa-rotate-left"></i>&nbsp;Devolver</a>
+  <a class="dropdown-item disabled" data-action="marcar_revisado" id="marcar_revisado" href="#"><i class="fas fa-clipboard-check fa-fw"></i>Revisado</a>
+  <a class="dropdown-item disabled" data-action="devolver_gasto" id="devolver_gasto" href="#"><i class="fas fa-rotate-left fa-fw"></i>Devolver</a>
+  {% endif %}
   <div class="dropdown-divider"></div>
-  <a class="dropdown-item" id='change_concept_r' href="#"><i class="fas fa-thumbtack"></i>&nbsp;Cambiar concepto</a>
-  <a class="dropdown-item" id='include_taxes_r' href="#"><i class="fas fa-percent"></i>&nbsp;IVA y Rte</a>
-</div> 
-<div class="dropdown-menu dropdown-menu-right contextmenu" id='contextMenuLeg' 
-  style="max-width: 220px;">
-  <a class="dropdown-item" id='print_reemb' href="#"><i class="fas fa-print"></i>&nbsp;Imprimir</a>
+  <a class="dropdown-item disabled" data-action="approve_gasto" id="approve_gasto" href="#"><i class="fas fa-check fa-fw"></i>Aprobar</a>
+  <a class="dropdown-item disabled" data-action="eliminar_leg" id="eliminar_leg" href="#"><i class="fas fa-trash fa-fw"></i>Eliminar</a>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu ctx-menu-compact" id='contextMenureemb'>
+  <a class="dropdown-item" data-action="ver_soporte_r" href="#"><i class="fas fa-file-pdf fa-fw"></i>Soporte</a>
+  {% if es_contabilidad %}
+  <a class="dropdown-item" data-action="devolver_r" href="#"><i class="fas fa-rotate-left fa-fw"></i>Devolver</a>
+  {% endif %}
   <div class="dropdown-divider"></div>
-  <a class="dropdown-item disabled" id='reg_legal' href="#"><i class="fas fa-link"></i>&nbsp;Legalización</a>
-  <a class="dropdown-item disabled" id='soporte_reemb' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Soporte legalización</a>
+  <div class="dropdown-submenu">
+    <a class="dropdown-item dropdown-toggle" href="#" tabindex="-1"><i class="fas fa-pen fa-fw"></i>Editar</a>
+    <div class="dropdown-menu ctx-menu-compact">
+      <a class="dropdown-item" data-action="change_concept_r" id="change_concept_r" href="#">Concepto</a>
+      <a class="dropdown-item" data-action="include_taxes_r" id="include_taxes_r" href="#">IVA / Rte</a>
+    </div>
+  </div>
+</div>
+<div class="dropdown-menu dropdown-menu-right contextmenu ctx-menu-compact" id='contextMenuLeg'>
+  <a class="dropdown-item" data-action="print_reemb" href="#"><i class="fas fa-print fa-fw"></i>Imprimir</a>
   <div class="dropdown-divider"></div>
-  <a class="dropdown-item disabled" id='pagar_reemb' href="#"><i class="fas fa-money-bill-wave"></i>&nbsp;Pagar</a>
-  <a class="dropdown-item disabled" id='soporte_transf' href="#"><i class="fas fa-file-pdf"></i>&nbsp;Transferencia</a>
+  <a class="dropdown-item disabled" data-action="reg_legal" id="reg_legal" href="#"><i class="fas fa-link fa-fw"></i>Legalizar</a>
+  <a class="dropdown-item disabled" data-action="soporte_reemb" id="soporte_reemb" href="#"><i class="fas fa-file-pdf fa-fw"></i>Sop. legal.</a>
   <div class="dropdown-divider"></div>
-  <a class="dropdown-item" id='interf_reemb' href="#"><i class="fas fa-file-arrow-down"></i>&nbsp;Interfaz</a>
-</div> 
+  <a class="dropdown-item disabled" data-action="pagar_reemb" id="pagar_reemb" href="#"><i class="fas fa-money-bill-wave fa-fw"></i>Pagar</a>
+  <a class="dropdown-item disabled" data-action="soporte_transf" id="soporte_transf" href="#"><i class="fas fa-file-pdf fa-fw"></i>Transfer.</a>
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item" data-action="interf_reemb" href="#"><i class="fas fa-file-arrow-down fa-fw"></i>Interfaz</a>
+</div>
 <div class="modal fade" id="modalNuevaLegalizacion" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
   <div class="modal-dialog">
       <div class="modal-content">
@@ -456,6 +471,7 @@
                         <th style="width:10%">Fecha</th>
                         <th style="width:25%">Tercero</th>
                         <th style="width:35%">Descripcion</th>
+                        <th style="width:8%">Tipo doc.</th>
                         <th style="text-align: right;">Subtotal</th>
                         <th style="text-align: right;">IVA</th>
                         <th style="text-align: right;">Rte</th>
@@ -465,7 +481,7 @@
                 </thead>
                 <tfoot>
                   <tr>
-                      <th colspan="6" style="text-align: right;">Total</th>
+                      <th colspan="7" style="text-align: right;">Total</th>
                       <th style="text-align: right;"></th>
                       <th></th>
                   </tr>
@@ -501,6 +517,98 @@
     if (pathOrUrl.startsWith(mediaPrefix) || pathOrUrl.startsWith('/media/')) return pathOrUrl;
 
     return mediaPrefix + pathOrUrl.replace(/^\/+/, '');
+  }
+
+  function labelTipoSoporte(val) {
+    if (val === 'fe') return 'FE';
+    if (val === 'cuenta_cobro') return 'Cuenta de cobro';
+    return '—';
+  }
+
+  function positionContextMenu($menu, evt) {
+    $menu.css({ display: 'block', visibility: 'hidden', left: 0, top: 0 });
+    $menu.find('.dropdown-submenu').removeClass('submenu-left');
+    const pad = 6;
+    const mw = $menu.outerWidth();
+    const mh = $menu.outerHeight();
+    const $win = $(window);
+    const scrollLeft = $win.scrollLeft();
+    const scrollTop = $win.scrollTop();
+    let left = evt.pageX;
+    let top = evt.pageY;
+    if (left + mw + pad > scrollLeft + $win.width()) {
+      left = Math.max(scrollLeft + pad, left - mw);
+    }
+    if (top + mh + pad > scrollTop + $win.height()) {
+      top = Math.max(scrollTop + pad, top - mh);
+    }
+    $menu.css({ left, top, visibility: 'visible', 'z-index': 1060 });
+    $menu.find('.dropdown-submenu').each(function() {
+      const $subMenu = $(this).children('.dropdown-menu');
+      if (!$subMenu.length) return;
+      const menuLeft = $menu.offset().left;
+      if (menuLeft + mw + $subMenu.outerWidth() + pad > scrollLeft + $win.width()) {
+        $(this).addClass('submenu-left');
+      }
+    });
+  }
+
+  function devolverGastoCaja(gastoPk, $tbody, tablaInstance) {
+    if (!confirm('¿Devolver este gasto al responsable para corrección?')) return;
+    $tbody.css('cursor', 'wait');
+    $.ajax({
+      type: 'POST',
+      url: '/accounting/cajasefectivo',
+      data: {
+        csrfmiddlewaretoken: getCookie('csrftoken'),
+        gasto: gastoPk,
+        to_do: 'return_to_user',
+      },
+      success: (xhr) => {
+        $('#alert-title').text('Andinasoft dice:');
+        $('#alert-data').text(xhr.msj);
+        $('#general-right-alert').toggleClass('show').toggleClass(xhr.class);
+        tablaInstance.ajax.reload();
+      },
+      error: () => {
+        $('#alert-title').text('Andinasoft dice:');
+        $('#alert-data').text('Ocurrió un error al devolver el gasto.');
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger');
+      },
+      complete: () => {
+        $tbody.css('cursor', 'pointer');
+      },
+    });
+  }
+
+  function setGastoMenuItems(line) {
+    const $menu = $('#contextMenuLegal');
+    const enable = (sel) => $menu.find(sel).removeClass('disabled');
+    const disable = (sel) => $menu.find(sel).addClass('disabled');
+    const allEdit = '#change_support, #change_concept, #change_tipo_doc, #include_taxes';
+    const contab = '#marcar_revisado, #devolver_gasto';
+
+    disable('#approve_gasto, #eliminar_leg');
+    disable(allEdit);
+    disable(contab);
+
+    if (line.estado === 'Pendiente') {
+      enable('#approve_gasto, #eliminar_leg');
+      enable(allEdit);
+    } else if (line.estado === 'Aprobado') {
+      enable('#change_tipo_doc');
+      enable('#marcar_revisado, #devolver_gasto');
+    } else if (line.estado === 'Revisado') {
+      enable('#change_tipo_doc');
+      enable('#devolver_gasto');
+    } else if (line.estado === 'Devuelto') {
+      enable('#change_support, #change_concept, #change_tipo_doc, #include_taxes');
+    } else if (line.estado === 'Reembolso') {
+      enable('#change_tipo_doc');
+      enable('#devolver_gasto');
+    } else if (line.estado === 'Legalizado') {
+      enable('#change_tipo_doc');
+    }
   }
 
   $(document).ready(function(){
@@ -612,6 +720,11 @@
               {'data':'tercero'},
               {'data':'descripcion'},
               {'data':'concepto'},
+              {'data':'tipo_documento_soporte',
+               render: function(data, type) {
+                 if (type === 'sort' || type === 'type') return data || '';
+                 return labelTipoSoporte(data);
+               }},
               {'data':'subtotal',
               render: $.fn.dataTable.render.number( ',', '.', 0)},
               {'data':'iva',
@@ -623,9 +736,10 @@
               {'data':'estado'},
           ],
           columnDefs: [
-              {targets: [4,5,6,7],type: 'num-fmt'},
-              {targets:[1,2],"className":"dt-body-left"}, 
-              {targets:[4,5,6,7],"className":"dt-body-right"}, 
+              {targets: [5,6,7,8],type: 'num-fmt'},
+              {targets:[1,2],"className":"dt-body-left"},
+              {targets:[4],"className":"dt-body-center text-nowrap"},
+              {targets:[5,6,7,8],"className":"dt-body-right"},
               { type: 'date-uk', targets: 0 },
           ],
           order: [[ 0, "asc" ]],
@@ -638,14 +752,14 @@
             };
 
             // Total over all pages
-            var columnData = api.column(7).data();
+            var columnData = api.column(8).data();
             total = columnData.length > 0 ? columnData.reduce(function (a, b) {
                 return intVal(a) + intVal(b);
             }, 0) : 0;
 
             fmt_total = new Intl.NumberFormat('en-EN').format(total)
             // Update footer
-            $(api.column(7).footer()).html('$' + fmt_total );
+            $(api.column(8).footer()).html('$' + fmt_total );
         }
       })
     var tabla_movimientos_reemb = $("#tabla_movimientos_reembolso").DataTable({
@@ -667,6 +781,11 @@
               {'data':'fecha'},
               {'data':'tercero'},
               {'data':'descripcion'},
+              {'data':'tipo_documento_soporte',
+               render: function(data, type) {
+                 if (type === 'sort' || type === 'type') return data || '';
+                 return labelTipoSoporte(data);
+               }},
               {'data':'subtotal',
               render: $.fn.dataTable.render.number( ',', '.', 0)},
               {'data':'iva',
@@ -678,9 +797,10 @@
               {'data':'usuario_aprueba'},
           ],
           columnDefs: [
-              {targets: [3,4,5,6],type: 'num-fmt'},
-              {targets:[1,2],"className":"dt-body-left"}, 
-              {targets:[3,4,5,6],"className":"dt-body-right"}, 
+              {targets: [4,5,6,7],type: 'num-fmt'},
+              {targets:[1,2],"className":"dt-body-left"},
+              {targets:[3],"className":"dt-body-center text-nowrap"},
+              {targets:[4,5,6,7],"className":"dt-body-right"},
               { type: 'date-uk', targets: 0 },
           ],
           order: [[ 0, "asc" ]],
@@ -693,14 +813,14 @@
             };
 
             // Total over all pages
-            var columnData = api.column(6).data();
+            var columnData = api.column(7).data();
             total = columnData.length > 0 ? columnData.reduce(function (a, b) {
                 return intVal(a) + intVal(b);
             }, 0) : 0;
 
             fmt_total = new Intl.NumberFormat('en-EN').format(total)
             // Update footer
-            $(api.column(6).footer()).html('$' + fmt_total );
+            $(api.column(7).footer()).html('$' + fmt_total );
         }
       })
     var tabla_reembolsos = $("#tabla_reembolsos").DataTable({
@@ -835,65 +955,10 @@
       let line = tabla_movimientos.row(this).data()
       if (line.tipo != 'gasto') return;
 
-      if (line.estado == 'Pendiente') {
-        $('#approve_gasto').removeClass('disabled');
-        $('#eliminar_leg').removeClass('disabled');
-        $('#change_support').removeClass('disabled');
-        $('#change_concept').removeClass('disabled');
-        $('#change_tipo_doc').removeClass('disabled');
-        $('#include_taxes').removeClass('disabled');
-      }
-      else if (line.estado == 'Aprobado'){
-        $('#approve_gasto').addClass('disabled');
-        $('#eliminar_leg').addClass('disabled');
-        $('#change_support').addClass('disabled');
-        $('#change_concept').addClass('disabled');
-        $('#change_tipo_doc').removeClass('disabled');
-        $('#include_taxes').addClass('disabled');
-      }
-      else if (line.estado == 'Devuelto') {
-        $('#approve_gasto').addClass('disabled');
-        $('#eliminar_leg').addClass('disabled');
-        $('#change_support').removeClass('disabled');
-        $('#change_concept').removeClass('disabled');
-        $('#change_tipo_doc').removeClass('disabled');
-        $('#include_taxes').removeClass('disabled');
-      }
-      else if (line.estado == 'Legalizado' || line.estado == 'Reembolso') {
-        $('#approve_gasto').addClass('disabled');
-        $('#eliminar_leg').addClass('disabled');
-        $('#change_support').addClass('disabled');
-        $('#change_concept').addClass('disabled');
-        $('#change_tipo_doc').removeClass('disabled');
-        $('#include_taxes').addClass('disabled');
-      }
-      else {
-        $('#approve_gasto').addClass('disabled');
-        $('#eliminar_leg').addClass('disabled');
-        $('#change_support').addClass('disabled');
-        $('#change_concept').addClass('disabled');
-        $('#change_tipo_doc').addClass('disabled');
-        $('#include_taxes').addClass('disabled');
-      }
-      
-      
+      setGastoMenuItems(line);
       tabla_movimientos.$('tr.selected').removeClass('selected');
       $(this).addClass('selected')
-      var width = $(document).width()
-      var position = e.pageX
-      if (position>=width*3/4){
-          position -= 220
-      }
-      positionY = e.pageY
-      if (e.pageY/$(document).height()>=0.7){
-          positionY -= 240
-      }
-      $('#contextMenuLegal').css({
-          'display':'block',
-          'left':position,
-          'top':positionY,
-          'z-index':1060
-      })
+      positionContextMenu($('#contextMenuLegal'), e);
       return false;
     })
     $('#tabla_movimientos_reembolso tbody').on('contextmenu','tr',function(e){
@@ -911,21 +976,7 @@
       }
       tabla_movimientos_reemb.$('tr.selected').removeClass('selected');
       $(this).addClass('selected')
-      var width = $(document).width()
-      var position = e.pageX
-      if (position>=width*3/4){
-          position -= 220
-      }
-      positionY = e.pageY
-      if (e.pageY/$(document).height()>=0.7){
-          positionY -= 240
-      }
-      $('#contextMenureemb').css({
-          'display':'block',
-          'left':position,
-          'top':positionY,
-          'z-index':1060
-      })
+      positionContextMenu($('#contextMenureemb'), e);
       return false;
     })
     $('#tabla_reembolsos tbody').on('contextmenu','tr',function(e){
@@ -954,33 +1005,23 @@
 
       tabla_reembolsos.$('tr.selected').removeClass('selected');
       $(this).addClass('selected')
-      var width = $(document).width()
-      var position = e.pageX
-      if (position>=width*3/4){
-          position -= 210
-      }
-      positionY = e.pageY
-      if (e.pageY/$(document).height()>=0.7){
-          positionY -= 260
-      }
-      $('#contextMenuLeg').css({
-          'display':'block',
-          'left':position,
-          'top':positionY,
-          'z-index':1060
-      })
+      positionContextMenu($('#contextMenuLeg'), e);
       return false;
     })
     
-    $("#contextMenuLegal").click(function(e){  
+    $("#contextMenuLegal").click(function(e){
+      e.preventDefault();
+      const $item = $(e.target).closest('[data-action]');
+      if (!$item.length || $item.hasClass('disabled')) return;
+      const action = $item.data('action');
       var line = tabla_movimientos.row('.selected').data()
-      switch(e.target.id){
+      switch(action){
           case "ver_soporte":
             var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte legalizacion anticipo',params)
             break;     
           
-            case "ver_soporte_prov":
+          case "ver_soporte_prov":
             var ruta = resolveMediaUrl(line.soporte_doc_prov)
             window.open(ruta,'Soporte idenficacion proveedor',params)
             break;    
@@ -1005,7 +1046,7 @@
               }
               $.post('/accounting/cajasefectivo', {
                 to_do: 'change_tipo_documento',
-                id_gasto: row.pk,
+                id_gasto: line.pk,
                 tipo_documento_soporte: tipo,
                 csrfmiddlewaretoken: '{{ csrf_token }}',
               }).done(xhr => {
@@ -1086,8 +1127,6 @@
                 }
               })
           }
-          
-            
               break;
           
           case "change_support":
@@ -1134,45 +1173,61 @@
                 })
               }
               break;
+
+          case "marcar_revisado":
+            if (line.estado !== 'Aprobado') {
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').text('Solo se pueden marcar como revisados los gastos aprobados.')
+              $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              return;
+            }
+            if (!confirm('¿Marcar este gasto como revisado por contabilidad? Quedará listo para envío a Alegra.')) {
+              return;
+            }
+            $('#tabla_movimientos tbody').css('cursor', 'wait')
+            $.ajax({
+              type: 'POST',
+              url: '/accounting/cajasefectivo',
+              data: {
+                csrfmiddlewaretoken: getCookie('csrftoken'),
+                gasto: line.pk,
+                to_do: 'marcar_revisado',
+              },
+              success: (xhr) => {
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                tabla_movimientos.ajax.reload()
+              },
+              error: () => {
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text('Ocurrió un error al marcar el gasto.')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              },
+              complete: () => {
+                $('#tabla_movimientos tbody').css('cursor', 'pointer')
+              },
+            })
+            break;
+
+          case "devolver_gasto":
+            devolverGastoCaja(line.pk, $('#tabla_movimientos tbody'), tabla_movimientos);
+            break;
       }
     })
-    $("#contextMenureemb").click(function(e){  
+    $("#contextMenureemb").click(function(e){
+      e.preventDefault();
+      const $item = $(e.target).closest('[data-action]');
+      if (!$item.length || $item.hasClass('disabled')) return;
+      const action = $item.data('action');
       var line = tabla_movimientos_reemb.row('.selected').data()
-      switch(e.target.id){
+      switch(action){
           case "ver_soporte_r":
             var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte legalizacion anticipo',params)
             break;     
           case "devolver_r":
-            $('#tabla_movimientos_reembolso tbody').css(
-                'cursor','wait'
-              )
-              $.ajax({
-                  type:'POST',
-                  url:'/accounting/cajasefectivo',
-                  data:{
-                    'csrfmiddlewaretoken':getCookie('csrftoken'),
-                    'gasto':line.pk,
-                    'to_do':'return_to_user'
-                  },
-                  success: (xhr) => {
-                    $('#alert-title').text('Andinasoft dice:')
-                    $('#alert-data').text(xhr.msj)
-                    $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
-                    tabla_movimientos_reemb.ajax.reload()
-                    
-                  },
-                  error: (xhr) => {
-                    $('#alert-title').text('Andinasoft dice:')
-                    $('#alert-data').text('Ocurrio un error, contacta  al administrador')
-                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-                  },
-                  complete: function(xhr){
-                    $('#tabla_movimientos_reembolso tbody').css(
-                      'cursor','pointer'
-                    )
-                  }
-                })
+            devolverGastoCaja(line.pk, $('#tabla_movimientos_reembolso tbody'), tabla_movimientos_reemb);
             break;
           case "change_concept_r":
             $('#modalchangeconcept').modal('show')
@@ -1207,9 +1262,13 @@
           
       }
     })
-    $("#contextMenuLeg").click(function(e){  
+    $("#contextMenuLeg").click(function(e){
+      e.preventDefault();
+      const $item = $(e.target).closest('[data-action]');
+      if (!$item.length || $item.hasClass('disabled')) return;
+      const action = $item.data('action');
       var line = tabla_reembolsos.row('.selected').data()
-      switch(e.target.id){
+      switch(action){
           case "soporte_reemb":
             var ruta = resolveMediaUrl(line.soporte_legalizacion)
             window.open(ruta,'Soporte legalizacion reembolso',params)
@@ -1977,6 +2036,53 @@
   }
   td {
     font-size: x-small;
+  }
+  .ctx-menu-compact {
+    min-width: 8.5rem;
+    max-width: 10rem;
+    padding: 0.15rem 0;
+    font-size: 0.72rem;
+  }
+  .ctx-menu-compact .dropdown-item {
+    padding: 0.22rem 0.55rem;
+    line-height: 1.2;
+  }
+  .ctx-menu-compact .dropdown-divider {
+    margin: 0.12rem 0;
+  }
+  .ctx-menu-compact .dropdown-item i.fa-fw {
+    width: 1em;
+    margin-right: 0.3rem;
+    font-size: 0.68rem;
+  }
+  .dropdown-submenu {
+    position: relative;
+  }
+  .dropdown-submenu > .dropdown-menu {
+    top: 0;
+    left: 100%;
+    margin-left: -1px;
+    display: none;
+  }
+  .dropdown-submenu:hover > .dropdown-menu,
+  .dropdown-submenu:focus-within > .dropdown-menu {
+    display: block;
+  }
+  .dropdown-submenu > .dropdown-toggle::after {
+    transform: rotate(-90deg);
+    position: absolute;
+    right: 0.35rem;
+    top: 0.42rem;
+    margin: 0;
+  }
+  .dropdown-submenu.submenu-left > .dropdown-menu {
+    left: auto;
+    right: 100%;
+    margin-left: 0;
+    margin-right: -1px;
+  }
+  .dropdown-submenu.submenu-left > .dropdown-toggle::after {
+    transform: rotate(90deg);
   }
 </style>
 {%endblock%}

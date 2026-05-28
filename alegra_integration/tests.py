@@ -16,6 +16,7 @@ from alegra_integration.builders import (
 )
 from alegra_integration.client import AlegraMCPClient
 from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError
+from accounting.models import gastos_caja
 
 
 class ResolverStub:
@@ -1148,6 +1149,15 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertNotIn('numberTemplate', built.payload)
         self.assertEqual(built.local_key, 'caja:bill:99:501')
 
+    def test_caja_bill_revisado_sin_reembolso(self):
+        gasto, _ = self._gasto(tipo='fe')
+        gasto.estado = gastos_caja.ESTADO_REVISADO
+        gasto.reembolso_id = None
+        gasto.reembolso = None
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertEqual(built.document_type, 'caja_bill')
+        self.assertEqual(built.local_key, 'caja:bill:None:501')
+
     def test_caja_bill_cuenta_cobro_uses_cc_numeration(self):
         gasto, _ = self._gasto(tipo='cuenta_cobro')
         built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
@@ -1188,3 +1198,40 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(assoc['idResource'], 0)
         self.assertIn('pending_bills', built.payload['__local'])
         self.assertEqual(built.payload['entries'][-1]['credit'], 120000.0)
+
+
+class CajaBatchFilterTests(SimpleTestCase):
+    @patch('andinasoft.models.cuentas_pagos.objects.filter')
+    @patch('alegra_integration.services.empresas.objects.get')
+    def test_validate_caja_requires_caja_id(self, mock_emp_get, mock_caja_filter):
+        from alegra_integration.services import AlegraIntegrationService
+        from alegra_integration.models import AlegraSyncBatch
+        from alegra_integration.exceptions import AlegraConfigurationError
+
+        mock_emp_get.return_value = SimpleNamespace(pk='900')
+        svc = AlegraIntegrationService()
+        with self.assertRaises(AlegraConfigurationError) as ctx:
+            svc._validate_input(
+                '900', AlegraSyncBatch.DOC_CAJA, '2026-01-01', '2026-01-31', None, caja_id=None,
+            )
+        self.assertIn('caja', str(ctx.exception).lower())
+        mock_caja_filter.assert_not_called()
+
+    @patch('andinasoft.models.cuentas_pagos.objects.filter')
+    @patch('alegra_integration.services.empresas.objects.get')
+    def test_validate_caja_accepts_active_caja(self, mock_emp_get, mock_caja_filter):
+        from alegra_integration.services import AlegraIntegrationService
+        from alegra_integration.models import AlegraSyncBatch
+
+        empresa = SimpleNamespace(pk='900')
+        mock_emp_get.return_value = empresa
+        cuenta = SimpleNamespace(pk=7)
+        mock_caja_filter.return_value.first.return_value = cuenta
+        svc = AlegraIntegrationService()
+        out = svc._validate_input(
+            '900', AlegraSyncBatch.DOC_CAJA, '2026-01-01', '2026-01-31', None, caja_id='7',
+        )
+        self.assertEqual(out[4], 7)
+        mock_caja_filter.assert_called_once_with(
+            pk='7', nit_empresa=empresa, activo=True, es_caja=True,
+        )
