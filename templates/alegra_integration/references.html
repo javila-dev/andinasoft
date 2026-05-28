@@ -101,6 +101,9 @@
               <button type="button" class="btn btn-sm btn-outline-success refs-section-btn" data-refs-section="commission" onclick="ensureCommissionConfigLoaded()">
                 <i class="fas fa-hand-holding-usd mr-1"></i>Comisiones
               </button>
+              <button type="button" class="btn btn-sm btn-outline-success refs-section-btn" data-refs-section="caja" onclick="ensureCajaConfigLoaded()">
+                <i class="fas fa-cash-register mr-1"></i>Caja efectivo
+              </button>
             </div>
           </div>
           <small class="text-muted d-block mt-2" style="font-size:.8rem">
@@ -463,6 +466,88 @@
     </div>
   </div>
 
+  <div class="card shadow-sm mb-3" id="cajaConfigCard" style="display:none">
+    <div class="card-header bg-light">
+      <strong><i class="fas fa-cash-register mr-2 text-muted"></i>Caja efectivo · Legalizacion Alegra</strong>
+      <small class="text-muted ml-2">Por empresa · <code>POST /bills</code> + <code>POST /journals</code></small>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-3">
+        Gastos legalizados: factura electronica o cuenta de cobro (<code>POST /bills</code>),
+        luego comprobante que cierra CxP contra la cuenta de caja (<code>POST /journals</code>).
+      </p>
+      <div class="form-row">
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Numeracion cuenta de cobro</label>
+          <select class="form-control" id="selCajaCcNumeration"><option value="">— seleccionar —</option></select>
+          <input class="form-control form-control-sm mt-1" id="txtCajaCcNumerationManual" placeholder="ID manual cuenta de cobro" />
+          <small class="text-muted d-block" id="curCajaCcNumeration">Actual: —</small>
+          <small class="text-muted d-block">Solo aplica cuando el gasto es cuenta de cobro (<code>supportDocument</code>).</small>
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Numeracion comprobante cierre</label>
+          <select class="form-control" id="selCajaJournalNumeration"><option value="">— seleccionar —</option></select>
+          <input class="form-control form-control-sm mt-1" id="txtCajaJournalNumerationManual" placeholder="ID manual journal" />
+          <small class="text-muted d-block" id="curCajaJournalNumeration">Actual: —</small>
+        </div>
+      </div>
+      <p class="text-muted small mb-3">
+        Factura electronica: no se envia <code>numberTemplate</code> en el bill; Alegra usa la numeracion FE de la cuenta.
+      </p>
+      <div class="form-row">
+        <div class="col-md-6 mb-3">
+          <label class="font-weight-bold" style="font-size:.85rem">Cuenta por pagar (journal)</label>
+          <div style="position:relative">
+            <input class="form-control" id="txtCajaCxpPick" placeholder="Buscar categoria CxP…" autocomplete="off" />
+            <input type="hidden" id="selCajaCxpId" />
+            <div id="cajaCxpMenu" class="list-group shadow-sm"
+                 style="display:none;position:absolute;z-index:20;width:100%;max-height:260px;overflow:auto;margin-top:4px"></div>
+          </div>
+          <small class="text-muted d-block" id="curCajaCxp">Actual: — (opcional; respaldo si el bill no trae CxP)</small>
+        </div>
+      </div>
+      <h6 class="font-weight-bold text-muted mb-2" style="font-size:.85rem">Impuestos legalizacion → Alegra</h6>
+      <p class="text-muted small mb-2">
+        IVA: impuesto en la linea base (<code>tax[]</code>, <a href="https://developer.alegra.com/reference/get_taxes" target="_blank" rel="noopener">GET /taxes</a>).
+        Retefuente: por concepto local (<code>retentions[]</code>, <a href="https://developer.alegra.com/reference/get_retentions" target="_blank" rel="noopener">GET /retentions</a>).
+        El total del bill debe cuadrar con el valor pagado en caja.
+      </p>
+      <div class="table-responsive mb-3">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th>Concepto local</th>
+              <th>Impuesto Alegra (IVA)</th>
+              <th>Retencion Alegra (retefuente)</th>
+            </tr>
+          </thead>
+          <tbody id="cajaImpuestosBody">
+            <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-responsive mb-3">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th>Caja (cuentas_pagos)</th>
+              <th>PUC local</th>
+              <th>Categoria Alegra (credito journal)</th>
+            </tr>
+          </thead>
+          <tbody id="cajaAccountsBody">
+            <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-end">
+        <button type="button" class="btn btn-success" id="btnSaveCajaConfig" onclick="return saveCajaConfig(event)">
+          <i class="fas fa-save mr-1"></i>Guardar configuracion caja
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="card shadow-sm mb-3" id="expenseDefaultsCard" style="display:none">
     <div class="card-header bg-light">
       <strong><i class="fas fa-coins mr-2 text-muted"></i>Egresos · Cuentas por defecto</strong>
@@ -731,6 +816,8 @@ const API = {
   saveCategory: '/accounting/alegra/references/save-category-mapping',
   saveNumeration: '/accounting/alegra/references/save-numeration-mapping',
   saveRetention: '/accounting/alegra/references/save-retention-mapping',
+  cajaImpuestos: '/accounting/alegra/references/caja-impuestos',
+  saveImpuestoMapping: '/accounting/alegra/references/save-impuesto-mapping',
   catSearch: '/accounting/alegra/references/categories/search',
   receiptFormas: '/accounting/alegra/references/receipt-formas-pago',
   saveReceiptFormas: '/accounting/alegra/references/save-receipt-formas-pago',
@@ -771,6 +858,7 @@ const REFS_PANELS = {
   expense: '#expenseDefaultsCard',
   gtt: '#gttConfigCard',
   commission: '#commissionConfigCard',
+  caja: '#cajaConfigCard',
 };
 
 function showRefsSection(section) {
@@ -799,6 +887,7 @@ function reloadActiveRefsSection() {
     expense: ensureExpenseDefaultsLoaded,
     gtt: ensureGttConfigLoaded,
     commission: ensureCommissionConfigLoaded,
+    caja: ensureCajaConfigLoaded,
   };
   const fn = loaders[activeRefsSection];
   if (fn) fn();
@@ -1140,6 +1229,31 @@ function filterSupportDocumentTemplates(templates) {
   return filtered.length ? filtered : list;
 }
 
+function mergeSupportBillNumerationTemplates(nt) {
+  const pools = [...((nt || {}).supportDocument || []), ...((nt || {}).bill || [])];
+  const seen = {};
+  const merged = [];
+  pools.forEach(t => {
+    const id = String((t && t.id) || '');
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    merged.push(t);
+  });
+  return merged;
+}
+
+function buildNumerationOptions(templates) {
+  const opts = ['<option value="">— seleccionar —</option>'];
+  (templates || []).forEach(t => {
+    const id = t.id || '';
+    if (!id) return;
+    const label = (t.name || t.prefix || t.resolutionNumber || ('id ' + id));
+    const typeHint = t.type ? ` · ${t.type}` : '';
+    opts.push(`<option value="${escHtml(String(id))}">${escHtml(`${label}${typeHint} (id ${id})`)}</option>`);
+  });
+  return opts.join('');
+}
+
 function buildSupportNumerationOptions(templates) {
   const opts = ['<option value="">— seleccionar —</option>'];
   filterSupportDocumentTemplates(templates).forEach(t => {
@@ -1156,19 +1270,7 @@ function loadSupportNumerationTemplates() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) return $.Deferred().reject().promise();
   return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`)
-    .then(data => {
-      const nt = data.number_templates || {};
-      const pools = [...(nt.supportDocument || []), ...(nt.bill || [])];
-      const seen = {};
-      const merged = [];
-      pools.forEach(t => {
-        const id = String((t && t.id) || '');
-        if (!id || seen[id]) return;
-        seen[id] = true;
-        merged.push(t);
-      });
-      return merged;
-    });
+    .then(data => mergeSupportBillNumerationTemplates((data || {}).number_templates || {}));
 }
 
 function pickScopedMapping(mappings, proyecto) {
@@ -1405,6 +1507,355 @@ function saveGttConfig(ev) {
     showAlert('error', `No se pudo guardar numeración: <strong>${escHtml(msg)}</strong>`);
   }).always(() => {
     $('#btnSaveGttConfig').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar configuración GTT');
+  });
+  return false;
+}
+
+let cajaCxpSearchTimer = null;
+let cajaCreditMenus = {};
+let cajaAlegraTaxes = [];
+let cajaAlegraRetentions = [];
+
+function alegraResourceId(item) {
+  if (!item || typeof item !== 'object') return '';
+  if (item.id != null && String(item.id).trim() !== '') return String(item.id).trim();
+  if (item.idGlobal != null && String(item.idGlobal).trim() !== '') return String(item.idGlobal).trim();
+  return '';
+}
+
+function normalizeAlegraResourceList(items) {
+  if (Array.isArray(items)) {
+    // ok
+  } else if (items && typeof items === 'object') {
+    if (Array.isArray(items.data)) items = items.data;
+    else if (Array.isArray(items.taxes)) items = items.taxes;
+    else if (Array.isArray(items.retentions)) items = items.retentions;
+    else items = [];
+  } else {
+    return [];
+  }
+  return items.map(item => {
+    if (!item || typeof item !== 'object') return null;
+    const id = alegraResourceId(item);
+    if (!id) return null;
+    const pct = item.percentage != null ? item.percentage : item.rate;
+    return Object.assign({}, item, { id, percentage: pct != null ? pct : item.percentage });
+  }).filter(Boolean);
+}
+
+function unwrapWhenData(arg) {
+  if (arg == null) return arg;
+  // jQuery $.when: cada $.get llega como [data, textStatus, jqXHR]
+  if (arg.length >= 3 && arg[2] && arg[2].readyState != null) {
+    return arg[0];
+  }
+  return arg;
+}
+
+function catalogFromRefResponse(whenArg, key) {
+  const body = unwrapWhenData(whenArg);
+  if (Array.isArray(body)) return normalizeAlegraResourceList(body);
+  if (body && Array.isArray(body[key])) return normalizeAlegraResourceList(body[key]);
+  return [];
+}
+
+function fetchAlegraTaxes(empresa) {
+  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=taxes`)
+    .then(data => catalogFromRefResponse(data, 'taxes'));
+}
+
+function fetchAlegraRetentions(empresa) {
+  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`)
+    .then(data => catalogFromRefResponse(data, 'retentions'));
+}
+
+function buildTaxOptions(taxes) {
+  const opts = ['<option value="">— sin mapeo —</option>'];
+  normalizeAlegraResourceList(taxes)
+    .filter(t => String(t.status || 'active').toLowerCase() !== 'inactive')
+    .forEach(t => {
+    const id = String(t.id);
+    const pct = t.percentage != null ? ` · ${t.percentage}%` : '';
+    const name = (t.name || t.type || t.description || 'Impuesto').trim();
+    opts.push(`<option value="${escHtml(id)}">${escHtml(`${name}${pct} (id ${id})`)}</option>`);
+  });
+  return opts.join('');
+}
+
+function buildCajaRetentionOptions(retentions) {
+  const opts = ['<option value="">— sin mapeo —</option>'];
+  normalizeAlegraResourceList(retentions).forEach(r => {
+    const id = String(r.id);
+    const name = (r.name || r.description || r.type || '').trim();
+    const pct = r.percentage != null ? ` · ${r.percentage}%` : '';
+    opts.push(`<option value="${escHtml(id)}">${escHtml(`${name || 'Retención'}${pct} (id ${id})`)}</option>`);
+  });
+  return opts.join('');
+}
+
+function renderCajaImpuestosTable(impuestos) {
+  if (!impuestos || !impuestos.length) {
+    $('#cajaImpuestosBody').html('<tr><td colspan="3" class="text-center text-muted py-3">No hay impuestos de legalizacion activos</td></tr>');
+    return;
+  }
+  const taxOpts = buildTaxOptions(cajaAlegraTaxes);
+  const retOpts = buildCajaRetentionOptions(cajaAlegraRetentions);
+  const rows = impuestos.map(row => {
+    const taxSel = row.es_iva
+      ? `<select class="form-control form-control-sm caja-imp-tax" data-impuesto-id="${row.id}">${taxOpts}</select>`
+      : '<span class="text-muted small">—</span>';
+    const retSel = row.es_rte
+      ? `<select class="form-control form-control-sm caja-imp-ret" data-impuesto-id="${row.id}">${retOpts}</select>`
+      : '<span class="text-muted small">—</span>';
+    return `<tr data-impuesto-id="${row.id}">
+      <td><small>${escHtml(row.descripcion || row.id)}</small></td>
+      <td>${taxSel}</td>
+      <td>${retSel}</td>
+    </tr>`;
+  }).join('');
+  $('#cajaImpuestosBody').html(rows);
+  if (impuestos.some(r => r.es_iva) && !cajaAlegraTaxes.length) {
+    $('#cajaImpuestosBody').append(
+      '<tr><td colspan="3" class="text-warning small py-2">No se obtuvieron impuestos de Alegra (GET /taxes). Revisa credenciales o permisos de la cuenta.</td></tr>'
+    );
+  }
+  impuestos.forEach(row => {
+    if (row.tax_alegra_id) {
+      $(`.caja-imp-tax[data-impuesto-id="${row.id}"]`).val(String(row.tax_alegra_id));
+    }
+    if (row.retention_alegra_id) {
+      $(`.caja-imp-ret[data-impuesto-id="${row.id}"]`).val(String(row.retention_alegra_id));
+    }
+  });
+}
+
+function loadCajaImpuestosTable() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return $.Deferred().resolve().promise();
+  $('#cajaImpuestosBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando impuestos…</td></tr>');
+  const impReq = $.get(`${API.cajaImpuestos}?empresa=${encodeURIComponent(empresa)}`);
+  const taxReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=taxes`);
+  const retReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`);
+  return $.when(impReq, taxReq, retReq).done((impResp, taxResp, retResp) => {
+    const impData = (impResp && impResp[0]) || impResp || {};
+    cajaAlegraTaxes = catalogFromRefResponse(taxResp, 'taxes');
+    cajaAlegraRetentions = catalogFromRefResponse(retResp, 'retentions');
+    renderCajaImpuestosTable(impData.impuestos || []);
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error al cargar';
+    $('#cajaImpuestosBody').html(`<tr><td colspan="3" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`);
+  });
+}
+
+function loadCajaNumerationCurrent(localCode, selSel, manualSel, curSel) {
+  applyScopedNumerationMapping(localCode, '', curSel, selSel, manualSel, $(manualSel).next('small'));
+}
+
+function loadCajaCxpCurrent() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_code=caja_cxp`)
+    .done(data => {
+      const m = (data.mappings || [])[0];
+      if (m) {
+        $('#curCajaCxp').text(`Actual: ${m.alegra_id} · ${m.description || ''}`);
+        $('#selCajaCxpId').val(String(m.alegra_id));
+        $('#txtCajaCxpPick').val((m.description || '').trim() || `ID ${m.alegra_id}`);
+      } else {
+        $('#curCajaCxp').text('Actual: — (opcional; respaldo si el bill no trae CxP)');
+        $('#selCajaCxpId').val('');
+        $('#txtCajaCxpPick').val('');
+      }
+    });
+}
+
+function renderCajaAccountsTable(localAccounts, mappings) {
+  const cajas = (localAccounts || []).filter(a => a.es_caja);
+  const mapByPk = {};
+  (mappings || []).forEach(m => {
+    if (m.local_model === 'andinasoft.cuentas_pagos' && m.local_code === 'caja_credit') {
+      mapByPk[m.local_pk] = m;
+    }
+  });
+  if (!cajas.length) {
+    $('#cajaAccountsBody').html('<tr><td colspan="3" class="text-center text-muted py-3">No hay cajas activas para esta empresa</td></tr>');
+    return;
+  }
+  const rows = cajas.map(acc => {
+    const pk = String(acc.idcuenta);
+    const m = mapByPk[pk];
+    const label = m ? (m.description || `ID ${m.alegra_id}`) : '';
+    const catId = m ? String(m.alegra_id) : '';
+    return `<tr data-caja-pk="${escHtml(pk)}">
+      <td>${escHtml(acc.cuentabanco || pk)}</td>
+      <td><small class="text-muted">${escHtml(String(acc.nro_cuentacontable || ''))}</small></td>
+      <td>
+        <input type="hidden" class="caja-credit-id" value="${escHtml(catId)}" />
+        <input class="form-control form-control-sm caja-credit-pick" data-pk="${escHtml(pk)}"
+               placeholder="Buscar categoria caja…" value="${escHtml(label)}" autocomplete="off" />
+        <div class="list-group shadow-sm caja-credit-menu" data-pk="${escHtml(pk)}"
+             style="display:none;position:absolute;z-index:25;max-height:200px;overflow:auto;min-width:280px"></div>
+      </td>
+    </tr>`;
+  }).join('');
+  $('#cajaAccountsBody').html(rows);
+}
+
+function loadCajaAccountsTable() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return $.Deferred().resolve().promise();
+  return $.when(
+    $.get(`${API.local}?empresa=${encodeURIComponent(empresa)}`),
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_model=andinasoft.cuentas_pagos&local_code=caja_credit`)
+  ).done((accResp, mapResp) => {
+    const accData = accResp[0] || accResp;
+    const mapData = mapResp[0] || mapResp;
+    renderCajaAccountsTable(accData.local_accounts || [], mapData.mappings || []);
+  });
+}
+
+function loadCajaMappingsCurrent() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return;
+  loadCajaNumerationCurrent('caja_cuenta_cobro', '#selCajaCcNumeration', '#txtCajaCcNumerationManual', '#curCajaCcNumeration');
+  loadCajaNumerationCurrent('caja_legalization_journal', '#selCajaJournalNumeration', '#txtCajaJournalNumerationManual', '#curCajaJournalNumeration');
+  loadCajaCxpCurrent();
+  loadCajaImpuestosTable();
+  loadCajaAccountsTable();
+}
+
+function ensureCajaConfigLoaded() {
+  showRefsSection('caja');
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) {
+    showAlert('error', 'Selecciona una empresa.');
+    return;
+  }
+  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`)
+    .done(data => {
+      const nt = data.number_templates || {};
+      $('#selCajaCcNumeration').html(buildSupportNumerationOptions(mergeSupportBillNumerationTemplates(nt)));
+      return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=journal_numerations`);
+    })
+    .done(data => {
+      if (data && data.journal_numerations) {
+        const opts = ['<option value="">— seleccionar —</option>'];
+        data.journal_numerations.forEach(t => {
+          const id = t.id != null ? String(t.id) : '';
+          if (!id) return;
+          opts.push(`<option value="${escHtml(id)}">${escHtml(t.name || t.prefix || id)}</option>`);
+        });
+        $('#selCajaJournalNumeration').html(opts.join(''));
+      }
+      return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`);
+    })
+    .done(data => {
+      cajaAlegraRetentions = catalogFromRefResponse(data, 'retentions');
+      return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=taxes`);
+    })
+    .done(taxData => {
+      cajaAlegraTaxes = catalogFromRefResponse(taxData, 'taxes');
+      loadCajaMappingsCurrent();
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      showAlert('error', `No se pudo cargar configuracion caja: <strong>${escHtml(msg)}</strong>`);
+    });
+}
+
+function searchCajaCxpInline(query) {
+  const empresa = $('#selEmpresa').val();
+  const q = (query || '').trim();
+  if (!empresa || q.length < 2) { $('#cajaCxpMenu').hide().empty(); return; }
+  if (cajaCxpSearchTimer) clearTimeout(cajaCxpSearchTimer);
+  cajaCxpSearchTimer = setTimeout(() => {
+    $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const items = (data.categories || []).map(c => {
+          const id = c.id;
+          const label = `${c.code ? c.code + ' · ' : ''}${c.name || c.description || ''} (id ${id})`;
+          return `<button type="button" class="list-group-item list-group-item-action py-1" data-id="${escHtml(String(id))}" data-label="${escHtml(label)}">${escHtml(label)}</button>`;
+        }).join('');
+        $('#cajaCxpMenu').html(items || '<div class="list-group-item text-muted">Sin resultados</div>').show();
+      });
+  }, 350);
+}
+
+function saveCajaConfig(ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return false; }
+
+  const ccId = ($('#txtCajaCcNumerationManual').val() || '').trim() || ($('#selCajaCcNumeration').val() || '').trim();
+  const journalId = ($('#txtCajaJournalNumerationManual').val() || '').trim() || ($('#selCajaJournalNumeration').val() || '').trim();
+  const cxpId = ($('#selCajaCxpId').val() || '').trim();
+  const cxpLabel = ($('#txtCajaCxpPick').val() || '').trim();
+
+  if (!ccId || !journalId) {
+    showAlert('error', 'Indica la numeracion de cuenta de cobro y la del comprobante de cierre.');
+    return false;
+  }
+
+  $('#btnSaveCajaConfig').prop('disabled', true).text('Guardando…');
+  const saves = [
+    $.ajax({ url: API.saveNumeration, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ empresa, local_code: 'caja_cuenta_cobro', alegra_id: ccId, description: 'Cuenta de cobro caja' }) }),
+    $.ajax({ url: API.saveNumeration, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ empresa, local_code: 'caja_legalization_journal', alegra_id: journalId, description: 'Journal legalizacion caja' }) }),
+  ];
+  if (cxpId) {
+    saves.push($.ajax({ url: API.saveCategory, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ empresa, local_code: 'caja_cxp', alegra_id: cxpId, description: cxpLabel || cxpId }) }));
+  }
+  $('.caja-imp-tax').each(function() {
+    const impuestoId = $(this).data('impuesto-id');
+    const taxId = ($(this).val() || '').trim();
+    saves.push($.ajax({ url: API.saveImpuestoMapping, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        empresa,
+        impuesto_id: String(impuestoId),
+        kind: 'tax',
+        alegra_id: taxId,
+        description: $(this).find('option:selected').text() || taxId,
+      }) }));
+  });
+  $('.caja-imp-ret').each(function() {
+    const impuestoId = $(this).data('impuesto-id');
+    const retId = ($(this).val() || '').trim();
+    saves.push($.ajax({ url: API.saveImpuestoMapping, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        empresa,
+        impuesto_id: String(impuestoId),
+        kind: 'retention',
+        alegra_id: retId,
+        description: $(this).find('option:selected').text() || retId,
+      }) }));
+  });
+  $('#cajaAccountsBody tr[data-caja-pk]').each(function() {
+    const pk = $(this).data('caja-pk');
+    const catId = $(this).find('.caja-credit-id').val();
+    const label = $(this).find('.caja-credit-pick').val();
+    if (pk && catId) {
+      saves.push($.ajax({ url: API.saveCategory, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+        data: JSON.stringify({
+          empresa,
+          local_model: 'andinasoft.cuentas_pagos',
+          local_pk: String(pk),
+          local_code: 'caja_credit',
+          alegra_id: String(catId),
+          description: label || `Caja ${pk}`,
+        }) }));
+    }
+  });
+
+  $.when.apply($, saves).done(() => {
+    showAlert('success', 'Configuracion de caja efectivo guardada.');
+    loadCajaMappingsCurrent();
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error al guardar';
+    showAlert('error', `No se pudo guardar: <strong>${escHtml(msg)}</strong>`);
+  }).always(() => {
+    $('#btnSaveCajaConfig').prop('disabled', false).html('<i class="fas fa-save mr-1"></i>Guardar configuracion caja');
   });
   return false;
 }
@@ -2839,6 +3290,46 @@ $('#selCommissionProject').on('change', function() {
   if ($('#commissionConfigCard').is(':visible')) {
     loadCommissionMappingsCurrent();
   }
+});
+
+$('#txtCajaCxpPick').on('input', function() {
+  searchCajaCxpInline($(this).val());
+  $('#selCajaCxpId').val('');
+});
+$('#cajaCxpMenu').on('click', 'button[data-id]', function() {
+  $('#selCajaCxpId').val(String($(this).data('id') || ''));
+  $('#txtCajaCxpPick').val(String($(this).data('label') || ''));
+  $('#cajaCxpMenu').hide().empty();
+});
+
+let cajaCreditSearchTimer = null;
+$(document).on('input', '.caja-credit-pick', function() {
+  const empresa = $('#selEmpresa').val();
+  const q = ($(this).val() || '').trim();
+  const pk = $(this).data('pk');
+  const $menu = $(`.caja-credit-menu[data-pk="${pk}"]`);
+  const $row = $(this).closest('tr');
+  $row.find('.caja-credit-id').val('');
+  if (!empresa || q.length < 2) { $menu.hide().empty(); return; }
+  if (cajaCreditSearchTimer) clearTimeout(cajaCreditSearchTimer);
+  cajaCreditSearchTimer = setTimeout(() => {
+    $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const items = (data.categories || []).map(c => {
+          const id = c.id;
+          const label = `${c.code ? c.code + ' · ' : ''}${c.name || c.description || ''} (id ${id})`;
+          return `<button type="button" class="list-group-item list-group-item-action py-1" data-id="${escHtml(String(id))}" data-label="${escHtml(label)}">${escHtml(label)}</button>`;
+        }).join('');
+        $menu.html(items || '<div class="list-group-item text-muted">Sin resultados</div>').show();
+      });
+  }, 350);
+});
+$(document).on('click', '.caja-credit-menu button[data-id]', function() {
+  const pk = $(this).closest('.caja-credit-menu').data('pk');
+  const $row = $(`#cajaAccountsBody tr[data-caja-pk="${pk}"]`);
+  $row.find('.caja-credit-id').val(String($(this).data('id') || ''));
+  $row.find('.caja-credit-pick').val(String($(this).data('label') || ''));
+  $(this).closest('.caja-credit-menu').hide().empty();
 });
 
 $('#txtCommissionExpensePick').on('input', function() {

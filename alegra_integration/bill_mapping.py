@@ -335,3 +335,62 @@ def enrich_factura_from_bill_data(factura, bill_data):
     if update_fields:
         factura.save(update_fields=update_fields)
     return update_fields
+
+
+def cxp_category_id_from_bill(bill_data):
+    """
+    Id de categoría CxP usada por Alegra al crear el bill (crédito en journal embebido).
+    Fallback: provider.accounting.debtToPay.id del contacto.
+    """
+    if not isinstance(bill_data, dict):
+        return ''
+
+    journal = bill_data.get('journal')
+    if isinstance(journal, dict):
+        credit_lines = []
+        for cat in journal.get('categories') or []:
+            if not isinstance(cat, dict):
+                continue
+            if (cat.get('operation') or '').lower() != 'credit':
+                continue
+            cat_id = cat.get('id')
+            if cat_id is None or str(cat_id).strip() == '':
+                continue
+            name = (cat.get('name') or '').lower()
+            if any(x in name for x in ('rete', 'retenc', 'retención', 'retencion')):
+                continue
+            credit_lines.append(cat)
+
+        for cat in credit_lines:
+            name = (cat.get('name') or '').lower()
+            code = str(cat.get('code') or '').strip()
+            if code.startswith('2') or 'por pagar' in name or 'cxp' in name or 'proveedor' in name:
+                return str(cat['id']).strip()
+
+        if len(credit_lines) == 1:
+            return str(credit_lines[0]['id']).strip()
+
+        if credit_lines:
+            return str(credit_lines[-1]['id']).strip()
+
+    provider = bill_data.get('provider') or {}
+    if isinstance(provider, dict):
+        debt = (provider.get('accounting') or {}).get('debtToPay') or {}
+        if isinstance(debt, dict):
+            debt_id = debt.get('id')
+            if debt_id is not None and str(debt_id).strip():
+                return str(debt_id).strip()
+
+    return ''
+
+
+def cxp_category_id_from_contact(contact_data):
+    """CxP configurada en el contacto proveedor (accounting.debtToPay)."""
+    if not isinstance(contact_data, dict):
+        return ''
+    debt = (contact_data.get('accounting') or {}).get('debtToPay') or {}
+    if isinstance(debt, dict):
+        debt_id = debt.get('id')
+        if debt_id is not None and str(debt_id).strip():
+            return str(debt_id).strip()
+    return ''

@@ -41,6 +41,8 @@ def _detalle_necesita_backfill(factura):
             return True
         if not (row.get('account_code') or '').strip():
             return True
+        if not (row.get('alegra_category_id') or '').strip():
+            return True
     return False
 
 

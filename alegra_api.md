@@ -40,6 +40,7 @@ Hay UI interna (Dashboard + Referencias) y API REST bajo `/accounting/alegra/`.
 | `receipt` | `Recaudos_general` (BD proyecto) | `POST /journals` |
 | `commission` | `Pagocomision` (SP proyecto) | Journal interno / `POST /bills` externo |
 | `gtt` | `Gtt` + `Detalle_gtt` (aprobados) | `POST /bills` (documento soporte) |
+| `caja` | `gastos_caja` legalizados + `reembolsos_caja` | `POST /bills` + `POST /journals` (super-asiento) |
 | `expense` | `Pagos`, `Anticipos`, `transferencias_companias` | `POST /payments`, transfer bancaria, journals interco |
 
 **Idea central:** Alegra usa IDs propios (banco, categoría, contacto, numeración, bill, etc.). El puente es `AlegraMapping` + `MappingResolver`.
@@ -114,11 +115,11 @@ Payload preview/send:
 - `proyecto` **obligatorio** para `receipt` y `commission`.
 - `expense` opera por **empresa** (`Pagos.empresa`, transferencias donde la empresa es `sale` o `entra`).
 
-Tipos: `receipt` | `commission` | `gtt` | `expense`.
+Tipos: `receipt` | `commission` | `gtt` | `caja` | `expense`.
 
 ### Referencias (API)
 
-- `GET /references/data?empresa=&type=banks|categories|cost_centers|number_templates|retentions|journal_numerations`
+- `GET /references/data?empresa=&type=banks|categories|cost_centers|number_templates|retentions|taxes|journal_numerations`
 - `POST /references/save-retention-mapping` — retenciones (p. ej. `commission_retefuente`)
 - `GET /references/mappings?...`
 - `GET /references/local-accounts?empresa=`
@@ -208,6 +209,8 @@ Un envío potencial o real. Estados: `pending`, `valid`, `invalid`, `sent`, `fai
 | `receipt:<proyecto>:<numrecibo>` | Recibo caja |
 | `commission:internal\|external:<proyecto>:<id>` | Comisión |
 | `gtt:<proyecto>:<detalle_pk>` | Línea GTT |
+| `caja:bill:<reembolso_id>:<gasto_id>` | Bill por gasto legalizado |
+| `caja:journal:<reembolso_id>` | Journal cierre CxP del reembolso |
 | `expense:pago:<id>` | Pago mismo empresa → `POST /payments` |
 | `expense:anticipo:<id>` | Anticipo |
 | `banktransfer:<id_transf>:<nit>` | Transferencia misma empresa |
@@ -880,6 +883,34 @@ Ref. documento soporte: [POST /bills](https://developer.alegra.com/reference/pos
 - Solo `Gtt` aprobado, líneas `Detalle_gtt` valor > 0
 - `POST /bills`, numeración `gtt_support_document`, cuentas `gtt_expense` / `gtt_cxp` por proyecto
 
+### Caja efectivo (legalización)
+
+Fuente: `gastos_caja` con `estado=Legalizado` y `reembolso` asignado, filtrados por `forma_pago.nit_empresa` y rango `fecha_gasto`. Disparo: Dashboard Alegra, tipo lote **`caja`** (sin proyecto obligatorio).
+
+**Flujo por reembolso:**
+
+1. Por cada gasto → `POST /bills` (`CajaGastoBillBuilder`).
+   - `tipo_documento_soporte` en el gasto: `fe` → bill sin `numberTemplate`; `cuenta_cobro` → `numberTemplate` con numeración `caja_cuenta_cobro` (documento soporte · [GET /number-templates](https://developer.alegra.com/reference/get_number-templates-1) · `documentType=supportDocument`).
+   - Proveedor: `Partners.idTercero` vía `contact_by_identification`.
+   - **Línea base** (`purchases.categories[]`): `price` = subtotal del gasto (sin IVA).
+   - **IVA:** si `valor_iva > 0`, `tax: [{ id }]` en la línea base; el impuesto Alegra viene del mapeo `impuesto_tax` por fila de `impuestos_legalizacion` ([GET /taxes](https://developer.alegra.com/reference/get_taxes)). Alegra calcula el IVA; el total del bill debe cuadrar con `gasto.valor` (valor pagado en caja).
+   - **Retefuente:** si `valor_rte > 0` y no es asumida, `retentions[]` con `id` del mapeo `impuesto_retention` por concepto local ([GET /retentions](https://developer.alegra.com/reference/get_retentions)) y `amount` = `valor_rte`.
+   - Rete asumida: no se envía `retentions[]`; el total del bill es subtotal + IVA = `valor`.
+2. Tras enviar todos los bills del reembolso → un `POST /journals` (`CajaLegalizationJournalBuilder`).
+   - Cada línea CxP lleva `associatedDocument: { idResource, resourceType: "bill" }` con el id del bill creado.
+   - La **cuenta CxP** (`entries[].id` débito) se resuelve al enviar el bill: la respuesta de `POST /bills` **no incluye** `journal`; entonces `GET /bills/{id}?fields=journal` y, si aún falta, `GET /contacts/{provider.id}?fields=accounting` (`debtToPay.id`). Se guarda en `response.__cxp_category_id`. Último respaldo al armar el journal: `caja_cxp` / `default_cxp`.
+   - Crédito único a la cuenta de caja (`caja_credit` por `cuentas_pagos`).
+
+**Orden de envío:** el servicio envía todos los `caja_bill` antes que los `caja_journal` e inyecta `idResource` al enviar cada journal.
+
+**Configuración:** Referencias → **Caja efectivo** (`caja_cuenta_cobro`, `caja_legalization_journal`, `caja_cxp`, `caja_credit` por caja, tabla **Impuestos legalización → Alegra** con mapeos `impuesto_tax` / `impuesto_retention` por fila de `impuestos_legalizacion`).
+
+**API mapeo impuestos:** `GET /references/caja-impuestos?empresa=` · `POST /references/save-impuesto-mapping` (`kind`: `tax` | `retention`).
+
+**Campo en gasto:** `gastos_caja.tipo_documento_soporte` — obligatorio para preview válido (formulario Caja efectivo o menú contextual «Tipo de soporte»).
+
+La exportación Excel SIIGO (`interf_reemb`) se mantiene hasta retirarla en fase posterior.
+
 ---
 
 ## Egresos
@@ -996,6 +1027,12 @@ Lado **empresa del gasto**: débito concepto CxP (`client` = proveedor), crédit
 | `commission_journal` | Comisión interna (journal) | `numberTemplate` |
 | `commission_support_document` | Comisión externa (documento soporte) | `numberTemplate.id` en bills |
 | `gtt_support_document` | GTT | `numberTemplate.id` en bills |
+| `caja_cuenta_cobro` | Caja · cuenta de cobro | `numberTemplate.id` en bills (solo cuenta de cobro) |
+| `caja_legalization_journal` | Caja · comprobante cierre | `numberTemplate` (string) en journals |
+| `caja_cxp` | Caja · CxP journal (respaldo) | `entries[].id` débito si el bill no trae CxP |
+| `caja_credit` + `cuentas_pagos.pk` | Caja · crédito journal | `entries[].id` crédito |
+| `impuesto_tax` + `impuestos_legalizacion.pk` | Caja · IVA en bill | `purchases.categories[].tax[].id` |
+| `impuesto_retention` + `impuestos_legalizacion.pk` | Caja · retefuente en bill | `retentions[].id` |
 | `commission_amount_source_external` | Base valor documento soporte | — (config CATEGORY) |
 | `commission_amount_source_internal` | Base valor journal interno | — (config CATEGORY) |
 | `commission_expense` | Gasto en documento soporte | `purchases.categories` |

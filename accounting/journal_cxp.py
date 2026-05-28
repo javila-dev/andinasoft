@@ -65,6 +65,29 @@ def _entry_account_code(entry):
     return str(debt.get('code') or '').strip()
 
 
+def _entry_category_id(entry):
+    """
+    Id de categoría Alegra en una línea type=category del journal (GET /journals/{id}).
+    Mismo campo `id` que usamos al crear asientos (POST /journals, POST /payments categories).
+    """
+    if (entry.get('type') or '').lower() != 'category':
+        return ''
+    cat = entry.get('category')
+    if isinstance(cat, dict):
+        cat_id = cat.get('id')
+        if cat_id is not None and str(cat_id).strip():
+            return str(cat_id).strip()
+    entry_id = entry.get('id')
+    if entry_id is not None and str(entry_id).strip():
+        return str(entry_id).strip()
+    client = entry.get('client') or {}
+    debt = (client.get('accounting') or {}).get('debtToPay') or {}
+    debt_id = debt.get('id')
+    if debt_id is not None and str(debt_id).strip():
+        return str(debt_id).strip()
+    return ''
+
+
 def _es_retencion_o_impuesto(entry):
     texto = f"{entry.get('name') or ''} {entry.get('description') or ''}"
     return bool(_EXCLUIR_PASIVO_TEXTO.search(texto))
@@ -101,6 +124,19 @@ def _cuenta_cxp_desde_lineas(lineas):
     principal = ordered[0][0]
     all_codes = [c for c, _ in ordered]
     return principal, all_codes
+
+
+def _categoria_id_desde_lineas(lineas):
+    """Id categoría Alegra principal del bucket (mayor crédito entre líneas con id)."""
+    by_id = defaultdict(int)
+    for ln in lineas or []:
+        cat_id = (ln.get('category_id') or '').strip()
+        if cat_id:
+            by_id[cat_id] += _money(ln.get('credit'))
+    if not by_id:
+        return ''
+    ordered = sorted(by_id.items(), key=lambda x: (-x[1], x[0]))
+    return ordered[0][0]
 
 
 def _credit_entries_con_tercero(entries):
@@ -186,11 +222,13 @@ def extraer_lineas_cxp(journal):
             'description': entry.get('description'),
             'credit': credit,
             'account_code': _entry_account_code(entry),
+            'category_id': _entry_category_id(entry),
         })
 
     result = []
     for ident, data in sorted(buckets.items(), key=lambda x: x[0]):
         account_code, account_codes = _cuenta_cxp_desde_lineas(data['lineas'])
+        alegra_category_id = _categoria_id_desde_lineas(data['lineas'])
         result.append({
             'id_tercero': ident,
             'nombre_tercero': data['nombre_tercero'],
@@ -198,6 +236,7 @@ def extraer_lineas_cxp(journal):
             'vencimiento': 1,
             'account_code': account_code,
             'account_codes': account_codes,
+            'alegra_category_id': alegra_category_id,
             'lineas': data['lineas'],
         })
     return result
@@ -210,21 +249,28 @@ def serializar_detalle_journal_pago(lineas_cxp):
         principal, all_codes = _cuenta_cxp_desde_lineas(row.get('lineas'))
         code = (row.get('account_code') or principal or '').strip()
         codes = row.get('account_codes') or all_codes or ([code] if code else [])
-        rows.append({
+        alegra_category_id = (
+            (row.get('alegra_category_id') or '').strip()
+            or _categoria_id_desde_lineas(row.get('lineas'))
+        )
+        slim = {
             'id_tercero': row.get('id_tercero'),
             'nombre_tercero': row.get('nombre_tercero'),
             'valor': row.get('valor'),
             'vencimiento': row.get('vencimiento', 1),
             'account_code': code,
             'account_codes': codes,
-        })
+        }
+        if alegra_category_id:
+            slim['alegra_category_id'] = alegra_category_id
+        rows.append(slim)
     return rows
 
 
 def persist_journal_cxp_mappings(empresa, detalle_rows):
     """
-    Por cada account_code del journal: guarda AlegraMapping (local_code=PUC → categoría)
-    y alegra_category_id en cada fila del detalle del radicado.
+    Completa alegra_category_id en filas sin id del GET journal (fallback PUC local).
+    Si el journal ya trajo id de categoría Alegra, se conserva y solo se cachea el mapeo PUC.
     """
     from alegra_integration.mapping import MappingResolver
 
@@ -232,14 +278,23 @@ def persist_journal_cxp_mappings(empresa, detalle_rows):
         return detalle_rows
     resolver = MappingResolver(empresa)
     cat_by_code = {}
+
     for row in detalle_rows:
+        stored = (row.get('alegra_category_id') or '').strip()
         code = (row.get('account_code') or '').strip()
+        if stored:
+            if code:
+                resolver.sync_puc_category_mapping(code, alegra_category_id=stored)
+            continue
         if not code or code in cat_by_code:
             continue
         cat_id = resolver.sync_puc_category_mapping(code)
         if cat_id:
             cat_by_code[code] = cat_id
+
     for row in detalle_rows:
+        if (row.get('alegra_category_id') or '').strip():
+            continue
         code = (row.get('account_code') or '').strip()
         if code and cat_by_code.get(code):
             row['alegra_category_id'] = cat_by_code[code]
@@ -319,15 +374,15 @@ def categoria_alegra_desde_fila_journal(resolver, row):
     """Id categoría Alegra (CxP) desde una fila de alegra_journal_detalle."""
     if not row:
         return None
+    stored = (row.get('alegra_category_id') or '').strip()
+    if stored:
+        return stored
     account_code = (row.get('account_code') or '').strip()
     if not account_code:
         codes = row.get('account_codes') or []
         account_code = (codes[0] if codes else '').strip()
     if not account_code:
         return None
-    stored = (row.get('alegra_category_id') or '').strip()
-    if stored:
-        return stored
     return resolver.category_for_puc_code(account_code, required=False)
 
 

@@ -12,6 +12,7 @@ class AlegraMapping(models.Model):
     COST_CENTER = 'cost_center'
     NUMERATION = 'numeration'
     RETENTION = 'retention'
+    TAX = 'tax'
     PAYMENT_METHOD = 'payment_method'
     BILL = 'bill'
 
@@ -22,6 +23,7 @@ class AlegraMapping(models.Model):
         (COST_CENTER, 'Centro de costo'),
         (NUMERATION, 'Numeracion'),
         (RETENTION, 'Retencion'),
+        (TAX, 'Impuesto'),
         (PAYMENT_METHOD, 'Metodo de pago'),
         (BILL, 'Factura/documento proveedor'),
     )
@@ -86,12 +88,14 @@ class AlegraSyncBatch(models.Model):
     DOC_COMMISSION = 'commission'
     DOC_GTT = 'gtt'
     DOC_EXPENSE = 'expense'
+    DOC_CAJA = 'caja'
 
     DOCUMENT_TYPES = (
         (DOC_RECEIPT, 'Recibos de caja'),
         (DOC_COMMISSION, 'Comisiones'),
         (DOC_GTT, 'GTT'),
         (DOC_EXPENSE, 'Egresos'),
+        (DOC_CAJA, 'Caja efectivo'),
     )
 
     empresa = models.ForeignKey(empresas, on_delete=models.PROTECT, related_name='alegra_batches', db_constraint=False)

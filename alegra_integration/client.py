@@ -244,6 +244,16 @@ class AlegraMCPClient:
             path = f'{path}?fields={fields}'
         return self.rest('GET', path)
 
+    def get_contact(self, contact_id, *, fields=None):
+        """GET /contacts/{id} — p. ej. fields=accounting para debtToPay del proveedor."""
+        cid = str(contact_id or '').strip()
+        if not cid:
+            raise AlegraConfigurationError('contact_id es requerido para get_contact.')
+        path = f'/contacts/{cid}'
+        if fields:
+            path = f'{path}?fields={fields}'
+        return self.rest('GET', path)
+
     def get_journal(self, journal_id, *, fields=None):
         """
         GET /journals/{id} — opcionalmente ?fields=numberTemplate,type para ver numeración/tipo.
@@ -337,21 +347,51 @@ class AlegraMCPClient:
 
         return list(by_id.values())
 
+    def _unwrap_rest_list(self, payload, *, resource_key=None):
+        """Normaliza respuestas REST de listados (array, {data}, {taxes}, dict por id)."""
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return []
+        data = payload.get('data')
+        if isinstance(data, list):
+            return data
+        keys = [resource_key] if resource_key else []
+        keys.extend(('taxes', 'retentions', 'items', 'results'))
+        seen = set()
+        for key in keys:
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            chunk = payload.get(key)
+            if isinstance(chunk, list):
+                return chunk
+        if payload and all(str(k).isdigit() for k in payload.keys()):
+            out = []
+            for k, v in payload.items():
+                if isinstance(v, dict):
+                    row = dict(v)
+                    row.setdefault('id', k)
+                    out.append(row)
+            if out:
+                return out
+        return []
+
     def _rest_list_all(self, path, *, limit=30, extra_params=None):
         """
         Fetches all pages for REST list endpoints that support start/limit.
         Works with both plain list responses and {metadata,data} wrappers.
         """
         extra_params = extra_params or {}
+        resource_key = (path or '').strip('/').split('/')[-1] or None
         items = []
         start = 0
         while True:
             params = {'start': start, 'limit': limit, **extra_params}
             qs = '&'.join([f'{k}={requests.utils.quote(str(v))}' for k, v in params.items() if v is not None])
             page = self.rest('GET', f'{path}?{qs}')
-            if isinstance(page, dict) and 'data' in page:
-                page = page['data']
-            if not isinstance(page, list) or not page:
+            page = self._unwrap_rest_list(page, resource_key=resource_key)
+            if not page:
                 break
             items.extend(page)
             if len(page) < limit:
@@ -359,11 +399,15 @@ class AlegraMCPClient:
             start += limit
         return items
 
+    def _rest_taxes(self):
+        """GET /taxes — listado plano [{ id, name, percentage, type, ... }]."""
+        return self._rest_list_all('/taxes')
+
     def get_reference_data(self, *, sections=None):
         """
         Catálogos Alegra para Referencias.
         sections: iterable opcional con claves a consultar
-        (banks, categories, cost_centers, journal_numerations, number_templates, retentions).
+        (banks, categories, cost_centers, journal_numerations, number_templates, retentions, taxes).
         Si es None, consulta todo (puede tardar por journal_numerations).
         """
         want = set(sections) if sections is not None else None
@@ -389,6 +433,8 @@ class AlegraMCPClient:
             data['number_templates'] = self._rest_number_templates()
         if _include('retentions'):
             data['retentions'] = self._rest_list_all('/retentions')
+        if _include('taxes'):
+            data['taxes'] = self._rest_taxes()
         return data
 
     def _rest_number_templates(self):

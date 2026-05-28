@@ -1913,12 +1913,22 @@ def impr_interf_egresos(request):
                                 fecha_pago__gte=egr_desde,fecha_pago__lte=egr_hasta,cuenta=cuenta
                             )
                     for mvto in obj_pagos:
-                        cxp = mvto.nroradicado.cuenta_por_pagar.cuenta_credito_1
-                        doc_cruce = mvto.nroradicado.nrocausa
-                        doc_cruce = doc_cruce.split('-')
-                        tipo_doc_cruce = f'{doc_cruce[0]}-{doc_cruce[1]}'
-                        num_cruce = doc_cruce[2]
-                        vencimient = mvto.nroradicado.secuencia_cxp
+                        misma_empresa = mvto.nroradicado.empresa.pk == mvto.empresa.pk
+                        cxp = None
+                        tipo_doc_cruce = ''
+                        num_cruce = ''
+                        vencimient = ''
+                        if misma_empresa:
+                            cxp_obj = mvto.nroradicado.cuenta_por_pagar
+                            if not cxp_obj:
+                                raise ValueError(
+                                    f'El radicado {mvto.nroradicado.pk} no tiene cuenta por pagar asignada.'
+                                )
+                            cxp = cxp_obj.cuenta_credito_1
+                            doc_cruce = mvto.nroradicado.nrocausa.split('-')
+                            tipo_doc_cruce = f'{doc_cruce[0]}-{doc_cruce[1]}'
+                            num_cruce = doc_cruce[2]
+                            vencimient = mvto.nroradicado.secuencia_cxp
                         pagos_detallados = pago_detallado_relacionado.objects.filter(pago=mvto.pk)
                         if pagos_detallados.exists():
                             if mvto.nroradicado.empresa.pk != mvto.empresa.pk:
@@ -5603,6 +5613,7 @@ def cajas_efectivo(request):
                             'rte': vr_rte,
                             'subtotal':subtotal,
                             'concepto':i.concepto.descripcion,
+                            'tipo_documento_soporte': i.tipo_documento_soporte or '',
                             'soporte_doc_prov': _media_url(i.tercero.soporte_identificacion),
                         })
                         
@@ -5966,6 +5977,7 @@ def cajas_efectivo(request):
                 valor = request.POST.get('valor')
                 soporte = request.FILES.get('soporte')
                 concepto = request.POST.get('concepto')
+                tipo_documento_soporte = (request.POST.get('tipo_documento_soporte') or '').strip()
 
                 try:
                     fecha_gasto = datetime.datetime.strptime(fecha, '%Y-%m-%d').date()
@@ -6030,7 +6042,8 @@ def cajas_efectivo(request):
                     fecha_gasto = fecha_gasto, concepto = obj_concepto,
                     descripcion = descripcion.upper(),  tercero = partner,
                     valor = valor.replace(',',''), soporte = soporte,
-                    usuario_carga = request.user, forma_pago = cuenta
+                    usuario_carga = request.user, forma_pago = cuenta,
+                    tipo_documento_soporte = tipo_documento_soporte,
                 )
                 
                 data = {
@@ -6071,6 +6084,32 @@ def cajas_efectivo(request):
                 }
                 
                 return JsonResponse(data)
+            
+            elif todo == 'change_tipo_documento':
+                gasto_id = request.POST.get('id_gasto')
+                tipo = (request.POST.get('tipo_documento_soporte') or '').strip()
+                valid = {c[0] for c in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES}
+                if tipo not in valid:
+                    return JsonResponse({
+                        'msj': 'Tipo de soporte invalido.',
+                        'class': 'alert-danger',
+                    })
+                obj_gasto = gastos_caja.objects.get(pk=gasto_id)
+                owner = obj_gasto.forma_pago.usuario_responsable.pk == request.user.pk
+                is_cont = check_groups(request, ('Contabilidad',), raise_exception=False)
+                if not owner and not is_cont:
+                    return JsonResponse({
+                        'msj': 'No tienes permiso de realizar cambios sobre un gasto.',
+                        'class': 'alert-danger',
+                    })
+                obj_gasto.tipo_documento_soporte = tipo
+                if obj_gasto.estado == 'Devuelto':
+                    obj_gasto.estado = 'Reembolso'
+                obj_gasto.save(update_fields=['tipo_documento_soporte', 'estado'])
+                return JsonResponse({
+                    'msj': 'Se actualizo el tipo de soporte del gasto.',
+                    'class': 'alert-success',
+                })
     
             elif todo == 'change_support_gasto':
                 gasto =  request.POST.get('gasto')

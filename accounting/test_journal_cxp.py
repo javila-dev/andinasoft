@@ -2,9 +2,11 @@
 from django.test import SimpleTestCase
 
 from accounting.journal_cxp import (
+    categoria_alegra_desde_fila_journal,
     categoria_alegra_para_pago_journal,
     extraer_lineas_cxp,
     parsear_journal_para_radicado,
+    persist_journal_cxp_mappings,
     serializar_detalle_journal_pago,
 )
 
@@ -205,6 +207,56 @@ class JournalCxpTests(SimpleTestCase):
         self.assertEqual(len(lineas), 3)
         total = sum(x['valor'] for x in lineas)
         self.assertEqual(total, 4517516)
+        for row in lineas:
+            self.assertEqual(row['alegra_category_id'], '7558')
+
+    def test_journal_11_category_id_en_category_anidado(self):
+        journal = {
+            'id': '99',
+            'date': '2026-05-15',
+            'entries': [{
+                'type': 'category',
+                'name': 'Comisiones',
+                'debit': 0,
+                'credit': 1000,
+                'category': {'id': '9001', 'code': '22050501'},
+                'client': {
+                    'identification': '123456',
+                    'name': 'PROVEEDOR TEST',
+                },
+            }],
+        }
+        lineas = extraer_lineas_cxp(journal)
+        self.assertEqual(len(lineas), 1)
+        self.assertEqual(lineas[0]['alegra_category_id'], '9001')
+
+    def test_serializar_preserva_alegra_category_id(self):
+        lineas = extraer_lineas_cxp(JOURNAL_11)
+        slim = serializar_detalle_journal_pago(lineas)
+        self.assertEqual(slim[0]['alegra_category_id'], '7558')
+
+    def test_persist_no_sobrescribe_id_del_journal(self):
+        import django
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        django.setup()
+        detalle = serializar_detalle_journal_pago(extraer_lineas_cxp(JOURNAL_11))
+        resolver = MagicMock()
+        resolver.sync_puc_category_mapping.return_value = 'default-cxp-id'
+        with patch('alegra_integration.mapping.MappingResolver', return_value=resolver):
+            out = persist_journal_cxp_mappings(SimpleNamespace(pk='901018375'), detalle)
+        self.assertEqual(out[0]['alegra_category_id'], '7558')
+        resolver.sync_puc_category_mapping.assert_called_with(
+            '22050501', alegra_category_id='7558',
+        )
+
+    def test_categoria_desde_fila_prioriza_id_sin_puc(self):
+        resolver = type('R', (), {'category_for_puc_code': lambda *a, **k: 'default-cxp'})()
+        cat = categoria_alegra_desde_fila_journal(
+            resolver, {'alegra_category_id': '7558'},
+        )
+        self.assertEqual(cat, '7558')
 
     def test_journal_11_multi_radicado(self):
         r = parsear_journal_para_radicado(JOURNAL_11)

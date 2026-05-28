@@ -260,6 +260,10 @@
             data-type="expense" onclick="selectDocType(this)">
             <i class="fas fa-money-check-alt mr-1"></i>Egresos
           </button>
+          <button type="button" class="btn btn-outline-secondary doc-type-btn"
+            data-type="caja" onclick="selectDocType(this)">
+            <i class="fas fa-cash-register mr-1"></i>Caja efectivo
+          </button>
         </div>
         <small class="text-muted d-block mt-1" id="gttDocHint" style="display:none">
           GTT aprobados del proyecto en el rango de fechas; cada línea se envía como
@@ -270,6 +274,12 @@
           Externos → <a href="https://developer.alegra.com/reference/post_bills" target="_blank" rel="noopener">documento soporte</a>;
           internos → journal (débito comisión / crédito CxP). Configura en
           <a href="/accounting/alegra/references">Referencias → Comisiones</a>.
+        </small>
+        <small class="text-muted d-block mt-1" id="cajaDocHint" style="display:none">
+          Solo gastos de caja en estado <strong>Legalizado</strong> en el rango de fechas.
+          Por gasto: factura electronica o cuenta de cobro (<code>POST /bills</code>);
+          luego comprobante que cierra CxP (<code>POST /journals</code>).
+          Configura en <a href="/accounting/alegra/references">Referencias → Caja efectivo</a>.
         </small>
       </div>
 
@@ -735,6 +745,7 @@ const DOC_LABELS = {
   commission: 'Comisiones',
   gtt:        'GTT',
   expense:    'Egresos',
+  caja:       'Caja efectivo',
 };
 
 const STATUS_CFG = {
@@ -790,11 +801,12 @@ function selectDocType(btn) {
   $('.doc-type-btn').removeClass('active');
   $(btn).addClass('active');
   currentDocType = $(btn).data('type');
-  const needProj = currentDocType !== 'expense';
+  const needProj = currentDocType !== 'expense' && currentDocType !== 'caja';
   $('#proyectoRequired').toggle(needProj);
   $('#proyectoOptional').toggle(!needProj);
   $('#gttDocHint').toggle(currentDocType === 'gtt');
   $('#commissionDocHint').toggle(currentDocType === 'commission');
+  $('#cajaDocHint').toggle(currentDocType === 'caja');
 }
 
 function onEmpresaChange() { loadHistory(); }

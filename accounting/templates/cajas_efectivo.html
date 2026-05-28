@@ -262,6 +262,7 @@
   <div class="dropdown-divider"></div>
   <a class="dropdown-item" id='change_support' href="#"><i class="fa fa-exchange"></i>&nbsp;Cambiar soporte</a>
   <a class="dropdown-item" id='change_concept' href="#"><i class="fas fa-thumbtack"></i>&nbsp;Cambiar concepto</a>
+  <a class="dropdown-item" id='change_tipo_doc' href="#"><i class="fas fa-file-invoice"></i>&nbsp;Tipo de soporte</a>
   <a class="dropdown-item" id='include_taxes' href="#"><i class="fas fa-percent"></i>&nbsp;IVA y Rte</a>
   <div class="dropdown-divider"></div>
   <a class="dropdown-item" id='approve_gasto' href="#"><i class="fas fa-check"></i>&nbsp;Aprobar</a>
@@ -839,6 +840,7 @@
         $('#eliminar_leg').removeClass('disabled');
         $('#change_support').removeClass('disabled');
         $('#change_concept').removeClass('disabled');
+        $('#change_tipo_doc').removeClass('disabled');
         $('#include_taxes').removeClass('disabled');
       }
       else if (line.estado == 'Aprobado'){
@@ -846,6 +848,7 @@
         $('#eliminar_leg').addClass('disabled');
         $('#change_support').addClass('disabled');
         $('#change_concept').addClass('disabled');
+        $('#change_tipo_doc').removeClass('disabled');
         $('#include_taxes').addClass('disabled');
       }
       else if (line.estado == 'Devuelto') {
@@ -853,13 +856,23 @@
         $('#eliminar_leg').addClass('disabled');
         $('#change_support').removeClass('disabled');
         $('#change_concept').removeClass('disabled');
+        $('#change_tipo_doc').removeClass('disabled');
         $('#include_taxes').removeClass('disabled');
+      }
+      else if (line.estado == 'Legalizado' || line.estado == 'Reembolso') {
+        $('#approve_gasto').addClass('disabled');
+        $('#eliminar_leg').addClass('disabled');
+        $('#change_support').addClass('disabled');
+        $('#change_concept').addClass('disabled');
+        $('#change_tipo_doc').removeClass('disabled');
+        $('#include_taxes').addClass('disabled');
       }
       else {
         $('#approve_gasto').addClass('disabled');
         $('#eliminar_leg').addClass('disabled');
         $('#change_support').addClass('disabled');
         $('#change_concept').addClass('disabled');
+        $('#change_tipo_doc').addClass('disabled');
         $('#include_taxes').addClass('disabled');
       }
       
@@ -974,6 +987,34 @@
 
           case "change_concept":
             $('#modalchangeconcept').modal('show')
+            break;
+
+          case "change_tipo_doc":
+            {
+              const actual = line.tipo_documento_soporte || ''
+              const msg = 'Tipo de soporte para Alegra:\n1 = Factura electronica\n2 = Cuenta de cobro\n(vacio = quitar)'
+              const opt = prompt(msg, actual === 'fe' ? '1' : (actual === 'cuenta_cobro' ? '2' : ''))
+              if (opt === null) break
+              let tipo = ''
+              if (opt === '1') tipo = 'fe'
+              else if (opt === '2') tipo = 'cuenta_cobro'
+              else if (opt === '') tipo = ''
+              else {
+                alert('Opcion invalida. Usa 1, 2 o deja vacio.')
+                break
+              }
+              $.post('/accounting/cajasefectivo', {
+                to_do: 'change_tipo_documento',
+                id_gasto: row.pk,
+                tipo_documento_soporte: tipo,
+                csrfmiddlewaretoken: '{{ csrf_token }}',
+              }).done(xhr => {
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                tabla_movimientos.ajax.reload()
+              })
+            }
             break;
             
           case "include_taxes":

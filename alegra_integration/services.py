@@ -8,9 +8,17 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.core.cache import cache
 
-from accounting.models import Anticipos, Pagos, transferencias_companias
-from alegra_integration.builders import CommissionBuilder, ExpensePaymentBuilder, GttBuilder, ReceiptPaymentBuilder
-from alegra_integration.client import AlegraMCPClient
+from accounting.models import Anticipos, Pagos, gastos_caja, transferencias_companias
+from alegra_integration.builders import (
+    CajaGastoBillBuilder,
+    CajaLegalizationJournalBuilder,
+    CommissionBuilder,
+    ExpensePaymentBuilder,
+    GttBuilder,
+    ReceiptPaymentBuilder,
+)
+from alegra_integration.bill_mapping import cxp_category_id_from_bill, cxp_category_id_from_contact
+from alegra_integration.mapping import MappingResolver
 from alegra_integration.pago_link import sync_pago_from_alegra_document
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 from alegra_integration.models import (
@@ -295,6 +303,8 @@ class AlegraIntegrationService:
             doc.sent_at = timezone.now()
             doc.save(update_fields=['status', 'response', 'alegra_id', 'error', 'sent_at', 'updated_at'])
             sync_pago_from_alegra_document(doc)
+            if doc.document_type == 'caja_bill':
+                self._capture_caja_bill_cxp(client, doc)
             return 'sent'
         except AlegraIntegrationError as exc:
             doc.status = AlegraDocument.STATUS_FAILED
@@ -312,7 +322,12 @@ class AlegraIntegrationService:
         failed = 0
         documents = []
 
-        for doc in batch.documents.order_by('id'):
+        doc_list = list(batch.documents.order_by('id'))
+        if batch.document_type == AlegraSyncBatch.DOC_CAJA:
+            type_order = {'caja_bill': 0, 'caja_journal': 1}
+            doc_list.sort(key=lambda d: (type_order.get(d.document_type, 9), d.pk))
+
+        for doc in doc_list:
             if doc.status == AlegraDocument.STATUS_SENT:
                 skipped += 1
                 documents.append(self._document_summary(doc))
@@ -322,6 +337,20 @@ class AlegraIntegrationService:
                 failed += 1
                 documents.append(self._document_summary(doc))
                 continue
+
+            if (
+                batch.document_type == AlegraSyncBatch.DOC_CAJA
+                and doc.document_type == 'caja_journal'
+            ):
+                try:
+                    self._finalize_caja_journal_doc(doc)
+                except AlegraIntegrationError as exc:
+                    doc.status = AlegraDocument.STATUS_FAILED
+                    doc.error = str(exc)
+                    doc.save(update_fields=['status', 'error', 'updated_at'])
+                    failed += 1
+                    documents.append(self._document_summary(doc))
+                    continue
 
             outcome = self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
             if outcome == 'sent':
@@ -349,7 +378,7 @@ class AlegraIntegrationService:
         key = (ref_type or '').strip().lower()
         if not key:
             return None
-        if key in ('banks', 'categories', 'cost_centers', 'retentions'):
+        if key in ('banks', 'categories', 'cost_centers', 'retentions', 'taxes'):
             return {key}
         if key in ('journal_numerations', 'journal_numeration', 'journals_numerations'):
             return {'journal_numerations'}
@@ -1145,6 +1174,37 @@ class AlegraIntegrationService:
                 results.extend(self._safe_build(builder, detalle, empresa=empresa, proyecto=proyecto))
             return results
 
+        if document_type == AlegraSyncBatch.DOC_CAJA:
+            bill_builder = CajaGastoBillBuilder(empresa)
+            journal_builder = CajaLegalizationJournalBuilder(empresa)
+            gastos_qs = gastos_caja.objects.filter(
+                estado='Legalizado',
+                reembolso__isnull=False,
+                forma_pago__nit_empresa=empresa,
+                fecha_gasto__range=(desde, hasta),
+            ).select_related(
+                'reembolso',
+                'reembolso__caja',
+                'tercero',
+                'concepto',
+                'forma_pago',
+                'cuenta_iva',
+                'cuenta_rte',
+            ).order_by('reembolso_id', 'fecha_gasto', 'pk')
+            gastos_list = list(gastos_qs)
+            by_reemb = {}
+            for gasto in gastos_list:
+                by_reemb.setdefault(gasto.reembolso_id, []).append(gasto)
+            results = []
+            for reemb_id in sorted(by_reemb.keys()):
+                gastos_group = by_reemb[reemb_id]
+                for gasto in gastos_group:
+                    results.extend(self._safe_build(bill_builder, gasto, empresa=empresa, proyecto=proyecto))
+                reembolso = gastos_group[0].reembolso
+                journal_source = {'reembolso': reembolso, 'gastos': gastos_group}
+                results.extend(self._safe_build(journal_builder, journal_source, empresa=empresa, proyecto=proyecto))
+            return results
+
         builder = ExpensePaymentBuilder(empresa)
         pagos = list(Pagos.objects.filter(empresa=empresa, fecha_pago__range=(desde, hasta)).select_related('nroradicado', 'cuenta', 'empresa'))
         anticipos = list(Anticipos.objects.filter(empresa=empresa, fecha_pago__range=(desde, hasta)).select_related('tipo_anticipo', 'cuenta', 'empresa'))
@@ -1426,6 +1486,120 @@ class AlegraIntegrationService:
         client = AlegraMCPClient(empresa)
         resp = client.delete_webhooks_subscription(subscription_id)
         return {'empresa': str(empresa.pk), 'deleted_id': str(subscription_id), 'response': resp}
+
+    def _fetch_bill_cxp_category_id(self, client, *, bill_data, alegra_id):
+        """
+        CxP del bill: respuesta almacenada, journal embebido, GET /bills/{id}?fields=journal
+        o GET /contacts/{provider.id}?fields=accounting (debtToPay).
+        """
+        data = bill_data if isinstance(bill_data, dict) else {}
+        cached = data.get('__cxp_category_id')
+        if cached is not None and str(cached).strip():
+            return str(cached).strip()
+
+        cxp_id = cxp_category_id_from_bill(data)
+        if cxp_id:
+            return cxp_id
+
+        merged = dict(data)
+        if alegra_id and client is not None:
+            try:
+                fresh = client.get_bill(alegra_id, fields='journal')
+                if isinstance(fresh, dict):
+                    merged.update(fresh)
+                    cxp_id = cxp_category_id_from_bill(fresh)
+                    if cxp_id:
+                        return cxp_id
+            except AlegraIntegrationError:
+                pass
+
+        if client is not None:
+            provider_id = (merged.get('provider') or {}).get('id')
+            if provider_id is not None and str(provider_id).strip():
+                try:
+                    contact = client.get_contact(provider_id, fields='accounting')
+                    cxp_id = cxp_category_id_from_contact(contact)
+                    if cxp_id:
+                        return cxp_id
+                except AlegraIntegrationError:
+                    pass
+
+        return ''
+
+    def _capture_caja_bill_cxp(self, client, doc):
+        """Persiste __cxp_category_id en la respuesta del bill para el journal de caja."""
+        bill_data = doc.response if isinstance(doc.response, dict) else {}
+        cxp_id = self._fetch_bill_cxp_category_id(
+            client, bill_data=bill_data, alegra_id=doc.alegra_id,
+        )
+        if not cxp_id:
+            return
+        response = dict(bill_data)
+        response['__cxp_category_id'] = cxp_id
+        doc.response = response
+        doc.save(update_fields=['response', 'updated_at'])
+
+    def _resolve_cxp_for_caja_bill(self, bill_doc, *, client=None):
+        """CxP del bill (respuesta POST/GET/contacto); fallback mapeos caja_cxp / default_cxp."""
+        bill_data = bill_doc.response if isinstance(bill_doc.response, dict) else {}
+        cxp_id = self._fetch_bill_cxp_category_id(
+            client, bill_data=bill_data, alegra_id=bill_doc.alegra_id,
+        )
+        if cxp_id:
+            return cxp_id
+        resolver = MappingResolver(bill_doc.empresa)
+        cxp_id = resolver.get(AlegraMapping.CATEGORY, local_code='caja_cxp', required=False)
+        if not cxp_id:
+            cxp_id = resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=True)
+        return str(cxp_id)
+
+    def _finalize_caja_journal_doc(self, doc):
+        """Inyecta idResource y cuenta CxP (desde bill) en cada línea del journal de caja."""
+        payload = dict(doc.payload or {})
+        local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
+        pending = local.get('pending_bills') or []
+        if not pending:
+            raise AlegraConfigurationError(
+                f'El journal de caja {doc.local_key} no tiene referencias a bills pendientes.'
+            )
+        entries = list(payload.get('entries') or [])
+        if len(entries) < len(pending):
+            raise AlegraConfigurationError(
+                f'El journal de caja {doc.local_key} tiene menos lineas ({len(entries)}) '
+                f'que gastos ({len(pending)}).'
+            )
+        client = AlegraMCPClient(doc.empresa)
+        missing = []
+        for idx, ref in enumerate(pending):
+            local_key = ref.get('local_key')
+            bill_doc = AlegraDocument.objects.filter(
+                empresa=doc.empresa,
+                document_type='caja_bill',
+                local_key=local_key,
+                status=AlegraDocument.STATUS_SENT,
+            ).first()
+            if not bill_doc or not bill_doc.alegra_id:
+                missing.append(local_key or f'gasto:{ref.get("gasto_id")}')
+                continue
+            try:
+                bill_id = int(str(bill_doc.alegra_id).strip())
+            except (TypeError, ValueError):
+                missing.append(local_key)
+                continue
+            cxp_id = self._resolve_cxp_for_caja_bill(bill_doc, client=client)
+            entries[idx]['id'] = cxp_id
+            assoc = entries[idx].get('associatedDocument') or {}
+            entries[idx]['associatedDocument'] = {
+                'idResource': bill_id,
+                'resourceType': assoc.get('resourceType') or 'bill',
+            }
+        if missing:
+            raise AlegraConfigurationError(
+                f'Faltan bills enviados para el journal {doc.local_key}: {", ".join(missing)}'
+            )
+        payload['entries'] = entries
+        doc.payload = payload
+        doc.save(update_fields=['payload', 'updated_at'])
 
     def _extract_alegra_id(self, response):
         if isinstance(response, dict):

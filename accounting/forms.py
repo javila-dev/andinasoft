@@ -8,7 +8,7 @@ from crispy_forms.bootstrap import StrictButton, PrependedText
 from andina import customfields
 from andinasoft.forms import customSelectField
 from andinasoft.models import empresas, proyectos, cuentas_pagos
-from accounting.models import impuestos_legalizacion, conceptos_legalizacion, Partners, Countries
+from accounting.models import impuestos_legalizacion, conceptos_legalizacion, Partners, Countries, gastos_caja
 from andinasoft.shared_models import formas_pago
 
 class form_nuevo_radicado(forms.Form):
@@ -929,7 +929,12 @@ class form_legalizar_anticipo(forms.Form):
     soporte = forms.FileField()
     concepto = forms.ModelChoiceField(conceptos_legalizacion.objects.filter(activo=True),
                                       empty_label="Seleciona...")
-    
+    tipo_documento_soporte = forms.ChoiceField(
+        choices=gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES,
+        required=False,
+        label='Tipo de soporte',
+    )
+
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
         self.helper = FormHelper() 
@@ -949,6 +954,7 @@ class form_legalizar_anticipo(forms.Form):
                    css_class='col-md-2'),    
             ),     
             customfields.customSelectField('concepto'),
+            Field('tipo_documento_soporte'),
             Field('descripcion'),
             customfields.filepicker('soporte'),
             HTML('</div></div>'),            

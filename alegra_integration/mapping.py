@@ -29,6 +29,8 @@ class MappingResolver:
                 'gtt_support_document',
                 'commission_support_document',
                 'commission_journal',
+                'caja_cuenta_cobro',
+                'caja_legalization_journal',
             )
         ):
             # Receipt / GTT / comisiones numbering can vary per project, with optional fallback to company default.
@@ -54,6 +56,8 @@ class MappingResolver:
             'commission_amount_source',
             'commission_amount_source_internal',
             'commission_amount_source_external',
+            'caja_cxp',
+            'caja_ajuste_aproximacion',
         ):
             # Project-specific category with optional company-level fallback.
             if self.proyecto:
@@ -300,6 +304,44 @@ class MappingResolver:
 
     def retention(self, retention_code, required=True):
         return self.get(AlegraMapping.RETENTION, local_code=retention_code, required=required)
+
+    def tax_for_impuesto(self, impuesto_pk, *, required=True):
+        """Impuesto Alegra (IVA) mapeado desde accounting.impuestos_legalizacion."""
+        pk = str(impuesto_pk or '').strip()
+        if not pk:
+            if required:
+                raise AlegraConfigurationError('Falta tipo de IVA en el gasto de caja.')
+            return None
+        return self.get(
+            AlegraMapping.TAX,
+            local_model='accounting.impuestos_legalizacion',
+            local_pk=pk,
+            local_code='impuesto_tax',
+            required=required,
+        )
+
+    def retention_for_impuesto(self, impuesto_pk, *, required=True):
+        """Retencion Alegra mapeada desde accounting.impuestos_legalizacion (tipo retefuente)."""
+        pk = str(impuesto_pk or '').strip()
+        if not pk:
+            if required:
+                raise AlegraConfigurationError('Falta tipo de retencion en el gasto de caja.')
+            return None
+        mapped = self.get(
+            AlegraMapping.RETENTION,
+            local_model='accounting.impuestos_legalizacion',
+            local_pk=pk,
+            local_code='impuesto_retention',
+            required=False,
+        )
+        if mapped:
+            return mapped
+        if required:
+            raise AlegraConfigurationError(
+                f'Falta mapeo Alegra de retencion para impuestos_legalizacion pk={pk}. '
+                f'Configure en Referencias → Caja efectivo → Impuestos.'
+            )
+        return None
 
     def commission_amount_source(self, *, for_tipo, default='net', required=False):
         """

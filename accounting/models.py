@@ -880,6 +880,20 @@ class gastos_caja(models.Model):
     estado = models.CharField(max_length=255, default='Pendiente')
     forma_pago = models.ForeignKey(cuentas_pagos, on_delete = models.PROTECT)
     reembolso = models.ForeignKey(reembolsos_caja, on_delete = models.PROTECT, null=True, blank=True)
+    TIPO_DOC_FE = 'fe'
+    TIPO_DOC_CUENTA_COBRO = 'cuenta_cobro'
+    TIPO_DOCUMENTO_SOPORTE_CHOICES = (
+        ('', 'Sin definir'),
+        (TIPO_DOC_FE, 'Factura electronica'),
+        (TIPO_DOC_CUENTA_COBRO, 'Cuenta de cobro'),
+    )
+    tipo_documento_soporte = models.CharField(
+        max_length=20,
+        choices=TIPO_DOCUMENTO_SOPORTE_CHOICES,
+        blank=True,
+        default='',
+        help_text='Tipo de soporte para envio a Alegra (factura electronica o cuenta de cobro).',
+    )
         
     class Meta:
         verbose_name = 'Gasto de caja'

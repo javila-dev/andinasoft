@@ -6,6 +6,8 @@ from unittest.mock import Mock, patch
 from django.test import SimpleTestCase
 
 from alegra_integration.builders import (
+    CajaGastoBillBuilder,
+    CajaLegalizationJournalBuilder,
     CommissionBuilder,
     ExternalCommissionSupportDocumentBuilder,
     GttSupportDocumentBuilder,
@@ -41,6 +43,15 @@ class ResolverStub:
     def retention(self, retention_code, required=True):
         return f'ret-{retention_code}'
 
+    def tax_for_impuesto(self, impuesto_id, required=True):
+        return f'tax-imp-{impuesto_id}'
+
+    def retention_for_impuesto(self, impuesto_id, required=True):
+        return f'ret-imp-{impuesto_id}'
+
+    def category_for_puc_code(self, puc, required=False):
+        return None
+
     def commission_amount_source(self, *, for_tipo, default='net', required=False):
         if for_tipo == 'external':
             return getattr(self, '_amount_source_external', default)
@@ -67,7 +78,19 @@ class ResolverStub:
             return 'cat-commission-debit'
         if code == 'commission_credit':
             return 'cat-commission-credit'
+        if code == 'caja_cxp':
+            return 'cat-cxp'
+        if code == 'caja_credit':
+            return 'cat-caja-credit'
+        if code == 'default_cxp':
+            return 'cat-default-cxp'
         return 'mapped-id'
+
+    def contact_by_identification(self, ident, **kwargs):
+        return f'contact-{ident}'
+
+    def category_for_puc_code(self, account_code, **kwargs):
+        return f'cat-puc-{account_code}'
 
 
 class BuilderTests(SimpleTestCase):
@@ -435,6 +458,18 @@ class ClientTests(SimpleTestCase):
         with self.assertRaises(AlegraClientError):
             client._handle_decoded_response(response, {'message': 'bad request'})
 
+    def test_unwrap_rest_list_accepts_common_wrappers(self):
+        empresa = SimpleNamespace(pk='1', alegra_enabled=True, alegra_token='user@test.com:tok')
+        client = AlegraMCPClient(empresa)
+        plain = [{'id': '1', 'name': 'IVA'}]
+        self.assertEqual(client._unwrap_rest_list(plain), plain)
+        self.assertEqual(client._unwrap_rest_list({'data': plain}), plain)
+        self.assertEqual(client._unwrap_rest_list({'taxes': plain}), plain)
+        self.assertEqual(
+            client._unwrap_rest_list({'1': {'name': 'IVA', 'percentage': 19}})[0]['id'],
+            '1',
+        )
+
 
 class WebhookInboundLogHelpersTests(SimpleTestCase):
     def test_radicado_status_from_stored_skip(self):
@@ -485,6 +520,104 @@ class BillMappingEnrichTests(SimpleTestCase):
         self.assertEqual(descripcion_from_bill(bill), 'Servicio mensual, IVA')
         fields = map_bill_to_factura_fields(bill)
         self.assertEqual(fields['descripcion'], 'Servicio mensual, IVA')
+
+    def test_cxp_category_id_from_bill_journal_credit(self):
+        from alegra_integration.bill_mapping import cxp_category_id_from_bill
+
+        bill = {
+            'journal': {
+                'categories': [
+                    {'id': '5011', 'operation': 'debit', 'name': 'IVA'},
+                    {'id': '5195', 'operation': 'debit', 'name': 'Gasto'},
+                    {'id': '5033', 'operation': 'credit', 'name': 'Cuentas por pagar a proveedores'},
+                ],
+            },
+        }
+        self.assertEqual(cxp_category_id_from_bill(bill), '5033')
+
+    def test_cxp_category_id_from_bill_provider_debt_to_pay(self):
+        from alegra_integration.bill_mapping import cxp_category_id_from_bill
+
+        bill = {
+            'provider': {
+                'accounting': {
+                    'debtToPay': {'id': '8821', 'code': '22050501'},
+                },
+            },
+        }
+        self.assertEqual(cxp_category_id_from_bill(bill), '8821')
+
+    def test_cxp_category_id_from_contact_debt_to_pay(self):
+        from alegra_integration.bill_mapping import cxp_category_id_from_contact
+
+        self.assertEqual(
+            cxp_category_id_from_contact({'accounting': {'debtToPay': {'id': '5033'}}}),
+            '5033',
+        )
+
+    def test_cxp_category_id_from_bill_minimal_post_response(self):
+        """Respuesta típica POST /bills sin journal ni provider.accounting."""
+        from alegra_integration.bill_mapping import cxp_category_id_from_bill
+
+        bill = {
+            'id': '1',
+            'provider': {'id': '1', 'name': 'Coorporación Alegrate', 'identification': '159.549.847'},
+            'purchases': {'categories': [{'id': '1', 'name': 'Ajustes de inventario', 'total': 2100}]},
+            'total': 2100,
+        }
+        self.assertEqual(cxp_category_id_from_bill(bill), '')
+
+    def test_fetch_bill_cxp_via_get_journal_fields(self):
+        from alegra_integration.services import AlegraIntegrationService
+
+        svc = AlegraIntegrationService()
+        bill_data = {
+            'id': '1',
+            'provider': {'id': '1', 'name': 'Proveedor'},
+        }
+
+        class FakeClient:
+            def get_bill(self, bill_id, *, fields=None):
+                self.bill_fields = fields
+                return {
+                    'journal': {
+                        'categories': [
+                            {'id': '5033', 'operation': 'credit', 'name': 'Cuentas por pagar a proveedores'},
+                        ],
+                    },
+                }
+
+            def get_contact(self, contact_id, *, fields=None):
+                raise AssertionError('no debe consultar contacto si GET journal trae CxP')
+
+        client = FakeClient()
+        cxp_id = svc._fetch_bill_cxp_category_id(client, bill_data=bill_data, alegra_id='1')
+        self.assertEqual(cxp_id, '5033')
+        self.assertEqual(client.bill_fields, 'journal')
+
+    def test_fetch_bill_cxp_via_contact_after_minimal_post(self):
+        from alegra_integration.services import AlegraIntegrationService
+
+        svc = AlegraIntegrationService()
+        bill_data = {
+            'id': '1',
+            'provider': {'id': '1', 'name': 'Proveedor'},
+        }
+
+        class FakeClient:
+            def get_bill(self, bill_id, *, fields=None):
+                self.bill_fields = fields
+                return bill_data
+
+            def get_contact(self, contact_id, *, fields=None):
+                self.contact_fields = fields
+                return {'accounting': {'debtToPay': {'id': '8821', 'code': '22050501'}}}
+
+        client = FakeClient()
+        cxp_id = svc._fetch_bill_cxp_category_id(client, bill_data=bill_data, alegra_id='1')
+        self.assertEqual(cxp_id, '8821')
+        self.assertEqual(client.bill_fields, 'journal')
+        self.assertEqual(client.contact_fields, 'accounting')
 
     def test_descripcion_from_purchases_categories_not_terms(self):
         from alegra_integration.bill_mapping import descripcion_from_bill, bill_descripcion_candidatos
@@ -736,9 +869,62 @@ class WebhookBillMappingTests(SimpleTestCase):
             mock_cli.objects.filter.return_value.exists.return_value = True
             builder.resolver.contact_for_cliente = lambda _x: '175'
             with patch('accounting.models.pago_detallado_relacionado') as mock_pd:
-                mock_pd.objects.filter.return_value = []
+                mock_pd.objects.filter.return_value.order_by.return_value = []
                 built = builder._from_pago(pago)
         self.assertEqual(built.payload['categories'][0]['id'], 'cat-22050501')
+
+    def test_expense_payment_journal_pago_unico_usa_id_del_get(self):
+        """Pago normal (sin detalle tesorería): categories[].id viene del journal, no del mapeo PUC."""
+        import json
+        from types import SimpleNamespace
+
+        from alegra_integration.builders import ExpensePaymentBuilder
+
+        class JournalResolver(ResolverStub):
+            def bill_for_factura(self, *a, **k):
+                return None
+
+            def numeration(self, document_code, required=True):
+                return 'num-4'
+
+            def category_for_puc_code(self, account_code, required=False):
+                return 'default-cxp-should-not-use'
+
+        detalle = [{
+            'id_tercero': '31425903',
+            'nombre_tercero': 'PROVEEDOR',
+            'valor': 2412500,
+            'account_code': '22050501',
+            'alegra_category_id': '8821',
+        }]
+        factura = SimpleNamespace(
+            pk=99,
+            idtercero='31425903',
+            nrofactura='ARRIENDO',
+            descripcion='ARRIENDO',
+            empresa=SimpleNamespace(pk='901018375'),
+            cuenta_por_pagar=None,
+            alegra_bill_id='901018375:journal:7',
+            alegra_document_type='journal',
+            alegra_journal_detalle=json.dumps(detalle),
+        )
+        pago = SimpleNamespace(
+            pk=1,
+            valor=2412500,
+            fecha_pago=datetime.date(2026, 5, 6),
+            cuenta=SimpleNamespace(pk=1, nro_cuentacontable='11100501', cuentabanco='transfer', nit_empresa_id='901018375'),
+            nroradicado=factura,
+        )
+        builder = ExpensePaymentBuilder(SimpleNamespace(pk='901018375'))
+        builder.resolver = JournalResolver()
+        with patch('alegra_integration.builders.clientes') as mock_cli:
+            mock_cli.objects.filter.return_value.exists.return_value = True
+            builder.resolver.contact_for_cliente = lambda _x: '175'
+            with patch('accounting.models.pago_detallado_relacionado') as mock_pd:
+                mock_pd.objects.filter.return_value.order_by.return_value = []
+                built = builder._from_pago(pago)
+        self.assertEqual(built.payload['categories'][0]['id'], '8821')
+        self.assertEqual(built.payload['categories'][0]['price'], 2412500.0)
 
     def test_expense_payment_journal_multi_tercero_un_pago_por_detalle(self):
         import json
@@ -803,7 +989,7 @@ class WebhookBillMappingTests(SimpleTestCase):
         prices = sorted(c['price'] for b in built_list for c in b.payload['categories'])
         self.assertEqual(prices, [801561.0, 1311269.0, 2404686.0])
         for b in built_list:
-            self.assertEqual(b.payload['categories'][0]['id'], 'cat-22050501')
+            self.assertEqual(b.payload['categories'][0]['id'], '7558')
             self.assertNotIn('bills', b.payload)
 
     def test_expense_payment_sin_bill_con_cxp_pone_categories(self):
@@ -916,3 +1102,89 @@ class WebhookBillMappingTests(SimpleTestCase):
         self.assertEqual(built.payload['entries'][0]['credit'], 0)
         self.assertEqual(built.payload['entries'][0]['client'], 'contact-emp-900A')
         self.assertNotIn('client', built.payload['entries'][1])
+
+
+class CajaBuilderTests(SimpleTestCase):
+    def setUp(self):
+        self.empresa = SimpleNamespace(pk='901018375')
+        self.resolver = ResolverStub()
+
+    def _gasto(self, *, tipo='fe', valor=119000, subtotal_val=100000, valor_iva=None, valor_rte=None):
+        concepto = SimpleNamespace(
+            cuenta_andina='5195950100',
+            cuenta_status='',
+            cuenta_quadrata='',
+        )
+        tercero = SimpleNamespace(idTercero='900123456')
+        caja = SimpleNamespace(pk=7, cuentabanco='Caja Menor', usuario_responsable=SimpleNamespace(pk=1))
+        forma_pago = SimpleNamespace(empresa='Promotora Sandville', pk=7)
+        reembolso = SimpleNamespace(pk=99, caja=caja, valor=valor, fecha_aprueba=datetime.date(2026, 5, 10))
+        gasto = SimpleNamespace(
+            pk=501,
+            estado='Legalizado',
+            reembolso_id=99,
+            reembolso=reembolso,
+            fecha_gasto=datetime.date(2026, 5, 5),
+            descripcion='COMPRA PAPELERIA',
+            valor=valor,
+            valor_iva=valor_iva,
+            valor_rte=valor_rte,
+            rte_asumida=False,
+            cuenta_iva_id=None,
+            cuenta_rte_id=None,
+            concepto=concepto,
+            tercero=tercero,
+            forma_pago=forma_pago,
+            tipo_documento_soporte=tipo,
+            subtotal=lambda: subtotal_val,
+        )
+        return gasto, reembolso
+
+    def test_caja_bill_fe_omits_number_template(self):
+        gasto, _ = self._gasto(tipo='fe')
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertEqual(built.document_type, 'caja_bill')
+        self.assertEqual(built.operation, 'POST /bills')
+        self.assertNotIn('numberTemplate', built.payload)
+        self.assertEqual(built.local_key, 'caja:bill:99:501')
+
+    def test_caja_bill_cuenta_cobro_uses_cc_numeration(self):
+        gasto, _ = self._gasto(tipo='cuenta_cobro')
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertEqual(built.payload['numberTemplate'], {'id': 'num-caja_cuenta_cobro'})
+
+    def test_caja_bill_with_iva_uses_tax_on_base_line(self):
+        gasto, _ = self._gasto(valor=119000, subtotal_val=100000, valor_iva=19000.0)
+        gasto.cuenta_iva_id = 12
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        line = built.payload['purchases']['categories'][0]
+        self.assertEqual(line['price'], 100000.0)
+        self.assertEqual(line['tax'], [{'id': 'tax-imp-12'}])
+        self.assertNotIn('retentions', built.payload)
+        self.assertEqual(built.payload['__local']['valor_esperado'], 119000.0)
+
+    def test_caja_bill_with_retefuente_uses_impuesto_mapping(self):
+        gasto, _ = self._gasto(valor=97000, subtotal_val=100000)
+        gasto.valor_iva = None
+        gasto.valor_rte = 3000.0
+        gasto.cuenta_rte_id = 5
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertEqual(built.payload['retentions'], [{'id': 'ret-imp-5', 'amount': 3000.0}])
+        self.assertNotIn('tax', built.payload['purchases']['categories'][0])
+
+    def test_caja_journal_includes_associated_document_placeholder(self):
+        gasto, reembolso = self._gasto(valor=120000, subtotal_val=100000, valor_iva=19000.0)
+        gasto.cuenta_iva_id = 12
+        with patch('alegra_integration.builders.Profiles') as profiles_model:
+            profiles_model.objects.filter.return_value.first.return_value = SimpleNamespace(identificacion='123456789')
+            built = CajaLegalizationJournalBuilder(self.empresa, self.resolver).build(
+                {'reembolso': reembolso, 'gastos': [gasto]}
+            )
+        self.assertEqual(built.document_type, 'caja_journal')
+        self.assertEqual(built.operation, 'accounting__createJournal')
+        self.assertEqual(built.payload['numberTemplate'], 'num-caja_legalization_journal')
+        assoc = built.payload['entries'][0]['associatedDocument']
+        self.assertEqual(assoc['resourceType'], 'bill')
+        self.assertEqual(assoc['idResource'], 0)
+        self.assertIn('pending_bills', built.payload['__local'])
+        self.assertEqual(built.payload['entries'][-1]['credit'], 120000.0)

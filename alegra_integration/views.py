@@ -20,7 +20,7 @@ from alegra_integration.models import (
 from alegra_integration.services import AlegraIntegrationService, ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX, ALEGRA_WEBHOOK_EVENTS
 from andinasoft.models import cuentas_pagos, empresas, proyectos, clientes, asesores
 from andinasoft.shared_models import formas_pago
-from accounting.models import cuentas_intercompanias, info_interfaces
+from accounting.models import cuentas_intercompanias, info_interfaces, impuestos_legalizacion
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.client import AlegraMCPClient
 from alegra_integration.webhook_bills import process_inbound_post
@@ -293,6 +293,8 @@ def references_data(request):
             return JsonResponse({'number_templates': data.get('number_templates', {})})
         if ref_type == 'retentions':
             return JsonResponse({'retentions': data.get('retentions', [])})
+        if ref_type == 'taxes':
+            return JsonResponse({'taxes': data.get('taxes', [])})
 
         return JsonResponse(data)
     except empresas.DoesNotExist:
@@ -748,6 +750,113 @@ def references_save_retention_mapping(request):
             defaults={
                 'alegra_id': alegra_id,
                 'description': (description or local_code)[:255],
+                'active': True,
+            },
+        )
+        return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk})
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['GET'])
+def references_caja_impuestos(request):
+    """Impuestos de legalizacion local con mapeos Alegra (tax / retention) para caja."""
+    try:
+        empresa_id = (request.GET.get('empresa') or '').strip()
+        if not empresa_id:
+            return JsonResponse({'detail': 'Empresa requerida'}, status=400)
+
+        tax_maps = {
+            m.local_pk: m
+            for m in AlegraMapping.objects.filter(
+                empresa_id=empresa_id,
+                mapping_type=AlegraMapping.TAX,
+                local_model='accounting.impuestos_legalizacion',
+                local_code='impuesto_tax',
+                active=True,
+            )
+        }
+        retention_maps = {
+            m.local_pk: m
+            for m in AlegraMapping.objects.filter(
+                empresa_id=empresa_id,
+                mapping_type=AlegraMapping.RETENTION,
+                local_model='accounting.impuestos_legalizacion',
+                local_code='impuesto_retention',
+                active=True,
+            )
+        }
+
+        rows = []
+        for imp in impuestos_legalizacion.objects.filter(activo=True).order_by('descripcion'):
+            pk = str(imp.pk)
+            desc = (imp.descripcion or '').lower()
+            skip = 'ajuste' in desc
+            is_rte = (not skip) and any(x in desc for x in ('rte', 'retef', 'reten'))
+            is_iva = (not skip) and any(x in desc for x in ('iva', 'impuesto'))
+            if not skip and not is_iva and not is_rte:
+                is_iva = True
+                is_rte = True
+            tm = tax_maps.get(pk)
+            rm = retention_maps.get(pk)
+            rows.append({
+                'id': imp.pk,
+                'descripcion': imp.descripcion,
+                'es_iva': is_iva,
+                'es_rte': is_rte,
+                'tax_alegra_id': tm.alegra_id if tm else '',
+                'tax_description': tm.description if tm else '',
+                'retention_alegra_id': rm.alegra_id if rm else '',
+                'retention_description': rm.description if rm else '',
+            })
+        return JsonResponse({'impuestos': rows})
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def references_save_impuesto_mapping(request):
+    """
+    Guarda mapeo Alegra para una fila de impuestos_legalizacion.
+    Body: { empresa, impuesto_id, kind: 'tax'|'retention', alegra_id, description? }
+    """
+    try:
+        payload = _payload(request)
+        empresa_id = (payload.get('empresa') or '').strip()
+        impuesto_id = str(payload.get('impuesto_id') or '').strip()
+        kind = (payload.get('kind') or '').strip().lower()
+        alegra_id = (payload.get('alegra_id') or '').strip()
+        description = (payload.get('description') or '').strip()
+
+        if not empresa_id or not impuesto_id or kind not in ('tax', 'retention'):
+            return JsonResponse({'detail': 'empresa, impuesto_id y kind (tax|retention) son requeridos'}, status=400)
+
+        imp = impuestos_legalizacion.objects.filter(pk=impuesto_id, activo=True).first()
+        if not imp:
+            return JsonResponse({'detail': 'Impuesto local no encontrado'}, status=404)
+
+        if not alegra_id:
+            AlegraMapping.objects.filter(
+                empresa_id=empresa_id,
+                mapping_type=AlegraMapping.TAX if kind == 'tax' else AlegraMapping.RETENTION,
+                local_model='accounting.impuestos_legalizacion',
+                local_pk=impuesto_id,
+                local_code='impuesto_tax' if kind == 'tax' else 'impuesto_retention',
+            ).update(active=False)
+            return JsonResponse({'ok': True, 'cleared': True})
+
+        m, created = AlegraMapping.objects.update_or_create(
+            empresa_id=empresa_id,
+            proyecto=None,
+            mapping_type=AlegraMapping.TAX if kind == 'tax' else AlegraMapping.RETENTION,
+            local_model='accounting.impuestos_legalizacion',
+            local_pk=impuesto_id,
+            local_code='impuesto_tax' if kind == 'tax' else 'impuesto_retention',
+            defaults={
+                'alegra_id': alegra_id,
+                'description': (description or imp.descripcion or alegra_id)[:255],
                 'active': True,
             },
         )

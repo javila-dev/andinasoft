@@ -2,11 +2,11 @@ from decimal import Decimal, ROUND_DOWN
 
 from django.db.models import Sum
 
-from accounting.models import Anticipos, Facturas, Pagos, cuentas_intercompanias, transferencias_companias
+from accounting.models import Anticipos, Facturas, Pagos, cuentas_intercompanias, transferencias_companias, gastos_caja
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.models import AlegraDocument, AlegraMapping
-from andinasoft.models import Detalle_gtt, Gtt, asesores, clientes, cuentas_pagos, empresas
+from andinasoft.models import Detalle_gtt, Gtt, Profiles, asesores, clientes, cuentas_pagos, empresas
 from andinasoft.shared_models import Recaudos, consecutivos, formas_pago
 
 
@@ -1369,3 +1369,278 @@ class ExpensePaymentBuilder:
                 'cuenta_entra': getattr(getattr(source, 'cuenta_entra', None), 'nro_cuentacontable', None),
             }
         return {'tipo': 'egreso', 'note': 'no local payload'}
+
+
+# ── Caja efectivo (legalizacion Alegra) ───────────────────────────────────────
+
+_CAJA_EMPRESA_PUC_ATTR = {
+    'Promotora Sandville': 'cuenta_andina',
+    'Status Comercializadora': 'cuenta_status',
+    'Quadrata Constructores': 'cuenta_quadrata',
+}
+
+
+def _puc_for_caja_empresa(obj, empresa_name):
+    field = _CAJA_EMPRESA_PUC_ATTR.get((empresa_name or '').strip())
+    if not field:
+        return ''
+    return (getattr(obj, field, None) or '').strip()
+
+
+def _contact_for_partner(resolver, partner):
+    tercero_pk = str(getattr(partner, 'idTercero', '') or '').strip()
+    if not tercero_pk:
+        raise AlegraBuildError('El gasto no tiene tercero identificado.')
+    return resolver.contact_by_identification(
+        tercero_pk,
+        prefer_types=['provider', 'client'],
+        required=True,
+    )
+
+
+class CajaGastoBillBuilder:
+    """POST /bills por gasto legalizado de caja efectivo."""
+
+    def __init__(self, empresa, resolver=None):
+        self.empresa = empresa
+        self.resolver = resolver or MappingResolver(empresa)
+
+    def _expense_category_id(self, gasto):
+        empresa_name = (getattr(gasto.forma_pago, 'empresa', None) or '').strip()
+        puc = _puc_for_caja_empresa(gasto.concepto, empresa_name)
+        if not puc:
+            raise AlegraBuildError(
+                f'El concepto del gasto {gasto.pk} no tiene cuenta PUC para la empresa {empresa_name or "?"}'
+            )
+        cat_id = self.resolver.category_for_puc_code(puc, required=False)
+        if not cat_id:
+            cat_id = self.resolver.category_for_code(puc, required=True)
+        return cat_id
+
+    @staticmethod
+    def _alegra_resource_id(raw_id):
+        sid = str(raw_id or '').strip()
+        if sid.isdigit():
+            return int(sid)
+        return sid
+
+    def build(self, gasto):
+        if (gasto.estado or '').strip() != 'Legalizado':
+            raise AlegraBuildError(f'El gasto {gasto.pk} no esta legalizado (estado={gasto.estado}).')
+        if not gasto.reembolso_id:
+            raise AlegraBuildError(f'El gasto {gasto.pk} no tiene reembolso asociado.')
+
+        tipo = (getattr(gasto, 'tipo_documento_soporte', None) or '').strip()
+        if tipo not in (gastos_caja.TIPO_DOC_FE, gastos_caja.TIPO_DOC_CUENTA_COBRO):
+            raise AlegraBuildError(
+                f'El gasto {gasto.pk} no tiene tipo de soporte (factura electronica o cuenta de cobro).'
+            )
+
+        provider_id = _contact_for_partner(self.resolver, gasto.tercero)
+        expense_category = self._expense_category_id(gasto)
+
+        vr_iva = 0 if gasto.valor_iva is None else float(gasto.valor_iva)
+        vr_rte = 0 if gasto.valor_rte is None else float(gasto.valor_rte)
+        subtotal = float(gasto.subtotal())
+        valor_esperado = _money(gasto.valor)
+
+        base_line = {
+            'id': expense_category,
+            'quantity': 1,
+            'price': subtotal,
+            'observations': (gasto.descripcion or '')[:255],
+        }
+
+        if vr_iva:
+            if not gasto.cuenta_iva_id:
+                raise AlegraBuildError(
+                    f'El gasto {gasto.pk} tiene valor de IVA pero no tiene tipo de IVA configurado.'
+                )
+            tax_id = self.resolver.tax_for_impuesto(gasto.cuenta_iva_id, required=True)
+            base_line['tax'] = [{'id': self._alegra_resource_id(tax_id)}]
+
+        categories = [base_line]
+
+        payload = {
+            'date': _date(gasto.fecha_gasto),
+            'dueDate': _date(gasto.fecha_gasto),
+            'provider': {'id': provider_id},
+            'observations': (gasto.descripcion or '')[:500],
+            'purchases': {'categories': categories},
+        }
+
+        if tipo == gastos_caja.TIPO_DOC_CUENTA_COBRO:
+            numeration_id = self.resolver.numeration('caja_cuenta_cobro')
+            payload['numberTemplate'] = {'id': numeration_id}
+
+        if vr_rte and not gasto.rte_asumida:
+            if not gasto.cuenta_rte_id:
+                raise AlegraBuildError(
+                    f'El gasto {gasto.pk} tiene retencion pero no tiene tipo de retencion configurado.'
+                )
+            retention_id = self.resolver.retention_for_impuesto(gasto.cuenta_rte_id, required=True)
+            payload['retentions'] = [{
+                'id': self._alegra_resource_id(retention_id),
+                'amount': _money(vr_rte),
+            }]
+
+        payload['__local'] = {
+            'tipo_documento_soporte': gasto.tipo_documento_soporte,
+            'reembolso_id': gasto.reembolso_id,
+            'subtotal': subtotal,
+            'valor_iva': vr_iva,
+            'valor_rte': vr_rte,
+            'rte_asumida': bool(gasto.rte_asumida),
+            'valor_esperado': valor_esperado,
+            'impuesto_iva_id': gasto.cuenta_iva_id,
+            'impuesto_rte_id': gasto.cuenta_rte_id,
+        }
+
+        return BuiltDocument(
+            document_type='caja_bill',
+            operation='POST /bills',
+            transport=AlegraDocument.ALEGRA_REST,
+            source_model='accounting.gastos_caja',
+            source_pk=gasto.pk,
+            local_key=f'caja:bill:{gasto.reembolso_id}:{gasto.pk}',
+            payload=payload,
+            empresa_id=self.empresa.pk,
+        )
+
+
+class CajaLegalizationJournalBuilder:
+    """POST /journals que cierra CxP de bills de caja con associatedDocument."""
+
+    def __init__(self, empresa, resolver=None):
+        self.empresa = empresa
+        self.resolver = resolver or MappingResolver(empresa)
+
+    def _cxp_category_id(self):
+        """Placeholder en preview; al enviar se reemplaza por la CxP del bill (respuesta Alegra)."""
+        cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='caja_cxp', required=False)
+        if cat_id:
+            return cat_id
+        return self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=True)
+
+    def _caja_credit_category_id(self, caja):
+        return self.resolver.get(
+            AlegraMapping.CATEGORY,
+            local_model='andinasoft.cuentas_pagos',
+            local_pk=str(caja.pk),
+            local_code='caja_credit',
+            required=True,
+        )
+
+    def _responsable_contact_id(self, caja):
+        user = getattr(caja, 'usuario_responsable', None)
+        if not user:
+            raise AlegraBuildError('La caja no tiene usuario responsable configurado.')
+        profile = Profiles.objects.filter(user=user).first()
+        ident = str(getattr(profile, 'identificacion', '') or '').strip()
+        if not ident:
+            raise AlegraBuildError(
+                f'El responsable de la caja no tiene identificacion en Profiles (user={user.pk}).'
+            )
+        return self.resolver.contact_by_identification(
+            ident,
+            prefer_types=['provider', 'client'],
+            required=True,
+        )
+
+    def build(self, source):
+        if isinstance(source, dict):
+            reembolso = source['reembolso']
+            gastos = list(source.get('gastos') or [])
+        else:
+            reembolso = source
+            gastos = list(
+                gastos_caja.objects.filter(reembolso=reembolso, estado='Legalizado').order_by('pk')
+            )
+
+        if not gastos:
+            raise AlegraBuildError(f'El reembolso {reembolso.pk} no tiene gastos legalizados.')
+
+        caja = reembolso.caja
+        cxp_category = self._cxp_category_id()
+        caja_category = self._caja_credit_category_id(caja)
+        responsable_id = self._responsable_contact_id(caja)
+        numeration_id = self.resolver.numeration('caja_legalization_journal')
+
+        journal_date = reembolso.fecha_aprueba or gastos[0].fecha_gasto
+        entries = []
+        pending_bills = []
+
+        for gasto in gastos:
+            amount = _money(gasto.valor)
+            provider_id = _contact_for_partner(self.resolver, gasto.tercero)
+            local_key = f'caja:bill:{reembolso.pk}:{gasto.pk}'
+            pending_bills.append({
+                'gasto_id': gasto.pk,
+                'local_key': local_key,
+                'amount': amount,
+                'provider_id': str(provider_id),
+            })
+            entry = _journal_entry(
+                account_id=cxp_category,
+                description=(gasto.descripcion or '')[:255],
+                debit=amount,
+                credit=0,
+                client_id=provider_id,
+            )
+            entry['associatedDocument'] = {
+                'idResource': 0,
+                'resourceType': 'bill',
+            }
+            entries.append(entry)
+
+        valor = int(reembolso.valor or 0)
+        valor_aprox = valor + (10000 - valor % 10000) % 10000
+        vr_ajuste = valor_aprox - valor
+
+        if vr_ajuste > 0:
+            ajuste_cat = self.resolver.get(
+                AlegraMapping.CATEGORY,
+                local_code='caja_ajuste_aproximacion',
+                required=False,
+            )
+            if ajuste_cat:
+                entries.append(_journal_entry(
+                    account_id=ajuste_cat,
+                    description='AJUSTE POR APROXIMACION PARA RETIRO EN CAJERO',
+                    debit=_money(vr_ajuste),
+                    credit=0,
+                    client_id=responsable_id,
+                ))
+
+        entries.append(_journal_entry(
+            account_id=caja_category,
+            description=f'REEMBOLSO CAJA {(caja.cuentabanco or caja.pk)}'[:255],
+            debit=0,
+            credit=_money(valor_aprox),
+            client_id=responsable_id,
+        ))
+
+        payload = _journal_payload(
+            numeration_id=numeration_id,
+            date=_date(journal_date),
+            reference=f'LC-{reembolso.pk}',
+            observations=f'Legalizacion caja {caja.cuentabanco or caja.pk}'[:500],
+            entries=entries,
+        )
+        payload['__local'] = {
+            'reembolso_id': reembolso.pk,
+            'pending_bills': pending_bills,
+            'valor_aprox': valor_aprox,
+            'cxp_from_bill_response': True,
+        }
+
+        return BuiltDocument(
+            document_type='caja_journal',
+            operation='accounting__createJournal',
+            transport=AlegraDocument.ALEGRA_REST,
+            source_model='accounting.reembolsos_caja',
+            source_pk=reembolso.pk,
+            local_key=f'caja:journal:{reembolso.pk}',
+            payload=payload,
+            empresa_id=self.empresa.pk,
+        )
