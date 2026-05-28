@@ -360,6 +360,24 @@ class GastoAprobacionTests(TestCase):
                 factura=self.factura,
             )
 
+    def test_ajax_eliminar_pendiente_asignacion(self):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        pk = self.factura.pk
+        self.client.force_login(self.contable)
+        resp = self.client.post(
+            '/accounting/ajax/gastos-alegra/eliminar',
+            data=json.dumps({'radicado': pk}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(body.get('ok'))
+        self.assertEqual(body['eliminado']['pk'], pk)
+        self.assertFalse(Facturas.objects.filter(pk=pk).exists())
+
     def test_asignar_sin_aprobador_auto_aprobado(self):
         from django.contrib.auth.models import Group
         g, _ = Group.objects.get_or_create(name='Contabilidad')

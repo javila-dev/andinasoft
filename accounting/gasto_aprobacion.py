@@ -664,9 +664,9 @@ def eliminar_gasto_alegra_pendiente_asignacion(request, *, factura):
     if factura.origen != 'Alegra':
         raise ValueError('Solo aplica a radicados con origen Alegra.')
     if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_ASIGNACION:
-        raise ValueError('Solo se pueden eliminar radicados pendientes de asignación.')
+        raise ValueError('Solo se pueden descartar radicados pendientes de asignación.')
     if Pagos.objects.filter(nroradicado=factura).exists():
-        raise ValueError('No se puede eliminar: el radicado ya tiene pagos registrados.')
+        raise ValueError('No se puede descartar: el radicado ya tiene pagos registrados.')
 
     resumen = {
         'pk': factura.pk,

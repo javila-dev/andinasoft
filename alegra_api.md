@@ -505,6 +505,36 @@ Hasta **5** ítems en `historial` (mismo `idtercero` + empresa, ya asignados). L
 
 Si se asignó aprobador, Django dispara el webhook n8n **pendiente_aprobacion** (ver abajo). Si fue auto-aprobado, `gasto_aprobacion_estado` será `aprobado` y **no** hay POST a n8n de aprobación pendiente.
 
+#### Descartar radicado (Contabilidad)
+
+`POST /accounting/ajax/gastos-alegra/eliminar`  
+`Content-Type: application/json`
+
+Quita de la cola un radicado Alegra **pendiente de asignación** que no debe procesarse (p. ej. bill recibido por webhook por error). Solo borra el registro local y desactiva el mapeo bill; **no** elimina el documento en Alegra.
+
+**Body:**
+
+```json
+{ "radicado": 17369 }
+```
+
+**Respuesta 200:**
+
+```json
+{
+  "ok": true,
+  "eliminado": {
+    "pk": 17369,
+    "nrofactura": "FCII327559",
+    "nombretercero": "PROVEEDOR SA",
+    "valor": 142456,
+    "alegra_bill_id": "901018375:1"
+  }
+}
+```
+
+Errores: radicado con pagos, ya asignado/aprobado, o sin permiso Contabilidad.
+
 #### Aprobar gasto (aprobador asignado)
 
 `POST /accounting/ajax/gastos-alegra/aprobar`  

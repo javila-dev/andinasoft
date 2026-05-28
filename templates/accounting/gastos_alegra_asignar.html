@@ -52,7 +52,7 @@
     <h4 class="mb-0"><i class="fas fa-tasks mr-2"></i>Asignar gastos Alegra</h4>
     <a class="btn btn-sm btn-outline-secondary" href="/accounting/alegra/webhooks/">Webhooks Alegra</a>
   </div>
-  <p class="text-muted small">Radicados Alegra pendientes de oficina (webhook o <strong>manual</strong>). Sin aprobador solo si la empresa tiene tope configurado en Admin y el valor no lo supera; se pedirá confirmación antes de guardar.</p>
+  <p class="text-muted small">Radicados Alegra pendientes de oficina (webhook o <strong>manual</strong>). Sin aprobador solo si la empresa tiene tope configurado en Admin y el valor no lo supera; se pedirá confirmación antes de guardar. Use <strong>Descartar</strong> para quitar facturas que no requieren radicación (solo elimina el registro en AndinaSoft; el bill en Alegra no se borra).</p>
 
   <div id="alertBox"></div>
 
@@ -88,7 +88,7 @@
           <th class="col-c">Factura</th>
           <th class="col-c">Fecha</th>
           <th class="col-c">Valor</th>
-          <th class="col-c"></th>
+          <th class="col-c">Acciones</th>
         </tr>
       </thead>
     </table>
@@ -257,8 +257,8 @@
         </div>
       </div>
       <div class="modal-footer d-flex justify-content-between">
-        <button type="button" class="btn btn-outline-danger btn-sm btn-icon-modal" id="btnEliminarAsignar" data-tip="Eliminar radicado">
-          <i class="fas fa-trash-alt"></i><span class="sr-only">Eliminar radicado</span>
+        <button type="button" class="btn btn-outline-danger btn-sm" id="btnEliminarAsignar" title="Descartar radicado">
+          <i class="fas fa-times mr-1"></i>Descartar
         </button>
         <div>
           <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-tip="Cancelar">
@@ -288,12 +288,12 @@ function showAlert(type, html) {
 
 function mensajeConfirmacionEliminar(row) {
   return (
-    '¿Eliminar el radicado #' + row.pk + '?\n\n' +
+    '¿Descartar el radicado #' + row.pk + '?\n\n' +
     'Proveedor: ' + (row.nombretercero || '—') + '\n' +
     'Factura: ' + (row.nrofactura || '—') + '\n' +
     'Valor: $' + Number(row.valor || 0).toLocaleString('es-CO') + '\n\n' +
-    'Esta acción no se puede deshacer.\n' +
-    'Solo se elimina el registro en AndinaSoft; el documento en Alegra no se borra.'
+    'No se procesará en AndinaSoft. El documento en Alegra permanece.\n' +
+    'Esta acción no se puede deshacer.'
   );
 }
 
@@ -318,7 +318,7 @@ function confirmarYEliminarRadicado(row, onSuccessExtra) {
   if (!window.confirm(mensajeConfirmacionEliminar(row))) return;
   eliminarRadicado(row.pk, function(res) {
     var el = res.eliminado || {};
-    showAlert('success', 'Radicado #' + el.pk + ' eliminado.');
+    showAlert('success', 'Radicado #' + el.pk + ' descartado.');
     if (typeof onSuccessExtra === 'function') onSuccessExtra();
     loadTable();
   });
@@ -670,7 +670,9 @@ $(function() {
         var pk = row.pk;
         return btnAccionIcon('btn-outline-primary btn-asignar', 'fa-clipboard-check', 'Asignar', 'data-pk="' + pk + '"') +
           btnAccionIcon('btn-outline-secondary btn-soporte', 'fa-file-pdf', 'Ver PDF soporte', 'data-pk="' + pk + '"') +
-          btnAccionIcon('btn-outline-danger btn-eliminar', 'fa-trash-alt', 'Eliminar radicado', 'data-pk="' + pk + '"');
+          '<button type="button" class="btn btn-xs btn-outline-danger btn-eliminar btn-descartar" data-pk="' + pk + '" ' +
+          'title="Descartar: quita el radicado en AndinaSoft (no borra el bill en Alegra)">' +
+          '<i class="fas fa-times mr-1"></i>Descartar</button>';
       }}
     ],
     order: [[0, 'desc']],
