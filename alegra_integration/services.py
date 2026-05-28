@@ -18,6 +18,7 @@ from alegra_integration.builders import (
     ReceiptPaymentBuilder,
 )
 from alegra_integration.bill_mapping import cxp_category_id_from_bill, cxp_category_id_from_contact
+from alegra_integration.client import AlegraMCPClient
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.pago_link import sync_pago_from_alegra_document
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
