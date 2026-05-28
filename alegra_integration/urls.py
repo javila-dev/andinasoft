@@ -31,6 +31,7 @@ urlpatterns = [
     path('preview', views.preview, name='alegra-preview'),
     path('send', views.send, name='alegra-send'),
     path('batches/', views.batch_list, name='alegra-batch-list'),
+    path('batches/delete-previews', views.batch_delete_previews, name='alegra-batch-delete-previews'),
     path('batches/<int:batch_id>', views.batch_detail, name='alegra-batch-detail'),
     path('batches/<int:batch_id>/send', views.batch_send, name='alegra-batch-send'),
     path('batches/<int:batch_id>/send-one', views.batch_send_one, name='alegra-batch-send-one'),

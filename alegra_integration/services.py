@@ -741,6 +741,33 @@ class AlegraIntegrationService:
         batch = AlegraSyncBatch.objects.select_related('created_by').get(pk=batch_id)
         return self._batch_response(batch, [self._document_summary(doc) for doc in batch.documents.order_by('id')])
 
+    def delete_preview_batches(self, *, empresa_id=None):
+        """
+        Elimina lotes en vista previa sin envíos ni errores de construcción/envío.
+        """
+        blocked_doc_statuses = (
+            AlegraDocument.STATUS_SENT,
+            AlegraDocument.STATUS_FAILED,
+            AlegraDocument.STATUS_INVALID,
+        )
+        qs = AlegraSyncBatch.objects.filter(status=AlegraSyncBatch.STATUS_PREVIEW)
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+
+        deleted_ids = []
+        for batch in qs.prefetch_related('documents'):
+            if batch.error_count > 0:
+                continue
+            statuses = {doc.status for doc in batch.documents.all()}
+            if statuses.intersection(blocked_doc_statuses):
+                continue
+            deleted_ids.append(batch.pk)
+
+        if deleted_ids:
+            AlegraSyncBatch.objects.filter(pk__in=deleted_ids).delete()
+
+        return {'deleted': len(deleted_ids), 'ids': deleted_ids}
+
     def bulk_create_missing_contacts(self, *, batch_id):
         """
         For a given batch, find invalid documents failing due to missing contact mappings,

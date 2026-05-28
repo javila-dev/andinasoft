@@ -595,9 +595,14 @@
   <div class="card shadow-sm">
     <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
       <span><i class="fas fa-history mr-2 text-muted"></i>Lotes recientes</span>
-      <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">
-        <i class="fas fa-sync-alt mr-1"></i>Actualizar
-      </button>
+      <div class="d-flex align-items-center" style="gap:6px">
+        <button class="btn btn-sm btn-outline-danger" onclick="deletePreviewBatches()" title="Elimina lotes en vista previa sin envíos ni errores">
+          <i class="fas fa-trash-alt mr-1"></i>Limpiar vistas previa
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">
+          <i class="fas fa-sync-alt mr-1"></i>Actualizar
+        </button>
+      </div>
     </div>
     <div class="table-responsive" style="max-height:360px;overflow-y:auto">
       <table class="table table-sm table-hover mb-0">
@@ -731,6 +736,7 @@ const API = {
   preview:      '/accounting/alegra/preview',
   send:         '/accounting/alegra/send',
   batches:      '/accounting/alegra/batches/',
+  deletePreviewBatches: '/accounting/alegra/batches/delete-previews',
   contactSync:  '/accounting/alegra/contact-sync',
   contactLink:  '/accounting/alegra/contact-link',
   contactLookupLocal: '/accounting/alegra/contact-link/lookup-local',
@@ -1880,6 +1886,39 @@ function loadHistory() {
     $('#historyBody').html(
       '<tr><td colspan="13" class="text-center text-danger py-3"><i class="fas fa-exclamation-circle mr-2"></i>Error cargando historial</td></tr>'
     );
+  });
+}
+
+function deletePreviewBatches() {
+  const empresa = $('#selEmpresa').val();
+  const scope = empresa ? `la empresa seleccionada` : 'todas las empresas';
+  if (!confirm(`¿Eliminar lotes en vista previa (sin envíos ni errores) de ${scope}?`)) {
+    return;
+  }
+  $.ajax({
+    url: API.deletePreviewBatches,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ empresa: empresa || '' }),
+    success: function(data) {
+      const n = parseInt(data.deleted || 0, 10);
+      if (data.ids && currentBatchId && data.ids.indexOf(currentBatchId) >= 0) {
+        currentBatchId = null;
+        currentBatchStatus = null;
+        allDocs = [];
+        renderDocsTable();
+        $('#logBatchBadge').hide();
+      }
+      log(n > 0 ? 'success' : 'info', n > 0
+        ? `Se eliminaron <strong>${n}</strong> lote(s) en vista previa.`
+        : 'No había lotes en vista previa elegibles para eliminar.');
+      loadHistory();
+    },
+    error: function(xhr) {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error';
+      log('error', `No se pudieron eliminar las vistas previa: <strong>${escHtml(msg)}</strong>`);
+    },
   });
 }
 

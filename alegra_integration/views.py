@@ -1124,6 +1124,22 @@ def send(request):
 
 
 @login_required
+@require_http_methods(['POST'])
+def batch_delete_previews(request):
+    try:
+        payload = _payload(request)
+        empresa_id = (payload.get('empresa') or '').strip() or None
+        data = AlegraIntegrationService(user=request.user).delete_preview_batches(
+            empresa_id=empresa_id,
+        )
+        return JsonResponse(data)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
 @require_http_methods(['GET'])
 def batch_detail(request, batch_id):
     try:
