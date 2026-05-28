@@ -431,7 +431,7 @@
               <th style="width:150px">Operación</th>
               <th style="width:90px">ID Alegra</th>
               <th>Error / Info</th>
-              <th style="width:60px" class="text-center">Ver</th>
+              <th style="width:88px" class="text-center">Acciones</th>
             </tr>
           </thead>
           <tbody id="docsBody">
@@ -596,7 +596,7 @@
     <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
       <span><i class="fas fa-history mr-2 text-muted"></i>Lotes recientes</span>
       <div class="d-flex align-items-center" style="gap:6px">
-        <button class="btn btn-sm btn-outline-danger" onclick="deletePreviewBatches()" title="Elimina lotes en vista previa sin envíos ni errores">
+        <button class="btn btn-sm btn-outline-danger" onclick="deletePreviewBatches()" title="Elimina lotes en vista previa o abandonados sin envíos reales a Alegra">
           <i class="fas fa-trash-alt mr-1"></i>Limpiar vistas previa
         </button>
         <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">
@@ -1011,6 +1011,80 @@ function docsGo(delta) {
   renderDocsPage();
 }
 
+function canSendDoc(doc) {
+  if (!currentBatchId || !doc || !doc.id) return false;
+  return doc.status === 'valid' || doc.status === 'failed';
+}
+
+function buildDocActionButtons(doc, globalIdx) {
+  const viewBtn = `<button type="button" class="btn btn-xs btn-outline-secondary" style="padding:1px 8px;font-size:11px"
+    onclick="event.stopPropagation(); showDocDetail(${globalIdx})" title="Ver detalle">
+    <i class="fas fa-search"></i>
+  </button>`;
+  if (!canSendDoc(doc)) {
+    return `<div class="d-flex justify-content-center" style="gap:4px">${viewBtn}</div>`;
+  }
+  return `<div class="d-flex justify-content-center" style="gap:4px">
+    ${viewBtn}
+    <button type="button" class="btn btn-xs btn-outline-success doc-send-btn" style="padding:1px 8px;font-size:11px"
+      onclick="event.stopPropagation(); sendSingleDoc(${doc.id}, ${globalIdx})" title="Enviar solo este documento a Alegra">
+      <i class="fas fa-paper-plane"></i>
+    </button>
+  </div>`;
+}
+
+function onSingleDocSendSuccess(data) {
+  const batch = data.batch || {};
+  currentBatchId = batch.id || currentBatchId;
+  currentBatchStatus = batch.status || currentBatchStatus;
+  if (data.documents && data.documents.length) {
+    allDocs = data.documents;
+  } else if (data.document) {
+    mergeDocUpdate(data.document);
+  }
+  if (data.document) {
+    patchDocRow(data.document);
+    const st = data.document.status || '';
+    const lvl = st === 'sent' ? 'success' : (st === 'failed' ? 'error' : 'info');
+    log(lvl, `Documento individual: <strong>${escHtml(data.document.local_key)}</strong> → ${escHtml(st)}`);
+  }
+  updateLiveMetricsDuringSend();
+  $('#metricTotal').text(batch.total_documents != null ? batch.total_documents : allDocs.length);
+  $('#logBatchBadge').html(statusBadge(currentBatchStatus)).show();
+  if (data.complete) {
+    log('info', 'Lote finalizado (todos los documentos enviables procesados).');
+  }
+  loadHistory();
+}
+
+function sendSingleDoc(docId, globalIdx) {
+  if (!currentBatchId) {
+    warn('Genera o abre un lote (vista previa) antes de enviar.');
+    return;
+  }
+  const doc = allDocs[globalIdx];
+  if (!doc || !canSendDoc(doc)) return;
+  if (!confirm(`¿Enviar este documento a Alegra?\n\n${doc.local_key}`)) return;
+
+  setDocRowSending(doc, true);
+  $.ajax({
+    url: `${API.batches}${currentBatchId}/send-one`,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ document_id: docId, retry_failed: true }),
+    success: function(data) {
+      onSingleDocSendSuccess(data);
+    },
+    error: function(xhr) {
+      setDocRowSending(doc, false);
+      patchDocRow(allDocs[globalIdx] || doc);
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      log('error', `Error al enviar documento: <strong>${escHtml(msg)}</strong>`);
+    },
+  });
+}
+
 function buildDocRows(docs) {
   const tbody = $('#docsBody').empty();
   if (!docs.length) {
@@ -1041,12 +1115,7 @@ function buildDocRows(docs) {
         <td>${opLabel(doc.alegra_operation)}</td>
         <td>${alegraId}</td>
         <td>${errorCell}</td>
-        <td class="text-center">
-          <button class="btn btn-xs btn-outline-secondary" style="padding:1px 8px;font-size:11px"
-            onclick="showDocDetail(${globalIdx})" title="Ver detalle">
-            <i class="fas fa-search"></i>
-          </button>
-        </td>
+        <td class="text-center">${buildDocActionButtons(doc, globalIdx)}</td>
       </tr>`);
   });
 
@@ -1323,6 +1392,14 @@ function patchDocRow(doc) {
   $row.find('td').eq(0).html(statusBadge(doc.status));
   $row.find('td').eq(4).html(alegraId);
   $row.find('td').eq(5).html(errorCell);
+  const idx = allDocs.findIndex(d =>
+    (doc.id && d.id === doc.id) || d.local_key === doc.local_key
+  );
+  if (idx >= 0) {
+    $row.attr('data-idx', idx);
+    if (doc.id) $row.attr('data-doc-id', doc.id);
+    $row.find('td').eq(6).html(buildDocActionButtons(doc, idx));
+  }
 
   const wrap = document.getElementById('docsTableWrap');
   if (wrap && $row.length) {
@@ -1469,7 +1546,7 @@ function doSend() {
     sendOne(batchId);
   }
 
-  const useBatchSend = (currentBatchId != null && String(currentBatchStatus || '') === 'preview');
+  const useBatchSend = currentBatchId != null && ['preview', 'processing'].includes(String(currentBatchStatus || ''));
   if (useBatchSend) {
     if (!planned) {
       setBusy('send', false);
@@ -1889,10 +1966,40 @@ function loadHistory() {
   });
 }
 
+function canDeleteBatch(batch) {
+  if (!batch) return false;
+  return batch.status === 'preview' || batch.status === 'processing';
+}
+
+function clearLoadedBatchIfDeleted(deletedIds) {
+  if (!deletedIds || !currentBatchId || deletedIds.indexOf(currentBatchId) < 0) return;
+  currentBatchId = null;
+  currentBatchStatus = null;
+  allDocs = [];
+  renderDocuments([]);
+  $('#resultsZone').hide();
+  $('#logBatchBadge').hide();
+}
+
+function reportBatchDeleteResult(data, singleLabel) {
+  const n = parseInt(data.deleted || 0, 10);
+  const skipped = parseInt(data.skipped || 0, 10);
+  clearLoadedBatchIfDeleted(data.ids || []);
+  if (n > 0) {
+    log('success', singleLabel || `Se eliminaron <strong>${n}</strong> lote(s) en vista previa.`);
+  } else {
+    log('info', 'No había lotes elegibles para eliminar (se conservan los que ya tienen envíos o fallos en Alegra).');
+  }
+  if (skipped > 0) {
+    log('dim', `Se omitieron <strong>${skipped}</strong> lote(s) con documentos ya enviados o fallidos.`);
+  }
+  loadHistory();
+}
+
 function deletePreviewBatches() {
   const empresa = $('#selEmpresa').val();
   const scope = empresa ? `la empresa seleccionada` : 'todas las empresas';
-  if (!confirm(`¿Eliminar lotes en vista previa (sin envíos ni errores) de ${scope}?`)) {
+  if (!confirm(`¿Eliminar lotes en vista previa de ${scope}?\n\nSe borran solo los que no tienen envíos ni fallos reales en Alegra.`)) {
     return;
   }
   $.ajax({
@@ -1902,22 +2009,37 @@ function deletePreviewBatches() {
     headers: { 'X-CSRFToken': CSRF },
     data: JSON.stringify({ empresa: empresa || '' }),
     success: function(data) {
-      const n = parseInt(data.deleted || 0, 10);
-      if (data.ids && currentBatchId && data.ids.indexOf(currentBatchId) >= 0) {
-        currentBatchId = null;
-        currentBatchStatus = null;
-        allDocs = [];
-        renderDocsTable();
-        $('#logBatchBadge').hide();
-      }
-      log(n > 0 ? 'success' : 'info', n > 0
-        ? `Se eliminaron <strong>${n}</strong> lote(s) en vista previa.`
-        : 'No había lotes en vista previa elegibles para eliminar.');
-      loadHistory();
+      reportBatchDeleteResult(data);
     },
     error: function(xhr) {
       const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error';
       log('error', `No se pudieron eliminar las vistas previa: <strong>${escHtml(msg)}</strong>`);
+    },
+  });
+}
+
+function deleteOneBatch(batchId) {
+  if (!confirm(`¿Eliminar el lote #${batchId}?\n\nSolo se permite si no tiene documentos enviados o fallidos en Alegra.`)) {
+    return;
+  }
+  $.ajax({
+    url: API.deletePreviewBatches,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ batch_id: batchId }),
+    success: function(data) {
+      const n = parseInt(data.deleted || 0, 10);
+      if (n > 0) {
+        reportBatchDeleteResult(data, `Lote <strong>#${batchId}</strong> eliminado.`);
+      } else {
+        log('info', `No se pudo eliminar el lote #${batchId} (tiene envíos o fallos en Alegra).`);
+        loadHistory();
+      }
+    },
+    error: function(xhr) {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error';
+      log('error', `Error al eliminar lote #${batchId}: <strong>${escHtml(msg)}</strong>`);
     },
   });
 }
@@ -1978,10 +2100,17 @@ function renderHistory() {
         <td><small class="text-muted">${escHtml(createdBy)}</small></td>
         <td><small class="text-muted">${escHtml(b.created_at)}</small></td>
         <td class="text-center">
-          <button class="btn btn-xs btn-outline-secondary" style="padding:1px 8px;font-size:11px"
-            onclick="event.stopPropagation();loadBatchDetail(${b.id})">
-            <i class="fas fa-search"></i>
-          </button>
+          <div class="d-flex justify-content-center" style="gap:4px">
+            <button type="button" class="btn btn-xs btn-outline-secondary" style="padding:1px 8px;font-size:11px"
+              onclick="event.stopPropagation(); loadBatchDetail(${b.id})" title="Ver lote">
+              <i class="fas fa-search"></i>
+            </button>
+            ${canDeleteBatch(b) ? `
+            <button type="button" class="btn btn-xs btn-outline-danger" style="padding:1px 8px;font-size:11px"
+              onclick="event.stopPropagation(); deleteOneBatch(${b.id})" title="Eliminar lote">
+              <i class="fas fa-trash-alt"></i>
+            </button>` : ''}
+          </div>
         </td>
       </tr>`);
   });

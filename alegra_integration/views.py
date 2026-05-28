@@ -1129,8 +1129,14 @@ def batch_delete_previews(request):
     try:
         payload = _payload(request)
         empresa_id = (payload.get('empresa') or '').strip() or None
+        batch_id = payload.get('batch_id')
+        if batch_id not in (None, ''):
+            batch_id = int(batch_id)
+        else:
+            batch_id = None
         data = AlegraIntegrationService(user=request.user).delete_preview_batches(
             empresa_id=empresa_id,
+            batch_id=batch_id,
         )
         return JsonResponse(data)
     except json.JSONDecodeError:
