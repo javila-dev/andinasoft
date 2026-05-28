@@ -1038,9 +1038,12 @@ def debug_mapping_check(request):
 @require_http_methods(['GET'])
 def batch_list(request):
     empresa_id = request.GET.get('empresa')
+    document_type = (request.GET.get('document_type') or '').strip()
     qs = AlegraSyncBatch.objects.select_related('empresa', 'proyecto', 'created_by').order_by('-created_at')
     if empresa_id:
         qs = qs.filter(empresa_id=empresa_id)
+    if document_type:
+        qs = qs.filter(document_type=document_type)
     batches = list(qs[:30])
     return JsonResponse({
         'batches': [

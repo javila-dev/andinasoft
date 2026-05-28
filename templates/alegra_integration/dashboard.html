@@ -850,6 +850,7 @@ function selectDocType(btn) {
   $(btn).addClass('active');
   currentDocType = $(btn).data('type');
   updateDocTypeFields();
+  loadHistory();
 }
 
 function loadCajasForEmpresa() {
@@ -1953,7 +1954,11 @@ function doReferenceSync() {
 // ── Batch history ──────────────────────────────
 function loadHistory() {
   const empresa = $('#selEmpresa').val();
-  const url = API.batches + (empresa ? `?empresa=${encodeURIComponent(empresa)}` : '');
+  const params = new URLSearchParams();
+  if (empresa) params.set('empresa', empresa);
+  if (currentDocType) params.set('document_type', currentDocType);
+  const qs = params.toString();
+  const url = API.batches + (qs ? `?${qs}` : '');
 
   $.get(url, function(data) {
     historyBatches = data.batches || [];
