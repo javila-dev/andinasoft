@@ -517,17 +517,37 @@
           <small class="text-muted d-block" id="curCajaCxp">Actual: — (opcional; respaldo si el bill no trae CxP)</small>
         </div>
       </div>
-      <h6 class="font-weight-bold text-muted mb-2" style="font-size:.85rem">Impuestos legalizacion → Alegra</h6>
+      <h6 class="font-weight-bold text-muted mb-2" style="font-size:.85rem">Conceptos de gasto → Alegra</h6>
       <p class="text-muted small mb-2">
-        IVA: impuesto en la linea base (<code>tax[]</code>, <a href="https://developer.alegra.com/reference/get_taxes" target="_blank" rel="noopener">GET /taxes</a>).
-        Retefuente: por concepto local (<code>retentions[]</code>, <a href="https://developer.alegra.com/reference/get_retentions" target="_blank" rel="noopener">GET /retentions</a>).
-        El total del bill debe cuadrar con el valor pagado en caja.
+        Cuenta de gasto en el bill (<code>purchases.categories[]</code>): cada concepto de legalizacion
+        se mapea a una categoria Alegra. Si falta, se intenta por codigo PUC local
+        (<span id="cajaConceptPucHint">—</span>).
       </p>
       <div class="table-responsive mb-3">
         <table class="table table-sm table-bordered mb-0">
           <thead class="thead-light">
             <tr>
               <th>Concepto local</th>
+              <th style="width:120px">PUC local</th>
+              <th>Categoria Alegra (gasto)</th>
+            </tr>
+          </thead>
+          <tbody id="cajaConceptosBody">
+            <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h6 class="font-weight-bold text-muted mb-2" style="font-size:.85rem">Impuestos legalizacion → Alegra</h6>
+      <p class="text-muted small mb-2">
+        IVA: impuesto en la linea base (<code>tax[]</code>, <a href="https://developer.alegra.com/reference/get_taxes" target="_blank" rel="noopener">GET /taxes</a>).
+        Retefuente: por impuesto local (<code>retentions[]</code>, <a href="https://developer.alegra.com/reference/get_retentions" target="_blank" rel="noopener">GET /retentions</a>).
+        El total del bill debe cuadrar con el valor pagado en caja.
+      </p>
+      <div class="table-responsive mb-3">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="thead-light">
+            <tr>
+              <th>Impuesto local</th>
               <th>Impuesto Alegra (IVA)</th>
               <th>Retencion Alegra (retefuente)</th>
             </tr>
@@ -829,6 +849,7 @@ const API = {
   saveRetention: '/accounting/alegra/references/save-retention-mapping',
   saveCostCenter: '/accounting/alegra/references/save-cost-center-mapping',
   cajaImpuestos: '/accounting/alegra/references/caja-impuestos',
+  cajaConceptos: '/accounting/alegra/references/caja-conceptos',
   saveImpuestoMapping: '/accounting/alegra/references/save-impuesto-mapping',
   catSearch: '/accounting/alegra/references/categories/search',
   receiptFormas: '/accounting/alegra/references/receipt-formas-pago',
@@ -1641,6 +1662,48 @@ function renderCajaImpuestosTable(impuestos) {
   });
 }
 
+function renderCajaConceptosTable(rows, meta) {
+  const pucLabel = (meta && meta.puc_field_label) ? meta.puc_field_label : '—';
+  $('#cajaConceptPucHint').text(`campo ${pucLabel}`);
+  if (!rows.length) {
+    $('#cajaConceptosBody').html('<tr><td colspan="3" class="text-center text-muted py-3">No hay conceptos de legalizacion activos</td></tr>');
+    return;
+  }
+  const html = rows.map(row => {
+    const cid = row.id;
+    const label = (row.category_description || '').trim() || (row.category_alegra_id ? `ID ${row.category_alegra_id}` : '');
+    const pucCell = row.puc
+      ? `<code>${escHtml(row.puc)}</code>`
+      : '<span class="text-warning">Sin PUC</span>';
+    return `<tr data-concepto-id="${escHtml(String(cid))}">
+      <td>${escHtml(row.descripcion || '')}</td>
+      <td>${pucCell}</td>
+      <td style="position:relative">
+        <input type="hidden" class="caja-concept-cat-id" value="${escHtml(String(row.category_alegra_id || ''))}" />
+        <input class="form-control form-control-sm caja-concept-cat-pick" data-concepto-id="${escHtml(String(cid))}"
+               placeholder="Buscar categoria gasto…" value="${escHtml(label)}" autocomplete="off" />
+        <div class="list-group shadow-sm caja-concept-cat-menu" data-concepto-id="${escHtml(String(cid))}"
+             style="display:none;position:absolute;z-index:25;width:100%;max-height:220px;overflow:auto;margin-top:4px"></div>
+      </td>
+    </tr>`;
+  }).join('');
+  $('#cajaConceptosBody').html(html);
+}
+
+function loadCajaConceptosTable() {
+  const empresa = $('#selEmpresa').val();
+  if (!empresa) return $.Deferred().resolve().promise();
+  $('#cajaConceptosBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando conceptos…</td></tr>');
+  return $.get(`${API.cajaConceptos}?empresa=${encodeURIComponent(empresa)}`)
+    .done(data => {
+      renderCajaConceptosTable(data.conceptos || [], data);
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error al cargar';
+      $('#cajaConceptosBody').html(`<tr><td colspan="3" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`);
+    });
+}
+
 function loadCajaImpuestosTable() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) return $.Deferred().resolve().promise();
@@ -1732,6 +1795,7 @@ function loadCajaMappingsCurrent() {
   loadCajaNumerationCurrent('caja_cuenta_cobro', '#selCajaCcNumeration', '#txtCajaCcNumerationManual', '#curCajaCcNumeration');
   loadCajaNumerationCurrent('caja_legalization_journal', '#selCajaJournalNumeration', '#txtCajaJournalNumerationManual', '#curCajaJournalNumeration');
   loadCajaCxpCurrent();
+  loadCajaConceptosTable();
   loadCajaImpuestosTable();
   loadCajaAccountsTable();
 }
@@ -1856,6 +1920,22 @@ function saveCajaConfig(ev) {
           local_code: 'caja_credit',
           alegra_id: String(catId),
           description: label || `Caja ${pk}`,
+        }) }));
+    }
+  });
+  $('#cajaConceptosBody tr[data-concepto-id]').each(function() {
+    const conceptoId = $(this).data('concepto-id');
+    const catId = ($(this).find('.caja-concept-cat-id').val() || '').trim();
+    const label = ($(this).find('.caja-concept-cat-pick').val() || '').trim();
+    if (conceptoId && catId) {
+      saves.push($.ajax({ url: API.saveCategory, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+        data: JSON.stringify({
+          empresa,
+          local_model: 'accounting.conceptos_legalizacion',
+          local_pk: String(conceptoId),
+          local_code: 'caja_expense',
+          alegra_id: String(catId),
+          description: label || `Concepto ${conceptoId}`,
         }) }));
     }
   });
@@ -3399,6 +3479,37 @@ $('#cajaCxpMenu').on('click', 'button[data-id]', function() {
   $('#selCajaCxpId').val(String($(this).data('id') || ''));
   $('#txtCajaCxpPick').val(String($(this).data('label') || ''));
   $('#cajaCxpMenu').hide().empty();
+});
+
+let cajaConceptCatSearchTimer = null;
+$(document).on('input', '.caja-concept-cat-pick', function() {
+  const empresa = $('#selEmpresa').val();
+  const conceptoId = $(this).data('concepto-id');
+  const q = ($(this).val() || '').trim();
+  const $row = $(`#cajaConceptosBody tr[data-concepto-id="${conceptoId}"]`);
+  const $menu = $row.find('.caja-concept-cat-menu');
+  $row.find('.caja-concept-cat-id').val('');
+  if (!empresa || q.length < 2) { $menu.hide().empty(); return; }
+  if (cajaConceptCatSearchTimer) clearTimeout(cajaConceptCatSearchTimer);
+  cajaConceptCatSearchTimer = setTimeout(() => {
+    $.get(`${API.catSearch}?empresa=${encodeURIComponent(empresa)}&q=${encodeURIComponent(q)}&limit=80`)
+      .done(data => {
+        const items = (data.categories || []).map(c => {
+          const id = c.id != null ? String(c.id) : '';
+          const label = `${c.code || ''} · ${c.name || ''}`.trim();
+          return `<button type="button" class="list-group-item list-group-item-action py-1" style="font-size:12px"
+            data-id="${escHtml(id)}" data-label="${escHtml(label)}">${escHtml(label)} (id ${escHtml(id)})</button>`;
+        }).join('');
+        $menu.html(items || '<div class="list-group-item text-muted">Sin resultados</div>').show();
+      });
+  }, 280);
+});
+$(document).on('click', '.caja-concept-cat-menu button[data-id]', function() {
+  const conceptoId = $(this).closest('.caja-concept-cat-menu').data('concepto-id');
+  const $row = $(`#cajaConceptosBody tr[data-concepto-id="${conceptoId}"]`);
+  $row.find('.caja-concept-cat-id').val(String($(this).data('id') || ''));
+  $row.find('.caja-concept-cat-pick').val(String($(this).data('label') || ''));
+  $(this).closest('.caja-concept-cat-menu').hide().empty();
 });
 
 let cajaCreditSearchTimer = null;

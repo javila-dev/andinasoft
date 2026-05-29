@@ -24,6 +24,7 @@ urlpatterns = [
     path('references/save-retention-mapping', views.references_save_retention_mapping, name='alegra-references-save-retention-mapping'),
     path('references/save-cost-center-mapping', views.references_save_cost_center_mapping, name='alegra-references-save-cost-center-mapping'),
     path('references/caja-impuestos', views.references_caja_impuestos, name='alegra-references-caja-impuestos'),
+    path('references/caja-conceptos', views.references_caja_conceptos, name='alegra-references-caja-conceptos'),
     path('references/save-impuesto-mapping', views.references_save_impuesto_mapping, name='alegra-references-save-impuesto-mapping'),
     path('references/categories/search', views.references_categories_search, name='alegra-references-categories-search'),
     path('references/receipt-formas-pago', views.references_receipt_formas_pago, name='alegra-references-receipt-formas-pago'),

@@ -851,6 +851,84 @@ def references_caja_impuestos(request):
 
 
 @login_required
+@require_http_methods(['GET'])
+def references_caja_conceptos(request):
+    """Conceptos de legalizacion con PUC local y mapeo Alegra para gastos de caja."""
+    try:
+        from accounting.models import conceptos_legalizacion
+        from alegra_integration.caja_mapping import (
+            CAJA_EXPENSE_LOCAL_CODE,
+            caja_puc_attr_for_empresa,
+            caja_puc_code,
+            caja_puc_field_label,
+        )
+
+        empresa_id = (request.GET.get('empresa') or '').strip()
+        if not empresa_id:
+            return JsonResponse({'detail': 'Empresa requerida'}, status=400)
+
+        empresa = empresas.objects.get(pk=empresa_id)
+        puc_attr = caja_puc_attr_for_empresa(empresa)
+        category_maps = {
+            m.local_pk: m
+            for m in AlegraMapping.objects.filter(
+                empresa_id=empresa_id,
+                mapping_type=AlegraMapping.CATEGORY,
+                local_model='accounting.conceptos_legalizacion',
+                local_code=CAJA_EXPENSE_LOCAL_CODE,
+                active=True,
+            )
+        }
+        puc_maps = {
+            m.local_code: m
+            for m in AlegraMapping.objects.filter(
+                empresa_id=empresa_id,
+                proyecto__isnull=True,
+                mapping_type=AlegraMapping.CATEGORY,
+                local_model='',
+                local_pk='',
+                active=True,
+            )
+            if m.local_code and m.local_code not in (
+                'caja_cxp', 'caja_credit', 'caja_ajuste_aproximacion',
+                'default_cxp', 'commission_expense', 'commission_debit', 'commission_credit',
+            )
+        }
+
+        rows = []
+        for concept in conceptos_legalizacion.objects.filter(activo=True).order_by('descripcion'):
+            pk = str(concept.pk)
+            puc = caja_puc_code(concept, puc_attr)
+            cm = category_maps.get(pk)
+            pm = puc_maps.get(puc) if puc else None
+            alegra_id = ''
+            alegra_desc = ''
+            if cm:
+                alegra_id = cm.alegra_id
+                alegra_desc = cm.description or ''
+            elif pm:
+                alegra_id = pm.alegra_id
+                alegra_desc = pm.description or ''
+            rows.append({
+                'id': concept.pk,
+                'descripcion': concept.descripcion,
+                'puc': puc,
+                'category_alegra_id': alegra_id,
+                'category_description': alegra_desc,
+            })
+
+        return JsonResponse({
+            'puc_field': puc_attr,
+            'puc_field_label': caja_puc_field_label(puc_attr),
+            'conceptos': rows,
+        })
+    except empresas.DoesNotExist:
+        return JsonResponse({'detail': 'Empresa no encontrada'}, status=404)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
 @require_http_methods(['POST'])
 def references_save_impuesto_mapping(request):
     """

@@ -86,6 +86,8 @@ class ResolverStub:
             return 'cat-cxp'
         if code == 'caja_credit':
             return 'cat-caja-credit'
+        if code == 'caja_expense' and kwargs.get('local_model') == 'accounting.conceptos_legalizacion':
+            return 'cat-caja-expense-mapped'
         if code == 'default_cxp':
             return 'cat-default-cxp'
         return 'mapped-id'
@@ -1156,6 +1158,7 @@ class CajaBuilderTests(SimpleTestCase):
 
     def _gasto(self, *, tipo='fe', valor=119000, subtotal_val=100000, valor_iva=None, valor_rte=None):
         concepto = SimpleNamespace(
+            pk=12,
             cuenta_andina='5195950100',
             cuenta_status='',
             cuenta_quadrata='',
@@ -1192,6 +1195,20 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(built.operation, 'POST /bills')
         self.assertNotIn('numberTemplate', built.payload)
         self.assertEqual(built.local_key, 'caja:bill:99:501')
+        self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-caja-expense-mapped')
+
+    def test_caja_bill_falls_back_to_puc_when_no_concept_mapping(self):
+        resolver = ResolverStub()
+
+        def get_no_concept(*args, **kwargs):
+            if kwargs.get('local_code') == 'caja_expense':
+                return None
+            return ResolverStub.get(resolver, *args, **kwargs)
+
+        resolver.get = get_no_concept
+        gasto, _ = self._gasto(tipo='fe')
+        built = CajaGastoBillBuilder(self.empresa, resolver).build(gasto)
+        self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-puc-5195950100')
 
     def test_caja_bill_revisado_sin_reembolso(self):
         gasto, _ = self._gasto(tipo='fe')

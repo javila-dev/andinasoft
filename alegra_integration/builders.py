@@ -1390,20 +1390,11 @@ class ExpensePaymentBuilder:
         return {'tipo': 'egreso', 'note': 'no local payload'}
 
 
-# ── Caja efectivo (legalizacion Alegra) ───────────────────────────────────────
-
-_CAJA_EMPRESA_PUC_ATTR = {
-    'Promotora Sandville': 'cuenta_andina',
-    'Status Comercializadora': 'cuenta_status',
-    'Quadrata Constructores': 'cuenta_quadrata',
-}
-
-
-def _puc_for_caja_empresa(obj, empresa_name):
-    field = _CAJA_EMPRESA_PUC_ATTR.get((empresa_name or '').strip())
-    if not field:
-        return ''
-    return (getattr(obj, field, None) or '').strip()
+from alegra_integration.caja_mapping import (
+    CAJA_EXPENSE_LOCAL_CODE,
+    caja_puc_attr_for_forma_pago,
+    caja_puc_code,
+)
 
 
 def _contact_for_partner(resolver, partner):
@@ -1425,8 +1416,20 @@ class CajaGastoBillBuilder:
         self.resolver = resolver or MappingResolver(empresa)
 
     def _expense_category_id(self, gasto):
+        concepto = gasto.concepto
+        concept_cat = self.resolver.get(
+            AlegraMapping.CATEGORY,
+            local_model='accounting.conceptos_legalizacion',
+            local_pk=str(getattr(concepto, 'pk', '') or ''),
+            local_code=CAJA_EXPENSE_LOCAL_CODE,
+            required=False,
+        )
+        if concept_cat:
+            return concept_cat
+
         empresa_name = (getattr(gasto.forma_pago, 'empresa', None) or '').strip()
-        puc = _puc_for_caja_empresa(gasto.concepto, empresa_name)
+        puc_attr = caja_puc_attr_for_forma_pago(empresa_name)
+        puc = caja_puc_code(concepto, puc_attr)
         if not puc:
             raise AlegraBuildError(
                 f'El concepto del gasto {gasto.pk} no tiene cuenta PUC para la empresa {empresa_name or "?"}'
