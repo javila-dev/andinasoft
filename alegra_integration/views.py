@@ -765,20 +765,32 @@ def references_save_cost_center_mapping(request):
         payload = _payload(request)
         empresa_id = (payload.get('empresa') or '').strip()
         proyecto_id = (payload.get('proyecto') or '').strip()
+        local_model = (payload.get('local_model') or 'andinasoft.proyectos').strip()
+        local_pk = (payload.get('local_pk') or proyecto_id or '').strip()
         local_code = (payload.get('local_code') or 'commission').strip()
         alegra_id = (payload.get('alegra_id') or '').strip()
         description = (payload.get('description') or '').strip()
 
-        if not empresa_id or not proyecto_id or not alegra_id:
-            return JsonResponse({'detail': 'empresa, proyecto y alegra_id son requeridos'}, status=400)
+        if not empresa_id or not alegra_id:
+            return JsonResponse({'detail': 'empresa y alegra_id son requeridos'}, status=400)
 
-        proyecto = proyectos.objects.get(pk=proyecto_id)
+        if local_model == 'andinasoft.cuentas_pagos':
+            if not local_pk:
+                return JsonResponse({'detail': 'local_pk (caja) es requerido'}, status=400)
+            proyecto = None
+            local_code = 'caja_cost_center'
+        else:
+            if not proyecto_id:
+                return JsonResponse({'detail': 'empresa, proyecto y alegra_id son requeridos'}, status=400)
+            proyecto = proyectos.objects.get(pk=proyecto_id)
+            local_pk = proyecto_id
+
         m, created = AlegraMapping.objects.update_or_create(
             empresa_id=empresa_id,
             proyecto=proyecto,
             mapping_type=AlegraMapping.COST_CENTER,
-            local_model='andinasoft.proyectos',
-            local_pk=proyecto_id,
+            local_model=local_model,
+            local_pk=local_pk,
             local_code=local_code,
             defaults={
                 'alegra_id': alegra_id,

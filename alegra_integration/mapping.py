@@ -266,6 +266,23 @@ class MappingResolver:
             required=required,
         )
 
+    def cost_center_for_caja(self, caja_id, *, required=False):
+        """Centro de costo por caja (Referencias → Caja efectivo)."""
+        pk = str(caja_id or '').strip()
+        if not pk:
+            if required:
+                raise AlegraConfigurationError(
+                    f'Falta caja para centro de costo en empresa {self.empresa.pk}.'
+                )
+            return None
+        return self.get(
+            AlegraMapping.COST_CENTER,
+            local_model='andinasoft.cuentas_pagos',
+            local_pk=pk,
+            local_code='caja_cost_center',
+            required=required,
+        )
+
     def receipt_forma_pago_config(self, forma_pago_descripcion, *, required=True):
         """
         Configuración de débito por forma de pago (categoría + intercompany opcional).

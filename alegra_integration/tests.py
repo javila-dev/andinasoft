@@ -41,6 +41,9 @@ class ResolverStub:
     def cost_center_for_commission(self, required=False):
         return 'cc-commission-1'
 
+    def cost_center_for_caja(self, caja_id, *, required=False):
+        return 'cc-caja-7'
+
     def numeration(self, document_code):
         return f'num-{document_code}'
 
@@ -1243,7 +1246,13 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['retentions'], [{'id': 'ret-imp-5', 'amount': 3000.0}])
         self.assertNotIn('tax', built.payload['purchases']['categories'][0])
 
-    def test_caja_journal_includes_associated_document_placeholder(self):
+    def test_caja_bill_with_cost_center(self):
+        gasto, _ = self._gasto(tipo='fe')
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertEqual(built.payload['costCenter'], {'id': 'cc-caja-7'})
+        self.assertEqual(built.payload['__local']['cost_center_id'], 'cc-caja-7')
+
+    def test_caja_journal_applies_cost_center_to_all_entries(self):
         gasto, reembolso = self._gasto(valor=120000, subtotal_val=100000, valor_iva=19000.0)
         gasto.cuenta_iva_id = 12
         with patch('alegra_integration.builders.Profiles') as profiles_model:
@@ -1259,6 +1268,9 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(assoc['idResource'], 0)
         self.assertIn('pending_bills', built.payload['__local'])
         self.assertEqual(built.payload['entries'][-1]['credit'], 120000.0)
+        for entry in built.payload['entries']:
+            self.assertEqual(entry['costCenter'], {'id': 'cc-caja-7'})
+        self.assertEqual(built.payload['__local']['cost_center_id'], 'cc-caja-7')
 
 
 class CajaBatchFilterTests(SimpleTestCase):

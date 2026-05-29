@@ -564,10 +564,11 @@
               <th>Caja (cuentas_pagos)</th>
               <th>PUC local</th>
               <th>Categoria Alegra (credito journal)</th>
+              <th>Centro de costo</th>
             </tr>
           </thead>
           <tbody id="cajaAccountsBody">
-            <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa</td></tr>
+            <tr><td colspan="4" class="text-center text-muted py-3">Selecciona una empresa</td></tr>
           </tbody>
         </table>
       </div>
@@ -1548,6 +1549,7 @@ let cajaCxpSearchTimer = null;
 let cajaCreditMenus = {};
 let cajaAlegraTaxes = [];
 let cajaAlegraRetentions = [];
+let cajaAlegraCostCenters = [];
 
 function alegraResourceId(item) {
   if (!item || typeof item !== 'object') return '';
@@ -1744,23 +1746,32 @@ function loadCajaCxpCurrent() {
     });
 }
 
-function renderCajaAccountsTable(localAccounts, mappings) {
+function renderCajaAccountsTable(localAccounts, creditMappings, costCenterMappings) {
   const cajas = (localAccounts || []).filter(a => a.es_caja);
-  const mapByPk = {};
-  (mappings || []).forEach(m => {
+  const creditByPk = {};
+  (creditMappings || []).forEach(m => {
     if (m.local_model === 'andinasoft.cuentas_pagos' && m.local_code === 'caja_credit') {
-      mapByPk[m.local_pk] = m;
+      creditByPk[m.local_pk] = m;
     }
   });
+  const ccByPk = {};
+  (costCenterMappings || []).forEach(m => {
+    if (m.local_model === 'andinasoft.cuentas_pagos' && m.local_code === 'caja_cost_center') {
+      ccByPk[m.local_pk] = m;
+    }
+  });
+  const ccOptions = buildCostCenterOptions(cajaAlegraCostCenters);
   if (!cajas.length) {
-    $('#cajaAccountsBody').html('<tr><td colspan="3" class="text-center text-muted py-3">No hay cajas activas para esta empresa</td></tr>');
+    $('#cajaAccountsBody').html('<tr><td colspan="4" class="text-center text-muted py-3">No hay cajas activas para esta empresa</td></tr>');
     return;
   }
   const rows = cajas.map(acc => {
     const pk = String(acc.idcuenta);
-    const m = mapByPk[pk];
+    const m = creditByPk[pk];
     const label = m ? (m.description || `ID ${m.alegra_id}`) : '';
     const catId = m ? String(m.alegra_id) : '';
+    const ccMap = ccByPk[pk];
+    const ccId = ccMap ? String(ccMap.alegra_id) : '';
     return `<tr data-caja-pk="${escHtml(pk)}">
       <td>${escHtml(acc.cuentabanco || pk)}</td>
       <td><small class="text-muted">${escHtml(String(acc.nro_cuentacontable || ''))}</small></td>
@@ -1771,9 +1782,23 @@ function renderCajaAccountsTable(localAccounts, mappings) {
         <div class="list-group shadow-sm caja-credit-menu" data-pk="${escHtml(pk)}"
              style="display:none;position:absolute;z-index:25;max-height:200px;overflow:auto;min-width:280px"></div>
       </td>
+      <td>
+        <select class="form-control form-control-sm caja-cost-center" data-pk="${escHtml(pk)}">${ccOptions}</select>
+      </td>
     </tr>`;
   }).join('');
   $('#cajaAccountsBody').html(rows);
+  cajas.forEach(acc => {
+    const pk = String(acc.idcuenta);
+    const ccMap = ccByPk[pk];
+    if (ccMap) {
+      const val = String(ccMap.alegra_id);
+      const $sel = $(`#cajaAccountsBody tr[data-caja-pk="${pk}"] .caja-cost-center`);
+      if ($sel.find(`option[value="${val.replace(/"/g, '&quot;')}"]`).length) {
+        $sel.val(val);
+      }
+    }
+  });
 }
 
 function loadCajaAccountsTable() {
@@ -1781,11 +1806,17 @@ function loadCajaAccountsTable() {
   if (!empresa) return $.Deferred().resolve().promise();
   return $.when(
     $.get(`${API.local}?empresa=${encodeURIComponent(empresa)}`),
-    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_model=andinasoft.cuentas_pagos&local_code=caja_credit`)
-  ).done((accResp, mapResp) => {
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_model=andinasoft.cuentas_pagos&local_code=caja_credit`),
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=cost_center&local_model=andinasoft.cuentas_pagos&local_code=caja_cost_center`)
+  ).done((accResp, creditMapResp, ccMapResp) => {
     const accData = accResp[0] || accResp;
-    const mapData = mapResp[0] || mapResp;
-    renderCajaAccountsTable(accData.local_accounts || [], mapData.mappings || []);
+    const creditMapData = creditMapResp[0] || creditMapResp;
+    const ccMapData = ccMapResp[0] || ccMapResp;
+    renderCajaAccountsTable(
+      accData.local_accounts || [],
+      creditMapData.mappings || [],
+      ccMapData.mappings || []
+    );
   });
 }
 
@@ -1831,6 +1862,10 @@ function ensureCajaConfigLoaded() {
     })
     .done(taxData => {
       cajaAlegraTaxes = catalogFromRefResponse(taxData, 'taxes');
+      return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=cost_centers`);
+    })
+    .done(ccData => {
+      cajaAlegraCostCenters = ccData.cost_centers || [];
       loadCajaMappingsCurrent();
     })
     .fail(xhr => {
@@ -1920,6 +1955,19 @@ function saveCajaConfig(ev) {
           local_code: 'caja_credit',
           alegra_id: String(catId),
           description: label || `Caja ${pk}`,
+        }) }));
+    }
+    const ccId = ($(this).find('.caja-cost-center').val() || '').trim();
+    if (pk && ccId) {
+      const ccLabel = $(this).find('.caja-cost-center option:selected').text() || ccId;
+      saves.push($.ajax({ url: API.saveCostCenter, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+        data: JSON.stringify({
+          empresa,
+          local_model: 'andinasoft.cuentas_pagos',
+          local_pk: String(pk),
+          local_code: 'caja_cost_center',
+          alegra_id: String(ccId),
+          description: ccLabel || `Caja ${pk}`,
         }) }));
     }
   });

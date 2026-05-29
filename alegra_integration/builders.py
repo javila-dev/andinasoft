@@ -1507,6 +1507,11 @@ class CajaGastoBillBuilder:
                 'amount': _money(vr_rte),
             }]
 
+        caja_id = getattr(gasto, 'forma_pago_id', None) or getattr(getattr(gasto, 'forma_pago', None), 'pk', None)
+        cost_center_id = self.resolver.cost_center_for_caja(caja_id, required=False)
+        if cost_center_id:
+            payload['costCenter'] = {'id': cost_center_id}
+
         payload['__local'] = {
             'tipo_documento_soporte': gasto.tipo_documento_soporte,
             'reembolso_id': gasto.reembolso_id,
@@ -1517,6 +1522,7 @@ class CajaGastoBillBuilder:
             'valor_esperado': valor_esperado,
             'impuesto_iva_id': gasto.cuenta_iva_id,
             'impuesto_rte_id': gasto.cuenta_rte_id,
+            'cost_center_id': cost_center_id,
         }
 
         return BuiltDocument(
@@ -1586,6 +1592,7 @@ class CajaLegalizationJournalBuilder:
         caja = reembolso.caja
         cxp_category = self._cxp_category_id()
         caja_category = self._caja_credit_category_id(caja)
+        cost_center_id = self.resolver.cost_center_for_caja(caja.pk, required=False)
         responsable_id = self._responsable_contact_id(caja)
         numeration_id = self.resolver.numeration('caja_legalization_journal')
 
@@ -1643,6 +1650,10 @@ class CajaLegalizationJournalBuilder:
             client_id=responsable_id,
         ))
 
+        if cost_center_id:
+            for entry in entries:
+                entry['costCenter'] = {'id': cost_center_id}
+
         payload = _journal_payload(
             numeration_id=numeration_id,
             date=_date(journal_date),
@@ -1655,6 +1666,7 @@ class CajaLegalizationJournalBuilder:
             'pending_bills': pending_bills,
             'valor_aprox': valor_aprox,
             'cxp_from_bill_response': True,
+            'cost_center_id': cost_center_id,
         }
 
         return BuiltDocument(
