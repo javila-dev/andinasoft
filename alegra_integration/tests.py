@@ -814,11 +814,21 @@ class WebhookBillMappingTests(SimpleTestCase):
         }
         self.assertEqual(bill_pago_neto_canje(bill), 0)
 
+    def test_pago_neto_canje_usa_balance_sin_restar_total_paid(self):
+        from alegra_integration.bill_mapping import bill_pago_neto_canje
+
+        bill = {
+            'total': 362950,
+            'totalPaid': 146400,
+            'balance': 204350,
+        }
+        self.assertEqual(bill_pago_neto_canje(bill), 204350)
+
     def test_pago_neto_canje_escenario_balance_igual_total_paid(self):
         from alegra_integration.bill_mapping import bill_pago_neto_canje
 
         bill = {'balance': 4039466, 'totalPaid': 4039466}
-        self.assertEqual(bill_pago_neto_canje(bill), 0)
+        self.assertEqual(bill_pago_neto_canje(bill), 4039466)
 
     def test_infer_document_type(self):
         from alegra_integration.bill_mapping import (

@@ -232,7 +232,7 @@ class GastoAprobacionTests(TestCase):
             'totalPaid': 150000,
             'total': 500000,
             'status': 'open',
-            'pago_neto': 200000,
+            'pago_neto': 350000,
             'pago_neto_anterior': 500000,
         }
 
@@ -244,7 +244,7 @@ class GastoAprobacionTests(TestCase):
             es_canje=False,
         )
         self.factura.refresh_from_db()
-        self.assertEqual(self.factura.pago_neto, 200000)
+        self.assertEqual(self.factura.pago_neto, 350000)
         self.assertFalse(self.factura.gasto_es_canje)
         mock_consulta.assert_called_once_with(self.factura)
 

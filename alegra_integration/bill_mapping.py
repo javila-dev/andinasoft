@@ -220,13 +220,10 @@ def is_placeholder_descripcion(descripcion):
 def bill_pago_neto_canje(bill):
     """
     Pago neto tesorería al asignar gasto (y cuando contabilidad marca canje).
-    Consulta GET /bills/{id} con totalPaid y balance actualizados.
+    Consulta GET /bills/{id}: el campo balance de Alegra ya es el saldo por pagar
+    (retenido y pagos parciales ya descontados), no se resta totalPaid otra vez.
     """
-    if not isinstance(bill, dict):
-        return 0
-    balance = _parse_int(bill.get('balance')) if bill.get('balance') is not None else 0
-    total_paid = _parse_int(bill.get('totalPaid'))
-    return max(0, balance - total_paid)
+    return bill_saldo_por_pagar(bill)
 
 
 def bill_saldo_por_pagar(bill):
