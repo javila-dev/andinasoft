@@ -10,7 +10,7 @@ from andina.storage.media_policy import PRIVATE_MEDIA_STORAGE
 
 class recibos_internos(models.Model):
     proyecto = models.ForeignKey(proyectos,on_delete=models.PROTECT)
-    fecha = models.DateField(auto_now=True)
+    fecha = models.DateField(auto_now_add=True)
     fecha_pago = models.DateField()
     soporte = models.FileField(upload_to='soportes_recibos', storage=PRIVATE_MEDIA_STORAGE)
     soporte_hash = models.CharField(max_length=64, blank=True, null=True)

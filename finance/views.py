@@ -237,7 +237,7 @@ def solicitar_recibo_interno(request):
                     id_rec = request.POST.get('id_rec')
                     obj_solic = recibos_internos.objects.get(pk=id_rec)
                     obj_solic.anulado = True
-                    obj_solic.save()
+                    obj_solic.save(update_fields=['anulado'])
                     status = 200
                 else:
                     status = 403
@@ -384,7 +384,13 @@ def solicitar_recibo_interno(request):
                     if soporte:
                         obj_editar.soporte = soporte
                         obj_editar.soporte_hash = soporte_hash
-                    obj_editar.save()
+                    update_fields = [
+                        'proyecto', 'fecha_pago', 'valor', 'condonacion',
+                        'abono_capital', 'cliente',
+                    ]
+                    if soporte:
+                        update_fields.extend(['soporte', 'soporte_hash'])
+                    obj_editar.save(update_fields=update_fields)
                     context['topalert']={
                         'alert':True,
                         'title':'Andinasoft dice:',
@@ -494,7 +500,7 @@ def solicitud_fractal(request):
                     id_rec = request.POST.get('id_rec')
                     obj_solic = recibos_internos.objects.get(pk=id_rec)
                     obj_solic.anulado = True
-                    obj_solic.save()
+                    obj_solic.save(update_fields=['anulado'])
                     status = 200
                 else:
                     status = 403
@@ -676,7 +682,7 @@ def api_update_receipt_status(request, receipt_id):
             solicitud.motivo_revision = motivo_revision if motivo_revision else None
         else:
             solicitud.motivo_revision = None
-        solicitud.save()
+        solicitud.save(update_fields=['requiere_revision_manual', 'motivo_revision'])
 
         return JsonResponse({
             'id': solicitud.pk,
@@ -733,7 +739,7 @@ def api_update_receipt_status(request, receipt_id):
 
         # Anular la solicitud
         solicitud.anulado = True
-        solicitud.save()
+        solicitud.save(update_fields=['anulado'])
 
         return JsonResponse({
             'id': solicitud.pk,
@@ -773,7 +779,7 @@ def api_update_receipt_status(request, receipt_id):
 
         # Reactivar la solicitud
         solicitud.anulado = False
-        solicitud.save()
+        solicitud.save(update_fields=['anulado'])
 
         return JsonResponse({
             'id': solicitud.pk,

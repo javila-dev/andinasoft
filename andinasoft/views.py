@@ -1850,7 +1850,13 @@ def _guardar_recaudo(
         # Limpiar flag de revisión manual ya que el recibo fue procesado
         obj_rec_int.requiere_revision_manual = False
         obj_rec_int.motivo_revision = None
-        obj_rec_int.save()
+        obj_rec_int.save(update_fields=[
+            'recibo_asociado',
+            'usuario_confirma',
+            'fecha_confirma',
+            'requiere_revision_manual',
+            'motivo_revision',
+        ])
 
     # Marcar movimiento bancario como usado si se proporcionó
     movimiento_banco_id = form_recibo.cleaned_data.get('movimiento_banco_id')
@@ -5774,13 +5780,19 @@ def adjudicar_venta(request,proyecto,contrato):
                             condonacion=0,
                             abono_capital=False
                         )
+                        soporte_actualizado = False
                     else:
+                        soporte_actualizado = False
                         if not solicitud.soporte:
                             solicitud.soporte = soporte_rel
+                            soporte_actualizado = True
                     solicitud.recibo_asociado = recibo.recibo
                     solicitud.usuario_confirma = request.user
                     solicitud.fecha_confirma = datetime.date.today()
-                    solicitud.save()
+                    update_fields = ['recibo_asociado', 'usuario_confirma', 'fecha_confirma']
+                    if soporte_actualizado:
+                        update_fields.append('soporte')
+                    solicitud.save(update_fields=update_fields)
                 recibo.delete()
             # Registra el la info de cartera
             
