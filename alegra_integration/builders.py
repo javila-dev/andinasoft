@@ -1,6 +1,7 @@
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 from django.db.models import Sum
+from django.utils import timezone
 
 from accounting.models import Anticipos, Facturas, Pagos, cuentas_intercompanias, transferencias_companias, gastos_caja
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError
@@ -617,7 +618,7 @@ class GttSupportDocumentBuilder:
         numeration_id = self.resolver.numeration('gtt_support_document')
         expense_category = self._expense_category_id()
         cxp_category = self._cxp_category_id()
-        bill_date = _date(gtt.fecha_hasta)
+        bill_date = _date(timezone.localdate())
         desc = (
             f'GTT {asesor.nombre} {self.proyecto.pk} '
             f'{gtt.fecha_desde}..{gtt.fecha_hasta}'

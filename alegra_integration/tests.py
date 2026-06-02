@@ -350,8 +350,10 @@ class BuilderTests(SimpleTestCase):
         self.assertNotIn('retentions', built.payload)
         self.assertEqual(built.payload['__local']['amount_mode'], 'net')
 
+    @patch('alegra_integration.builders.timezone')
     @patch('alegra_integration.builders.consecutivos')
-    def test_gtt_builds_support_document(self, consecutivos):
+    def test_gtt_builds_support_document(self, consecutivos, timezone_mock):
+        timezone_mock.localdate.return_value = datetime.date(2026, 6, 2)
         def _get(*a, **kw):
             code = kw.get('local_code', '')
             return {
@@ -375,6 +377,8 @@ class BuilderTests(SimpleTestCase):
         self.assertEqual(built.document_type, 'gtt_support')
         self.assertEqual(built.payload['provider']['id'], 'adviser-333')
         self.assertEqual(built.payload['numberTemplate'], {'id': 'num-gtt_support_document'})
+        self.assertEqual(built.payload['date'], '2026-06-02')
+        self.assertEqual(built.payload['dueDate'], '2026-06-02')
         self.assertEqual(built.payload['purchases']['categories'][0]['price'], 112500.0)
         self.assertEqual(built.local_key, 'gtt:Oasis:10:55')
 
