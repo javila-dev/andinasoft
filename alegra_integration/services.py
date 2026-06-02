@@ -21,6 +21,7 @@ from alegra_integration.bill_mapping import cxp_category_id_from_bill, cxp_categ
 from alegra_integration.client import AlegraMCPClient
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.pago_link import sync_pago_from_alegra_document
+from alegra_integration.pago_reconcile import reconcile_expense_payment_document, should_attempt_payment_reconcile
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 from alegra_integration.models import (
     AlegraContactIndex,
@@ -295,6 +296,7 @@ class AlegraIntegrationService:
             sync_pago_from_alegra_document(doc)
             return 'skipped'
 
+        client = None
         try:
             emp_id = str(doc.empresa_id)
             client = client_by_empresa.get(emp_id)
@@ -313,6 +315,20 @@ class AlegraIntegrationService:
                 self._capture_caja_bill_cxp(client, doc)
             return 'sent'
         except AlegraIntegrationError as exc:
+            if (
+                doc.alegra_operation == 'POST /payments'
+                and doc.document_type == 'expense_payment'
+                and should_attempt_payment_reconcile(exc)
+            ):
+                try:
+                    reconcile_client = client or AlegraMCPClient(doc.empresa)
+                    if reconcile_expense_payment_document(doc, reconcile_client, exc):
+                        return 'sent'
+                except Exception as reconcile_exc:
+                    doc.status = AlegraDocument.STATUS_FAILED
+                    doc.error = f'{exc} · Reconciliación falló: {reconcile_exc}'
+                    doc.save(update_fields=['status', 'error', 'updated_at'])
+                    return 'failed'
             doc.status = AlegraDocument.STATUS_FAILED
             doc.error = str(exc)
             doc.save(update_fields=['status', 'error', 'updated_at'])

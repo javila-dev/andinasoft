@@ -1322,3 +1322,162 @@ class CajaBatchFilterTests(SimpleTestCase):
         mock_caja_filter.assert_called_once_with(
             pk='7', nit_empresa=empresa, activo=True, es_caja=True,
         )
+
+
+class PaymentReconcileTests(SimpleTestCase):
+    def test_should_attempt_on_code_4031(self):
+        from alegra_integration.exceptions import AlegraClientError
+        from alegra_integration.pago_reconcile import should_attempt_payment_reconcile
+
+        exc = AlegraClientError(
+            "Alegra HTTP 400: {'message': 'El monto es mayor que lo que falta por pagar', 'code': 4031}"
+        )
+        self.assertTrue(should_attempt_payment_reconcile(exc))
+
+    def test_payment_criteria_from_bills_payload(self):
+        from alegra_integration.pago_reconcile import payment_criteria_from_payload
+
+        criteria = payment_criteria_from_payload({
+            'type': 'out',
+            'date': '2026-05-15',
+            'bankAccount': {'id': '12'},
+            'client': {'id': '175'},
+            'bills': [{'id': '50', 'amount': 801561.0}],
+        })
+        self.assertEqual(criteria['date'], '2026-05-15')
+        self.assertEqual(criteria['bank_account_id'], '12')
+        self.assertEqual(criteria['client_id'], '175')
+        self.assertEqual(float(criteria['amount']), 801561.0)
+        self.assertEqual(criteria['bill_lines'][0]['id'], '50')
+
+    def test_payment_matches_criteria_bills(self):
+        from alegra_integration.pago_reconcile import payment_criteria_from_payload, payment_matches_criteria
+
+        payload = {
+            'type': 'out',
+            'date': '2026-05-15',
+            'bankAccount': {'id': '12'},
+            'client': {'id': '175'},
+            'bills': [{'id': '50', 'amount': 801561.0}],
+        }
+        criteria = payment_criteria_from_payload(payload)
+        payment = {
+            'id': '9001',
+            'type': 'out',
+            'date': '2026-05-15',
+            'bankAccount': {'id': '12'},
+            'client': {'id': '175'},
+            'bills': [{'id': '50', 'amount': 801561.0}],
+        }
+        self.assertTrue(payment_matches_criteria(payment, criteria))
+
+    def test_find_matching_payment_requires_single_match(self):
+        from alegra_integration.pago_reconcile import find_matching_payment
+
+        payload = {
+            'type': 'out',
+            'date': '2026-05-15',
+            'bankAccount': {'id': '12'},
+            'client': {'id': '175'},
+            'bills': [{'id': '50', 'amount': 100.0}],
+        }
+        client = Mock()
+        client.list_payments.return_value = [
+            {
+                'id': '1',
+                'type': 'out',
+                'date': '2026-05-15',
+                'bankAccount': {'id': '12'},
+                'client': {'id': '175'},
+                'bills': [{'id': '50', 'amount': 100.0}],
+            },
+            {
+                'id': '2',
+                'type': 'out',
+                'date': '2026-05-15',
+                'bankAccount': {'id': '12'},
+                'client': {'id': '175'},
+                'bills': [{'id': '50', 'amount': 100.0}],
+            },
+        ]
+        self.assertIsNone(find_matching_payment(client, payload))
+
+    @patch('alegra_integration.pago_reconcile.sync_pago_from_alegra_document')
+    @patch('alegra_integration.pago_reconcile.find_matching_payment')
+    def test_reconcile_marks_document_sent(self, mock_find, mock_sync):
+        from alegra_integration.exceptions import AlegraClientError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.pago_reconcile import reconcile_expense_payment_document
+
+        doc = SimpleNamespace(
+            pk=1,
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='expense_payment',
+            payload={
+                'type': 'out',
+                'date': '2026-05-15',
+                'bankAccount': {'id': '12'},
+                'client': {'id': '175'},
+                'bills': [{'id': '50', 'amount': 801561.0}],
+            },
+            status='failed',
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            source_model='accounting.Pagos',
+            source_pk='14906',
+            save=Mock(),
+        )
+        mock_find.return_value = {'id': '777', 'date': '2026-05-15'}
+        exc = AlegraClientError("Alegra HTTP 400: {'message': 'x', 'code': 4031}")
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.exists.return_value = False
+            self.assertTrue(reconcile_expense_payment_document(doc, Mock(), exc))
+
+        self.assertEqual(doc.status, AlegraDocument.STATUS_SENT)
+        self.assertEqual(doc.alegra_id, '777')
+        self.assertTrue(doc.response.get('reconciled'))
+        mock_sync.assert_called_once_with(doc)
+
+    @patch('alegra_integration.services.reconcile_expense_payment_document')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_reconciles_on_4031(self, mock_client_cls, mock_reconcile):
+        from alegra_integration.exceptions import AlegraClientError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=10,
+            empresa_id='901018375',
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='expense_payment',
+            alegra_operation='POST /payments',
+            status=AlegraDocument.STATUS_VALID,
+            local_key='expense:pago:1:t:123',
+            payload={'client': {'id': '175'}, 'bills': [{'id': '50', 'amount': 100}]},
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            source_model='accounting.Pagos',
+            source_pk='1',
+            save=Mock(),
+        )
+        client = Mock()
+        client.create_out_payment.side_effect = AlegraClientError(
+            "Alegra HTTP 400: {'message': 'El monto es mayor', 'code': 4031}"
+        )
+        mock_client_cls.return_value = client
+        mock_reconcile.return_value = True
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        mock_reconcile.assert_called_once()
+

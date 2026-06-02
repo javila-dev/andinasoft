@@ -219,6 +219,30 @@ class AlegraMCPClient:
     def create_out_payment(self, payload):
         return self.rest('POST', '/payments', json_payload=payload)
 
+    def list_payments(self, *, start=0, limit=30, type=None, client_id=None, order_field=None, order_direction=None, metadata=None):
+        params = {'start': int(start), 'limit': min(int(limit), 30)}
+        if type:
+            params['type'] = str(type)
+        if client_id:
+            params['client_id'] = str(client_id)
+        if order_field:
+            params['order_field'] = str(order_field)
+        if order_direction:
+            params['order_direction'] = str(order_direction)
+        if metadata is not None:
+            params['metadata'] = 'true' if metadata else 'false'
+        qs = '&'.join(f'{k}={requests.utils.quote(str(v))}' for k, v in params.items())
+        return self.rest('GET', f'/payments?{qs}')
+
+    def get_payment(self, payment_id, *, fields=None):
+        pid = str(payment_id or '').strip()
+        if not pid:
+            raise AlegraConfigurationError('payment_id es requerido para get_payment.')
+        path = f'/payments/{pid}'
+        if fields:
+            path = f'{path}?fields={fields}'
+        return self.rest('GET', path)
+
     def bank_account_transfer(self, origin_bank_id, payload):
         """
         Transfer between bank accounts within the same Alegra company.
