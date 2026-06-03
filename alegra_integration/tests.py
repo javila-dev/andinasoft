@@ -1481,3 +1481,44 @@ class PaymentReconcileTests(SimpleTestCase):
         self.assertEqual(outcome, 'sent')
         mock_reconcile.assert_called_once()
 
+
+class AnticipoPaymentBuilderTests(SimpleTestCase):
+    @patch('alegra_integration.builders.asesores')
+    @patch('alegra_integration.builders.empresas')
+    @patch('alegra_integration.builders.clientes')
+    def test_anticipo_payload_includes_client(self, mock_clientes, mock_empresas, mock_asesores):
+        from alegra_integration.builders import ExpensePaymentBuilder
+
+        mock_clientes.objects.filter.return_value.exists.return_value = True
+
+        class AnticipoResolver(ResolverStub):
+            def contact_for_cliente(self, cliente_id):
+                return 'contact-anticipo-99'
+
+            def numeration(self, document_code, required=True):
+                return 'num-anticipo'
+
+            def get(self, mapping_type, *args, **kwargs):
+                if kwargs.get('local_code') == 'default_anticipo':
+                    return 'cat-anticipo-default'
+                return super().get(mapping_type, *args, **kwargs)
+
+        anticipo = SimpleNamespace(
+            pk=501,
+            id_tercero='900111222',
+            nombre_tercero='PROVEEDOR ANTICIPO',
+            descripcion='Anticipo marzo',
+            valor=250000,
+            fecha_pago=datetime.date(2026, 5, 10),
+            cuenta=SimpleNamespace(pk=3, cuentabanco='transfer', nit_empresa_id='901018375'),
+            tipo_anticipo=SimpleNamespace(cuenta_debito_1='13300501'),
+            tipo_anticipo_id=8,
+        )
+        builder = ExpensePaymentBuilder(SimpleNamespace(pk='901018375'))
+        builder.resolver = AnticipoResolver()
+        built = builder._from_anticipo(anticipo)
+
+        self.assertEqual(built.payload['client'], {'id': 'contact-anticipo-99'})
+        self.assertEqual(built.payload['type'], 'out')
+        self.assertEqual(built.local_key, 'expense:anticipo:501')
+

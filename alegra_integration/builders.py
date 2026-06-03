@@ -1126,7 +1126,12 @@ class ExpensePaymentBuilder:
         )
 
     def _from_anticipo(self, anticipo):
-        contact_id = self.resolver.get(AlegraMapping.CONTACT, local_model='andinasoft.clientes', local_pk=anticipo.id_tercero, required=False)
+        try:
+            contact_id = self._contact_id_for_tercero(self.resolver, anticipo.id_tercero, required=True)
+        except AlegraConfigurationError as exc:
+            raise AlegraBuildError(
+                f'{exc} Enlaza el contacto del tercero {anticipo.id_tercero} en Referencias.'
+            ) from exc
         built = self._base_payment(
             date=anticipo.fecha_pago,
             cuenta=anticipo.cuenta,
