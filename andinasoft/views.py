@@ -40,6 +40,7 @@ from andinasoft.shared_models import timeline,seguimientos, Inmuebles, ventas_nu
 from andinasoft.shared_models import VerificacionOperaciones, DescuentosCondicionados, PlanPagos, DescuentosCondicionados, formas_pago
 from andinasoft.shared_models import Promesas, PresupuestoCartera, Parametros_Operaciones, EntregaManzanas, Pqrs
 from andinasoft.informe_cartera_orm import informe_cartera_rows
+from andinasoft.edades_cartera_service import edades_cartera_snapshot
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
@@ -6803,100 +6804,10 @@ def edades_cartera(request,proyecto):
     
     check_groups(request,('Supervisor Cartera',))
 
-    # Esta vista era muy costosa (N+1) porque por cada adjudicación calculaba presupuesto
-    # iterando cuotas y haciendo queries. Para evitar agotar workers, agregamos en BD.
-    today = datetime.date.today()
-    periodo = today.strftime('%Y%m')
-
-    base_qs = PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo)
-    if not base_qs.exists():
-        # Fallback al último periodo cargado en presupuesto_cartera
-        last_period = PresupuestoCartera.objects.using(proyecto).values_list('periodo', flat=True).order_by('-periodo').first()
-        if last_period:
-            periodo = str(last_period)
-            base_qs = PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo)
-
-    # Agrupar por adjudicación usando diasmora (más confiable que el string Edad)
-    ppto_rows = list(
-        base_qs.values('idadjudicacion')
-        .annotate(
-            dias_mora=Max('diasmora'),
-            por_vencer=Coalesce(
-                Sum(Case(When(diasmora__lte=0, then=F('cuota')), default=Value(0), output_field=DecimalField())),
-                Value(0, output_field=DecimalField()),
-            ),
-            lt30=Coalesce(
-                Sum(Case(When(diasmora__gt=0, diasmora__lte=30, then=F('cuota')), default=Value(0), output_field=DecimalField())),
-                Value(0, output_field=DecimalField()),
-            ),
-            lt60=Coalesce(
-                Sum(Case(When(diasmora__gt=30, diasmora__lte=60, then=F('cuota')), default=Value(0), output_field=DecimalField())),
-                Value(0, output_field=DecimalField()),
-            ),
-            lt90=Coalesce(
-                Sum(Case(When(diasmora__gt=60, diasmora__lte=90, then=F('cuota')), default=Value(0), output_field=DecimalField())),
-                Value(0, output_field=DecimalField()),
-            ),
-            lt120=Coalesce(
-                Sum(Case(When(diasmora__gt=90, diasmora__lte=120, then=F('cuota')), default=Value(0), output_field=DecimalField())),
-                Value(0, output_field=DecimalField()),
-            ),
-            gt120=Coalesce(
-                Sum(Case(When(diasmora__gt=120, then=F('cuota')), default=Value(0), output_field=DecimalField())),
-                Value(0, output_field=DecimalField()),
-            ),
-            total_pendiente=Coalesce(Sum('cuota'), Value(0, output_field=DecimalField())),
-        )
-    )
-
-    adj_ids = [r.get('idadjudicacion') for r in ppto_rows if r.get('idadjudicacion')]
-    # Restringir a adjudicaciones aprobadas (y no canje) para no mostrar basura
-    allowed_adj = set(
-        Adjudicacion.objects.using(proyecto)
-        .filter(pk__in=adj_ids, estado='Aprobado')
-        .exclude(origenventa='Canje')
-        .values_list('pk', flat=True)
-    )
-    adj_ids = [a for a in adj_ids if a in allowed_adj]
-
-    info_map = {
-        row['IdAdjudicacion']: row
-        for row in Vista_Adjudicacion.objects.using(proyecto).filter(IdAdjudicacion__in=adj_ids).values('IdAdjudicacion', 'Nombre', 'tipo_cartera')
-    }
-    gestor_map = {
-        row['idadjudicacion']: (row.get('gestorasignado') or 'Sin Gestor')
-        for row in InfoCartera.objects.using(proyecto).filter(idadjudicacion__in=adj_ids).values('idadjudicacion', 'gestorasignado')
-    }
-    ultimo_pago_map = {
-        row['idadjudicacion']: row['ultimo_pago']
-        for row in Recaudos.objects.using(proyecto).filter(idadjudicacion__in=adj_ids).values('idadjudicacion').annotate(ultimo_pago=Max('fecha'))
-    }
-
-    # Preparar filas listas para template (sin llamadas a métodos que consultan BD)
-    ppto_by_adj = {r['idadjudicacion']: r for r in ppto_rows if r.get('idadjudicacion') in allowed_adj}
-    adjudicaciones = []
-    for adj_id in adj_ids:
-        p = ppto_by_adj.get(adj_id) or {}
-        info = info_map.get(adj_id) or {}
-        adjudicaciones.append({
-            'adj': adj_id,
-            'cliente': (info.get('Nombre') or ''),
-            'cartera': (info.get('tipo_cartera') or ''),
-            'gestor': gestor_map.get(adj_id, 'Sin Gestor'),
-            'dias_mora': p.get('dias_mora') or 0,
-            'ultimo_pago': ultimo_pago_map.get(adj_id),
-            'por_vencer': p.get('por_vencer') or 0,
-            'lt30': p.get('lt30') or 0,
-            'lt60': p.get('lt60') or 0,
-            'lt90': p.get('lt90') or 0,
-            'lt120': p.get('lt120') or 0,
-            'gt120': p.get('gt120') or 0,
-            'total_pendiente': p.get('total_pendiente') or 0,
-        })
-
+    adjudicaciones, fecha_consulta = edades_cartera_snapshot(proyecto)
     context = {
         'proyecto': proyecto,
-        'periodo': periodo,
+        'periodo': fecha_consulta.strftime('%d/%m/%Y'),
         'adjudicaciones': adjudicaciones,
     }
     
