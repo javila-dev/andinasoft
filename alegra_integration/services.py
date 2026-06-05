@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 from urllib.parse import quote, urlparse
@@ -23,6 +24,8 @@ from alegra_integration.mapping import MappingResolver
 from alegra_integration.pago_link import sync_pago_from_alegra_document
 from alegra_integration.pago_reconcile import reconcile_expense_payment_document, should_attempt_payment_reconcile
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
+
+logger = logging.getLogger(__name__)
 from alegra_integration.models import (
     AlegraContactIndex,
     AlegraDocument,
@@ -533,6 +536,23 @@ class AlegraIntegrationService:
             'unmatched': unmatched,
         }
 
+    def _contact_sync_log_state(self, state, *, prefix='contact_sync'):
+        by_ident = state.get('by_ident') or {}
+        logger.info(
+            '%s state phase=%s stage=%s alegra_type=%s alegra_start=%s alegra_loaded=%s '
+            'by_ident_keys=%s processed=%s total_local=%s status=%s',
+            prefix,
+            state.get('phase'),
+            state.get('stage'),
+            state.get('alegra_type'),
+            state.get('alegra_start'),
+            state.get('alegra_loaded'),
+            len(by_ident) if isinstance(by_ident, dict) else 0,
+            state.get('processed'),
+            state.get('total_local'),
+            state.get('status'),
+        )
+
     def contact_sync_progress(self, *, empresa_id, action='start', chunk_size=250):
         """
         Progressive contact sync for UI progress feedback.
@@ -544,12 +564,27 @@ class AlegraIntegrationService:
         user_id = getattr(getattr(self.user, 'pk', None), '__str__', lambda: 'anon')()
         key = f'alegra:contact_sync:{empresa_id}:{user_id}'
         state = cache.get(key) or {}
+        logger.info(
+            'contact_sync_progress empresa=%s action=%s chunk_size=%s cache_key=%s has_state=%s',
+            empresa_id,
+            action,
+            chunk_size,
+            key,
+            bool(state),
+        )
 
         def _ident(contact):
             raw = contact.get('identification') or ''
             if isinstance(raw, dict):
                 raw = raw.get('number') or ''
             return _norm_ident(raw)
+
+        if action == 'step' and not state:
+            logger.warning(
+                'contact_sync step sin estado en cache (expirado o otro worker?) empresa=%s key=%s',
+                empresa_id,
+                key,
+            )
 
         if action == 'start' or not state:
             state = {
@@ -574,9 +609,12 @@ class AlegraIntegrationService:
                 'by_ident': {},
             }
             cache.set(key, state, timeout=60 * 30)
+            self._contact_sync_log_state(state, prefix='contact_sync start')
             return self._contact_sync_state_public(state)
 
         if action == 'status':
+            if not state:
+                return {'status': 'idle', 'phase': None, 'stage': None}
             return self._contact_sync_state_public(state)
 
         # step
@@ -591,11 +629,39 @@ class AlegraIntegrationService:
             start = int(state.get('alegra_start') or 0)
             limit = int(state.get('alegra_limit') or 30)
             contact_type = state.get('alegra_type') or 'client'
-            page = client.get_contacts_page(start=start, limit=limit, contact_type=contact_type)
+            logger.info(
+                'contact_sync alegra page empresa=%s type=%s start=%s limit=%s loaded_so_far=%s',
+                empresa_id,
+                contact_type,
+                start,
+                limit,
+                state.get('alegra_loaded'),
+            )
+            try:
+                page = client.get_contacts_page(start=start, limit=limit, contact_type=contact_type)
+            except Exception as exc:
+                logger.error(
+                    'contact_sync get_contacts_page failed empresa=%s type=%s start=%s limit=%s: %s',
+                    empresa_id,
+                    contact_type,
+                    start,
+                    limit,
+                    exc,
+                    exc_info=True,
+                )
+                raise
             # Alegra returns list; if wrapped in metadata=true it'd be page['data']
             if isinstance(page, dict) and 'data' in page:
                 page = page['data']
             page = page if isinstance(page, list) else []
+            logger.info(
+                'contact_sync alegra page ok empresa=%s type=%s start=%s page_len=%s page_type=%s',
+                empresa_id,
+                contact_type,
+                start,
+                len(page),
+                type(page).__name__ if not isinstance(page, list) else 'list',
+            )
             for c in page:
                 k = _ident(c)
                 for kk in _ident_variants(k):
@@ -603,16 +669,29 @@ class AlegraIntegrationService:
                         by_ident[kk] = {'id': str(c.get('id')), 'name': c.get('name') or c.get('businessName') or ''}
                 # Also upsert the contact index as we stream pages
                 if k:
-                    AlegraContactIndex.objects.update_or_create(
-                        empresa=empresa,
-                        contact_type=contact_type,
-                        identification=k,
-                        defaults={
-                            'alegra_id': str(c.get('id') or ''),
-                            'name': (c.get('name') or c.get('businessName') or '')[:255],
-                            'raw': c or {},
-                        },
-                    )
+                    try:
+                        AlegraContactIndex.objects.update_or_create(
+                            empresa=empresa,
+                            contact_type=contact_type,
+                            identification=k,
+                            defaults={
+                                'alegra_id': str(c.get('id') or ''),
+                                'name': (c.get('name') or c.get('businessName') or '')[:255],
+                                'raw': c or {},
+                            },
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            'contact_sync AlegraContactIndex upsert failed empresa=%s type=%s '
+                            'ident=%s alegra_id=%s: %s',
+                            empresa_id,
+                            contact_type,
+                            k,
+                            c.get('id'),
+                            exc,
+                            exc_info=True,
+                        )
+                        raise
             state['by_ident'] = by_ident
             state['alegra_loaded'] = int(state.get('alegra_loaded') or 0) + len(page)
             state['alegra_start'] = start + limit
@@ -621,16 +700,37 @@ class AlegraIntegrationService:
             if len(page) < limit:
                 # finished this type; switch to providers if we just finished clients
                 if contact_type == 'client':
+                    logger.info(
+                        'contact_sync alegra finished clients empresa=%s loaded=%s -> providers',
+                        empresa_id,
+                        state.get('alegra_loaded'),
+                    )
                     state['alegra_type'] = 'provider'
                     state['alegra_start'] = 0
                 else:
                     # finished loading all Alegra contacts (client + provider)
+                    logger.info(
+                        'contact_sync alegra finished all empresa=%s total_loaded=%s -> local phase',
+                        empresa_id,
+                        state.get('alegra_loaded'),
+                    )
                     state['phase'] = 'local'
                     state['alegra_total'] = int(state.get('alegra_loaded') or 0)
                     state['total_local'] = clientes.objects.count() + asesores.objects.count() + empresas.objects.count()
                     state['stage'] = 'clientes'
                     state['offset'] = 0
-            cache.set(key, state, timeout=60 * 30)
+            try:
+                cache.set(key, state, timeout=60 * 30)
+            except Exception as exc:
+                logger.error(
+                    'contact_sync cache.set failed empresa=%s by_ident_keys=%s: %s',
+                    empresa_id,
+                    len(by_ident),
+                    exc,
+                    exc_info=True,
+                )
+                raise
+            self._contact_sync_log_state(state, prefix='contact_sync alegra step')
             return self._contact_sync_state_public(state)
 
         def _iter_queryset(qs, to_process):
@@ -724,7 +824,26 @@ class AlegraIntegrationService:
             state['stage'] = 'done'
             # Drop big index to keep cache small
             state.pop('by_ident', None)
-        cache.set(key, state, timeout=60 * 30)
+            logger.info(
+                'contact_sync done empresa=%s alegra_total=%s mapped_new=%s mapped_updated=%s unmatched=%s',
+                empresa_id,
+                state.get('alegra_total'),
+                state.get('mapped_new'),
+                state.get('mapped_updated'),
+                state.get('unmatched_count'),
+            )
+        try:
+            cache.set(key, state, timeout=60 * 30)
+        except Exception as exc:
+            logger.error(
+                'contact_sync cache.set (local) failed empresa=%s processed=%s: %s',
+                empresa_id,
+                state.get('processed'),
+                exc,
+                exc_info=True,
+            )
+            raise
+        self._contact_sync_log_state(state, prefix='contact_sync local step')
         return self._contact_sync_state_public(state)
 
     def _contact_sync_state_public(self, state):

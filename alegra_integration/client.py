@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import time
 
 import requests
@@ -8,6 +9,8 @@ from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 
 from alegra_integration.exceptions import AlegraClientError, AlegraConfigurationError
+
+logger = logging.getLogger(__name__)
 
 
 class AlegraMCPClient:
@@ -572,7 +575,20 @@ class AlegraMCPClient:
 
     def _handle_decoded_response(self, response, payload):
         if response.status_code >= 400:
+            logger.error(
+                'Alegra REST error empresa=%s status=%s url=%s payload=%s',
+                getattr(self.empresa, 'pk', None),
+                response.status_code,
+                getattr(response, 'url', None),
+                payload,
+            )
             raise AlegraClientError(f'Alegra HTTP {response.status_code}: {payload}')
         if isinstance(payload, dict) and payload.get('error'):
+            logger.error(
+                'Alegra REST logical error empresa=%s url=%s error=%s',
+                getattr(self.empresa, 'pk', None),
+                getattr(response, 'url', None),
+                payload.get('error'),
+            )
             raise AlegraClientError(f'Alegra error: {payload["error"]}')
         return payload

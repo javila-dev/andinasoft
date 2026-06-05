@@ -943,6 +943,99 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function formatContactSyncError(xhr) {
+  const body = xhr.responseJSON || {};
+  let msg = body.detail || body.message || '';
+  if (!msg && xhr.responseText) {
+    const t = String(xhr.responseText).trim();
+    if (t.length && t.length < 500 && !t.startsWith('<')) msg = t;
+  }
+  if (!msg) msg = xhr.statusText || 'Error desconocido';
+  const extra = [];
+  if (body.error_type) extra.push(body.error_type);
+  if (xhr.status) extra.push('HTTP ' + xhr.status);
+  console.error('contact_sync error', {
+    status: xhr.status,
+    statusText: xhr.statusText,
+    body: body,
+    responseText: xhr.responseText ? String(xhr.responseText).slice(0, 800) : '',
+  });
+  return escHtml(msg) + (extra.length ? ' (' + escHtml(extra.join(' · ')) + ')' : '');
+}
+
+let _contactSyncRunId = 0;
+let _contactSyncTimer = null;
+let _contactSyncPendingXhr = null;
+const CONTACT_SYNC_AJAX_TIMEOUT_MS = 180000;
+const CONTACT_SYNC_STEP_RETRIES = 3;
+
+function beginContactSyncRun() {
+  _contactSyncRunId += 1;
+  if (_contactSyncTimer) { clearTimeout(_contactSyncTimer); _contactSyncTimer = null; }
+  if (_contactSyncPendingXhr) {
+    try { _contactSyncPendingXhr.abort(); } catch (e) { /* ignore */ }
+    _contactSyncPendingXhr = null;
+  }
+  return _contactSyncRunId;
+}
+
+function isContactSyncRunActive(runId) {
+  return runId === _contactSyncRunId;
+}
+
+function scheduleContactSyncLoop(runId, fn, delayMs) {
+  if (!isContactSyncRunActive(runId)) return;
+  if (_contactSyncTimer) clearTimeout(_contactSyncTimer);
+  _contactSyncTimer = setTimeout(() => {
+    _contactSyncTimer = null;
+    if (isContactSyncRunActive(runId)) fn();
+  }, delayMs == null ? 50 : delayMs);
+}
+
+function contactSyncAjax(runId, empresa, action, chunkSize) {
+  if (!isContactSyncRunActive(runId)) {
+    return $.Deferred().reject({ cancelled: true }).promise();
+  }
+  const xhr = $.ajax({
+    url: API.contactSync,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    timeout: CONTACT_SYNC_AJAX_TIMEOUT_MS,
+    data: JSON.stringify({
+      empresa,
+      action: action || 'step',
+      chunk_size: chunkSize || 300,
+    }),
+  });
+  _contactSyncPendingXhr = xhr;
+  xhr.always(() => {
+    if (_contactSyncPendingXhr === xhr) _contactSyncPendingXhr = null;
+  });
+  return xhr;
+}
+
+function isContactSyncXhrCancelled(xhr) {
+  return !!(xhr && (xhr.cancelled || xhr.statusText === 'abort'));
+}
+
+function isContactSyncStepRetriable(xhr) {
+  if (!xhr || xhr.cancelled) return false;
+  const st = xhr.status;
+  if (!st || st === 408 || st === 502 || st === 503 || st === 504) return true;
+  const t = String(xhr.statusText || '').toLowerCase();
+  return t.indexOf('timeout') >= 0 || t === 'error';
+}
+
+function contactSyncStepContext(data) {
+  if (!data) return '';
+  if (data.phase === 'alegra' || data.stage === 'alegra') {
+    const t = data.alegra_type ? ' (' + data.alegra_type + ')' : '';
+    return 'carga Alegra' + t + ', ' + (data.alegra_loaded || 0) + ' contactos';
+  }
+  return 'mapeo ' + (data.stage || '') + ', ' + (data.processed || 0) + '/' + (data.total_local || 0);
+}
+
 // ── Metrics ────────────────────────────────────
 function previewCounts(batch, docs) {
   const sum = batch.summary || {};
@@ -1619,18 +1712,24 @@ function doContactSync() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { warn('Selecciona una empresa primero.'); return; }
 
+  const runId = beginContactSyncRun();
+  let lastProgress = null;
+  let stepRetries = 0;
+  let stepErrors = 0;
+
   $('#resultsZone').show();
   clearLog();
-  log('loading', 'Iniciando sincronización de contactos (con progreso real)…');
-  log('info', 'Primero cargamos contactos de Alegra y luego recorremos terceros locales por tandas.');
+  log('loading', 'Iniciando sincronizacion de contactos por pasos…');
+  log('info', 'Cada paso es una peticion corta; un fallo no invalida los pasos ya hechos.');
 
   setBusy('contactSync', true);
   $('#contactProgressBar').show();
   $('#contactProgressFill').css('width', '0%');
 
   function renderProgress(data) {
+    if (!isContactSyncRunActive(runId)) return;
+    lastProgress = data;
     if (data.phase === 'alegra' || data.stage === 'alegra') {
-      // During Alegra loading, show progress text and animate bar.
       $('#contactProgressFill').css('width', '25%');
       const t = data.alegra_type ? ` (${escHtml(data.alegra_type)})` : '';
       log('dim', `Cargando contactos de Alegra${t}… <strong>${data.alegra_loaded}</strong> cargados`);
@@ -1642,7 +1741,12 @@ function doContactSync() {
   }
 
   function finish(data) {
+    if (!isContactSyncRunActive(runId)) return;
+    if (_contactSyncTimer) { clearTimeout(_contactSyncTimer); _contactSyncTimer = null; }
     logSep();
+    if (stepErrors > 0) {
+      log('warning', 'Completado con errores previos en algunos pasos (ver registro arriba).');
+    }
     log('success', `Contactos en Alegra: <strong>${data.alegra_total}</strong>`);
     log('success', `Mapeos nuevos: <strong>${data.mapped_new}</strong>`);
     if (data.mapped_updated > 0) log('info', `Mapeos actualizados: <strong>${data.mapped_updated}</strong>`);
@@ -1668,46 +1772,77 @@ function doContactSync() {
     setBusy('contactSync', false);
   }
 
-  function step() {
-    $.ajax({
-      url: API.contactSync, method: 'POST',
-      contentType: 'application/json',
-      headers: { 'X-CSRFToken': CSRF },
-      data: JSON.stringify({ empresa, action: 'step', chunk_size: 300 }),
-      success: function(data) {
+  function onContactSyncStepFail(xhr) {
+    if (!isContactSyncRunActive(runId) || isContactSyncXhrCancelled(xhr)) return;
+    const ctx = contactSyncStepContext(lastProgress);
+    const detail = formatContactSyncError(xhr);
+
+    if (isContactSyncStepRetriable(xhr) && stepRetries < CONTACT_SYNC_STEP_RETRIES) {
+      stepRetries += 1;
+      const wait = 1500 * stepRetries;
+      log('warning', `Paso con problema: <strong>${detail}</strong> · ${escHtml(ctx)} · reintento ${stepRetries}/${CONTACT_SYNC_STEP_RETRIES}`);
+      scheduleContactSyncLoop(runId, runStep, wait);
+      return;
+    }
+
+    stepRetries = 0;
+    stepErrors += 1;
+    logSep();
+    log('error', `Paso detenido (no es el resultado final del proceso): <strong>${detail}</strong>`);
+    log('dim', `Contexto: ${escHtml(ctx)}`);
+    log('info', 'Puedes volver a sincronizar; los pasos ya guardados en servidor se conservan en cache.');
+    setBusy('contactSync', false);
+  }
+
+  function runStep() {
+    if (!isContactSyncRunActive(runId)) return;
+    contactSyncAjax(runId, empresa, 'step').done(function(stepData) {
+      if (!isContactSyncRunActive(runId)) return;
+      stepRetries = 0;
+      renderProgress(stepData);
+      if (stepData.status === 'done') return finish(stepData);
+      scheduleContactSyncLoop(runId, runStep, 50);
+    }).fail(onContactSyncStepFail);
+  }
+
+  function startOrResume() {
+    contactSyncAjax(runId, empresa, 'status').done(function(st) {
+      if (!isContactSyncRunActive(runId)) return;
+      const canResume = st && st.status === 'running' && (
+        (st.phase === 'alegra' && (st.alegra_loaded || 0) > 0) ||
+        (st.phase === 'local' && (st.processed || 0) > 0)
+      );
+      if (canResume) {
+        log('info', 'Reanudando sincronizacion (' + escHtml(contactSyncStepContext(st)) + ')…');
+        renderProgress(st);
+        runStep();
+        return;
+      }
+      contactSyncAjax(runId, empresa, 'start').done(function(data) {
+        if (!isContactSyncRunActive(runId)) return;
+        log('info', 'Estado inicial listo. Recorriendo pasos…');
         renderProgress(data);
-        if (data.status === 'done') return finish(data);
-        setTimeout(step, 50);
-      },
-      error: function(xhr) {
-        const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+        runStep();
+      }).fail(function(xhr) {
+        if (!isContactSyncRunActive(runId) || isContactSyncXhrCancelled(xhr)) return;
         logSep();
-        log('error', `Error en sincronización: <strong>${escHtml(msg)}</strong>`);
+        log('error', `No se pudo iniciar: <strong>${formatContactSyncError(xhr)}</strong>`);
         $('#contactProgressBar').hide();
         setBusy('contactSync', false);
-      }
+      });
+    }).fail(function() {
+      contactSyncAjax(runId, empresa, 'start').done(function(data) {
+        if (!isContactSyncRunActive(runId)) return;
+        renderProgress(data);
+        runStep();
+      }).fail(function(xhr) {
+        log('error', `No se pudo iniciar: <strong>${formatContactSyncError(xhr)}</strong>`);
+        setBusy('contactSync', false);
+      });
     });
   }
 
-  // Start (loads Alegra contacts and initializes progress)
-  $.ajax({
-    url: API.contactSync, method: 'POST',
-    contentType: 'application/json',
-    headers: { 'X-CSRFToken': CSRF },
-    data: JSON.stringify({ empresa, action: 'start' }),
-    success: function(data) {
-      log('info', 'Iniciando carga de contactos de Alegra…');
-      renderProgress(data);
-      step();
-    },
-    error: function(xhr) {
-      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
-      logSep();
-      log('error', `Error en sincronización: <strong>${escHtml(msg)}</strong>`);
-      $('#contactProgressBar').hide();
-      setBusy('contactSync', false);
-    }
-  });
+  startOrResume();
 }
 
 function renderUnmatched(unmatched) {

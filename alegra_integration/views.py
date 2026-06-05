@@ -1,4 +1,5 @@
 import json
+import logging
 from urllib.parse import parse_qs
 
 from django.http import JsonResponse
@@ -23,6 +24,8 @@ from andinasoft.shared_models import formas_pago
 from accounting.models import cuentas_intercompanias, info_interfaces, impuestos_legalizacion
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.client import AlegraMCPClient
+
+logger = logging.getLogger(__name__)
 from alegra_integration.webhook_bills import process_inbound_post
 from alegra_integration.webhook_inbound_status import (
     build_inbound_log_rows,
@@ -1164,7 +1167,8 @@ def _payload(request):
 
 
 def _error_response(exc, status=400):
-    return JsonResponse({'detail': str(exc)}, status=status)
+    detail = str(exc) or repr(exc)
+    return JsonResponse({'detail': detail, 'error_type': type(exc).__name__}, status=status)
 
 
 @login_required
@@ -1295,22 +1299,64 @@ def batch_send(request, batch_id):
 @login_required
 @require_http_methods(['POST'])
 def contact_sync(request):
+    payload = {}
+    action = 'start'
+    empresa_id = None
     try:
         payload = _payload(request)
         action = payload.get('action') or 'start'
+        empresa_id = payload.get('empresa')
+        chunk_size = int(payload.get('chunk_size') or 250)
+        logger.info(
+            'contact_sync request user=%s empresa=%s action=%s chunk_size=%s',
+            getattr(request.user, 'pk', None),
+            empresa_id,
+            action,
+            chunk_size,
+        )
         data = AlegraIntegrationService(user=request.user).contact_sync_progress(
-            empresa_id=payload.get('empresa'),
+            empresa_id=empresa_id,
             action=action,
-            chunk_size=int(payload.get('chunk_size') or 250),
+            chunk_size=chunk_size,
+        )
+        logger.info(
+            'contact_sync ok user=%s empresa=%s action=%s status=%s phase=%s stage=%s '
+            'alegra_loaded=%s processed=%s/%s',
+            getattr(request.user, 'pk', None),
+            empresa_id,
+            action,
+            data.get('status'),
+            data.get('phase'),
+            data.get('stage'),
+            data.get('alegra_loaded'),
+            data.get('processed'),
+            data.get('total_local'),
         )
         return JsonResponse(data)
     except json.JSONDecodeError:
-        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+        logger.warning('contact_sync JSON invalido user=%s', getattr(request.user, 'pk', None))
+        return JsonResponse({'detail': 'JSON invalido', 'error_type': 'JSONDecodeError'}, status=400)
     except empresas.DoesNotExist:
-        return JsonResponse({'detail': 'Empresa no encontrada'}, status=404)
+        logger.warning('contact_sync empresa no encontrada empresa=%s', empresa_id)
+        return JsonResponse({'detail': 'Empresa no encontrada', 'error_type': 'DoesNotExist'}, status=404)
     except AlegraIntegrationError as exc:
+        logger.error(
+            'contact_sync AlegraIntegrationError user=%s empresa=%s action=%s: %s',
+            getattr(request.user, 'pk', None),
+            empresa_id,
+            action,
+            exc,
+            exc_info=True,
+        )
         return _error_response(exc)
     except Exception as exc:
+        logger.exception(
+            'contact_sync unexpected error user=%s empresa=%s action=%s payload_keys=%s',
+            getattr(request.user, 'pk', None),
+            empresa_id,
+            action,
+            sorted(payload.keys()) if isinstance(payload, dict) else None,
+        )
         return _error_response(exc, status=500)
 
 

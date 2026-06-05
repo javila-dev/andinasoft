@@ -5542,6 +5542,119 @@ def historical_data(request):
     
     return render(request, 'historical_data.html',context)
 
+_CAJA_SALDO_RECAUDOS_DESDE = '2024-08-01'
+
+
+def _proyectos_para_recaudos_caja():
+    return proyectos.objects.exclude(proyecto__icontains='Alttum')
+
+
+def _formas_pago_descripciones_caja(caja_pk, proyecto_db):
+    """Formas de pago del proyecto cuya cuenta_asociada es esta caja."""
+    return list(
+        formas_pago.objects.using(proyecto_db)
+        .filter(cuenta_asociada_id=int(caja_pk))
+        .exclude(descripcion__isnull=True)
+        .exclude(descripcion='')
+        .values_list('descripcion', flat=True)
+    )
+
+
+def _sum_recaudos_caja_proyectos(caja_pk, *, fecha_lt=None, fecha_desde=None, fecha_hasta=None):
+    """Suma recibos (radicados y no radicados) ligados a la caja por proyecto."""
+    total = 0
+    for proy in _proyectos_para_recaudos_caja():
+        db = proy.proyecto
+        formas = _formas_pago_descripciones_caja(caja_pk, db)
+        if not formas:
+            continue
+        for model in (Recaudos_general, RecaudosNoradicados):
+            qs = model.objects.using(db).filter(formapago__in=formas)
+            if fecha_lt is not None:
+                qs = qs.filter(fecha__lt=fecha_lt, fecha__gte=_CAJA_SALDO_RECAUDOS_DESDE)
+            elif fecha_desde and fecha_hasta:
+                qs = qs.filter(fecha__range=(fecha_desde, fecha_hasta))
+            else:
+                continue
+            chunk = qs.aggregate(total=Sum('valor')).get('total')
+            if chunk is not None:
+                total += chunk
+    return total
+
+
+def _nombre_cliente_recaudo(tercero_id):
+    if not tercero_id:
+        return ''
+    cliente = clientes.objects.filter(pk=tercero_id).first()
+    if not cliente:
+        return str(tercero_id)
+    return (cliente.nombrecompleto or '').upper()
+
+
+def _append_movimientos_recaudos_caja(movements, caja_pk, fecha_desde, fecha_hasta):
+    """Ingresos por recibos de proyecto cuando formas_pago.cuenta_asociada apunta a la caja."""
+    for proy in _proyectos_para_recaudos_caja():
+        db = proy.proyecto
+        formas = _formas_pago_descripciones_caja(caja_pk, db)
+        if not formas:
+            continue
+
+        recaudos = Recaudos_general.objects.using(db).filter(
+            formapago__in=formas,
+            fecha__range=(fecha_desde, fecha_hasta),
+        ).order_by('fecha', 'numrecibo')
+        for mvto in recaudos:
+            movements.append({
+                'pk': mvto.pk,
+                'fecha': datetime.datetime.strftime(mvto.fecha, '%d/%m/%Y'),
+                'tercero': _nombre_cliente_recaudo(mvto.idtercero),
+                'nit_tercero': mvto.idtercero or '',
+                'descripcion': f'Recibo {mvto.numrecibo} - {db}',
+                'valor': float(mvto.valor or 0),
+                'legalizado': '',
+                'soporte': '',
+                'tipo': 'ingreso',
+                'estado': '',
+                'iva': None,
+                'rte': None,
+                'subtotal': '',
+                'concepto': 'RECIBOS',
+                'tipo_documento_soporte': '',
+            })
+
+        noradicados = RecaudosNoradicados.objects.using(db).filter(
+            formapago__in=formas,
+            fecha__range=(fecha_desde, fecha_hasta),
+        ).order_by('fecha', 'recibo')
+        for mvto in noradicados:
+            tercero_id = ''
+            nombre = ''
+            try:
+                contrato = ventas_nuevas.objects.using(db).filter(pk=mvto.contrato).first()
+                if contrato:
+                    tercero_id = contrato.id_t1 or ''
+                    nombre = _nombre_cliente_recaudo(tercero_id)
+            except Exception:
+                pass
+            movements.append({
+                'pk': mvto.pk,
+                'fecha': datetime.datetime.strftime(mvto.fecha, '%d/%m/%Y'),
+                'tercero': nombre or 'NO RADICADO',
+                'nit_tercero': tercero_id,
+                'descripcion': f'Recibo {mvto.recibo} no radicado - {db}',
+                'valor': float(mvto.valor or 0),
+                'legalizado': '',
+                'soporte': '',
+                'tipo': 'ingreso',
+                'estado': '',
+                'iva': None,
+                'rte': None,
+                'subtotal': '',
+                'concepto': 'RECIBOS',
+                'tipo_documento_soporte': '',
+            })
+
+
 #Cajas efectivo
 @login_required
 @group_perm_required(('accounting.view_gastos_caja',),raise_exception=True)
@@ -5656,6 +5769,10 @@ def cajas_efectivo(request):
                         ).aggregate(total=Sum('valor')).get('total')
                         
                         if saldo_ant_hoteles != None: valor += saldo_ant_hoteles
+
+                        saldo_recaudos = _sum_recaudos_caja_proyectos(caja, fecha_lt=fecha_desde)
+                        if saldo_recaudos:
+                            valor += saldo_recaudos
                         
                         saldo_gastos = gastos_caja.objects.filter(
                                 forma_pago=caja,
@@ -5776,7 +5893,8 @@ def cajas_efectivo(request):
                                 'subtotal':'',
                                 'concepto':'INGRESOS'
                             })
-                        
+
+                        _append_movimientos_recaudos_caja(movements, caja, fecha_desde, fecha_hasta)
                         
                     
                 data = {

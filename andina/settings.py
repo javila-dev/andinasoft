@@ -318,5 +318,10 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'alegra_integration': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }

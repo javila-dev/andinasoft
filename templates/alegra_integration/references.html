@@ -140,6 +140,12 @@
         <small class="text-muted d-block mt-2" id="contactSyncProgressText">—</small>
       </div>
 
+      <div class="mt-2" id="contactSyncLogWrap" style="display:none">
+        <small class="text-muted d-block mb-1">Registro del proceso</small>
+        <div id="contactSyncLog" class="border rounded bg-light p-2"
+             style="max-height:200px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.45"></div>
+      </div>
+
       <div class="mt-3" id="contactSyncSummary" style="display:none"></div>
 
       <div class="mt-3" id="contactSyncUnmatchedWrap" style="display:none">
@@ -869,6 +875,152 @@ function showAlert(kind, msg) {
   $('#alertBox').html(
     `<div class="alert alert-${cls} py-2 mb-0" style="font-size:.9rem">${msg}</div>`
   );
+}
+
+/** Detalle de error de contact-sync (servidor + consola para depuracion). */
+function formatContactSyncError(xhr) {
+  const body = xhr.responseJSON || {};
+  let msg = body.detail || body.message || '';
+  if (!msg && xhr.responseText) {
+    const t = String(xhr.responseText).trim();
+    if (t.length && t.length < 500 && !t.startsWith('<')) msg = t;
+  }
+  if (!msg) msg = xhr.statusText || 'Error desconocido';
+  const extra = [];
+  if (body.error_type) extra.push(body.error_type);
+  if (xhr.status) extra.push('HTTP ' + xhr.status);
+  console.error('contact_sync error', {
+    status: xhr.status,
+    statusText: xhr.statusText,
+    body: body,
+    responseText: xhr.responseText ? String(xhr.responseText).slice(0, 800) : '',
+  });
+  return escHtml(msg) + (extra.length ? ' <span class="text-muted">(' + escHtml(extra.join(' · ')) + ')</span>' : '');
+}
+
+/** Evita mezclar respuestas si el usuario inicia otra sync (no cancela por error de un paso). */
+let _contactSyncRunId = 0;
+let _contactSyncTimer = null;
+let _contactSyncPendingXhr = null;
+const CONTACT_SYNC_AJAX_TIMEOUT_MS = 180000;
+const CONTACT_SYNC_STEP_RETRIES = 3;
+
+function contactSyncTs() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8);
+}
+
+function contactSyncLog(kind, msg) {
+  const colors = {
+    ok: '#198754', err: '#dc3545', warn: '#b45309', info: '#0d6efd', dim: '#6c757d',
+  };
+  const icons = { ok: '+', err: 'x', warn: '!', info: '>', dim: '.' };
+  $('#contactSyncLogWrap').show();
+  $('#contactSyncLog').append(
+    `<div style="color:${colors[kind] || '#333'}">` +
+    `<span style="color:#999">[${contactSyncTs()}]</span> ${icons[kind] || '.'} ${msg}</div>`
+  );
+  const el = document.getElementById('contactSyncLog');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+function clearContactSyncLog() {
+  $('#contactSyncLog').empty();
+  $('#contactSyncLogWrap').hide();
+}
+
+function stopContactSyncTimers() {
+  if (_contactSyncTimer) {
+    clearTimeout(_contactSyncTimer);
+    _contactSyncTimer = null;
+  }
+}
+
+function abortContactSyncInFlight() {
+  if (_contactSyncPendingXhr) {
+    try { _contactSyncPendingXhr.abort(); } catch (e) { /* ignore */ }
+    _contactSyncPendingXhr = null;
+  }
+}
+
+/** Solo al iniciar una sync nueva: invalida la anterior en vuelo. */
+function beginContactSyncRun() {
+  _contactSyncRunId += 1;
+  stopContactSyncTimers();
+  abortContactSyncInFlight();
+  return _contactSyncRunId;
+}
+
+function isContactSyncRunActive(runId) {
+  return runId === _contactSyncRunId;
+}
+
+function scheduleContactSyncLoop(runId, fn, delayMs) {
+  if (!isContactSyncRunActive(runId)) return;
+  stopContactSyncTimers();
+  _contactSyncTimer = setTimeout(() => {
+    _contactSyncTimer = null;
+    if (isContactSyncRunActive(runId)) fn();
+  }, delayMs == null ? 50 : delayMs);
+}
+
+function contactSyncAjax(runId, empresa, action, chunkSize) {
+  if (!isContactSyncRunActive(runId)) {
+    return $.Deferred().reject({ cancelled: true }).promise();
+  }
+  const xhr = $.ajax({
+    url: API.contactSync,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    timeout: CONTACT_SYNC_AJAX_TIMEOUT_MS,
+    data: JSON.stringify({
+      empresa,
+      action: action || 'step',
+      chunk_size: chunkSize || 300,
+    }),
+  });
+  _contactSyncPendingXhr = xhr;
+  xhr.always(() => {
+    if (_contactSyncPendingXhr === xhr) _contactSyncPendingXhr = null;
+  });
+  return xhr;
+}
+
+function isContactSyncXhrCancelled(xhr) {
+  return !!(xhr && (xhr.cancelled || xhr.statusText === 'abort'));
+}
+
+function isContactSyncStepRetriable(xhr) {
+  if (!xhr || xhr.cancelled) return false;
+  const st = xhr.status;
+  if (!st || st === 408 || st === 502 || st === 503 || st === 504) return true;
+  const t = String(xhr.statusText || '').toLowerCase();
+  return t.indexOf('timeout') >= 0 || t === 'error';
+}
+
+function contactSyncErrorDetail(xhr) {
+  const body = xhr && xhr.responseJSON;
+  let msg = (body && body.detail) || (body && body.message) || '';
+  if (!msg && xhr && xhr.responseText) {
+    const raw = String(xhr.responseText).trim();
+    if (raw.length && raw.length < 400 && raw.indexOf('<') !== 0) msg = raw;
+  }
+  if (!msg && xhr) msg = xhr.statusText || 'sin detalle';
+  const extra = [];
+  if (body && body.error_type) extra.push(body.error_type);
+  if (xhr && xhr.status) extra.push('HTTP ' + xhr.status);
+  console.error('contact_sync paso', { status: xhr && xhr.status, body, xhr });
+  return escHtml(msg) + (extra.length ? ' (' + escHtml(extra.join(' · ')) + ')' : '');
+}
+
+function contactSyncProgressLabel(data) {
+  if (!data) return '';
+  if (data.phase === 'alegra' || data.stage === 'alegra') {
+    const t = data.alegra_type ? ' tipo ' + data.alegra_type : '';
+    return 'carga Alegra' + t + ', ' + (data.alegra_loaded || 0) + ' contactos';
+  }
+  return 'mapeo local etapa ' + escHtml(data.stage || '') + ', ' + (data.processed || 0) + '/' + (data.total_local || 0);
 }
 
 function clearAlert() {
@@ -3373,70 +3525,141 @@ function renderContactSyncUnmatched(unmatched) {
 function doContactSyncRefs() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+
+  const runId = beginContactSyncRun();
+  let lastProgress = null;
+  let stepRetries = 0;
+  let stepErrors = 0;
+
+  const enableContactSyncBtn = () => {
+    $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
+  };
+
   $('#btnContactSyncRun').prop('disabled', true).text('Sincronizando…');
   $('#contactSyncProgressBar').show();
   $('#contactSyncProgressFill').css('width', '0%');
   $('#contactSyncProgressText').text('Iniciando…');
   $('#contactSyncSummary').hide().empty();
   $('#contactSyncUnmatchedWrap').hide();
+  clearContactSyncLog();
+  clearAlert();
+  contactSyncLog('info', 'Iniciando sincronizacion por pasos (cada peticion es independiente).');
 
-  function step(action) {
-    return $.ajax({
-      url: API.contactSync,
-      method: 'POST',
-      contentType: 'application/json',
-      headers: { 'X-CSRFToken': CSRF },
-      data: JSON.stringify({ empresa, action: action || 'step', chunk_size: 300 }),
+  function renderContactSyncProgress(data) {
+    if (!isContactSyncRunActive(runId)) return;
+    lastProgress = data;
+    if (data.phase === 'alegra' || data.stage === 'alegra') {
+      $('#contactSyncProgressFill').css('width', '25%');
+      const t = data.alegra_type ? ` (${escHtml(data.alegra_type)})` : '';
+      $('#contactSyncProgressText').html(`Cargando contactos de Alegra${t}… <strong>${data.alegra_loaded}</strong>`);
+    } else {
+      const pct = Math.max(0, Math.min(100, data.percent || 0));
+      $('#contactSyncProgressFill').css('width', pct + '%');
+      $('#contactSyncProgressText').html(`Progreso: <strong>${pct}%</strong> (${data.processed}/${data.total_local})`);
+    }
+  }
+
+  function finishContactSync(data, hadStepErrors) {
+    if (!isContactSyncRunActive(runId)) return;
+    stopContactSyncTimers();
+    $('#contactSyncProgressFill').css('width', '100%');
+    $('#contactSyncProgressText').text('Completado.');
+    const warn = hadStepErrors
+      ? '<div class="alert alert-warning py-2 mb-2" style="font-size:.9rem">Hubo errores en algunos pasos; revisa el registro.</div>'
+      : '';
+    $('#contactSyncSummary').show().html(
+      warn +
+      `<div class="alert alert-success py-2 mb-0" style="font-size:.9rem">
+        Contactos en Alegra: <strong>${data.alegra_total}</strong> ·
+        mapeos nuevos: <strong>${data.mapped_new}</strong> ·
+        mapeos actualizados: <strong>${data.mapped_updated}</strong> ·
+        sin match: <strong>${data.unmatched_count}</strong>
+      </div>`
+    );
+    if ((data.unmatched_count || 0) > 0) {
+      $('#contactSyncUnmatchedWrap').show();
+      renderContactSyncUnmatched(data.unmatched || []);
+    }
+    enableContactSyncBtn();
+    contactSyncLog('ok', 'Proceso terminado correctamente.');
+    setTimeout(() => $('#contactSyncProgressBar').hide(), 900);
+  }
+
+  function onContactSyncStepFail(xhr) {
+    if (!isContactSyncRunActive(runId) || isContactSyncXhrCancelled(xhr)) return;
+    const ctx = contactSyncProgressLabel(lastProgress);
+    const detail = contactSyncErrorDetail(xhr);
+
+    if (isContactSyncStepRetriable(xhr) && stepRetries < CONTACT_SYNC_STEP_RETRIES) {
+      stepRetries += 1;
+      const wait = 1500 * stepRetries;
+      contactSyncLog('warn', `Paso con problema (${detail}). Reintento ${stepRetries}/${CONTACT_SYNC_STEP_RETRIES} en ${wait / 1000}s · ${ctx}`);
+      scheduleContactSyncLoop(runId, runStep, wait);
+      return;
+    }
+
+    stepRetries = 0;
+    stepErrors += 1;
+    contactSyncLog('err', `Paso detenido: ${detail} · ${ctx}`);
+    stopContactSyncTimers();
+    enableContactSyncBtn();
+    $('#contactSyncProgressText').append(' <span class="text-danger">(pausado)</span>');
+    contactSyncLog('info', 'El avance en servidor puede conservarse. Vuelve a pulsar Sincronizar para reintentar.');
+  }
+
+  function runStep() {
+    if (!isContactSyncRunActive(runId)) return;
+    contactSyncAjax(runId, empresa, 'step').done(data => {
+      if (!isContactSyncRunActive(runId)) return;
+      stepRetries = 0;
+      renderContactSyncProgress(data);
+      if (data.status === 'done') {
+        return finishContactSync(data, stepErrors > 0);
+      }
+      scheduleContactSyncLoop(runId, runStep, 50);
+    }).fail(onContactSyncStepFail);
+  }
+
+  function startOrResume() {
+    contactSyncAjax(runId, empresa, 'status').done(st => {
+      if (!isContactSyncRunActive(runId)) return;
+      const canResume = st && st.status === 'running' && (
+        (st.phase === 'alegra' && (st.alegra_loaded || 0) > 0) ||
+        (st.phase === 'local' && (st.processed || 0) > 0)
+      );
+      if (canResume) {
+        contactSyncLog('info', 'Reanudando sincronizacion (' + contactSyncProgressLabel(st) + ')…');
+        renderContactSyncProgress(st);
+        runStep();
+        return;
+      }
+      contactSyncAjax(runId, empresa, 'start').done(data => {
+        if (!isContactSyncRunActive(runId)) return;
+        contactSyncLog('info', 'Estado inicial listo. Recorriendo pasos…');
+        if (data) renderContactSyncProgress(data);
+        runStep();
+      }).fail(xhr => {
+        if (!isContactSyncRunActive(runId) || isContactSyncXhrCancelled(xhr)) return;
+        contactSyncLog('err', 'No se pudo iniciar: ' + contactSyncErrorDetail(xhr));
+        enableContactSyncBtn();
+        $('#contactSyncProgressBar').hide();
+      });
+    }).fail(xhr => {
+      if (!isContactSyncRunActive(runId) || isContactSyncXhrCancelled(xhr)) return;
+      contactSyncLog('warn', 'No se pudo consultar estado; iniciando desde cero.');
+      contactSyncAjax(runId, empresa, 'start').done(data => {
+        if (!isContactSyncRunActive(runId)) return;
+        if (data) renderContactSyncProgress(data);
+        runStep();
+      }).fail(xhr2 => {
+        contactSyncLog('err', 'No se pudo iniciar: ' + contactSyncErrorDetail(xhr2));
+        enableContactSyncBtn();
+        $('#contactSyncProgressBar').hide();
+      });
     });
   }
 
-  step('start').done(() => {
-    function loop() {
-      step('step').done(data => {
-        if (data.phase === 'alegra' || data.stage === 'alegra') {
-          $('#contactSyncProgressFill').css('width', '25%');
-          const t = data.alegra_type ? ` (${data.alegra_type})` : '';
-          $('#contactSyncProgressText').html(`Cargando contactos de Alegra${escHtml(t)}… <strong>${data.alegra_loaded}</strong>`);
-        } else {
-          const pct = Math.max(0, Math.min(100, data.percent || 0));
-          $('#contactSyncProgressFill').css('width', pct + '%');
-          $('#contactSyncProgressText').html(`Progreso: <strong>${pct}%</strong> (${data.processed}/${data.total_local})`);
-        }
-
-        if (data.status === 'done') {
-          $('#contactSyncProgressFill').css('width', '100%');
-          $('#contactSyncProgressText').text('Completado.');
-          $('#contactSyncSummary').show().html(
-            `<div class="alert alert-success py-2 mb-0" style="font-size:.9rem">
-              Contactos en Alegra: <strong>${data.alegra_total}</strong> ·
-              mapeos nuevos: <strong>${data.mapped_new}</strong> ·
-              mapeos actualizados: <strong>${data.mapped_updated}</strong> ·
-              sin match: <strong>${data.unmatched_count}</strong>
-            </div>`
-          );
-          if ((data.unmatched_count || 0) > 0) {
-            $('#contactSyncUnmatchedWrap').show();
-            renderContactSyncUnmatched(data.unmatched || []);
-          }
-          $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
-          setTimeout(() => $('#contactSyncProgressBar').hide(), 900);
-          return;
-        }
-        setTimeout(loop, 50);
-      }).fail(xhr => {
-        const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
-        showAlert('error', `Error sincronizando contactos: <strong>${escHtml(msg)}</strong>`);
-        $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
-        $('#contactSyncProgressBar').hide();
-      });
-    }
-    loop();
-  }).fail(xhr => {
-    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
-    showAlert('error', `Error iniciando sync: <strong>${escHtml(msg)}</strong>`);
-    $('#btnContactSyncRun').prop('disabled', false).html('<i class="fas fa-sync-alt mr-1"></i>Sincronizar contactos');
-    $('#contactSyncProgressBar').hide();
-  });
+  startOrResume();
 }
 
 function loadRef(refType) {
