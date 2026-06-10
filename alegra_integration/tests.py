@@ -1,9 +1,13 @@
 import datetime
+import json
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest import mock
 from unittest.mock import Mock, patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+
+from andinasoft.models import empresas
 
 from alegra_integration.builders import (
     CajaGastoBillBuilder,
@@ -525,6 +529,89 @@ class ClientTests(SimpleTestCase):
         )
 
 
+class WebhookInboundConsoleFilterTests(TestCase):
+    def setUp(self):
+        from alegra_integration.models import AlegraWebhookInboundLog
+
+        self.Log = AlegraWebhookInboundLog
+        self.Log.objects.create(
+            http_method='POST',
+            empresa_nit='900111',
+            process_status='ok',
+            process_detail='created',
+            factura_id=10,
+            payload={'subject': 'new-bill', 'message': {'bill': {'id': '1'}}},
+        )
+        self.Log.objects.create(
+            http_method='POST',
+            empresa_nit='900111',
+            process_status='skip',
+            process_detail='radicado_not_created',
+            payload={'subject': 'new-bill', 'message': {'bill': {'id': '2'}}},
+        )
+        self.Log.objects.create(
+            http_method='GET',
+            empresa_nit='900111',
+            payload={},
+        )
+
+    def test_filter_empresa_and_missing(self):
+        from alegra_integration.webhook_inbound_status import queryset_inbound_logs_for_console
+
+        all_posts = queryset_inbound_logs_for_console()
+        self.assertEqual(all_posts.count(), 2)
+
+        by_empresa = queryset_inbound_logs_for_console(empresa='900111')
+        self.assertEqual(by_empresa.count(), 2)
+
+        missing = queryset_inbound_logs_for_console(estado='missing')
+        self.assertEqual(missing.count(), 1)
+        self.assertEqual(missing.first().process_detail, 'radicado_not_created')
+
+
+class WebhookInboundImportViewTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username='whk_tester', password='x')
+        self.client.force_login(self.user)
+        self.empresa = empresas.objects.create(
+            Nit='900222',
+            nombre='Empresa prueba',
+            alegra_enabled=True,
+        )
+
+    def test_import_bill_requires_bill_id(self):
+        res = self.client.post(
+            '/accounting/alegra/webhooks/inbound/import-bill',
+            data=json.dumps({'empresa': '900222'}),
+            content_type='application/json',
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('factura', res.json()['detail'].lower())
+
+    @mock.patch('alegra_integration.views.import_factura_from_alegra_bill')
+    def test_import_bill_success(self, import_mock):
+        import_mock.return_value = {
+            'created': True,
+            'factura_pk': 55,
+            'alegra_bill_id': '900222:9',
+            'pdf_saved': True,
+            'enriched_fields': [],
+        }
+        res = self.client.post(
+            '/accounting/alegra/webhooks/inbound/import-bill',
+            data=json.dumps({'empresa': '900222', 'bill_id': '9'}),
+            content_type='application/json',
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['created'])
+        self.assertEqual(data['factura_pk'], 55)
+        import_mock.assert_called_once()
+
+
 class WebhookInboundLogHelpersTests(SimpleTestCase):
     def test_radicado_status_from_stored_skip(self):
         from types import SimpleNamespace
@@ -559,6 +646,26 @@ class WebhookInboundLogHelpersTests(SimpleTestCase):
         st = radicado_status_display(log, '900123', '28', 'new-bill')
         self.assertEqual(st['kind'], 'ok')
         self.assertIn('99', st['label'])
+
+    def test_extract_bill_display_fields_from_sample(self):
+        from alegra_integration.webhook_inbound_status import extract_bill_display_fields
+
+        bill = {
+            'id': '1',
+            'total': 142456,
+            'balance': 142456,
+            'client': {
+                'name': 'TELESENTINEL DE ANTIOQUIA LTDA',
+                'identification': '800144355',
+            },
+            'numberTemplate': {'number': 'FCII327559'},
+        }
+        display = extract_bill_display_fields(bill)
+        self.assertEqual(display['tercero_nombre'], 'TELESENTINEL DE ANTIOQUIA LTDA')
+        self.assertEqual(display['tercero_nit'], '800144355')
+        self.assertEqual(display['nro_factura'], 'FCII327559')
+        self.assertEqual(display['valor'], 142456)
+        self.assertEqual(display['valor_display'], '$142,456')
 
 
 class BillMappingEnrichTests(SimpleTestCase):

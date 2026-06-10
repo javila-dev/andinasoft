@@ -10,6 +10,7 @@ urlpatterns = [
     path('webhooks/subscriptions', views.webhooks_subscriptions_list, name='alegra-webhooks-subscriptions-list'),
     path('webhooks/subscriptions/delete', views.webhooks_subscriptions_delete, name='alegra-webhooks-subscriptions-delete'),
     path('webhooks/inbound/replay', views.webhooks_inbound_replay, name='alegra-webhooks-inbound-replay'),
+    path('webhooks/inbound/import-bill', views.webhooks_inbound_import_bill, name='alegra-webhooks-inbound-import-bill'),
     path('webhooks/', views.webhooks_console, name='alegra-webhooks-console'),
     path('', views.dashboard, name='alegra-dashboard'),
     path('references', views.references, name='alegra-references'),

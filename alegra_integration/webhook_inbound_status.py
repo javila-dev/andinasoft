@@ -1,8 +1,26 @@
 """
 Estado de procesamiento de webhooks entrantes (¿creó radicado?).
 """
+from django.db.models import Q
+
 from accounting.models import Facturas
 from alegra_integration.webhook_bills import composite_alegra_bill_id
+
+INBOUND_CONSOLE_PAGE_SIZE = 50
+
+INBOUND_EVENT_CHOICES = (
+    ('new-bill', 'Factura nueva'),
+    ('edit-bill', 'Factura editada'),
+    ('delete-bill', 'Factura eliminada'),
+)
+
+INBOUND_STATUS_FILTER_CHOICES = (
+    ('', 'Todos'),
+    ('ok', 'Procesado'),
+    ('error', 'Error'),
+    ('skip', 'Omitido'),
+    ('missing', 'Sin radicado'),
+)
 
 SKIP_REASON_LABELS = {
     'missing_empresa': 'Sin empresa en URL',
@@ -68,6 +86,46 @@ def extract_bill_from_payload(payload):
     if not isinstance(bill, dict):
         return None, str(payload.get('subject') or '').strip().lower()
     return bill, str(payload.get('subject') or '').strip().lower()
+
+
+def extract_bill_display_fields(bill):
+    """
+    Campos legibles para la tabla de recepciones (proveedor y valor a pagar).
+    """
+    empty = {
+        'tercero_nombre': '',
+        'tercero_nit': '',
+        'nro_factura': '',
+        'valor': None,
+        'valor_display': '',
+    }
+    if not isinstance(bill, dict):
+        return empty
+
+    from alegra_integration.bill_mapping import map_bill_to_factura_fields
+
+    mapped = map_bill_to_factura_fields(bill)
+    valor = mapped.get('valor')
+    valor_display = ''
+    if valor is not None and int(valor) > 0:
+        valor_display = f'${int(valor):,}'
+
+    nt = bill.get('numberTemplate') or {}
+    nro_factura = ''
+    if isinstance(nt, dict) and nt.get('number') is not None:
+        nro_factura = str(nt.get('number')).strip()
+
+    nombre = (mapped.get('nombretercero') or '').strip()
+    if nombre.upper() == 'SIN NOMBRE':
+        nombre = ''
+
+    return {
+        'tercero_nombre': nombre,
+        'tercero_nit': (mapped.get('idtercero') or '').strip(),
+        'nro_factura': nro_factura,
+        'valor': valor,
+        'valor_display': valor_display,
+    }
 
 
 def infer_inbound_process_result(empresa_nit, payload):
@@ -290,6 +348,47 @@ def radicado_status_display(log, empresa_nit, bill_id, subject, factura=None):
     }
 
 
+def queryset_inbound_logs_for_console(*, empresa='', evento='', estado='', buscar=''):
+    """
+    Filtra AlegraWebhookInboundLog para la pestaña Recepciones de la consola webhooks.
+    """
+    from alegra_integration.models import AlegraWebhookInboundLog
+
+    qs = AlegraWebhookInboundLog.objects.filter(http_method='POST').order_by('-created_at')
+    empresa = (empresa or '').strip()
+    if empresa:
+        qs = qs.filter(empresa_nit=empresa)
+    evento = (evento or '').strip()
+    if evento:
+        qs = qs.filter(payload__subject=evento)
+    buscar = (buscar or '').strip()
+    if buscar:
+        qs = qs.filter(
+            Q(payload__message__bill__client__name__icontains=buscar)
+            | Q(payload__message__bill__provider__name__icontains=buscar)
+            | Q(payload__message__bill__client__identification__icontains=buscar)
+            | Q(payload__message__bill__provider__identification__icontains=buscar)
+            | Q(payload__message__bill__numberTemplate__number__icontains=buscar)
+            | Q(payload__message__bill__id__icontains=buscar)
+            | Q(raw_body__icontains=buscar)
+        )
+    estado = (estado or '').strip()
+    if estado == 'ok':
+        qs = qs.filter(process_status='ok').exclude(process_detail='deleted_hard')
+    elif estado == 'error':
+        qs = qs.filter(process_status='error')
+    elif estado == 'skip':
+        qs = qs.filter(process_status='skip')
+    elif estado == 'missing':
+        qs = qs.filter(payload__subject='new-bill').filter(
+            Q(process_status='skip', process_detail='radicado_not_created')
+            | Q(process_status='skip', process_detail='not_processed')
+            | Q(process_status='', factura_id__isnull=True)
+            | Q(process_status='ok', process_detail='deleted_hard')
+        )
+    return qs
+
+
 def build_inbound_log_rows(logs, empresa_filter=''):
     """
     Enriquece filas de AlegraWebhookInboundLog para la consola webhooks.
@@ -298,12 +397,11 @@ def build_inbound_log_rows(logs, empresa_filter=''):
     composites = []
     for log in logs:
         payload = log.payload if isinstance(log.payload, dict) else {}
-        bill = {}
-        msg = payload.get('message')
-        if isinstance(msg, dict) and isinstance(msg.get('bill'), dict):
-            bill = msg['bill']
+        bill, subject_raw = extract_bill_from_payload(payload)
+        bill = bill if isinstance(bill, dict) else {}
         bill_id = str(bill.get('id') or '').strip()
-        subject = str(payload.get('subject') or '').strip()
+        subject = str(subject_raw or payload.get('subject') or '').strip()
+        display = extract_bill_display_fields(bill)
         empresa_nit = resolve_empresa_nit_for_log(log, empresa_filter, bill_id=bill_id)
         empresa_hint = (getattr(log, 'empresa_nit', None) or '').strip() or empresa_nit
         composite = composite_alegra_bill_id(empresa_nit, bill_id) if empresa_nit and bill_id else ''
@@ -313,6 +411,11 @@ def build_inbound_log_rows(logs, empresa_filter=''):
             'log': log,
             'subject': subject[:60],
             'bill_id': bill_id,
+            'nro_factura': display['nro_factura'],
+            'tercero_nombre': display['tercero_nombre'],
+            'tercero_nit': display['tercero_nit'],
+            'valor': display['valor'],
+            'valor_display': display['valor_display'],
             'empresa_hint': empresa_hint,
             'empresa_nit': empresa_nit,
             'payload_ok': bool(payload) and not payload.get('_json_parse_error'),

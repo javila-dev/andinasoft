@@ -2,6 +2,7 @@ import json
 import logging
 from urllib.parse import parse_qs
 
+from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -26,9 +27,13 @@ from alegra_integration.mapping import MappingResolver
 from alegra_integration.client import AlegraMCPClient
 
 logger = logging.getLogger(__name__)
-from alegra_integration.webhook_bills import process_inbound_post
+from alegra_integration.webhook_bills import import_factura_from_alegra_bill, process_inbound_post
 from alegra_integration.webhook_inbound_status import (
+    INBOUND_CONSOLE_PAGE_SIZE,
+    INBOUND_EVENT_CHOICES,
+    INBOUND_STATUS_FILTER_CHOICES,
     build_inbound_log_rows,
+    queryset_inbound_logs_for_console,
     update_inbound_log_from_process_result,
 )
 
@@ -57,16 +62,33 @@ def _empresa_nit_from_inbound_log(log):
 @require_http_methods(['GET'])
 def webhooks_console(request):
     empresa_id = (request.GET.get('empresa') or '').strip()
+    filter_evento = (request.GET.get('evento') or '').strip()
+    filter_estado = (request.GET.get('estado') or '').strip()
+    filter_buscar = (request.GET.get('buscar') or '').strip()
+    active_tab = (request.GET.get('tab') or 'suscripcion').strip().lower()
+    if active_tab not in ('suscripcion', 'recepciones'):
+        active_tab = 'suscripcion'
+
     logs = []
     if empresa_id:
         logs = list(
             AlegraWebhookSubscriptionLog.objects.filter(empresa_id=empresa_id)
             .order_by('-created_at')[:40]
         )
+
+    inbound_qs = queryset_inbound_logs_for_console(
+        empresa=empresa_id,
+        evento=filter_evento,
+        estado=filter_estado,
+        buscar=filter_buscar,
+    )
+    paginator = Paginator(inbound_qs, INBOUND_CONSOLE_PAGE_SIZE)
+    inbound_page = paginator.get_page(request.GET.get('page'))
     inbound_logs = build_inbound_log_rows(
-        AlegraWebhookInboundLog.objects.order_by('-created_at')[:30],
+        inbound_page.object_list,
         empresa_filter=empresa_id,
     )
+
     return render(request, 'alegra_integration/webhooks.html', {
         'empresas': empresas.objects.filter(alegra_enabled=True).order_by('nombre'),
         'webhook_ingest_suffix': ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX,
@@ -74,6 +96,13 @@ def webhooks_console(request):
         'selected_empresa': empresa_id,
         'initial_logs': logs,
         'inbound_logs': inbound_logs,
+        'inbound_page': inbound_page,
+        'filter_evento': filter_evento,
+        'filter_estado': filter_estado,
+        'filter_buscar': filter_buscar,
+        'inbound_event_choices': INBOUND_EVENT_CHOICES,
+        'inbound_status_choices': INBOUND_STATUS_FILTER_CHOICES,
+        'active_tab': active_tab,
     })
 
 
@@ -170,6 +199,57 @@ def webhooks_inbound_replay(request):
         'subject': payload.get('subject'),
         'replayed_by': request.user.username,
         **extra,
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def webhooks_inbound_import_bill(request):
+    """
+    Crea o reconcilia un radicado consultando GET /bills/{id} en Alegra.
+    Util cuando no llego el webhook o el radicado fue eliminado.
+    """
+    try:
+        body = _payload(request)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+
+    empresa_id = (body.get('empresa') or '').strip()
+    bill_id = str(body.get('bill_id') or '').strip()
+    if not empresa_id:
+        return JsonResponse({'detail': 'Selecciona la empresa (NIT).'}, status=400)
+    if not bill_id:
+        return JsonResponse({'detail': 'Indica el numero de factura en Alegra.'}, status=400)
+
+    try:
+        empresa = empresas.objects.get(pk=empresa_id)
+    except empresas.DoesNotExist:
+        return JsonResponse({'detail': 'Empresa no encontrada.'}, status=404)
+
+    if not empresa.alegra_enabled:
+        return JsonResponse({'detail': 'La empresa no tiene integracion Alegra activa.'}, status=400)
+
+    try:
+        result = import_factura_from_alegra_bill(empresa, bill_id, sync_pdf=True)
+    except ValueError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        logger.exception('webhooks_inbound_import_bill empresa=%s bill=%s', empresa_id, bill_id)
+        return _error_response(exc, status=500)
+
+    return JsonResponse({
+        'status': 'imported',
+        'empresa': empresa_id,
+        'bill_id': bill_id,
+        'imported_by': request.user.username,
+        'created': bool(result.get('created')),
+        'idempotent': not bool(result.get('created')),
+        'factura_pk': result.get('factura_pk'),
+        'alegra_bill_id': result.get('alegra_bill_id'),
+        'pdf_saved': bool(result.get('pdf_saved')),
+        'enriched_fields': result.get('enriched_fields') or [],
     })
 
 

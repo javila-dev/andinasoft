@@ -34,7 +34,8 @@
   }
   .log-ok { color: #28a745; font-weight: 600; }
   .log-fail { color: #dc3545; font-weight: 600; }
-  .btn-inbound-replay.is-loading {
+  .btn-inbound-replay.is-loading,
+  .btn-inbound-import.is-loading {
     pointer-events: none;
     opacity: 0.85;
   }
@@ -53,231 +54,415 @@
   .whk-radicado-skip { background: #fff3cd; color: #856404; }
   .whk-radicado-error { background: #f8d7da; color: #721c24; }
   .whk-radicado-unknown { background: #e2e3e5; color: #383d41; }
+  .whk-tabs .nav-link { font-weight: 600; }
+  .whk-tabs .nav-link.active { color: #1e3330; border-bottom-color: #2d4a42; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4" style="max-width:960px">
+<div class="container-fluid py-4" style="max-width:1100px">
 
   <div class="whk-header d-flex justify-content-between align-items-center flex-wrap">
     <div>
-      <h4 class="mb-1"><i class="fas fa-plug mr-2"></i>Suscripción webhooks Alegra</h4>
-      <p class="mb-0 small" style="opacity:.85">Por empresa · credenciales desde <code>empresas.alegra_token</code></p>
+      <h4 class="mb-1"><i class="fas fa-plug mr-2"></i>Webhooks Alegra</h4>
+      <p class="mb-0 small" style="opacity:.85">Suscripcion y recepciones de facturas de compra</p>
     </div>
     <a class="btn btn-sm btn-outline-light" href="/accounting/alegra/"><i class="fas fa-arrow-left mr-1"></i>Dashboard Alegra</a>
   </div>
 
-  <div class="alert alert-light border small mb-4">
-    <strong>Gastos Alegra (aprobación):</strong>
+  <div class="alert alert-light border small mb-3">
+    <strong>Gastos Alegra (aprobacion):</strong>
     <a href="/accounting/gastos-alegra/asignar/">Asignar oficina y aprobador</a>
     ·
     <a href="/accounting/gastos-alegra/aprobar/">Aprobar gastos</a>
   </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header font-weight-bold" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
-      Nueva suscripción
-    </div>
-    <div class="card-body">
-      <p class="text-muted small mb-3">
-        Indica el <strong>host</strong> (puedes pegar también <code>https://…</code>; se usa solo el host).
-        Alegra exige la URL del webhook <strong>sin</strong> <code>http://</code> ni <code>https://</code>; nosotros enviamos <code>host + ruta</code> y en la respuesta verás <code>callback_url_https</code> para probar en el navegador.
-      </p>
-      <div class="whk-path mb-3">
-        <span class="text-white-50">ej. ibex-daring-molly.ngrok-free.app</span><strong class="text-warning">{{ webhook_ingest_suffix }}</strong>
-      </div>
+  <ul class="nav nav-tabs whk-tabs mb-3" id="whkMainTabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'suscripcion' %}active{% endif %}" id="tabSuscripcionLink" data-toggle="tab" href="#tabSuscripcion" role="tab">
+        <i class="fas fa-cog mr-1"></i>Suscripcion
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'recepciones' %}active{% endif %}" id="tabRecepcionesLink" data-toggle="tab" href="#tabRecepciones" role="tab">
+        <i class="fas fa-inbox mr-1"></i>Recepciones
+        {% if inbound_page.paginator.count %}
+        <span class="badge badge-secondary ml-1">{{ inbound_page.paginator.count }}</span>
+        {% endif %}
+      </a>
+    </li>
+  </ul>
 
-      <div id="whkAlert"></div>
+  <div class="tab-content" id="whkMainTabContent">
 
-      <div class="form-row">
-        <div class="col-md-5 mb-3">
-          <label class="font-weight-bold small">Empresa <span class="text-danger">*</span></label>
-          <select class="form-control" id="whkEmpresa">
-            <option value="">— Seleccionar —</option>
-            {% for e in empresas %}
-            <option value="{{ e.Nit }}" {% if e.Nit == selected_empresa %}selected{% endif %}>{{ e.nombre }}</option>
-            {% endfor %}
-          </select>
+    <div class="tab-pane fade {% if active_tab == 'suscripcion' %}show active{% endif %}" id="tabSuscripcion" role="tabpanel">
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header font-weight-bold" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          Nueva suscripcion
         </div>
-        <div class="col-md-4 mb-3">
-          <label class="font-weight-bold small">Evento <span class="text-danger">*</span></label>
-          <select class="form-control" id="whkEvent">
-            {% for ev in webhook_events %}
-            <option value="{{ ev }}" {% if ev == 'new-bill' %}selected{% endif %}>{{ ev }}</option>
-            {% endfor %}
-          </select>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Indica el <strong>host</strong> (puedes pegar tambien <code>https://…</code>; se usa solo el host).
+            Alegra exige la URL del webhook <strong>sin</strong> <code>http://</code> ni <code>https://</code>.
+          </p>
+          <div class="whk-path mb-3">
+            <span class="text-white-50">ej. ibex-daring-molly.ngrok-free.app</span><strong class="text-warning">{{ webhook_ingest_suffix }}</strong>
+          </div>
+
+          <div id="whkAlert"></div>
+
+          <div class="form-row">
+            <div class="col-md-5 mb-3">
+              <label class="font-weight-bold small">Empresa <span class="text-danger">*</span></label>
+              <select class="form-control" id="whkEmpresa">
+                <option value="">— Seleccionar —</option>
+                {% for e in empresas %}
+                <option value="{{ e.Nit }}" {% if e.Nit == selected_empresa %}selected{% endif %}>{{ e.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="font-weight-bold small">Evento <span class="text-danger">*</span></label>
+              <select class="form-control" id="whkEvent">
+                {% for ev in webhook_events %}
+                <option value="{{ ev }}" {% if ev == 'new-bill' %}selected{% endif %}>{{ ev }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-12 mb-3">
+              <label class="font-weight-bold small">Dominio base <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="whkDomain" placeholder="ibex-daring-molly.ngrok-free.app"
+                     value="ibex-daring-molly.ngrok-free.app">
+              <small class="text-muted">Host sin path. Tambien acepta URL completa; el protocolo no se envia a Alegra.</small>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary" id="whkBtnSubscribe">
+            <i class="fas fa-paper-plane mr-1"></i>Suscribir en Alegra
+          </button>
         </div>
-        <div class="col-md-12 mb-3">
-          <label class="font-weight-bold small">Dominio base <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" id="whkDomain" placeholder="ibex-daring-molly.ngrok-free.app"
-                 value="ibex-daring-molly.ngrok-free.app">
-          <small class="text-muted">Host sin path. También acepta URL completa; el protocolo no se envía a Alegra.</small>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          <span>Respuesta Alegra (ultima accion de suscripcion)</span>
+        </div>
+        <div class="card-body">
+          <div id="whkLastResponse" class="json-viewer text-muted">Aun no hay respuesta en esta sesion.</div>
         </div>
       </div>
-      <button type="button" class="btn btn-primary" id="whkBtnSubscribe">
-        <i class="fas fa-paper-plane mr-1"></i>Suscribir en Alegra
-      </button>
-    </div>
-  </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
-      <span>Respuesta Alegra (última acción)</span>
-    </div>
-    <div class="card-body">
-      <div id="whkLastResponse" class="json-viewer text-muted">Aún no hay respuesta en esta sesión.</div>
-    </div>
-  </div>
-
-  <div class="card shadow-sm mb-4 border-info">
-    <div class="card-header font-weight-bold bg-light border-bottom">
-      <i class="fas fa-info-circle text-info mr-2"></i>Qué hace cada parte
-    </div>
-    <div class="card-body small text-muted">
-      <p class="mb-2"><strong>Suscribir</strong> llama a <code>POST /webhooks/subscriptions</code>. Si ya existe un <code>new-bill</code> para la empresa, hay que <strong>eliminarlo</strong> antes de registrar otro host (varios webhooks activos pueden duplicar radicados).</p>
-      <p class="mb-2"><strong>Cuando ocurre un evento</strong>, Alegra hace <code>POST</code> a la URL registrada (host + <code>{{ webhook_ingest_suffix }}&lt;NIT&gt;/</code>). Revisa <strong>Suscripciones activas en Alegra</strong> abajo (fuente de verdad). El radicado usa <code>alegra_bill_id = NIT:id</code> para no duplicar reintentos.</p>
-      <p class="mb-0"><strong>Reenviar</strong> en «Recepciones» vuelve a ejecutar el procesamiento del payload guardado (sin llamar a Alegra). La respuesta aparece en «Respuesta Alegra (última acción)» con <code>skip_reason</code>, <code>factura_pk</code>, etc.</p>
-    </div>
-  </div>
-
-  <div class="card shadow-sm mb-4">
-    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center flex-wrap" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
-      <span>Recepciones desde Alegra (POST a ingesta)</span>
-      <div class="d-flex align-items-center flex-wrap">
-        <small class="text-muted mr-2 mb-1 mb-md-0">La empresa viene del path <code>{{ webhook_ingest_suffix }}&lt;NIT&gt;/</code> (ej. <code>…/bills/901018375/</code>). Columna <strong>Radicado</strong>: resultado al procesar ese POST.</small>
-        <a class="btn btn-sm btn-outline-dark mb-1" href="/admin/alegra_integration/alegrawebhookinboundlog/" target="_blank" rel="noopener">
-          <i class="fas fa-database mr-1"></i>Admin (JSON completo)
-        </a>
+      <div class="card shadow-sm mb-4 border-info">
+        <div class="card-header font-weight-bold bg-light border-bottom">
+          <i class="fas fa-info-circle text-info mr-2"></i>Como funciona la suscripcion
+        </div>
+        <div class="card-body small text-muted">
+          <p class="mb-2"><strong>Suscribir</strong> registra en Alegra la URL de recepcion. Si ya existe un <code>new-bill</code> para la empresa, eliminalo antes de registrar otro host (varios webhooks activos pueden duplicar radicados).</p>
+          <p class="mb-0"><strong>Cuando ocurre un evento</strong>, Alegra hace <code>POST</code> a <code>{{ webhook_ingest_suffix }}&lt;NIT&gt;/</code>. Revisa las recepciones en la pestana <strong>Recepciones</strong>.</p>
+        </div>
       </div>
-    </div>
-    <div class="card-body p-0">
-      <div id="whkReplayStatus" class="whk-replay-status" role="status" aria-live="polite"></div>
-      <div class="table-responsive">
-        <table class="table table-sm table-striped mb-0" style="font-size:13px">
-          <thead class="thead-light">
-            <tr>
-              <th>Id</th>
-              <th>Fecha</th>
-              <th>Evento</th>
-              <th>Bill</th>
-              <th>Empresa</th>
-              <th>Radicado</th>
-              <th>Origen</th>
-              <th class="text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in inbound_logs %}
-            <tr>
-              <td>{{ row.log.pk }}</td>
-              <td nowrap>{{ row.log.created_at|date:"d/m/Y H:i:s" }}</td>
-              <td>{% if row.subject %}<code>{{ row.subject }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
-              <td>{% if row.bill_id %}<code>{{ row.bill_id }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
-              <td><small>{% if row.empresa_nit %}<code>{{ row.empresa_nit }}</code>{% else %}<span class="text-muted" title="Sin NIT en path ni radicado asociado">—</span>{% endif %}</small></td>
-              <td>
-                {% if row.radicado.kind == 'ok' %}
-                <span class="badge whk-radicado-ok">{{ row.radicado.label }}</span>
-                {% elif row.radicado.kind == 'missing' %}
-                <span class="badge whk-radicado-missing">{{ row.radicado.label }}</span>
-                {% elif row.radicado.kind == 'skip' %}
-                <span class="badge whk-radicado-skip">{{ row.radicado.label }}</span>
-                {% elif row.radicado.kind == 'error' %}
-                <span class="badge whk-radicado-error">{{ row.radicado.label }}</span>
-                {% elif row.radicado.kind == 'unknown' %}
-                <span class="badge whk-radicado-unknown">{{ row.radicado.label }}</span>
-                {% else %}
-                <span class="text-muted">{{ row.radicado.label }}</span>
-                {% endif %}
-                {% if row.radicado.detail %}
-                <small class="text-muted d-block" style="max-width:140px;line-height:1.2" title="{{ row.radicado.detail }}">{{ row.radicado.detail|truncatechars:40 }}</small>
-                {% endif %}
-              </td>
-              <td><small>{{ row.log.remote_addr|default:"—" }}</small></td>
-              <td class="text-right text-nowrap">
-                <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/alegra_integration/alegrawebhookinboundlog/{{ row.log.pk }}/change/" target="_blank" rel="noopener">Payload</a>
-                {% if row.payload_ok and row.log.http_method == 'POST' %}
-                <button type="button" class="btn btn-sm btn-outline-primary py-0 btn-inbound-replay" data-log-id="{{ row.log.pk }}" data-subject="{{ row.subject }}" data-bill-id="{{ row.bill_id }}" data-empresa-hint="{{ row.empresa_nit }}">
-                  <i class="fas fa-redo mr-1"></i>Reenviar
-                </button>
-                {% endif %}
-              </td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="8" class="text-center text-muted py-4">Aún no hay POST desde Alegra. Crea o edita una factura de compra en Alegra tras suscribir <code>new-bill</code>.</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
-  <div class="card shadow-sm mb-4 border-warning">
-    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#fff8e1;border-bottom:1px solid #ffe8a1;">
-      <span>Suscripciones activas en Alegra (listar / eliminar)</span>
-      <button type="button" class="btn btn-sm btn-outline-secondary" id="whkBtnRefreshSubscriptions">
-        <i class="fas fa-sync-alt mr-1"></i>Actualizar
-      </button>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-sm table-striped mb-0" style="font-size:13px">
-          <thead class="thead-light">
-            <tr>
-              <th>Evento</th>
-              <th>URL</th>
-              <th>ID</th>
-              <th class="text-right">Acción</th>
-            </tr>
-          </thead>
-          <tbody id="whkSubscriptionsBody">
-            <tr>
-              <td colspan="4" class="text-center text-muted py-3">Selecciona una empresa para cargar suscripciones.</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="card shadow-sm mb-4 border-warning">
+        <div class="card-header font-weight-bold d-flex justify-content-between align-items-center" style="background:#fff8e1;border-bottom:1px solid #ffe8a1;">
+          <span>Suscripciones activas en Alegra</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="whkBtnRefreshSubscriptions">
+            <i class="fas fa-sync-alt mr-1"></i>Actualizar
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0" style="font-size:13px">
+              <thead class="thead-light">
+                <tr>
+                  <th>Evento</th>
+                  <th>URL</th>
+                  <th>ID</th>
+                  <th class="text-right">Accion</th>
+                </tr>
+              </thead>
+              <tbody id="whkSubscriptionsBody">
+                <tr>
+                  <td colspan="4" class="text-center text-muted py-3">Selecciona una empresa para cargar suscripciones.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header font-weight-bold d-flex justify-content-between align-items-center flex-wrap" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
-      <span>Suscripciones (llamadas a la API de Alegra)</span>
-      <button type="button" class="btn btn-sm btn-outline-secondary" id="whkBtnReload">
-        <i class="fas fa-sync-alt mr-1"></i>Recargar con empresa seleccionada
-      </button>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-sm table-striped mb-0" style="font-size:13px">
-          <thead class="thead-light">
-            <tr>
-              <th>Fecha</th>
-              <th>Evento</th>
-              <th>HTTP</th>
-              <th>OK</th>
-              <th>URL callback</th>
-            </tr>
-          </thead>
-          <tbody id="whkLogBody">
-            {% for row in initial_logs %}
-            <tr>
-              <td nowrap>{{ row.created_at|date:"d/m/Y H:i" }}</td>
-              <td><code>{{ row.event }}</code></td>
-              <td>{{ row.response_status|default:"—" }}</td>
-              <td class="{% if row.success %}log-ok{% else %}log-fail{% endif %}">{% if row.success %}Sí{% else %}No{% endif %}</td>
-              <td style="max-width:280px;word-break:break-all;"><small>{{ row.callback_url }}</small></td>
-            </tr>
-            {% empty %}
-            <tr id="whkLogEmpty">
-              <td colspan="5" class="text-center text-muted py-4">Sin registros. Elige empresa y recarga, o suscribe arriba.</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="card shadow-sm mb-4">
+        <div class="card-header font-weight-bold d-flex justify-content-between align-items-center flex-wrap" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          <span>Historial de suscripciones (llamadas a la API)</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="whkBtnReload">
+            <i class="fas fa-sync-alt mr-1"></i>Recargar con empresa seleccionada
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0" style="font-size:13px">
+              <thead class="thead-light">
+                <tr>
+                  <th>Fecha</th>
+                  <th>Evento</th>
+                  <th>HTTP</th>
+                  <th>OK</th>
+                  <th>URL callback</th>
+                </tr>
+              </thead>
+              <tbody id="whkLogBody">
+                {% for row in initial_logs %}
+                <tr>
+                  <td nowrap>{{ row.created_at|date:"d/m/Y H:i" }}</td>
+                  <td><code>{{ row.event }}</code></td>
+                  <td>{{ row.response_status|default:"—" }}</td>
+                  <td class="{% if row.success %}log-ok{% else %}log-fail{% endif %}">{% if row.success %}Si{% else %}No{% endif %}</td>
+                  <td style="max-width:280px;word-break:break-all;"><small>{{ row.callback_url }}</small></td>
+                </tr>
+                {% empty %}
+                <tr id="whkLogEmpty">
+                  <td colspan="5" class="text-center text-muted py-4">Sin registros. Elige empresa y recarga, o suscribe arriba.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
+
     </div>
+
+    <div class="tab-pane fade {% if active_tab == 'recepciones' %}show active{% endif %}" id="tabRecepciones" role="tabpanel">
+
+      <div class="card shadow-sm mb-4 border-info">
+        <div class="card-header font-weight-bold bg-light border-bottom">
+          <i class="fas fa-info-circle text-info mr-2"></i>Recuperar radicados
+        </div>
+        <div class="card-body small text-muted">
+          <p class="mb-2"><strong>Reprocesar</strong> vuelve a ejecutar el aviso guardado (sin llamar a Alegra). Sirve si el radicado no se creo o fue eliminado y aun tienes el registro de recepcion.</p>
+          <p class="mb-0"><strong>Importar factura</strong> consulta la factura directamente en Alegra y crea el radicado. Usalo si el aviso nunca llego o el JSON guardado no es valido.</p>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header font-weight-bold" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          Importar factura desde Alegra
+        </div>
+        <div class="card-body">
+          <div id="whkImportAlert"></div>
+          <div class="form-row align-items-end">
+            <div class="col-md-5 mb-2">
+              <label class="font-weight-bold small">Empresa <span class="text-danger">*</span></label>
+              <select class="form-control" id="whkImportEmpresa">
+                <option value="">— Seleccionar —</option>
+                {% for e in empresas %}
+                <option value="{{ e.Nit }}" {% if e.Nit == selected_empresa %}selected{% endif %}>{{ e.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="font-weight-bold small">Numero de factura en Alegra <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="whkImportBillId" placeholder="ej. 28">
+            </div>
+            <div class="col-md-3 mb-2">
+              <button type="button" class="btn btn-success btn-block" id="whkBtnImportBill">
+                <i class="fas fa-download mr-1"></i>Importar factura
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <form method="get" class="card shadow-sm mb-4">
+        <input type="hidden" name="tab" value="recepciones">
+        <div class="card-header font-weight-bold" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          Filtros de recepciones
+        </div>
+        <div class="card-body">
+          <div class="form-row align-items-end">
+            <div class="col-md-12 mb-2">
+              <label class="font-weight-bold small">Buscar</label>
+              <input type="search" class="form-control" name="buscar" value="{{ filter_buscar }}"
+                     placeholder="Proveedor, NIT, numero de factura, valor o id Alegra">
+              <small class="text-muted">Coincide con nombre del proveedor, identificacion, numero de factura o valor en el aviso.</small>
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="font-weight-bold small">Empresa</label>
+              <select class="form-control" name="empresa" id="whkInboundEmpresa">
+                <option value="">Todas</option>
+                {% for e in empresas %}
+                <option value="{{ e.Nit }}" {% if e.Nit == selected_empresa %}selected{% endif %}>{{ e.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3 mb-2">
+              <label class="font-weight-bold small">Evento</label>
+              <select class="form-control" name="evento">
+                <option value="">Todos</option>
+                {% for ev_code, ev_label in inbound_event_choices %}
+                <option value="{{ ev_code }}" {% if ev_code == filter_evento %}selected{% endif %}>{{ ev_label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3 mb-2">
+              <label class="font-weight-bold small">Estado del radicado</label>
+              <select class="form-control" name="estado">
+                {% for st_code, st_label in inbound_status_choices %}
+                <option value="{{ st_code }}" {% if st_code == filter_estado %}selected{% endif %}>{{ st_label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2 mb-2">
+              <button type="submit" class="btn btn-primary btn-block">
+                <i class="fas fa-filter mr-1"></i>Filtrar
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header font-weight-bold d-flex justify-content-between align-items-center flex-wrap" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          <span>Recepciones desde Alegra</span>
+          <div class="d-flex align-items-center flex-wrap">
+            <small class="text-muted mr-2 mb-1 mb-md-0">
+              {{ inbound_page.paginator.count }} registro{{ inbound_page.paginator.count|pluralize }}
+              {% if inbound_page.paginator.num_pages > 1 %}
+              · pagina {{ inbound_page.number }} de {{ inbound_page.paginator.num_pages }}
+              {% endif %}
+            </small>
+            <a class="btn btn-sm btn-outline-dark mb-1" href="/admin/alegra_integration/alegrawebhookinboundlog/" target="_blank" rel="noopener">
+              <i class="fas fa-database mr-1"></i>Admin (JSON completo)
+            </a>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div id="whkReplayStatus" class="whk-replay-status" role="status" aria-live="polite"></div>
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0" style="font-size:13px">
+              <thead class="thead-light">
+                <tr>
+                  <th>Id</th>
+                  <th>Fecha</th>
+                  <th>Proveedor</th>
+                  <th class="text-right">Valor</th>
+                  <th>Evento</th>
+                  <th>Factura</th>
+                  <th>Empresa</th>
+                  <th>Radicado</th>
+                  <th class="text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in inbound_logs %}
+                <tr>
+                  <td>{{ row.log.pk }}</td>
+                  <td nowrap>{{ row.log.created_at|date:"d/m/Y H:i:s" }}</td>
+                  <td style="max-width:200px;">
+                    {% if row.tercero_nombre %}
+                    <span title="{{ row.tercero_nombre }}">{{ row.tercero_nombre|truncatechars:36 }}</span>
+                    {% if row.tercero_nit %}
+                    <small class="text-muted d-block"><code>{{ row.tercero_nit }}</code></small>
+                    {% endif %}
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-right text-nowrap">
+                    {% if row.valor_display %}
+                    <strong>{{ row.valor_display }}</strong>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>{% if row.subject %}<code>{{ row.subject }}</code>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                  <td>
+                    {% if row.nro_factura %}
+                    <span title="Numero en Alegra">{{ row.nro_factura }}</span>
+                    {% if row.bill_id %}
+                    <small class="text-muted d-block">id <code>{{ row.bill_id }}</code></small>
+                    {% endif %}
+                    {% elif row.bill_id %}
+                    <code>{{ row.bill_id }}</code>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td><small>{% if row.empresa_nit %}<code>{{ row.empresa_nit }}</code>{% else %}<span class="text-muted" title="Sin NIT en path ni radicado asociado">—</span>{% endif %}</small></td>
+                  <td>
+                    {% if row.radicado.kind == 'ok' and row.radicado.factura_pk %}
+                    <a href="/accounting/gastos-alegra/asignar/" class="badge whk-radicado-ok text-decoration-none" title="Ver en asignacion de gastos">{{ row.radicado.label }}</a>
+                    {% elif row.radicado.kind == 'ok' %}
+                    <span class="badge whk-radicado-ok">{{ row.radicado.label }}</span>
+                    {% elif row.radicado.kind == 'missing' %}
+                    <span class="badge whk-radicado-missing">{{ row.radicado.label }}</span>
+                    {% elif row.radicado.kind == 'skip' %}
+                    <span class="badge whk-radicado-skip">{{ row.radicado.label }}</span>
+                    {% elif row.radicado.kind == 'error' %}
+                    <span class="badge whk-radicado-error">{{ row.radicado.label }}</span>
+                    {% elif row.radicado.kind == 'unknown' %}
+                    <span class="badge whk-radicado-unknown">{{ row.radicado.label }}</span>
+                    {% else %}
+                    <span class="text-muted">{{ row.radicado.label }}</span>
+                    {% endif %}
+                    {% if row.radicado.detail %}
+                    <small class="text-muted d-block" style="max-width:160px;line-height:1.2" title="{{ row.radicado.detail }}">{{ row.radicado.detail|truncatechars:48 }}</small>
+                    {% endif %}
+                  </td>
+                  <td class="text-right text-nowrap">
+                    <a class="btn btn-sm btn-outline-secondary py-0" href="/admin/alegra_integration/alegrawebhookinboundlog/{{ row.log.pk }}/change/" target="_blank" rel="noopener">Ver JSON</a>
+                    {% if row.payload_ok and row.log.http_method == 'POST' %}
+                    <button type="button" class="btn btn-sm btn-outline-primary py-0 btn-inbound-replay" data-log-id="{{ row.log.pk }}" data-subject="{{ row.subject }}" data-bill-id="{{ row.bill_id }}" data-empresa-hint="{{ row.empresa_nit }}">
+                      <i class="fas fa-redo mr-1"></i>Reprocesar
+                    </button>
+                    {% endif %}
+                    {% if row.bill_id and row.empresa_nit and row.subject == 'new-bill' %}
+                    <button type="button" class="btn btn-sm btn-outline-success py-0 btn-inbound-import-row" data-bill-id="{{ row.bill_id }}" data-empresa-hint="{{ row.empresa_nit }}">
+                      <i class="fas fa-download mr-1"></i>Importar
+                    </button>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="9" class="text-center text-muted py-4">No hay recepciones con estos filtros. Crea una factura de compra en Alegra o ajusta los filtros.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if inbound_page.paginator.num_pages > 1 %}
+          <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top bg-light">
+            {% if inbound_page.has_previous %}
+            <a class="btn btn-sm btn-outline-secondary" href="?tab=recepciones&amp;buscar={{ filter_buscar|urlencode }}&amp;empresa={{ selected_empresa|urlencode }}&amp;evento={{ filter_evento|urlencode }}&amp;estado={{ filter_estado|urlencode }}&amp;page={{ inbound_page.previous_page_number }}">
+              <i class="fas fa-chevron-left mr-1"></i>Anterior
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+            <small class="text-muted">Pagina {{ inbound_page.number }} de {{ inbound_page.paginator.num_pages }}</small>
+            {% if inbound_page.has_next %}
+            <a class="btn btn-sm btn-outline-secondary" href="?tab=recepciones&amp;buscar={{ filter_buscar|urlencode }}&amp;empresa={{ selected_empresa|urlencode }}&amp;evento={{ filter_evento|urlencode }}&amp;estado={{ filter_estado|urlencode }}&amp;page={{ inbound_page.next_page_number }}">
+              Siguiente<i class="fas fa-chevron-right ml-1"></i>
+            </a>
+            {% else %}
+            <span></span>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header font-weight-bold" style="background:#f8f9fa;border-bottom:1px solid #e9ecef;">
+          Resultado de la ultima accion (reprocesar / importar)
+        </div>
+        <div class="card-body">
+          <div id="whkInboundLastResponse" class="json-viewer text-muted">Aun no hay acciones en esta sesion.</div>
+        </div>
+      </div>
+
+    </div>
+
   </div>
 
 </div>
@@ -291,12 +476,18 @@ const CONSOLE_URL = '/accounting/alegra/webhooks/';
 const SUBSCRIPTIONS_LIST_URL = '/accounting/alegra/webhooks/subscriptions';
 const SUBSCRIPTIONS_DELETE_URL = '/accounting/alegra/webhooks/subscriptions/delete';
 const INBOUND_REPLAY_URL = '/accounting/alegra/webhooks/inbound/replay';
-function showAlert(type, html) {
-  const el = document.getElementById('whkAlert');
+const INBOUND_IMPORT_URL = '/accounting/alegra/webhooks/inbound/import-bill';
+
+function showAlert(type, html, targetId) {
+  const el = document.getElementById(targetId || 'whkAlert');
+  if (!el) return;
   const cls = type === 'danger' ? 'alert-danger' : (type === 'success' ? 'alert-success' : 'alert-info');
   el.innerHTML = '<div class="alert ' + cls + ' mb-0">' + html + '</div>';
 }
-function clearAlert() { document.getElementById('whkAlert').innerHTML = ''; }
+function clearAlert(targetId) {
+  const el = document.getElementById(targetId || 'whkAlert');
+  if (el) el.innerHTML = '';
+}
 
 function prettyJson(obj) {
   try { return JSON.stringify(obj, null, 2); } catch (e) { return String(obj); }
@@ -317,31 +508,50 @@ function clearReplayStatus() {
   el.innerHTML = '';
 }
 
-function setReplayButtonLoading(btn, loading) {
+function setActionButtonLoading(btn, loading, loadingHtml) {
   if (!btn) return;
   if (loading) {
-    if (!btn.dataset.replayLabel) {
-      btn.dataset.replayLabel = btn.innerHTML;
+    if (!btn.dataset.actionLabel) {
+      btn.dataset.actionLabel = btn.innerHTML;
     }
     btn.classList.add('is-loading');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span>Reenviando…';
+    btn.innerHTML = loadingHtml;
   } else {
     btn.classList.remove('is-loading');
     btn.disabled = false;
-    if (btn.dataset.replayLabel) {
-      btn.innerHTML = btn.dataset.replayLabel;
+    if (btn.dataset.actionLabel) {
+      btn.innerHTML = btn.dataset.actionLabel;
     }
   }
 }
 
+function getInboundEmpresa(hint) {
+  let empresa = (document.getElementById('whkInboundEmpresa') || {}).value || '';
+  empresa = empresa.trim();
+  if (!empresa && hint) {
+    empresa = hint.trim();
+  }
+  if (!empresa) {
+    empresa = (document.getElementById('whkImportEmpresa') || {}).value || '';
+    empresa = empresa.trim();
+  }
+  return empresa;
+}
+
+function buildRecepcionesReloadUrl() {
+  const params = new URLSearchParams(window.location.search);
+  params.set('tab', 'recepciones');
+  return CONSOLE_URL + '?' + params.toString();
+}
+
 document.getElementById('whkBtnSubscribe').addEventListener('click', async function () {
-  clearAlert();
+  clearAlert('whkAlert');
   const empresa = document.getElementById('whkEmpresa').value.trim();
   const event = document.getElementById('whkEvent').value.trim();
   const domain = document.getElementById('whkDomain').value.trim();
-  if (!empresa) { showAlert('danger', 'Selecciona una empresa.'); return; }
-  if (!domain) { showAlert('danger', 'Indica el dominio base.'); return; }
+  if (!empresa) { showAlert('danger', 'Selecciona una empresa.', 'whkAlert'); return; }
+  if (!domain) { showAlert('danger', 'Indica el dominio base.', 'whkAlert'); return; }
 
   const btn = this;
   btn.disabled = true;
@@ -355,20 +565,20 @@ document.getElementById('whkBtnSubscribe').addEventListener('click', async funct
     document.getElementById('whkLastResponse').textContent = prettyJson(data);
 
     if (!res.ok) {
-      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status));
+      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status), 'whkAlert');
       return;
     }
 
-    let okMsg = data.success ? 'Suscripción registrada en Alegra (revisa <code>subscription</code> en la respuesta).' : 'Alegra respondió pero indica error (revisa JSON).';
+    let okMsg = data.success ? 'Suscripcion registrada en Alegra.' : 'Alegra respondio pero indica error (revisa JSON).';
     if (data.already_subscribed) {
-      okMsg = 'Esa URL y evento ya estaban suscritos en Alegra; no se creó otra.';
+      okMsg = 'Esa URL y evento ya estaban suscritos en Alegra; no se creo otra.';
     }
-    showAlert(data.success ? 'success' : 'danger', okMsg);
+    showAlert(data.success ? 'success' : 'danger', okMsg, 'whkAlert');
 
     prependLogRow(data);
     await loadSubscriptions();
   } catch (e) {
-    showAlert('danger', 'Fallo de red: ' + e);
+    showAlert('danger', 'Fallo de red: ' + e, 'whkAlert');
     document.getElementById('whkLastResponse').textContent = String(e);
   } finally {
     btn.disabled = false;
@@ -391,23 +601,22 @@ function prependLogRow(data) {
     '<td nowrap>' + ds + '</td>' +
     '<td><code>' + ev + '</code></td>' +
     '<td>' + status + '</td>' +
-    '<td class="' + (ok ? 'log-ok' : 'log-fail') + '">' + (ok ? 'Sí' : 'No') + '</td>' +
+    '<td class="' + (ok ? 'log-ok' : 'log-fail') + '">' + (ok ? 'Si' : 'No') + '</td>' +
     '<td style="max-width:280px;word-break:break-all;"><small>' + url + '</small></td>';
   tbody.insertBefore(tr, tbody.firstChild);
 }
 
 document.getElementById('whkBtnReload').addEventListener('click', function () {
   const empresa = document.getElementById('whkEmpresa').value.trim();
-  if (!empresa) { showAlert('danger', 'Selecciona empresa para filtrar el historial.'); return; }
-  window.location = CONSOLE_URL + '?empresa=' + encodeURIComponent(empresa);
+  if (!empresa) { showAlert('danger', 'Selecciona empresa para filtrar el historial.', 'whkAlert'); return; }
+  window.location = CONSOLE_URL + '?tab=suscripcion&empresa=' + encodeURIComponent(empresa);
 });
 
 document.getElementById('whkBtnRefreshSubscriptions').addEventListener('click', function () {
-  clearAlert();
+  clearAlert('whkAlert');
   loadSubscriptions();
 });
 
-// --- Suscripciones activas en Alegra (fuente de verdad) ---
 function setSubscriptionsLoading() {
   const el = document.getElementById('whkSubscriptionsBody');
   if (!el) return;
@@ -447,13 +656,13 @@ async function loadSubscriptions() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       renderSubscriptions([]);
-      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status));
+      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status), 'whkAlert');
       return;
     }
     renderSubscriptions((data && data.subscriptions) ? data.subscriptions : []);
   } catch (e) {
     renderSubscriptions([]);
-    showAlert('danger', 'Fallo de red al listar suscripciones: ' + e);
+    showAlert('danger', 'Fallo de red al listar suscripciones: ' + e, 'whkAlert');
   }
 }
 
@@ -473,49 +682,44 @@ document.addEventListener('click', async function (ev) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status));
+      showAlert('danger', (data && data.detail) ? data.detail : ('Error HTTP ' + res.status), 'whkAlert');
       return;
     }
-    showAlert('success', 'Suscripción eliminada en Alegra: <code>' + subscription_id + '</code>');
+    showAlert('success', 'Suscripcion eliminada en Alegra: <code>' + subscription_id + '</code>', 'whkAlert');
     await loadSubscriptions();
   } catch (e) {
-    showAlert('danger', 'Fallo de red al eliminar suscripción: ' + e);
+    showAlert('danger', 'Fallo de red al eliminar suscripcion: ' + e, 'whkAlert');
   } finally {
     btn.disabled = false;
   }
 });
 
-document.addEventListener('click', async function (ev) {
-  const btn = ev.target && ev.target.closest ? ev.target.closest('.btn-inbound-replay') : null;
-  if (!btn || btn.disabled) return;
-  ev.preventDefault();
-
+async function runInboundReplay(btn) {
   const logId = (btn.getAttribute('data-log-id') || '').trim();
   const subject = (btn.getAttribute('data-subject') || '').trim();
   const billId = (btn.getAttribute('data-bill-id') || '').trim();
-  let empresa = document.getElementById('whkEmpresa').value.trim();
   const hint = (btn.getAttribute('data-empresa-hint') || '').trim();
-  if (!empresa && hint) {
-    empresa = hint;
-    document.getElementById('whkEmpresa').value = hint;
-  }
+  let empresa = getInboundEmpresa(hint);
+
   if (!empresa) {
-    const sel = document.getElementById('whkEmpresa');
-    sel.classList.add('border-danger');
-    setTimeout(function () { sel.classList.remove('border-danger'); }, 2500);
-    setReplayStatus('error', '<i class="fas fa-exclamation-circle mr-1"></i>Selecciona la <strong>empresa (NIT)</strong> en el selector de arriba antes de reenviar.');
-    showAlert('danger', 'Selecciona la empresa (NIT) en el selector de arriba antes de reenviar.');
-    sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const sel = document.getElementById('whkInboundEmpresa') || document.getElementById('whkImportEmpresa');
+    if (sel) {
+      sel.classList.add('border-danger');
+      setTimeout(function () { sel.classList.remove('border-danger'); }, 2500);
+      sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    setReplayStatus('error', '<i class="fas fa-exclamation-circle mr-1"></i>Selecciona la <strong>empresa (NIT)</strong> en los filtros o en importar antes de reprocesar.');
+    showAlert('danger', 'Selecciona la empresa (NIT) antes de reprocesar.', 'whkImportAlert');
     return;
   }
 
-  const label = subject + (billId ? ' · bill ' + billId : '');
-  setReplayButtonLoading(btn, true);
-  setReplayStatus('', '<span class="spinner-border spinner-border-sm mr-2" role="status"></span>Reenviando recepción <strong>#' + logId + '</strong> (' + label + ') · empresa <code>' + empresa + '</code>…');
-  clearAlert();
+  const label = subject + (billId ? ' · factura ' + billId : '');
+  setActionButtonLoading(btn, true, '<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span>Reprocesando…');
+  setReplayStatus('', '<span class="spinner-border spinner-border-sm mr-2" role="status"></span>Reprocesando recepcion <strong>#' + logId + '</strong> (' + label + ') · empresa <code>' + empresa + '</code>…');
+  clearAlert('whkImportAlert');
 
-  const respEl = document.getElementById('whkLastResponse');
-  respEl.textContent = 'Procesando reenvío #' + logId + '…';
+  const respEl = document.getElementById('whkInboundLastResponse');
+  respEl.textContent = 'Procesando recepcion #' + logId + '…';
 
   try {
     const res = await fetch(INBOUND_REPLAY_URL, {
@@ -526,53 +730,139 @@ document.addEventListener('click', async function (ev) {
     });
     const data = await res.json().catch(() => ({}));
     respEl.textContent = prettyJson(data);
-    respEl.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     if (!res.ok) {
       const detail = (data && data.detail) ? data.detail : ('Error HTTP ' + res.status);
       setReplayStatus('error', '<i class="fas fa-times-circle mr-1"></i>' + detail);
-      showAlert('danger', detail);
+      showAlert('danger', detail, 'whkImportAlert');
       return;
     }
 
-    let msg = 'Reenvío procesado.';
+    let msg = 'Reprocesado.';
     let kind = 'success';
     if (data.skip_reason) {
-      msg = 'No se aplicó cambio: <code>' + data.skip_reason + '</code>';
+      msg = 'No se aplico cambio: <code>' + data.skip_reason + '</code>';
       kind = 'error';
     } else if (data.idempotent) {
-      msg = 'Radicado ya existía (idempotente). <code>factura_pk=' + data.factura_pk + '</code>';
+      msg = 'El radicado ya existia. Numero: <code>' + data.factura_pk + '</code>';
     } else if (data.created) {
-      msg = 'Radicado <strong>creado</strong>. <code>factura_pk=' + data.factura_pk + '</code>';
+      msg = 'Radicado <strong>creado</strong>. Numero: <code>' + data.factura_pk + '</code>';
     } else if (data.updated) {
-      msg = 'Radicado <strong>actualizado</strong>. <code>factura_pk=' + data.factura_pk + '</code>';
+      msg = 'Radicado <strong>actualizado</strong>. Numero: <code>' + data.factura_pk + '</code>';
     } else if (data.processing_error) {
       msg = 'Error al procesar: ' + data.processing_error;
       kind = 'error';
     } else if (data.processed) {
-      msg = 'Procesado. Revisa el JSON en «Respuesta Alegra» arriba.';
+      msg = 'Procesado. Revisa el detalle abajo.';
     }
-    setReplayStatus(kind, '<i class="fas fa-' + (kind === 'error' ? 'exclamation' : 'check') + '-circle mr-1"></i>' + msg + ' <span class="text-muted">(actualizando tabla…)</span>');
-    showAlert(kind === 'error' ? 'danger' : 'success', msg);
+    setReplayStatus(kind, '<i class="fas fa-' + (kind === 'error' ? 'exclamation' : 'check') + '-circle mr-1"></i>' + msg);
+    showAlert(kind === 'error' ? 'danger' : 'success', msg, 'whkImportAlert');
     if (kind !== 'error') {
-      setTimeout(function () { window.location.reload(); }, 900);
+      setTimeout(function () { window.location.href = buildRecepcionesReloadUrl(); }, 900);
     }
   } catch (e) {
     setReplayStatus('error', '<i class="fas fa-times-circle mr-1"></i>Fallo de red: ' + e);
-    showAlert('danger', 'Fallo de red: ' + e);
+    showAlert('danger', 'Fallo de red: ' + e, 'whkImportAlert');
     respEl.textContent = String(e);
   } finally {
-    setReplayButtonLoading(btn, false);
+    setActionButtonLoading(btn, false);
+  }
+}
+
+async function runInboundImport(empresa, billId, btn) {
+  empresa = (empresa || '').trim();
+  billId = (billId || '').trim();
+  if (!empresa) {
+    showAlert('danger', 'Selecciona la empresa (NIT).', 'whkImportAlert');
+    return;
+  }
+  if (!billId) {
+    showAlert('danger', 'Indica el numero de factura en Alegra.', 'whkImportAlert');
+    return;
+  }
+
+  if (btn) {
+    setActionButtonLoading(btn, true, '<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span>Importando…');
+  }
+  clearAlert('whkImportAlert');
+  setReplayStatus('', '<span class="spinner-border spinner-border-sm mr-2" role="status"></span>Importando factura <code>' + billId + '</code> desde Alegra…');
+
+  const respEl = document.getElementById('whkInboundLastResponse');
+  respEl.textContent = 'Consultando factura ' + billId + ' en Alegra…';
+
+  try {
+    const res = await fetch(INBOUND_IMPORT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      body: JSON.stringify({ empresa, bill_id: billId }),
+      credentials: 'same-origin',
+    });
+    const data = await res.json().catch(() => ({}));
+    respEl.textContent = prettyJson(data);
+
+    if (!res.ok) {
+      const detail = (data && data.detail) ? data.detail : ('Error HTTP ' + res.status);
+      setReplayStatus('error', '<i class="fas fa-times-circle mr-1"></i>' + detail);
+      showAlert('danger', detail, 'whkImportAlert');
+      return;
+    }
+
+    let msg = data.created
+      ? 'Radicado creado. Numero: <code>' + data.factura_pk + '</code>'
+      : 'El radicado ya existia. Numero: <code>' + data.factura_pk + '</code>';
+    setReplayStatus('success', '<i class="fas fa-check-circle mr-1"></i>' + msg);
+    showAlert('success', msg, 'whkImportAlert');
+    setTimeout(function () { window.location.href = buildRecepcionesReloadUrl(); }, 900);
+  } catch (e) {
+    setReplayStatus('error', '<i class="fas fa-times-circle mr-1"></i>Fallo de red: ' + e);
+    showAlert('danger', 'Fallo de red: ' + e, 'whkImportAlert');
+    respEl.textContent = String(e);
+  } finally {
+    if (btn) {
+      setActionButtonLoading(btn, false);
+    }
+  }
+}
+
+document.addEventListener('click', async function (ev) {
+  const replayBtn = ev.target && ev.target.closest ? ev.target.closest('.btn-inbound-replay') : null;
+  if (replayBtn && !replayBtn.disabled) {
+    ev.preventDefault();
+    await runInboundReplay(replayBtn);
+    return;
+  }
+
+  const importRowBtn = ev.target && ev.target.closest ? ev.target.closest('.btn-inbound-import-row') : null;
+  if (importRowBtn && !importRowBtn.disabled) {
+    ev.preventDefault();
+    const billId = (importRowBtn.getAttribute('data-bill-id') || '').trim();
+    const empresa = getInboundEmpresa((importRowBtn.getAttribute('data-empresa-hint') || '').trim());
+    await runInboundImport(empresa, billId, importRowBtn);
   }
 });
 
+document.getElementById('whkBtnImportBill').addEventListener('click', async function () {
+  const empresa = document.getElementById('whkImportEmpresa').value.trim();
+  const billId = document.getElementById('whkImportBillId').value.trim();
+  await runInboundImport(empresa, billId, this);
+});
+
 document.getElementById('whkEmpresa').addEventListener('change', function () {
-  // limpiar alert para no confundir al cambiar de empresa
-  clearAlert();
+  clearAlert('whkAlert');
   loadSubscriptions();
 });
 
-// Carga inicial si viene empresa en querystring (selected_empresa)
+document.querySelectorAll('#whkMainTabs a[data-toggle="tab"]').forEach(function (tabLink) {
+  tabLink.addEventListener('shown.bs.tab', function (ev) {
+    const href = ev.target.getAttribute('href') || '';
+    const tab = href === '#tabRecepciones' ? 'recepciones' : 'suscripcion';
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', tab);
+    const next = CONSOLE_URL + '?' + params.toString();
+    window.history.replaceState({}, '', next);
+  });
+});
+
 loadSubscriptions();
 </script>
 {% endblock %}
