@@ -1,0 +1,149 @@
+{% load l10n humanize static %}
+<html>
+<head>
+    <style>
+        @page {
+            size: A4;
+            margin: 1.2cm 1.5cm 1.8cm 1.5cm;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 11px;
+            color: #222;
+            line-height: 1.5;
+        }
+        .header {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .logo {
+            width: 150px;
+            height: auto;
+        }
+        .titulo {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 8px 0 18px 0;
+            letter-spacing: 0.5px;
+        }
+        .cuerpo {
+            text-align: justify;
+            margin-bottom: 14px;
+        }
+        .tabla-pagos {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+        }
+        .tabla-pagos th,
+        .tabla-pagos td {
+            border: 0.5px solid #888;
+            padding: 5px 6px;
+            text-align: right;
+            font-size: 10px;
+        }
+        .tabla-pagos th {
+            background-color: #558b6e;
+            color: #fff;
+            text-align: center;
+            font-size: 10px;
+        }
+        .tabla-pagos th.titulo-seccion {
+            font-size: 11px;
+            font-weight: bold;
+            padding: 7px 6px;
+        }
+        .tabla-pagos td.anio {
+            text-align: center;
+        }
+        .tabla-pagos tr.total td {
+            font-weight: bold;
+            background-color: #eef3f0;
+        }
+        .cierre {
+            text-align: justify;
+            margin-top: 16px;
+        }
+        .legal {
+            margin-top: 28px;
+            font-size: 9px;
+            color: #444;
+            text-align: justify;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if empresa.logo %}
+        <img class="logo" src="{{ empresa.logo.url }}" alt="Logo">
+        {% else %}
+        <strong>{{ empresa.nombre|upper }}</strong>
+        {% endif %}
+    </div>
+
+    <div class="titulo">CERTIFICADO DE ABONO EN CUENTA</div>
+
+    <p class="cuerpo">
+        La empresa <strong>{{ empresa.nombre|upper }}</strong> y sus empresas asociadas, certifica que
+        el(la) se&ntilde;or(a) <strong>{{ titular.nombrecompleto|upper }}</strong>, con {{ tipo_documento }} N&deg;
+        <strong>{{ titular.pk }}</strong>, adquiri&oacute; un lote con nuestra empresa correspondiente a la
+        <strong>{{ inmueble|upper }}</strong> por valor de
+        <strong>$ {{ valor_contrato|floatformat:0|intcomma }}</strong>, perteneciente al proyecto
+        <strong>{{ proyecto }}</strong>, con abonos realizados a <strong>{{ anio_hasta }}</strong>,
+        {% if cantidad_titulares > 1 %}
+        correspondientes a su participaci&oacute;n proporcional entre {{ cantidad_titulares }} titulares,
+        {% endif %}
+        as&iacute;:
+    </p>
+
+    <table class="tabla-pagos">
+        <thead>
+            <tr>
+                <th colspan="5" class="titulo-seccion">RESUMEN DE PAGOS REALIZADOS</th>
+            </tr>
+            <tr>
+                <th style="width: 12%;">A&ntilde;o</th>
+                <th style="width: 22%;">Capital</th>
+                <th style="width: 22%;">Int. Cte</th>
+                <th style="width: 22%;">Int. Mora</th>
+                <th style="width: 22%;">Cuota</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fila in filas %}
+            <tr>
+                <td class="anio">{{ fila.anio }}</td>
+                <td>$ {{ fila.capital|floatformat:0|intcomma }}</td>
+                <td>$ {{ fila.interescte|floatformat:0|intcomma }}</td>
+                <td>$ {{ fila.interesmora|floatformat:0|intcomma }}</td>
+                <td>$ {{ fila.cuota|floatformat:0|intcomma }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total">
+                <td class="anio">TOTAL</td>
+                <td>$ {{ total_capital|floatformat:0|intcomma }}</td>
+                <td>$ {{ total_interescte|floatformat:0|intcomma }}</td>
+                <td>$ {{ total_interesmora|floatformat:0|intcomma }}</td>
+                <td>$ {{ total_general|floatformat:0|intcomma }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p class="cierre">
+        Para un total de abono en cuenta con corte al a&ntilde;o <strong>{{ anio_hasta }}</strong>, de
+        <strong>$ {{ total_general|floatformat:0|intcomma }}</strong>
+        ({{ total_general_letras }}).
+    </p>
+
+    <p class="cierre">
+        Para constancia se expide a solicitud del interesado a los <strong>{{ dia_expedicion }}</strong>
+        d&iacute;as del mes de <strong>{{ mes_expedicion }}</strong> de <strong>{{ anio_expedicion }}</strong>.
+    </p>
+
+    <p class="legal">
+        De acuerdo con el art&iacute;culo 1.6.1.12.12 del decreto 1625 de 2016, los certificados expedidos en forma
+        continua por computador no requieren firma aut&oacute;grafa.
+    </p>
+</body>
+</html>

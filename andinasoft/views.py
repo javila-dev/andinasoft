@@ -33,7 +33,7 @@ from andinasoft.forms import form_radicar_factura, form_causar, form_pagar, form
 from andinasoft.models import ( asesores, bk_bfchangeplan, bk_planpagos, bk_recaudodetallado,clientes,Facturas, reestructuraciones_otrosi,
                                 timeline_radicados, Pagos, cuentas_pagos, Usuarios_Proyectos, Gtt, Detalle_gtt,
                                 GastosInforme, CuentasAsociadas, ItemsInforme, CentrosCostos, proyectos, entidades_bancarias, 
-                                Profiles, Avatars, Countries, States, Cities, sagrilaft_info, CIUU)
+                                Profiles, Avatars, Countries, States, Cities, sagrilaft_info, CIUU, empresas)
 from andinasoft.shared_models import Adjudicacion, Vista_Adjudicacion, documentos_contratos, fractales_ventas,saldos_adj,titulares_por_adj, fractales_ventas
 from andinasoft.shared_models import Recaudos, consecutivos, Recaudos_general, AsignacionComisiones, CargosFijos, InfoCartera, Cargos_comisiones
 from andinasoft.shared_models import timeline,seguimientos, Inmuebles, ventas_nuevas, RecaudosNoradicados, Pagocomision
@@ -42,6 +42,10 @@ from andinasoft.shared_models import Promesas, PresupuestoCartera, Parametros_Op
 from andinasoft.informe_cartera_orm import informe_cartera_rows
 from andinasoft.edades_cartera_service import edades_cartera_snapshot
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
+from andinasoft.certificado_tributario_service import (
+    anios_disponibles_certificado,
+    build_certificado_tributario_context,
+)
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
@@ -3587,6 +3591,48 @@ def detalle_adjudicacion(request,proyecto,adj):
                 titulo='¡Ya puedes descargar tu documento!'
                 mensaje='Puedes descargarlo aqui'
                 link=True
+            if request.POST.get('impCertificadoTributario'):
+                titular_id = (request.POST.get('cert_titular') or '').strip()
+                empresa_nit = (request.POST.get('cert_empresa') or '').strip()
+                try:
+                    anio_hasta = int(request.POST.get('cert_anio') or 0)
+                except (TypeError, ValueError):
+                    anio_hasta = 0
+                if not titular_id:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debe seleccionar el titular del certificado.'
+                elif not empresa_nit:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debe seleccionar la empresa emisora.'
+                elif not anio_hasta:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debe seleccionar el ano hasta el cual certificar.'
+                else:
+                    context_cert, err_cert = build_certificado_tributario_context(
+                        proyecto,
+                        adj,
+                        titular_id,
+                        empresa_nit,
+                        anio_hasta,
+                        request.user,
+                    )
+                    if err_cert:
+                        alerta = True
+                        titulo = 'Error'
+                        mensaje = err_cert
+                    else:
+                        filename = f'Certificado_tributario_{adj}_{titular_id}_{anio_hasta}.pdf'
+                        pdf = pdf_gen('pdf/certificado_tributario.html', context_cert, filename)
+                        ruta_link = pdf.get('url')
+                        dir_link = ruta_link
+                        alerta = True
+                        titulo = 'Ya puedes descargar tu documento'
+                        mensaje = 'Puedes descargarlo aqui'
+                        link = True
+
             if request.POST.get('impPortada'):
                 check_perms(request,('andinasoft.view_pagocomision',))
                 planpagos='Regular'
@@ -3648,7 +3694,10 @@ def detalle_adjudicacion(request,proyecto,adj):
             'procesable':procesable,
             'pqrs':Pqrs.objects.using(proyecto).filter(idadjudicacion=adj),
             'lotes_libres':Inmuebles.objects.using(proyecto).filter(estado='Libre'),
-            'ultimobk': bk_bfchangeplan.objects.filter(adj=adj,proyecto=proyecto).order_by('-fecha_bk')
+            'ultimobk': bk_bfchangeplan.objects.filter(adj=adj,proyecto=proyecto).order_by('-fecha_bk'),
+            'empresas_certificado': empresas.objects.all().order_by('nombre'),
+            'anios_certificado': anios_disponibles_certificado(proyecto, adj),
+            'titulares_certificado': obj_adj.titulares2(),
         }
         return render(request,'detalle_adj.html',context)
     
