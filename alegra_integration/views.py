@@ -362,24 +362,31 @@ def references_data(request):
         if not empresa_id:
             return JsonResponse({'detail': 'Empresa requerida'}, status=400)
 
+        cache_key = f'alegra:refs:{empresa_id}:{ref_type or "all"}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return JsonResponse(cached)
+
         data = AlegraIntegrationService(user=request.user).reference_sync(
             empresa_id=empresa_id,
             ref_type=ref_type or None,
         )
 
-        # Allow fetching individual reference groups.
         if ref_type in ('banks', 'categories', 'cost_centers'):
-            return JsonResponse({ref_type: data.get(ref_type, [])})
-        if ref_type in ('journal_numerations', 'journal_numeration', 'journals_numerations'):
-            return JsonResponse({'journal_numerations': data.get('journal_numerations', [])})
-        if ref_type in ('number_templates', 'numerations', 'numeration'):
-            return JsonResponse({'number_templates': data.get('number_templates', {})})
-        if ref_type == 'retentions':
-            return JsonResponse({'retentions': data.get('retentions', [])})
-        if ref_type == 'taxes':
-            return JsonResponse({'taxes': data.get('taxes', [])})
+            payload = {ref_type: data.get(ref_type, [])}
+        elif ref_type in ('journal_numerations', 'journal_numeration', 'journals_numerations'):
+            payload = {'journal_numerations': data.get('journal_numerations', [])}
+        elif ref_type in ('number_templates', 'numerations', 'numeration'):
+            payload = {'number_templates': data.get('number_templates', {})}
+        elif ref_type == 'retentions':
+            payload = {'retentions': data.get('retentions', [])}
+        elif ref_type == 'taxes':
+            payload = {'taxes': data.get('taxes', [])}
+        else:
+            payload = data
 
-        return JsonResponse(data)
+        cache.set(cache_key, payload, timeout=60 * 10)
+        return JsonResponse(payload)
     except empresas.DoesNotExist:
         return JsonResponse({'detail': 'Empresa no encontrada'}, status=404)
     except AlegraIntegrationError as exc:
