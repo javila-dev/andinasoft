@@ -3594,7 +3594,7 @@ def detalle_adjudicacion(request,proyecto,adj):
             if request.POST.get('impCertificadoTributario'):
                 titular_id = (request.POST.get('cert_titular') or '').strip()
                 empresa_nit = (request.POST.get('cert_empresa') or '').strip()
-                cert_anio_raw = (request.POST.get('cert_anio') or '').strip()
+                cert_anio_raw = (request.POST.get('cert_anio') or '').strip().replace('.', '').replace(',', '')
                 anio_hasta = 0
                 if cert_anio_raw:
                     try:
