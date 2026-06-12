@@ -76,9 +76,6 @@
               <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Paz y Salvo</a>
             </div>
           </div>
-          <input type="hidden" name="cert_empresa" id="cert_empresa" value="">
-          <input type="hidden" name="cert_titular" id="cert_titular" value="">
-          <input type="hidden" name="cert_anio" id="cert_anio" value="">
           <input type="hidden" name="impCertificadoTributario" id="impCertificadoTributario" value="">
         </div>
       </form>
@@ -276,7 +273,7 @@
           <p class="text-muted">El certificado es individual por titular. Seleccione la persona a quien se expide; los valores corresponden a su parte proporcional de los recaudos.</p>
           <div class="form-group">
             <label for="sel_cert_titular">Titular del certificado</label>
-            <select class="form-control" id="sel_cert_titular" required>
+            <select class="form-control" id="sel_cert_titular" name="cert_titular" form="form-documentos" required>
               <option value="">Seleccione titular...</option>
               {% for titular in titulares_certificado %}
               <option value="{{ titular.pk }}"{% if titulares_certificado|length == 1 %} selected{% endif %}>
@@ -289,7 +286,7 @@
           </div>
           <div class="form-group">
             <label for="sel_cert_empresa">Empresa emisora</label>
-            <select class="form-control" id="sel_cert_empresa" required>
+            <select class="form-control" id="sel_cert_empresa" name="cert_empresa" form="form-documentos" required>
               <option value="">Seleccione empresa...</option>
               {% for empresa in empresas_certificado %}
               <option value="{{ empresa.Nit }}">{{ empresa.nombre|upper }} - NIT {{ empresa.Nit }}</option>
@@ -297,9 +294,9 @@
             </select>
           </div>
           <div class="form-group mb-0">
-            <label for="sel_cert_anio">Certificar pagos hasta el ano</label>
-            <select class="form-control" id="sel_cert_anio" required>
-              <option value="">Seleccione ano...</option>
+            <label for="sel_cert_anio">Certificar pagos hasta el a&ntilde;o</label>
+            <select class="form-control" id="sel_cert_anio" name="cert_anio" form="form-documentos" required>
+              <option value="">Seleccione a&ntilde;o...</option>
               {% for anio in anios_certificado %}
               <option value="{{ anio }}">{{ anio }}</option>
               {% endfor %}
@@ -769,23 +766,20 @@
       }
 
     })
-  })
 
-  $('#btn-generar-cert-tributario').on('click', function(){
-    const empresa = $('#sel_cert_empresa').val();
-    const titular = $('#sel_cert_titular').val();
-    const anio = $('#sel_cert_anio').val();
-    if (!empresa || !titular || !anio) {
-      alert('Seleccione titular, empresa y ano.');
-      return;
-    }
-    $('#cert_empresa').val(empresa);
-    $('#cert_titular').val(titular);
-    $('#cert_anio').val(anio);
-    $('#impCertificadoTributario').val('1');
-    $('#modalCertificadoTributario').modal('hide');
-    $('#modal-cargando').modal('show');
-    $('#form-documentos').submit();
+    $('#btn-generar-cert-tributario').on('click', function(){
+      const empresa = $('#sel_cert_empresa').val();
+      const titular = $('#sel_cert_titular').val();
+      const anio = $('#sel_cert_anio').val();
+      if (!empresa || !titular || !anio) {
+        alert('Seleccione titular, empresa y a\u00f1o.');
+        return;
+      }
+      $('#impCertificadoTributario').val('1');
+      $('#modalCertificadoTributario').modal('hide');
+      $('#modal-cargando').modal('show');
+      $('#form-documentos').submit();
+    });
   });
 </script>
 {%if alerta%}

@@ -3594,10 +3594,13 @@ def detalle_adjudicacion(request,proyecto,adj):
             if request.POST.get('impCertificadoTributario'):
                 titular_id = (request.POST.get('cert_titular') or '').strip()
                 empresa_nit = (request.POST.get('cert_empresa') or '').strip()
-                try:
-                    anio_hasta = int(request.POST.get('cert_anio') or 0)
-                except (TypeError, ValueError):
-                    anio_hasta = 0
+                cert_anio_raw = (request.POST.get('cert_anio') or '').strip()
+                anio_hasta = 0
+                if cert_anio_raw:
+                    try:
+                        anio_hasta = int(cert_anio_raw)
+                    except (TypeError, ValueError):
+                        anio_hasta = 0
                 if not titular_id:
                     alerta = True
                     titulo = 'Error'
@@ -3609,7 +3612,7 @@ def detalle_adjudicacion(request,proyecto,adj):
                 elif not anio_hasta:
                     alerta = True
                     titulo = 'Error'
-                    mensaje = 'Debe seleccionar el ano hasta el cual certificar.'
+                    mensaje = 'Debe seleccionar el año hasta el cual certificar.'
                 else:
                     context_cert, err_cert = build_certificado_tributario_context(
                         proyecto,

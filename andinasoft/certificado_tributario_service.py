@@ -137,7 +137,7 @@ def build_certificado_tributario_context(
 
     hoy = datetime.date.today()
     if anio_hasta < 1900 or anio_hasta > hoy.year:
-        return None, f'El ano debe estar entre 1900 y {hoy.year}.'
+        return None, f'El año debe estar entre 1900 y {hoy.year}.'
 
     cantidad_titulares = len(titulares)
     pagos_por_anio = _pagos_agrupados_por_anio(proyecto, adj_id, anio_hasta)
