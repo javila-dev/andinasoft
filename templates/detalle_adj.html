@@ -720,52 +720,51 @@
         }
       });
     });
-  })
-  $('#form-documentos').on('submit', function () {
-    $('#modal-cargando').modal('show')
-  })
-  // Habilitar botón cuando se selecciona un backup
-  $('input[name="backup_select"]').on('change', function() {
-    $('#btnrestorebk').prop('disabled', false);
-  });
 
-  // Click en fila para seleccionar backup
-  $('.backup-row').on('click', function() {
-    const bkId = $(this).data('bk-id');
-    $(`#bk-${bkId}`).prop('checked', true).trigger('change');
-  });
+    $('#form-documentos').on('submit', function () {
+      $('#modal-cargando').modal('show')
+    })
 
-  $('#btnrestorebk').click(function(){
-    const selectedBk = $('input[name="backup_select"]:checked').val();
+    $('input[name="backup_select"]').on('change', function() {
+      $('#btnrestorebk').prop('disabled', false);
+    });
 
-    if (!selectedBk) {
-      alert('Debes seleccionar un backup para restaurar');
-      return;
-    }
+    $('.backup-row').on('click', function() {
+      const bkId = $(this).data('bk-id');
+      $(`#bk-${bkId}`).prop('checked', true).trigger('change');
+    });
 
-    $('#modal-restaurar').modal('hide')
-    $('#alert-title').text('Andinasoft dice:')
-    $('#alert-data').text('')
-    .append('Estamos restaurando el backup seleccionado <i class="fas fa-circle-notch fa-spin"></i>')
-    $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
-    $.ajax({
-      type:'POST',
-      url:'/adjudicaciones/{{proyecto}}/{{adj}}/',
-      data:{
-        'csrfmiddlewaretoken':getCookie('csrftoken'),
-        'todo':'restore_bk',
-        'bk_id': selectedBk
-      },
-      success: (xhr) => {
-        window.location.reload()
-      },
-      error: (xhr) => {
-        $('#alert-data').text('')
-        .append('Ocurrió un error, contacta al administrador del sistema.')
-        $('#general-right-alert').toggleClass('alert-danger')
+    $('#btnrestorebk').click(function(){
+      const selectedBk = $('input[name="backup_select"]:checked').val();
+
+      if (!selectedBk) {
+        alert('Debes seleccionar un backup para restaurar');
+        return;
       }
 
-    })
+      $('#modal-restaurar').modal('hide')
+      $('#alert-title').text('Andinasoft dice:')
+      $('#alert-data').text('')
+      .append('Estamos restaurando el backup seleccionado <i class="fas fa-circle-notch fa-spin"></i>')
+      $('#general-right-alert').toggleClass('show').toggleClass('alert-info')
+      $.ajax({
+        type:'POST',
+        url:'/adjudicaciones/{{proyecto}}/{{adj}}/',
+        data:{
+          'csrfmiddlewaretoken':getCookie('csrftoken'),
+          'todo':'restore_bk',
+          'bk_id': selectedBk
+        },
+        success: (xhr) => {
+          window.location.reload()
+        },
+        error: (xhr) => {
+          $('#alert-data').text('')
+          .append('Ocurrió un error, contacta al administrador del sistema.')
+          $('#general-right-alert').toggleClass('alert-danger')
+        }
+      });
+    });
 
     $('#btn-generar-cert-tributario').on('click', function(){
       const empresa = $('#sel_cert_empresa').val();
