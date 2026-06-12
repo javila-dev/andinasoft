@@ -88,8 +88,8 @@
         La empresa <strong>{{ empresa.nombre|upper }}</strong> y sus empresas asociadas, certifica que
         el(la) se&ntilde;or(a) <strong>{{ titular.nombrecompleto|upper }}</strong>, con {{ tipo_documento }} N&deg;
         <strong>{{ titular.pk }}</strong>, adquiri&oacute; un lote con nuestra empresa correspondiente a la
-        <strong>{{ inmueble|upper }}</strong> por valor de
-        <strong>$ {{ valor_contrato|floatformat:0|intcomma }}</strong>, perteneciente al proyecto
+        <strong>{{ inmueble|default_if_none:""|upper }}</strong> por valor de
+        <strong>$ {{ valor_contrato|default_if_none:0|floatformat:0|intcomma }}</strong>, perteneciente al proyecto
         <strong>{{ proyecto }}</strong>, con abonos realizados a <strong>{{ anio_hasta }}</strong>,
         {% if cantidad_titulares > 1 %}
         correspondientes a su participaci&oacute;n proporcional entre {{ cantidad_titulares }} titulares,

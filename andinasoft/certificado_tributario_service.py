@@ -55,6 +55,34 @@ def _tipo_documento_label(tipo_doc: str | None) -> str:
     return labels.get(tipo_doc, 'documento de identidad').lower()
 
 
+def titulares_para_certificado(adj: Adjudicacion) -> list:
+    return _titulares_seguros(adj)
+
+
+def _titulares_seguros(adj: Adjudicacion) -> list:
+    titulares = []
+    for tid in (adj.idtercero1, adj.idtercero2, adj.idtercero3, adj.idtercero4):
+        if not tid:
+            continue
+        try:
+            titulares.append(clientes.objects.get(pk=tid))
+        except clientes.DoesNotExist:
+            continue
+    return titulares
+
+
+def _datos_adj_certificado(proyecto: str, adj_id: str, adj: Adjudicacion) -> tuple[str, datetime.date | None]:
+    inmueble = adj.idinmueble or ''
+    fecha_contrato = adj.fechacontrato
+    try:
+        vista_adj = Vista_Adjudicacion.objects.using(proyecto).get(IdAdjudicacion=adj_id)
+        inmueble = vista_adj.Inmueble or inmueble
+        fecha_contrato = vista_adj.FechaContrato or fecha_contrato
+    except Vista_Adjudicacion.DoesNotExist:
+        pass
+    return inmueble, fecha_contrato
+
+
 def anios_disponibles_certificado(proyecto: str, adj_id: str) -> list[int]:
     hoy = datetime.date.today()
     agg = Recaudos_general.objects.using(proyecto).filter(
@@ -82,7 +110,6 @@ def _pagos_agrupados_por_anio(proyecto: str, adj_id: str, anio_hasta: int) -> di
     recaudos = Recaudos.objects.using(proyecto).filter(
         idadjudicacion=adj_id,
         recibo__in=recibos,
-        fecha__lte=fin_anio,
     )
 
     por_anio: dict[int, dict[str, Decimal]] = defaultdict(
@@ -93,14 +120,15 @@ def _pagos_agrupados_por_anio(proyecto: str, adj_id: str, anio_hasta: int) -> di
         }
     )
     for rec in recaudos:
-        if not rec.fecha:
+        fecha_pago = rec.fecha or rec.fechaoperacion
+        if not fecha_pago or fecha_pago > fin_anio:
             continue
         cap = _d(rec.capital)
         intcte = _d(rec.interescte)
         intmora = _d(rec.interesmora)
-        por_anio[rec.fecha.year]['capital'] += cap
-        por_anio[rec.fecha.year]['interescte'] += intcte
-        por_anio[rec.fecha.year]['interesmora'] += intmora
+        por_anio[fecha_pago.year]['capital'] += cap
+        por_anio[fecha_pago.year]['interescte'] += intcte
+        por_anio[fecha_pago.year]['interesmora'] += intmora
     return por_anio
 
 
@@ -117,7 +145,7 @@ def build_certificado_tributario_context(
     except Adjudicacion.DoesNotExist:
         return None, 'Adjudicacion no encontrada.'
 
-    titulares = adj.titulares2()
+    titulares = _titulares_seguros(adj)
     if not titulares:
         return None, 'La adjudicacion no tiene titulares registrados.'
 
@@ -169,15 +197,10 @@ def build_certificado_tributario_context(
         return None, 'No hay pagos aplicados para generar el certificado en el periodo seleccionado.'
 
     total_general = total_capital + total_interescte + total_interesmora
-    total_general_letras = Utilidades().numeros_letras(int(total_general))
+    total_general_letras = Utilidades().numeros_letras(int(round(total_general)))
 
-    try:
-        vista_adj = Vista_Adjudicacion.objects.using(proyecto).get(IdAdjudicacion=adj_id)
-        inmueble = vista_adj.IdInmueble
-        fecha_contrato = vista_adj.FechaContrato
-    except Vista_Adjudicacion.DoesNotExist:
-        inmueble = adj.idinmueble
-        fecha_contrato = adj.fechacontrato
+    inmueble, fecha_contrato = _datos_adj_certificado(proyecto, adj_id, adj)
+    valor_contrato = adj.valor or Decimal('0')
 
     total_recaudado_general = Recaudos_general.objects.using(proyecto).filter(
         idadjudicacion=adj_id,
@@ -200,7 +223,7 @@ def build_certificado_tributario_context(
         'tipo_documento': _tipo_documento_label(titular.tipo_doc),
         'inmueble': inmueble,
         'fecha_contrato': fecha_contrato,
-        'valor_contrato': adj.valor,
+        'valor_contrato': valor_contrato,
         'cantidad_titulares': cantidad_titulares,
         'total_recaudado_titular': total_recaudado_titular,
         'filas': filas,

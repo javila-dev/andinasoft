@@ -45,6 +45,7 @@ from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.certificado_tributario_service import (
     anios_disponibles_certificado,
     build_certificado_tributario_context,
+    titulares_para_certificado,
 )
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
@@ -3460,6 +3461,56 @@ def detalle_adjudicacion(request,proyecto,adj):
             pagado+=cuota.rcdocapital if cuota.rcdocapital else 0
         
         if request.method == 'POST':
+            if request.POST.get('impCertificadoTributario'):
+                titular_id = (request.POST.get('cert_titular') or '').strip()
+                empresa_nit = (request.POST.get('cert_empresa') or '').strip()
+                cert_anio_raw = (request.POST.get('cert_anio') or '').strip().replace('.', '').replace(',', '')
+                anio_hasta = 0
+                if cert_anio_raw:
+                    try:
+                        anio_hasta = int(cert_anio_raw)
+                    except (TypeError, ValueError):
+                        anio_hasta = 0
+                if not titular_id:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debe seleccionar el titular del certificado.'
+                elif not empresa_nit:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debe seleccionar la empresa emisora.'
+                elif not anio_hasta:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debe seleccionar el año hasta el cual certificar.'
+                else:
+                    context_cert, err_cert = build_certificado_tributario_context(
+                        proyecto,
+                        adj,
+                        titular_id,
+                        empresa_nit,
+                        anio_hasta,
+                        request.user,
+                    )
+                    if err_cert:
+                        alerta = True
+                        titulo = 'Error'
+                        mensaje = err_cert
+                    else:
+                        filename = f'Certificado_tributario_{adj}_{titular_id}_{anio_hasta}.pdf'
+                        pdf = pdf_gen('pdf/certificado_tributario.html', context_cert, filename)
+                        if isinstance(pdf, HttpResponse):
+                            alerta = True
+                            titulo = 'Error'
+                            mensaje = 'No se pudo generar el PDF del certificado.'
+                        else:
+                            ruta_link = pdf.get('url')
+                            dir_link = ruta_link
+                            alerta = True
+                            titulo = 'Ya puedes descargar tu documento'
+                            mensaje = 'Puedes descargarlo aqui'
+                            link = True
+
             nombre=info_tit1.nombrecompleto
             direccion=info_tit1.domicilio
             inmueble=vista_adj.Inmueble
@@ -3591,51 +3642,6 @@ def detalle_adjudicacion(request,proyecto,adj):
                 titulo='¡Ya puedes descargar tu documento!'
                 mensaje='Puedes descargarlo aqui'
                 link=True
-            if request.POST.get('impCertificadoTributario'):
-                titular_id = (request.POST.get('cert_titular') or '').strip()
-                empresa_nit = (request.POST.get('cert_empresa') or '').strip()
-                cert_anio_raw = (request.POST.get('cert_anio') or '').strip().replace('.', '').replace(',', '')
-                anio_hasta = 0
-                if cert_anio_raw:
-                    try:
-                        anio_hasta = int(cert_anio_raw)
-                    except (TypeError, ValueError):
-                        anio_hasta = 0
-                if not titular_id:
-                    alerta = True
-                    titulo = 'Error'
-                    mensaje = 'Debe seleccionar el titular del certificado.'
-                elif not empresa_nit:
-                    alerta = True
-                    titulo = 'Error'
-                    mensaje = 'Debe seleccionar la empresa emisora.'
-                elif not anio_hasta:
-                    alerta = True
-                    titulo = 'Error'
-                    mensaje = 'Debe seleccionar el año hasta el cual certificar.'
-                else:
-                    context_cert, err_cert = build_certificado_tributario_context(
-                        proyecto,
-                        adj,
-                        titular_id,
-                        empresa_nit,
-                        anio_hasta,
-                        request.user,
-                    )
-                    if err_cert:
-                        alerta = True
-                        titulo = 'Error'
-                        mensaje = err_cert
-                    else:
-                        filename = f'Certificado_tributario_{adj}_{titular_id}_{anio_hasta}.pdf'
-                        pdf = pdf_gen('pdf/certificado_tributario.html', context_cert, filename)
-                        ruta_link = pdf.get('url')
-                        dir_link = ruta_link
-                        alerta = True
-                        titulo = 'Ya puedes descargar tu documento'
-                        mensaje = 'Puedes descargarlo aqui'
-                        link = True
-
             if request.POST.get('impPortada'):
                 check_perms(request,('andinasoft.view_pagocomision',))
                 planpagos='Regular'
@@ -3700,7 +3706,7 @@ def detalle_adjudicacion(request,proyecto,adj):
             'ultimobk': bk_bfchangeplan.objects.filter(adj=adj,proyecto=proyecto).order_by('-fecha_bk'),
             'empresas_certificado': empresas.objects.all().order_by('nombre'),
             'anios_certificado': anios_disponibles_certificado(proyecto, adj),
-            'titulares_certificado': obj_adj.titulares2(),
+            'titulares_certificado': titulares_para_certificado(obj_adj),
         }
         return render(request,'detalle_adj.html',context)
     
