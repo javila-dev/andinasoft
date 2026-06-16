@@ -1540,7 +1540,9 @@ class CajaGastoBillBuilder:
 
 
 class CajaLegalizationJournalBuilder:
-    """POST /journals que cierra CxP de bills de caja con associatedDocument."""
+    """POST /journals — un comprobante por lote que cierra CxP de bills con associatedDocument."""
+
+    BATCH_SOURCE_MODEL = 'alegra_integration.AlegraSyncBatch'
 
     def __init__(self, empresa, resolver=None):
         self.empresa = empresa
@@ -1578,36 +1580,40 @@ class CajaLegalizationJournalBuilder:
             required=True,
         )
 
-    def build(self, source):
-        if isinstance(source, dict):
-            reembolso = source['reembolso']
-            gastos = list(source.get('gastos') or [])
-        else:
-            reembolso = source
-            gastos = list(
-                gastos_caja.objects.filter(reembolso=reembolso, estado='Legalizado').order_by('pk')
-            )
+    @staticmethod
+    def _valor_aprox_reembolso(valor):
+        valor = int(valor or 0)
+        return valor + (10000 - valor % 10000) % 10000
 
+    def build_batch(self, *, caja, gastos, batch_id, fecha_desde, fecha_hasta):
+        """Un journal por lote: debitos CxP (uno por gasto legalizado) + creditos caja por reembolso."""
+        gastos = list(gastos or [])
         if not gastos:
-            raise AlegraBuildError(f'El reembolso {reembolso.pk} no tiene gastos legalizados.')
+            raise AlegraBuildError('El lote no tiene gastos legalizados para el journal de caja.')
 
-        caja = reembolso.caja
         cxp_category = self._cxp_category_id()
         caja_category = self._caja_credit_category_id(caja)
         cost_center_id = self.resolver.cost_center_for_caja(caja.pk, required=False)
         responsable_id = self._responsable_contact_id(caja)
         numeration_id = self.resolver.numeration('caja_legalization_journal')
 
-        journal_date = reembolso.fecha_aprueba or gastos[0].fecha_gasto
         entries = []
         pending_bills = []
+        reembolsos = {}
 
-        for gasto in gastos:
+        for gasto in sorted(gastos, key=lambda g: (g.fecha_gasto, g.pk)):
+            reembolso = gasto.reembolso
+            if not reembolso:
+                raise AlegraBuildError(
+                    f'El gasto {gasto.pk} esta Legalizado pero no tiene reembolso asociado.'
+                )
+            reembolsos[reembolso.pk] = reembolso
             amount = _money(gasto.valor)
             provider_id = _contact_for_partner(self.resolver, gasto.tercero)
-            local_key = f'caja:bill:{reembolso.pk}:{gasto.pk}'
+            local_key = f'caja:bill:{gasto.reembolso_id}:{gasto.pk}'
             pending_bills.append({
                 'gasto_id': gasto.pk,
+                'reembolso_id': reembolso.pk,
                 'local_key': local_key,
                 'amount': amount,
                 'provider_id': str(provider_id),
@@ -1625,48 +1631,61 @@ class CajaLegalizationJournalBuilder:
             }
             entries.append(entry)
 
-        valor = int(reembolso.valor or 0)
-        valor_aprox = valor + (10000 - valor % 10000) % 10000
-        vr_ajuste = valor_aprox - valor
-
-        if vr_ajuste > 0:
-            ajuste_cat = self.resolver.get(
-                AlegraMapping.CATEGORY,
-                local_code='caja_ajuste_aproximacion',
-                required=False,
-            )
-            if ajuste_cat:
+        ajuste_cat = self.resolver.get(
+            AlegraMapping.CATEGORY,
+            local_code='caja_ajuste_aproximacion',
+            required=False,
+        )
+        total_aprox = 0
+        for reemb_id in sorted(reembolsos.keys()):
+            reembolso = reembolsos[reemb_id]
+            valor = int(reembolso.valor or 0)
+            valor_aprox = self._valor_aprox_reembolso(valor)
+            total_aprox += valor_aprox
+            vr_ajuste = valor_aprox - valor
+            if vr_ajuste > 0 and ajuste_cat:
                 entries.append(_journal_entry(
                     account_id=ajuste_cat,
-                    description='AJUSTE POR APROXIMACION PARA RETIRO EN CAJERO',
+                    description=f'AJUSTE APROX REEMB {reemb_id}'[:255],
                     debit=_money(vr_ajuste),
                     credit=0,
                     client_id=responsable_id,
                 ))
+            entries.append(_journal_entry(
+                account_id=caja_category,
+                description=f'REEMB CAJA {reemb_id} {(caja.cuentabanco or caja.pk)}'[:255],
+                debit=0,
+                credit=_money(valor_aprox),
+                client_id=responsable_id,
+            ))
 
-        entries.append(_journal_entry(
-            account_id=caja_category,
-            description=f'REEMBOLSO CAJA {(caja.cuentabanco or caja.pk)}'[:255],
-            debit=0,
-            credit=_money(valor_aprox),
-            client_id=responsable_id,
-        ))
+        journal_dates = [
+            getattr(r, 'fecha_aprueba', None) for r in reembolsos.values() if getattr(r, 'fecha_aprueba', None)
+        ]
+        journal_date = max(journal_dates) if journal_dates else gastos[-1].fecha_gasto
 
         if cost_center_id:
             for entry in entries:
                 entry['costCenter'] = {'id': cost_center_id}
 
+        ref_desde = _date(fecha_desde)
+        ref_hasta = _date(fecha_hasta)
+        caja_label = (caja.cuentabanco or str(caja.pk)).strip()
         payload = _journal_payload(
             numeration_id=numeration_id,
             date=_date(journal_date),
-            reference=f'LC-{reembolso.pk}',
-            observations=f'Legalizacion caja {caja.cuentabanco or caja.pk}'[:500],
+            reference=f'LC-{caja_label}-LOTE-{batch_id}'[:255],
+            observations=(
+                f'Legalizacion caja {caja.cuentabanco or caja.pk} '
+                f'{ref_desde} a {ref_hasta}'
+            )[:500],
             entries=entries,
         )
         payload['__local'] = {
-            'reembolso_id': reembolso.pk,
+            'batch_id': batch_id,
+            'reembolso_ids': sorted(reembolsos.keys()),
             'pending_bills': pending_bills,
-            'valor_aprox': valor_aprox,
+            'valor_aprox_total': total_aprox,
             'cxp_from_bill_response': True,
             'cost_center_id': cost_center_id,
         }
@@ -1675,9 +1694,42 @@ class CajaLegalizationJournalBuilder:
             document_type='caja_journal',
             operation='accounting__createJournal',
             transport=AlegraDocument.ALEGRA_REST,
-            source_model='accounting.reembolsos_caja',
-            source_pk=reembolso.pk,
-            local_key=f'caja:journal:{reembolso.pk}',
+            source_model=self.BATCH_SOURCE_MODEL,
+            source_pk=str(batch_id),
+            local_key=f'caja:journal:batch:{batch_id}',
             payload=payload,
             empresa_id=self.empresa.pk,
         )
+
+    def build(self, source):
+        """Compatibilidad tests: dict con reembolso + gastos → journal de un solo reembolso."""
+        if isinstance(source, dict):
+            reembolso = source['reembolso']
+            gastos = list(source.get('gastos') or [])
+        else:
+            reembolso = source
+            gastos = list(
+                gastos_caja.objects.filter(reembolso=reembolso, estado='Legalizado').order_by('pk')
+            )
+
+        if not gastos:
+            raise AlegraBuildError(f'El reembolso {reembolso.pk} no tiene gastos legalizados.')
+
+        caja = reembolso.caja
+        batch_id = f'reemb-{reembolso.pk}'
+        built = self.build_batch(
+            caja=caja,
+            gastos=gastos,
+            batch_id=batch_id,
+            fecha_desde=gastos[0].fecha_gasto,
+            fecha_hasta=gastos[-1].fecha_gasto,
+        )
+        built.local_key = f'caja:journal:{reembolso.pk}'
+        built.source_model = 'accounting.reembolsos_caja'
+        built.source_pk = reembolso.pk
+        caja_label = (caja.cuentabanco or str(caja.pk)).strip()
+        built.payload['reference'] = f'LC-{caja_label}-{reembolso.pk}'[:255]
+        built.payload['observations'] = f'Legalizacion caja {caja.cuentabanco or caja.pk}'[:500]
+        built.payload['__local']['reembolso_id'] = reembolso.pk
+        built.payload['__local']['valor_aprox'] = self._valor_aprox_reembolso(reembolso.valor)
+        return built

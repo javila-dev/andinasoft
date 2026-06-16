@@ -1392,13 +1392,43 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(assoc['resourceType'], 'bill')
         self.assertEqual(assoc['idResource'], 0)
         self.assertIn('pending_bills', built.payload['__local'])
+        self.assertEqual(built.local_key, 'caja:journal:99')
         self.assertEqual(built.payload['entries'][-1]['credit'], 120000.0)
         for entry in built.payload['entries']:
             self.assertEqual(entry['costCenter'], {'id': 'cc-caja-7'})
         self.assertEqual(built.payload['__local']['cost_center_id'], 'cc-caja-7')
 
+    def test_caja_journal_batch_single_comprobante_por_lote(self):
+        gasto1, reembolso1 = self._gasto(valor=50000, subtotal_val=42000)
+        gasto2, reembolso2 = self._gasto(valor=70000, subtotal_val=58824)
+        reembolso2.pk = 100
+        gasto2.reembolso = reembolso2
+        gasto2.reembolso_id = reembolso2.pk
+        caja = reembolso1.caja
+        reembolso2.caja = caja
+        reembolso1.valor = 50000
+        reembolso2.valor = 70000
+        with patch('alegra_integration.builders.Profiles') as profiles_model:
+            profiles_model.objects.filter.return_value.first.return_value = SimpleNamespace(
+                identificacion='123456789'
+            )
+            built = CajaLegalizationJournalBuilder(self.empresa, self.resolver).build_batch(
+                caja=caja,
+                gastos=[gasto1, gasto2],
+                batch_id=42,
+                fecha_desde=datetime.date(2026, 5, 1),
+                fecha_hasta=datetime.date(2026, 5, 31),
+            )
+        self.assertEqual(built.local_key, 'caja:journal:batch:42')
+        self.assertEqual(built.payload['reference'], 'LC-Caja Menor-LOTE-42')
+        self.assertEqual(len(built.payload['__local']['pending_bills']), 2)
+        self.assertEqual(built.payload['__local']['reembolso_ids'], [99, 100])
+        debits = [e for e in built.payload['entries'] if e.get('debit')]
+        credits = [e for e in built.payload['entries'] if e.get('credit')]
+        self.assertEqual(len(debits), 2)
+        self.assertEqual(len(credits), 2)
+        self.assertEqual(debits[0]['associatedDocument']['resourceType'], 'bill')
 
-class CajaBatchFilterTests(SimpleTestCase):
     @patch('andinasoft.models.cuentas_pagos.objects.filter')
     @patch('alegra_integration.services.empresas.objects.get')
     def test_validate_caja_requires_caja_id(self, mock_emp_get, mock_caja_filter):
@@ -1433,6 +1463,73 @@ class CajaBatchFilterTests(SimpleTestCase):
         mock_caja_filter.assert_called_once_with(
             pk='7', nit_empresa=empresa, activo=True, es_caja=True,
         )
+
+
+class CajaJournalFinalizeTests(SimpleTestCase):
+    def test_next_sendable_prefers_bills_before_journals(self):
+        from alegra_integration.models import AlegraSyncBatch, AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        batch = SimpleNamespace(document_type=AlegraSyncBatch.DOC_CAJA)
+        journal = SimpleNamespace(document_type='caja_journal', pk=20, status=AlegraDocument.STATUS_VALID)
+        bill = SimpleNamespace(document_type='caja_bill', pk=10, status=AlegraDocument.STATUS_VALID)
+        svc = AlegraIntegrationService()
+
+        class _Qs(list):
+            def filter(self, **kwargs):
+                statuses = kwargs.get('status__in') or []
+                return _Qs([d for d in self if d.status in statuses])
+
+        batch.documents = _Qs([journal, bill])
+        picked = svc._next_sendable_batch_document(batch, retry_failed=False)
+        self.assertEqual(picked.document_type, 'caja_bill')
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_finalize_injects_bill_id_and_cxp(self, mock_client_cls):
+        from alegra_integration.models import AlegraDocument, AlegraSyncBatch
+        from alegra_integration.services import AlegraIntegrationService
+
+        empresa = SimpleNamespace(pk='900')
+        bill_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_bill',
+            local_key='caja:bill:99:501',
+            alegra_id='555',
+            status=AlegraDocument.STATUS_SENT,
+            response={'__cxp_category_id': 'cat-cxp-88'},
+        )
+        journal_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_journal',
+            local_key='caja:journal:batch:99',
+            payload={
+                'entries': [{
+                    'id': 'placeholder-cxp',
+                    'debit': 1000,
+                    'credit': 0,
+                    'associatedDocument': {'idResource': 0, 'resourceType': 'bill'},
+                }],
+                '__local': {
+                    'pending_bills': [{
+                        'local_key': 'caja:bill:99:501',
+                        'gasto_id': 501,
+                        'amount': 1000,
+                        'provider_id': '175',
+                    }],
+                },
+            },
+            save=Mock(),
+        )
+        batch = SimpleNamespace(document_type=AlegraSyncBatch.DOC_CAJA)
+
+        with patch.object(AlegraDocument.objects, 'filter') as doc_filter:
+            doc_filter.return_value.first.return_value = bill_doc
+            AlegraIntegrationService()._prepare_caja_document_for_send(batch, journal_doc)
+
+        entry = journal_doc.payload['entries'][0]
+        self.assertEqual(entry['id'], 'cat-cxp-88')
+        self.assertEqual(entry['associatedDocument']['idResource'], 555)
+        journal_doc.save.assert_called_once()
 
 
 class PaymentReconcileTests(SimpleTestCase):

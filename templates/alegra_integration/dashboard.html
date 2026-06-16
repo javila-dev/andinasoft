@@ -255,7 +255,7 @@
           Pagos, anticipos y transferencias de la empresa en el rango de fechas.
         </small>
         <small class="text-muted d-block mt-1" id="cajaDocHint" style="display:none">
-          Gastos de caja en estado <strong>Revisado</strong> (bills) o <strong>Legalizado</strong> (journals por reembolso) de la caja seleccionada.
+          Gastos de caja en estado <strong>Revisado</strong> (bills) o <strong>Legalizado</strong> (un journal de cierre por lote) de la caja seleccionada.
           Por gasto: factura electrónica o cuenta de cobro (<code>POST /bills</code>);
           luego comprobante que cierra CxP (<code>POST /journals</code>).
           Configura en <a href="/accounting/alegra/references">Referencias → Caja efectivo</a>.
@@ -1402,9 +1402,18 @@ function mergeDocUpdate(updated) {
 }
 
 function findNextSendableDoc(retry_failed) {
-  return (allDocs || []).find(d =>
+  const pending = (allDocs || []).filter(d =>
     d.status === 'valid' || (retry_failed && d.status === 'failed')
   );
+  if (!pending.length) return null;
+  const typeOrder = { caja_bill: 0, caja_journal: 1 };
+  pending.sort((a, b) => {
+    const ta = typeOrder[a.document_type] != null ? typeOrder[a.document_type] : 9;
+    const tb = typeOrder[b.document_type] != null ? typeOrder[b.document_type] : 9;
+    if (ta !== tb) return ta - tb;
+    return (a.id || 0) - (b.id || 0);
+  });
+  return pending[0];
 }
 
 function docRowEl(doc) {

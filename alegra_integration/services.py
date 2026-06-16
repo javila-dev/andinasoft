@@ -225,7 +225,9 @@ class AlegraIntegrationService:
             created_by=self.user if getattr(self.user, 'is_authenticated', False) else None,
         )
 
-        built_results = self._build_documents(empresa, proyecto, document_type, desde, hasta, caja_id=caja_id)
+        built_results = self._build_documents(
+            empresa, proyecto, document_type, desde, hasta, caja_id=caja_id, batch=batch,
+        )
         ready_to_send = 0
         already_sent = 0
         invalid = 0
@@ -353,6 +355,22 @@ class AlegraIntegrationService:
             }
 
         client_by_empresa = {}
+        try:
+            self._prepare_caja_document_for_send(batch, doc)
+        except AlegraIntegrationError as exc:
+            doc.status = AlegraDocument.STATUS_FAILED
+            doc.error = str(exc)
+            doc.save(update_fields=['status', 'error', 'updated_at'])
+            batch.refresh_from_db()
+            remaining = self._count_sendable_batch_documents(batch, retry_failed=retry_failed)
+            documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
+            return {
+                **self._batch_response(batch, documents),
+                'complete': remaining == 0,
+                'remaining': remaining,
+                'document': self._document_summary(doc),
+            }
+
         self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
         batch.refresh_from_db()
 
@@ -390,7 +408,11 @@ class AlegraIntegrationService:
         statuses = [AlegraDocument.STATUS_VALID]
         if retry_failed:
             statuses.append(AlegraDocument.STATUS_FAILED)
-        return batch.documents.filter(status__in=statuses).order_by('id').first()
+        qs = batch.documents.filter(status__in=statuses)
+        if batch.document_type == AlegraSyncBatch.DOC_CAJA:
+            docs = sorted(qs, key=self._caja_document_sort_key)
+            return docs[0] if docs else None
+        return qs.order_by('id').first()
 
     def _finalize_batch_send(self, batch):
         totals = self._batch_send_totals(batch)
@@ -409,6 +431,18 @@ class AlegraIntegrationService:
         batch.summary = {'sent': sent, 'failed': failed, 'skipped': skipped}
         batch.completed_at = timezone.now()
         batch.save(update_fields=['status', 'success_count', 'error_count', 'summary', 'completed_at', 'updated_at'])
+
+    def _caja_document_sort_key(self, doc):
+        type_order = {'caja_bill': 0, 'caja_journal': 1}
+        return (type_order.get(doc.document_type, 9), doc.pk)
+
+    def _prepare_caja_document_for_send(self, batch, doc):
+        """Antes de enviar un journal de caja: inyecta CxP del bill y associatedDocument."""
+        if batch.document_type != AlegraSyncBatch.DOC_CAJA:
+            return
+        if doc.document_type != 'caja_journal':
+            return
+        self._finalize_caja_journal_doc(doc)
 
     def _try_send_batch_document(self, batch, doc, client_by_empresa, *, retry_failed=True):
         if doc.status == AlegraDocument.STATUS_SENT:
@@ -482,8 +516,7 @@ class AlegraIntegrationService:
 
         doc_list = list(batch.documents.order_by('id'))
         if batch.document_type == AlegraSyncBatch.DOC_CAJA:
-            type_order = {'caja_bill': 0, 'caja_journal': 1}
-            doc_list.sort(key=lambda d: (type_order.get(d.document_type, 9), d.pk))
+            doc_list.sort(key=self._caja_document_sort_key)
 
         for doc in doc_list:
             if doc.status == AlegraDocument.STATUS_SENT:
@@ -496,19 +529,15 @@ class AlegraIntegrationService:
                 documents.append(self._document_summary(doc))
                 continue
 
-            if (
-                batch.document_type == AlegraSyncBatch.DOC_CAJA
-                and doc.document_type == 'caja_journal'
-            ):
-                try:
-                    self._finalize_caja_journal_doc(doc)
-                except AlegraIntegrationError as exc:
-                    doc.status = AlegraDocument.STATUS_FAILED
-                    doc.error = str(exc)
-                    doc.save(update_fields=['status', 'error', 'updated_at'])
-                    failed += 1
-                    documents.append(self._document_summary(doc))
-                    continue
+            try:
+                self._prepare_caja_document_for_send(batch, doc)
+            except AlegraIntegrationError as exc:
+                doc.status = AlegraDocument.STATUS_FAILED
+                doc.error = str(exc)
+                doc.save(update_fields=['status', 'error', 'updated_at'])
+                failed += 1
+                documents.append(self._document_summary(doc))
+                continue
 
             outcome = self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
             if outcome == 'sent':
@@ -1371,7 +1400,7 @@ class AlegraIntegrationService:
 
         return empresa, proyecto, desde, hasta, validated_caja_id
 
-    def _build_documents(self, empresa, proyecto, document_type, desde, hasta, caja_id=None):
+    def _build_documents(self, empresa, proyecto, document_type, desde, hasta, caja_id=None, batch=None):
         if document_type == AlegraSyncBatch.DOC_RECEIPT:
             builder = ReceiptPaymentBuilder(empresa, proyecto)
             queryset = Recaudos_general.objects.using(proyecto.pk).filter(fecha__range=(desde, hasta)).order_by('fecha', 'pk')
@@ -1460,14 +1489,42 @@ class AlegraIntegrationService:
             for gasto in gastos_bill_qs:
                 results.extend(self._safe_build(bill_builder, gasto, empresa=empresa, proyecto=proyecto))
 
-            by_reemb = {}
-            for gasto in gastos_journal_qs:
-                by_reemb.setdefault(gasto.reembolso_id, []).append(gasto)
-            for reemb_id in sorted(by_reemb.keys()):
-                gastos_group = by_reemb[reemb_id]
-                reembolso = gastos_group[0].reembolso
-                journal_source = {'reembolso': reembolso, 'gastos': gastos_group}
-                results.extend(self._safe_build(journal_builder, journal_source, empresa=empresa, proyecto=proyecto))
+            gastos_journal = list(gastos_journal_qs)
+            if gastos_journal:
+                if not batch:
+                    raise AlegraConfigurationError(
+                        'El journal de caja por lote requiere un batch de preview.'
+                    )
+                from andinasoft.models import cuentas_pagos
+
+                caja = cuentas_pagos.objects.get(pk=caja_id)
+                try:
+                    built = journal_builder.build_batch(
+                        caja=caja,
+                        gastos=gastos_journal,
+                        batch_id=batch.pk,
+                        fecha_desde=desde,
+                        fecha_hasta=hasta,
+                    )
+                    sent = AlegraDocument.objects.filter(
+                        empresa=empresa,
+                        document_type='caja_journal',
+                        local_key=built.local_key,
+                        status=AlegraDocument.STATUS_SENT,
+                    ).first()
+                    if sent:
+                        results.append({'existing_sent': sent})
+                    else:
+                        results.append({'built': built})
+                except (AlegraBuildError, AlegraConfigurationError) as exc:
+                    results.append({
+                        'error': str(exc),
+                        'document_type': 'caja_journal',
+                        'source_model': 'alegra_integration.AlegraSyncBatch',
+                        'source_pk': str(batch.pk),
+                        'local_key': f'invalid:caja_journal:batch:{batch.pk}',
+                        'payload': {},
+                    })
             return results
 
         builder = ExpensePaymentBuilder(empresa)
