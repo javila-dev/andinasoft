@@ -113,6 +113,14 @@ def _local_third_party_info(local_model, local_pk):
         if partner:
             return ('accounting.partners', ident, name, ['provider'])
 
+    if local_model == 'andinasoft.profiles':
+        from andinasoft.models import Profiles
+        profile = Profiles.objects.filter(pk=ident).first()
+        if not profile:
+            profile = Profiles.objects.filter(identificacion=ident).first()
+        if profile:
+            return ('andinasoft.profiles', str(profile.pk), str(profile), ['provider', 'client'])
+
     if local_model == 'andinasoft.clientes':
         obj = clientes.objects.filter(pk=ident).first()
         name = _pick_local_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre', 'razon_social', 'razonSocial'])
@@ -160,6 +168,58 @@ def _local_third_party_info(local_model, local_pk):
     return (local_model, ident, '', ['client'])
 
 
+def _resolve_identification_to_local(ident):
+    """
+    Resuelve cédula/NIT al registro local correcto para enlazar contactos.
+    Orden: Partners → Profiles (responsable caja) → asesor → cliente → empresa.
+    """
+    raw = str(ident or '').strip()
+    if not raw:
+        return None
+
+    from andinasoft.models import Profiles
+
+    keys = _ident_variants(raw)
+    for key in keys:
+        partner = Partners.objects.filter(pk=key).first()
+        if partner:
+            return ('accounting.partners', str(partner.pk), _partner_display_name(partner))
+
+    for key in keys:
+        profile = Profiles.objects.filter(identificacion=key).first()
+        if profile:
+            return ('andinasoft.profiles', str(profile.pk), str(profile))
+
+    for key in keys:
+        obj = asesores.objects.filter(pk=key).first()
+        if obj:
+            return ('andinasoft.asesores', str(obj.pk), (obj.nombre or '').strip())
+
+    for key in keys:
+        obj = clientes.objects.filter(pk=key).first()
+        if obj:
+            name = _pick_local_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre'])
+            return ('andinasoft.clientes', str(obj.pk), name)
+
+    for key in keys:
+        obj = empresas.objects.filter(pk=key).first()
+        if obj:
+            name = _pick_local_name(obj, ['nombre', 'razon_social', 'razonSocial'])
+            return ('andinasoft.empresas', str(obj.pk), name)
+
+    return None
+
+
+def _contact_index_ident(resolved_model, local_pk):
+    """Identificación para AlegraContactIndex (puede diferir del local_pk del mapeo)."""
+    if resolved_model == 'andinasoft.profiles':
+        from andinasoft.models import Profiles
+        profile = Profiles.objects.filter(pk=local_pk).first()
+        if profile and profile.identificacion:
+            return _norm_ident(profile.identificacion)
+    return _norm_ident(local_pk)
+
+
 def _extract_missing_contact_refs(error):
     """Parse invalid-doc errors into (local_model, local_pk) pairs."""
     err = (error or '')
@@ -179,7 +239,22 @@ def _extract_missing_contact_refs(error):
     if 'identification=' in err and 'índice Alegra' in err:
         match = _MISSING_PARTNER_IDENT_RE.search(err)
         if match:
-            refs.append(('accounting.partners', match.group('ident').strip()))
+            ident = match.group('ident').strip()
+            resolved = _resolve_identification_to_local(ident)
+            if resolved:
+                refs.append((resolved[0], resolved[1]))
+            else:
+                refs.append(('andinasoft.profiles', ident))
+
+    if 'responsable de la caja' in err.lower() and 'identificacion=' in err.lower():
+        match = re.search(r'identificacion=([^)\s,]+)', err, re.I)
+        if match:
+            ident = match.group(1).strip()
+            resolved = _resolve_identification_to_local(ident)
+            if resolved:
+                refs.append((resolved[0], resolved[1]))
+            else:
+                refs.append(('andinasoft.profiles', ident))
 
     out = []
     for model, pk in refs:
@@ -442,12 +517,22 @@ class AlegraIntegrationService:
         return (type_order.get(doc.document_type, 9), doc.pk)
 
     def _prepare_caja_document_for_send(self, batch, doc):
-        """Antes de enviar un journal de caja: inyecta CxP del bill y associatedDocument."""
+        """Antes de enviar un journal de caja: construye (si falta) e inyecta CxP del bill."""
         if batch.document_type != AlegraSyncBatch.DOC_CAJA:
             return
         if doc.document_type != 'caja_journal':
             return
-        self._finalize_caja_journal_doc(doc)
+        payload = doc.payload or {}
+        local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
+        pending_bills = local.get('pending_bills') or []
+        entries = payload.get('entries') or []
+        needs_build = bool(local.get('awaiting_bills')) or (
+            pending_bills and len(entries) < len(pending_bills)
+        )
+        if needs_build:
+            self._activate_caja_journal_doc(batch, doc)
+        else:
+            self._finalize_caja_journal_doc(doc)
 
     def _try_send_batch_document(self, batch, doc, client_by_empresa, *, retry_failed=True):
         if doc.status == AlegraDocument.STATUS_SENT:
@@ -1117,9 +1202,11 @@ class AlegraIntegrationService:
         client = AlegraMCPClient(empresa)
 
         missing = {}
-        invalid_docs = batch.documents.filter(status=AlegraDocument.STATUS_INVALID).only('error')
-        for doc in invalid_docs:
-            for local_model, local_pk in _extract_missing_contact_refs(doc.error):
+        contact_error_docs = batch.documents.filter(
+            status__in=(AlegraDocument.STATUS_INVALID, AlegraDocument.STATUS_FAILED),
+        ).values('error', 'source_model', 'source_pk', 'local_key')
+        for doc in contact_error_docs:
+            for local_model, local_pk in _extract_missing_contact_refs(doc.get('error')):
                 missing[(local_model, local_pk)] = True
 
         candidates = [{'local_model': k[0], 'local_pk': k[1]} for k in missing.keys()]
@@ -1257,7 +1344,7 @@ class AlegraIntegrationService:
                 )
                 _upsert_contact_index_for_mapping(
                     empresa,
-                    ident=ident,
+                    ident=_contact_index_ident(resolved_model, str(ident)),
                     alegra_id=alegra_id,
                     name=name,
                     contact_types=contact_types,
@@ -1290,8 +1377,10 @@ class AlegraIntegrationService:
 
         # Collect candidates + doc refs
         missing = {}
-        invalid_docs = batch.documents.filter(status=AlegraDocument.STATUS_INVALID).values('error', 'source_model', 'source_pk', 'local_key')
-        for doc in invalid_docs:
+        contact_error_docs = batch.documents.filter(
+            status__in=(AlegraDocument.STATUS_INVALID, AlegraDocument.STATUS_FAILED),
+        ).values('error', 'source_model', 'source_pk', 'local_key')
+        for doc in contact_error_docs:
             for local_model, local_pk in _extract_missing_contact_refs(doc.get('error')):
                 key = (local_model, local_pk)
                 entry = missing.setdefault(key, {'local_model': local_model, 'local_pk': local_pk, 'refs': []})

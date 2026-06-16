@@ -19,7 +19,15 @@ from alegra_integration.models import (
     AlegraWebhookInboundLog,
     AlegraWebhookSubscriptionLog,
 )
-from alegra_integration.services import AlegraIntegrationService, ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX, ALEGRA_WEBHOOK_EVENTS, _partner_display_name
+from alegra_integration.services import (
+    AlegraIntegrationService,
+    ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX,
+    ALEGRA_WEBHOOK_EVENTS,
+    _contact_index_ident,
+    _local_third_party_info,
+    _partner_display_name,
+    _upsert_contact_index_for_mapping,
+)
 from andinasoft.models import cuentas_pagos, empresas, proyectos, clientes, asesores
 from andinasoft.shared_models import formas_pago
 from accounting.models import cuentas_intercompanias, info_interfaces, impuestos_legalizacion
@@ -1491,6 +1499,15 @@ def contact_link(request):
                 'active': True,
             },
         )
+        empresa = empresas.objects.get(pk=empresa_id)
+        resolved_model, ident, resolved_name, contact_types = _local_third_party_info(local_model, local_pk)
+        _upsert_contact_index_for_mapping(
+            empresa,
+            ident=_contact_index_ident(resolved_model, ident or local_pk),
+            alegra_id=alegra_id,
+            name=(name or resolved_name or m.description or '')[:255],
+            contact_types=contact_types,
+        )
         return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk})
     except Exception as exc:
         return _error_response(exc, status=500)
@@ -1521,6 +1538,12 @@ def contact_link_lookup_local(request):
             from accounting.models import Partners
             obj = Partners.objects.filter(pk=local_pk).first()
             name = _partner_display_name(obj) if obj else ''
+        elif local_model == 'andinasoft.profiles':
+            from andinasoft.models import Profiles
+            obj = Profiles.objects.filter(pk=local_pk).first()
+            if not obj:
+                obj = Profiles.objects.filter(identificacion=local_pk).first()
+            name = str(obj) if obj else ''
         elif local_model == 'andinasoft.terceros_raw':
             # For cases where we only have an external/local id in documents (no dedicated local table).
             obj = True

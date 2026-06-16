@@ -1903,8 +1903,34 @@ class PartnerContactToolsTests(SimpleTestCase):
             'Falta contacto en índice Alegra para empresa 900 '
             '(identification=900123456). Sincroniza contactos o enlázalo manualmente.'
         )
-        refs = _extract_missing_contact_refs(err)
-        self.assertEqual(refs, [('accounting.partners', '900123456')])
+        with patch('alegra_integration.services._resolve_identification_to_local') as resolve:
+            resolve.return_value = ('andinasoft.profiles', '7', 'MARIA LOPEZ')
+            refs = _extract_missing_contact_refs(err)
+        self.assertEqual(refs, [('andinasoft.profiles', '7')])
+
+    def test_resolve_identification_prefers_profile_when_not_partner(self):
+        from alegra_integration.services import _resolve_identification_to_local
+
+        profile = SimpleNamespace(pk=12, identificacion='1152463184')
+        profile.__str__ = lambda: 'ANA RESP'
+        with patch('alegra_integration.services.Partners') as partners_model, \
+             patch('andinasoft.models.Profiles') as profiles_model:
+            partners_model.objects.filter.return_value.first.return_value = None
+            profiles_model.objects.filter.return_value.first.return_value = profile
+            out = _resolve_identification_to_local('1152463184')
+        self.assertEqual(out[0], 'andinasoft.profiles')
+        self.assertEqual(out[1], '12')
+
+    def test_local_third_party_info_resolves_profile(self):
+        from alegra_integration.services import _local_third_party_info
+
+        profile = SimpleNamespace(pk=12, identificacion='1152463184')
+        with patch('andinasoft.models.Profiles') as profiles_model:
+            profiles_model.objects.filter.return_value.first.return_value = profile
+            model, ident, name, types = _local_third_party_info('andinasoft.profiles', '12')
+        self.assertEqual(model, 'andinasoft.profiles')
+        self.assertEqual(ident, '12')
+        self.assertIn('provider', types)
 
     @patch('alegra_integration.services.Partners')
     def test_local_third_party_info_resolves_partner(self, mock_partners):
@@ -1941,6 +1967,24 @@ class PartnerContactToolsTests(SimpleTestCase):
         self.assertIn('tipo "contact"', str(ctx.exception))
         self.assertIn('accounting.partners', str(ctx.exception))
         self.assertIn('pk=123456', str(ctx.exception))
+
+    def test_contact_by_identification_falls_back_to_contact_mapping(self):
+        from alegra_integration.mapping import MappingResolver
+        from alegra_integration.models import AlegraContactIndex, AlegraMapping
+
+        resolver = MappingResolver(SimpleNamespace(pk='900'))
+        with patch.object(AlegraContactIndex.objects, 'filter') as index_filter, \
+             patch.object(AlegraMapping.objects, 'filter') as mapping_filter:
+            index_qs = index_filter.return_value
+            index_qs.order_by.return_value.first.return_value = None
+            mapped = SimpleNamespace(alegra_id='alegra-88')
+            mapping_qs = mapping_filter.return_value
+            mapping_qs.order_by.return_value.first.return_value = mapped
+            self.assertEqual(
+                resolver.contact_by_identification('1152463184'),
+                'alegra-88',
+            )
+            mapping_filter.assert_called()
 
     def test_caja_bill_uses_contact_for_partner(self):
         gasto, _ = CajaBuilderTests()._gasto()

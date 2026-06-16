@@ -1574,6 +1574,17 @@ class CajaLegalizationJournalBuilder:
             raise AlegraBuildError(
                 f'El responsable de la caja no tiene identificacion en Profiles (user={user.pk}).'
             )
+        if profile:
+            profile_pk = getattr(profile, 'pk', None)
+            if profile_pk is not None:
+                mapped = self.resolver.get(
+                    AlegraMapping.CONTACT,
+                    local_model='andinasoft.profiles',
+                    local_pk=str(profile_pk),
+                    required=False,
+                )
+                if mapped:
+                    return mapped
         return self.resolver.contact_by_identification(
             ident,
             prefer_types=['provider', 'client'],

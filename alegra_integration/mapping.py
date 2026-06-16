@@ -272,11 +272,36 @@ class MappingResolver:
         if row:
             return str(row.alegra_id)
 
+        mapped = AlegraMapping.objects.filter(
+            empresa_id=self.empresa.pk,
+            mapping_type=AlegraMapping.CONTACT,
+            local_pk__in=list(variants),
+            active=True,
+            proyecto__isnull=True,
+        ).order_by('-updated_at').first()
+        if mapped and mapped.alegra_id:
+            return str(mapped.alegra_id)
+
+        from andinasoft.models import Profiles
+
+        profile = Profiles.objects.filter(identificacion__in=list(variants)).order_by('pk').first()
+        if profile:
+            prof_map = AlegraMapping.objects.filter(
+                empresa_id=self.empresa.pk,
+                mapping_type=AlegraMapping.CONTACT,
+                local_model='andinasoft.profiles',
+                local_pk=str(profile.pk),
+                active=True,
+                proyecto__isnull=True,
+            ).first()
+            if prof_map and prof_map.alegra_id:
+                return str(prof_map.alegra_id)
+
         if not required:
             return None
         raise AlegraConfigurationError(
             f'Falta contacto en índice Alegra para empresa {self.empresa.pk} (identification={ident}). '
-            f'Sincroniza contactos o enlázalo manualmente.'
+            f'Sincroniza contactos o enlázalo manualmente (responsable de caja / proveedor).'
         )
 
     def cost_center_for_project(self, required=True):
