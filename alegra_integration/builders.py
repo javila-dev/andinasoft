@@ -1404,14 +1404,10 @@ from alegra_integration.caja_mapping import (
 
 
 def _contact_for_partner(resolver, partner):
-    tercero_pk = str(getattr(partner, 'idTercero', '') or '').strip()
+    tercero_pk = str(getattr(partner, 'idTercero', '') or getattr(partner, 'pk', '') or '').strip()
     if not tercero_pk:
         raise AlegraBuildError('El gasto no tiene tercero identificado.')
-    return resolver.contact_by_identification(
-        tercero_pk,
-        prefer_types=['provider', 'client'],
-        required=True,
-    )
+    return resolver.contact_for_partner(tercero_pk, required=True)
 
 
 class CajaGastoBillBuilder:

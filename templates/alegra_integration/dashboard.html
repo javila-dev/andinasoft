@@ -512,6 +512,7 @@
                 <option value="andinasoft.clientes">Cliente</option>
                 <option value="andinasoft.asesores">Asesor</option>
                 <option value="andinasoft.empresas">Empresa</option>
+                <option value="accounting.partners">Proveedor (caja efectivo)</option>
                 <option value="andinasoft.terceros_raw">Tercero (ID factura)</option>
               </select>
             </div>
@@ -2315,12 +2316,19 @@ function loadBatchDetail(batchId) {
   });
 }
 
+function isMissingContactError(err) {
+  const e = (err || '');
+  return e.includes('tipo "contact"')
+    || e.includes('accounting.partners')
+    || (e.includes('índice Alegra') && e.includes('identification='));
+}
+
 function bulkCreateMissingContacts() {
   if (!currentBatchId) {
     warn('Primero genera o abre un lote (vista previa).');
     return;
   }
-  const missing = (allDocs || []).filter(d => d.status === 'invalid' && (d.error || '').includes('tipo "contact"')).length;
+  const missing = (allDocs || []).filter(d => d.status === 'invalid' && isMissingContactError(d.error)).length;
   if (!missing) {
     warn('Este lote no tiene errores por contacto faltante.');
     return;

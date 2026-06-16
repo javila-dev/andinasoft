@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.core.cache import cache
 
-from accounting.models import Anticipos, Pagos, gastos_caja, transferencias_companias
+from accounting.models import Anticipos, Pagos, Partners, gastos_caja, transferencias_companias
 from alegra_integration.builders import (
     CajaGastoBillBuilder,
     CajaLegalizationJournalBuilder,
@@ -72,6 +72,139 @@ def _ident_variants(value):
 
 
 _MISSING_CONTACT_RE = re.compile(r'model=(?P<model>[^,]+),\s*pk=(?P<pk>[^)]+)\)')
+_MISSING_PARTNER_IDENT_RE = re.compile(r'identification=(?P<ident>[^)]+)\)')
+
+
+def _pick_local_name(obj, fields):
+    if not obj:
+        return ''
+    for field in fields:
+        value = getattr(obj, field, None)
+        value = (value or '').strip() if isinstance(value, str) else (str(value).strip() if value is not None else '')
+        if value:
+            return value
+    return ''
+
+
+def _partner_display_name(partner):
+    if not partner:
+        return ''
+    nombre_completo = getattr(partner, 'nombre_completo', None)
+    if callable(nombre_completo):
+        name = (nombre_completo() or '').strip()
+        if name:
+            return name
+    nombres = _pick_local_name(partner, ['nombres'])
+    apellidos = _pick_local_name(partner, ['apellidos'])
+    return f'{nombres} {apellidos}'.strip() or nombres or apellidos
+
+
+def _local_third_party_info(local_model, local_pk):
+    """
+    Returns (resolved_local_model, ident, name, contact_types) for bulk contact tools.
+    """
+    ident = str(local_pk or '').strip()
+    if not ident:
+        return (local_model, '', '', ['client'])
+
+    if local_model == 'accounting.partners':
+        partner = Partners.objects.filter(pk=ident).first()
+        name = _partner_display_name(partner)
+        if partner:
+            return ('accounting.partners', ident, name, ['provider'])
+
+    if local_model == 'andinasoft.clientes':
+        obj = clientes.objects.filter(pk=ident).first()
+        name = _pick_local_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre', 'razon_social', 'razonSocial'])
+        if obj and not name:
+            n = _pick_local_name(obj, ['nombres'])
+            a = _pick_local_name(obj, ['apellidos'])
+            name = f'{n} {a}'.strip()
+        if name:
+            return ('andinasoft.clientes', ident, name, ['client'])
+    elif local_model == 'andinasoft.empresas':
+        obj = empresas.objects.filter(pk=ident).first()
+        name = _pick_local_name(obj, ['nombre', 'razon_social', 'razonSocial', 'nombrecompleto'])
+        if name:
+            return ('andinasoft.empresas', ident, name, ['provider'])
+    elif local_model == 'andinasoft.asesores':
+        obj = asesores.objects.filter(pk=ident).first()
+        name = _pick_local_name(obj, ['nombre', 'nombrecompleto'])
+        if name:
+            return ('andinasoft.asesores', ident, name, ['provider'])
+
+    partner = Partners.objects.filter(pk=ident).first()
+    name = _partner_display_name(partner)
+    if name:
+        return ('accounting.partners', ident, name, ['provider'])
+
+    obj = empresas.objects.filter(pk=ident).first()
+    name = _pick_local_name(obj, ['nombre', 'razon_social', 'razonSocial', 'nombrecompleto'])
+    if name:
+        return ('andinasoft.empresas', ident, name, ['provider'])
+
+    obj = clientes.objects.filter(pk=ident).first()
+    name = _pick_local_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre', 'razon_social', 'razonSocial'])
+    if obj and not name:
+        n = _pick_local_name(obj, ['nombres'])
+        a = _pick_local_name(obj, ['apellidos'])
+        name = f'{n} {a}'.strip()
+    if name:
+        return ('andinasoft.clientes', ident, name, ['client'])
+
+    obj = asesores.objects.filter(pk=ident).first()
+    name = _pick_local_name(obj, ['nombre', 'nombrecompleto'])
+    if name:
+        return ('andinasoft.asesores', ident, name, ['provider'])
+
+    return (local_model, ident, '', ['client'])
+
+
+def _extract_missing_contact_refs(error):
+    """Parse invalid-doc errors into (local_model, local_pk) pairs."""
+    err = (error or '')
+    refs = []
+    seen = set()
+
+    if 'tipo "contact"' in err:
+        match = _MISSING_CONTACT_RE.search(err)
+        if match:
+            refs.append((match.group('model').strip(), match.group('pk').strip()))
+
+    if 'accounting.partners' in err:
+        match = _MISSING_CONTACT_RE.search(err)
+        if match and match.group('model').strip() == 'accounting.partners':
+            refs.append((match.group('model').strip(), match.group('pk').strip()))
+
+    if 'identification=' in err and 'índice Alegra' in err:
+        match = _MISSING_PARTNER_IDENT_RE.search(err)
+        if match:
+            refs.append(('accounting.partners', match.group('ident').strip()))
+
+    out = []
+    for model, pk in refs:
+        key = (model, pk)
+        if model and pk and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _upsert_contact_index_for_mapping(empresa, *, ident, alegra_id, name, contact_types):
+    ident_key = _norm_ident(ident)
+    if not ident_key or not alegra_id:
+        return
+    for contact_type in contact_types or ['client']:
+        AlegraContactIndex.objects.update_or_create(
+            empresa=empresa,
+            contact_type=contact_type,
+            identification=ident_key,
+            defaults={
+                'alegra_id': str(alegra_id),
+                'name': (name or '')[:255],
+                'raw': {},
+            },
+        )
 
 
 class AlegraIntegrationService:
@@ -716,7 +849,12 @@ class AlegraIntegrationService:
                     )
                     state['phase'] = 'local'
                     state['alegra_total'] = int(state.get('alegra_loaded') or 0)
-                    state['total_local'] = clientes.objects.count() + asesores.objects.count() + empresas.objects.count()
+                    state['total_local'] = (
+                        clientes.objects.count()
+                        + asesores.objects.count()
+                        + empresas.objects.count()
+                        + Partners.objects.count()
+                    )
                     state['stage'] = 'clientes'
                     state['offset'] = 0
             try:
@@ -810,6 +948,21 @@ class AlegraIntegrationService:
                 batch = _iter_queryset(empresas.objects.all(), remaining)
                 for e in batch:
                     _upsert_contact('andinasoft.empresas', e.Nit, e.Nit, e.nombre)
+                state['processed'] += len(batch)
+                if len(batch) < remaining:
+                    stage = 'partners'
+                    offset = 0
+                else:
+                    offset += len(batch)
+            elif stage == 'partners':
+                batch = _iter_queryset(Partners.objects.all(), remaining)
+                for partner in batch:
+                    _upsert_contact(
+                        'accounting.partners',
+                        partner.idTercero,
+                        partner.idTercero,
+                        _partner_display_name(partner),
+                    )
                 state['processed'] += len(batch)
                 if len(batch) < remaining:
                     stage = None
@@ -929,19 +1082,8 @@ class AlegraIntegrationService:
 
         missing = {}
         invalid_docs = batch.documents.filter(status=AlegraDocument.STATUS_INVALID).only('error')
-        for d in invalid_docs:
-            err = (d.error or '')
-            if 'tipo "contact"' not in err and 'tipo "contact"' not in err.lower() and 'mapping_type' not in err:
-                # keep it strict; we only handle missing contact mappings
-                pass
-            if 'tipo "contact"' not in err:
-                continue
-            m = _MISSING_CONTACT_RE.search(err)
-            if not m:
-                continue
-            local_model = (m.group('model') or '').strip()
-            local_pk = (m.group('pk') or '').strip()
-            if local_model and local_pk:
+        for doc in invalid_docs:
+            for local_model, local_pk in _extract_missing_contact_refs(doc.error):
                 missing[(local_model, local_pk)] = True
 
         candidates = [{'local_model': k[0], 'local_pk': k[1]} for k in missing.keys()]
@@ -952,73 +1094,6 @@ class AlegraIntegrationService:
         skipped_already_mapped = 0
         errors = []
         warnings = []
-
-        def _local_info(local_model, local_pk):
-            """
-            Returns (resolved_local_model, ident, name, contact_types) for a local third-party.
-            We treat `ident` as the local_pk (NIT/CC) and try multiple model/field fallbacks because:
-            - some invalid docs were built with the wrong local_model (e.g. proveedores stored as clientes)
-            - name fields vary across tables
-            """
-
-            def _pick_name(obj, fields):
-                if not obj:
-                    return ''
-                for f in fields:
-                    v = getattr(obj, f, None)
-                    v = (v or '').strip() if isinstance(v, str) else (str(v).strip() if v is not None else '')
-                    if v:
-                        return v
-                return ''
-
-            ident = str(local_pk or '').strip()
-            if not ident:
-                return (local_model, '', '', ['client'])
-
-            # 1) Try the declared model first
-            if local_model == 'andinasoft.clientes':
-                obj = clientes.objects.filter(pk=ident).first()
-                name = _pick_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre', 'razon_social', 'razonSocial'])
-                if obj and not name:
-                    # Some records store names split; build a display name.
-                    n = _pick_name(obj, ['nombres'])
-                    a = _pick_name(obj, ['apellidos'])
-                    name = f'{n} {a}'.strip()
-                if name:
-                    return ('andinasoft.clientes', ident, name, ['client'])
-                # fall through to cross-table fallback (many proveedores are "empresas")
-            elif local_model == 'andinasoft.empresas':
-                obj = empresas.objects.filter(pk=ident).first()
-                name = _pick_name(obj, ['nombre', 'razon_social', 'razonSocial', 'nombrecompleto'])
-                if name:
-                    return ('andinasoft.empresas', ident, name, ['provider'])
-            elif local_model == 'andinasoft.asesores':
-                obj = asesores.objects.filter(pk=ident).first()
-                name = _pick_name(obj, ['nombre', 'nombrecompleto'])
-                if name:
-                    return ('andinasoft.asesores', ident, name, ['provider'])
-
-            # 2) Cross-table fallback (handles stale invalid docs built with wrong model)
-            obj = empresas.objects.filter(pk=ident).first()
-            name = _pick_name(obj, ['nombre', 'razon_social', 'razonSocial', 'nombrecompleto'])
-            if name:
-                return ('andinasoft.empresas', ident, name, ['provider'])
-
-            obj = clientes.objects.filter(pk=ident).first()
-            name = _pick_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre', 'razon_social', 'razonSocial'])
-            if obj and not name:
-                n = _pick_name(obj, ['nombres'])
-                a = _pick_name(obj, ['apellidos'])
-                name = f'{n} {a}'.strip()
-            if name:
-                return ('andinasoft.clientes', ident, name, ['client'])
-
-            obj = asesores.objects.filter(pk=ident).first()
-            name = _pick_name(obj, ['nombre', 'nombrecompleto'])
-            if name:
-                return ('andinasoft.asesores', ident, name, ['provider'])
-
-            return (local_model, ident, '', ['client'])
 
         def _match_by_ident(results, ident):
             target_keys = set(_ident_variants(ident))
@@ -1037,7 +1112,7 @@ class AlegraIntegrationService:
             local_model = item['local_model']
             local_pk = item['local_pk']
 
-            resolved_model, ident, name, contact_types = _local_info(local_model, local_pk)
+            resolved_model, ident, name, contact_types = _local_third_party_info(local_model, local_pk)
 
             # Skip if already mapped
             existing = AlegraMapping.objects.filter(
@@ -1144,6 +1219,13 @@ class AlegraIntegrationService:
                         'active': True,
                     },
                 )
+                _upsert_contact_index_for_mapping(
+                    empresa,
+                    ident=ident,
+                    alegra_id=alegra_id,
+                    name=name,
+                    contact_types=contact_types,
+                )
                 mapped += 1
             except Exception as exc:
                 errors.append({'local_model': local_model, 'local_pk': local_pk, 'error': str(exc)})
@@ -1173,68 +1255,18 @@ class AlegraIntegrationService:
         # Collect candidates + doc refs
         missing = {}
         invalid_docs = batch.documents.filter(status=AlegraDocument.STATUS_INVALID).values('error', 'source_model', 'source_pk', 'local_key')
-        for d in invalid_docs:
-            err = (d.get('error') or '')
-            if 'tipo "contact"' not in err:
-                continue
-            m = _MISSING_CONTACT_RE.search(err)
-            if not m:
-                continue
-            local_model = (m.group('model') or '').strip()
-            local_pk = (m.group('pk') or '').strip()
-            if not local_model or not local_pk:
-                continue
-            key = (local_model, local_pk)
-            entry = missing.setdefault(key, {'local_model': local_model, 'local_pk': local_pk, 'refs': []})
-            if len(entry['refs']) < int(max_refs_per_third or 0):
-                entry['refs'].append(
-                    {
-                        'source_model': d.get('source_model'),
-                        'source_pk': d.get('source_pk'),
-                        'local_key': d.get('local_key'),
-                    }
-                )
-
-        # Local info helper (reuse logic from bulk create)
-        def _local_info(local_model, local_pk):
-            def _pick_name(obj, fields):
-                if not obj:
-                    return ''
-                for f in fields:
-                    v = getattr(obj, f, None)
-                    v = (v or '').strip() if isinstance(v, str) else (str(v).strip() if v is not None else '')
-                    if v:
-                        return v
-                return ''
-
-            ident = str(local_pk or '').strip()
-            if not ident:
-                return (local_model, '', '')
-            if local_model == 'andinasoft.empresas':
-                obj = empresas.objects.filter(pk=ident).first()
-                name = _pick_name(obj, ['nombre'])
-                if name:
-                    return ('andinasoft.empresas', ident, name)
-            if local_model == 'andinasoft.asesores':
-                obj = asesores.objects.filter(pk=ident).first()
-                name = _pick_name(obj, ['nombre'])
-                if name:
-                    return ('andinasoft.asesores', ident, name)
-            # clientes (idTercero is PK)
-            obj = clientes.objects.filter(pk=ident).first()
-            name = _pick_name(obj, ['nombrecompleto', 'nombres', 'apellidos'])
-            if obj and not name:
-                n = _pick_name(obj, ['nombres'])
-                a = _pick_name(obj, ['apellidos'])
-                name = f'{n} {a}'.strip()
-            if name:
-                return ('andinasoft.clientes', ident, name)
-            # fallback: try empresas
-            obj = empresas.objects.filter(pk=ident).first()
-            name = _pick_name(obj, ['nombre'])
-            if name:
-                return ('andinasoft.empresas', ident, name)
-            return (local_model, ident, '')
+        for doc in invalid_docs:
+            for local_model, local_pk in _extract_missing_contact_refs(doc.get('error')):
+                key = (local_model, local_pk)
+                entry = missing.setdefault(key, {'local_model': local_model, 'local_pk': local_pk, 'refs': []})
+                if len(entry['refs']) < int(max_refs_per_third or 0):
+                    entry['refs'].append(
+                        {
+                            'source_model': doc.get('source_model'),
+                            'source_pk': doc.get('source_pk'),
+                            'local_key': doc.get('local_key'),
+                        }
+                    )
 
         def _match_by_ident(results, ident):
             target_keys = set(_ident_variants(ident))
@@ -1252,7 +1284,7 @@ class AlegraIntegrationService:
         out = {}
         for key, info in missing.items():
             local_model, local_pk = info['local_model'], info['local_pk']
-            resolved_model, ident, name = _local_info(local_model, local_pk)
+            resolved_model, ident, name, _contact_types = _local_third_party_info(local_model, local_pk)
             if not ident:
                 continue
 

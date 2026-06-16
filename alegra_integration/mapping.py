@@ -205,6 +205,41 @@ class MappingResolver:
     def contact_for_empresa(self, empresa_id):
         return self.get(AlegraMapping.CONTACT, local_model='andinasoft.empresas', local_pk=empresa_id)
 
+    def contact_for_partner(self, partner_pk, *, required=True):
+        """
+        Proveedor de caja efectivo (accounting.Partners, PK = idTercero / NIT-CC).
+        Orden: mapeo explícito → índice Alegra por identificación.
+        """
+        pk = str(partner_pk or '').strip()
+        if not pk:
+            if required:
+                raise AlegraConfigurationError(
+                    f'Falta mapeo Alegra tipo "{AlegraMapping.CONTACT}" para empresa {self.empresa.pk}, '
+                    f'proyecto empresa (model=accounting.partners, pk=).'
+                )
+            return None
+        mapped = self.get(
+            AlegraMapping.CONTACT,
+            local_model='accounting.partners',
+            local_pk=pk,
+            required=False,
+        )
+        if mapped:
+            return mapped
+        indexed = self.contact_by_identification(
+            pk,
+            prefer_types=[AlegraContactIndex.TYPE_PROVIDER, AlegraContactIndex.TYPE_CLIENT],
+            required=False,
+        )
+        if indexed:
+            return indexed
+        if not required:
+            return None
+        raise AlegraConfigurationError(
+            f'Falta mapeo Alegra tipo "{AlegraMapping.CONTACT}" para empresa {self.empresa.pk}, '
+            f'proyecto empresa (model=accounting.partners, pk={pk}).'
+        )
+
     def contact_by_identification(self, identification, *, prefer_types=None, required=True):
         """
         Resolve Alegra contact id by identification (NIT/CC) using `AlegraContactIndex`.

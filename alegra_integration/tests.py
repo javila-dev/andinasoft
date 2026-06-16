@@ -102,6 +102,9 @@ class ResolverStub:
     def contact_by_identification(self, ident, **kwargs):
         return f'contact-{ident}'
 
+    def contact_for_partner(self, partner_pk, *, required=True):
+        return f'contact-{partner_pk}'
+
     def category_for_puc_code(self, account_code, **kwargs):
         return f'cat-puc-{account_code}'
 
@@ -1629,4 +1632,70 @@ class AnticipoPaymentBuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['client'], {'id': 'contact-anticipo-99'})
         self.assertEqual(built.payload['type'], 'out')
         self.assertEqual(built.local_key, 'expense:anticipo:501')
+
+
+class PartnerContactToolsTests(SimpleTestCase):
+    def test_extract_missing_contact_refs_for_caja_partner(self):
+        from alegra_integration.services import _extract_missing_contact_refs
+
+        err = (
+            'Falta mapeo Alegra tipo "contact" para empresa 900, '
+            'proyecto empresa (model=accounting.partners, pk=900123456).'
+        )
+        refs = _extract_missing_contact_refs(err)
+        self.assertEqual(refs, [('accounting.partners', '900123456')])
+
+    def test_extract_missing_contact_refs_for_legacy_index_error(self):
+        from alegra_integration.services import _extract_missing_contact_refs
+
+        err = (
+            'Falta contacto en índice Alegra para empresa 900 '
+            '(identification=900123456). Sincroniza contactos o enlázalo manualmente.'
+        )
+        refs = _extract_missing_contact_refs(err)
+        self.assertEqual(refs, [('accounting.partners', '900123456')])
+
+    @patch('alegra_integration.services.Partners')
+    def test_local_third_party_info_resolves_partner(self, mock_partners):
+        from alegra_integration.services import _local_third_party_info
+
+        partner = SimpleNamespace(nombres='JUAN', apellidos='PEREZ')
+        partner.nombre_completo = lambda: 'JUAN PEREZ'
+        mock_partners.objects.filter.return_value.first.return_value = partner
+
+        model, ident, name, types = _local_third_party_info('accounting.partners', '123456')
+        self.assertEqual(model, 'accounting.partners')
+        self.assertEqual(ident, '123456')
+        self.assertEqual(name, 'JUAN PEREZ')
+        self.assertEqual(types, ['provider'])
+
+    def test_contact_for_partner_uses_mapping_before_index(self):
+        from alegra_integration.mapping import MappingResolver
+
+        resolver = MappingResolver(SimpleNamespace(pk='900'))
+        resolver.get = Mock(return_value='mapped-99')
+        resolver.contact_by_identification = Mock()
+        self.assertEqual(resolver.contact_for_partner('123456'), 'mapped-99')
+        resolver.get.assert_called_once()
+        resolver.contact_by_identification.assert_not_called()
+
+    def test_contact_for_partner_raises_standard_contact_error(self):
+        from alegra_integration.mapping import MappingResolver
+
+        resolver = MappingResolver(SimpleNamespace(pk='900'))
+        resolver.get = Mock(return_value=None)
+        resolver.contact_by_identification = Mock(return_value=None)
+        with self.assertRaises(AlegraConfigurationError) as ctx:
+            resolver.contact_for_partner('123456')
+        self.assertIn('tipo "contact"', str(ctx.exception))
+        self.assertIn('accounting.partners', str(ctx.exception))
+        self.assertIn('pk=123456', str(ctx.exception))
+
+    def test_caja_bill_uses_contact_for_partner(self):
+        gasto, _ = CajaBuilderTests()._gasto()
+        resolver = ResolverStub()
+        resolver.contact_for_partner = Mock(return_value='provider-900123456')
+        built = CajaGastoBillBuilder(SimpleNamespace(pk='901018375'), resolver).build(gasto)
+        self.assertEqual(built.payload['provider'], {'id': 'provider-900123456'})
+        resolver.contact_for_partner.assert_called_once_with('900123456', required=True)
 

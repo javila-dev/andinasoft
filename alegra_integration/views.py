@@ -19,7 +19,7 @@ from alegra_integration.models import (
     AlegraWebhookInboundLog,
     AlegraWebhookSubscriptionLog,
 )
-from alegra_integration.services import AlegraIntegrationService, ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX, ALEGRA_WEBHOOK_EVENTS
+from alegra_integration.services import AlegraIntegrationService, ALEGRA_WEBHOOK_BILLS_INGEST_SUFFIX, ALEGRA_WEBHOOK_EVENTS, _partner_display_name
 from andinasoft.models import cuentas_pagos, empresas, proyectos, clientes, asesores
 from andinasoft.shared_models import formas_pago
 from accounting.models import cuentas_intercompanias, info_interfaces, impuestos_legalizacion
@@ -1517,6 +1517,10 @@ def contact_link_lookup_local(request):
         elif local_model == 'andinasoft.empresas':
             obj = empresas.objects.filter(pk=local_pk).first()
             name = (obj.nombre if obj else '') or ''
+        elif local_model == 'accounting.partners':
+            from accounting.models import Partners
+            obj = Partners.objects.filter(pk=local_pk).first()
+            name = _partner_display_name(obj) if obj else ''
         elif local_model == 'andinasoft.terceros_raw':
             # For cases where we only have an external/local id in documents (no dedicated local table).
             obj = True
