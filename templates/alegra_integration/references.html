@@ -1717,6 +1717,7 @@ function normalizeAlegraResourceList(items) {
     if (Array.isArray(items.data)) items = items.data;
     else if (Array.isArray(items.taxes)) items = items.taxes;
     else if (Array.isArray(items.retentions)) items = items.retentions;
+    else if (Array.isArray(items.cost_centers)) items = items.cost_centers;
     else items = [];
   } else {
     return [];
@@ -1754,6 +1755,11 @@ function fetchAlegraTaxes(empresa) {
 function fetchAlegraRetentions(empresa) {
   return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`)
     .then(data => catalogFromRefResponse(data, 'retentions'));
+}
+
+function fetchAlegraCostCenters(empresa) {
+  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=cost_centers`)
+    .then(data => catalogFromRefResponse(data, 'cost_centers'));
 }
 
 function buildTaxOptions(taxes) {
@@ -1959,16 +1965,21 @@ function loadCajaAccountsTable() {
   return $.when(
     $.get(`${API.local}?empresa=${encodeURIComponent(empresa)}`),
     $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category&local_model=andinasoft.cuentas_pagos&local_code=caja_credit`),
-    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=cost_center&local_model=andinasoft.cuentas_pagos&local_code=caja_cost_center`)
-  ).done((accResp, creditMapResp, ccMapResp) => {
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=cost_center&local_model=andinasoft.cuentas_pagos&local_code=caja_cost_center`),
+    fetchAlegraCostCenters(empresa)
+  ).done((accResp, creditMapResp, ccMapResp, ccCatalog) => {
     const accData = accResp[0] || accResp;
     const creditMapData = creditMapResp[0] || creditMapResp;
     const ccMapData = ccMapResp[0] || ccMapResp;
+    cajaAlegraCostCenters = catalogFromRefResponse(ccCatalog, 'cost_centers');
     renderCajaAccountsTable(
       accData.local_accounts || [],
       creditMapData.mappings || [],
       ccMapData.mappings || []
     );
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'Error al cargar';
+    $('#cajaAccountsBody').html(`<tr><td colspan="4" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`);
   });
 }
 
@@ -2014,10 +2025,6 @@ function ensureCajaConfigLoaded() {
     })
     .done(taxData => {
       cajaAlegraTaxes = catalogFromRefResponse(taxData, 'taxes');
-      return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=cost_centers`);
-    })
-    .done(ccData => {
-      cajaAlegraCostCenters = ccData.cost_centers || [];
       loadCajaMappingsCurrent();
     })
     .fail(xhr => {
@@ -2290,9 +2297,8 @@ function loadCommissionRetefuenteCurrent() {
 
 function buildCostCenterOptions(items) {
   const opts = ['<option value="">— seleccionar —</option>'];
-  (items || []).forEach(cc => {
-    const id = cc.id != null ? String(cc.id) : '';
-    if (!id) return;
+  normalizeAlegraResourceList(items).forEach(cc => {
+    const id = String(cc.id);
     const name = cc.name || cc.description || '';
     const code = cc.code ? `${cc.code} · ` : '';
     opts.push(`<option value="${escHtml(id)}">${escHtml(`${code}${name} (id ${id})`)}</option>`);
@@ -2342,9 +2348,9 @@ function loadCommissionCostCenterCatalog() {
     return $.Deferred().resolve().promise();
   }
   $('#selCommissionCostCenter').prop('disabled', false).html('<option value="">Cargando…</option>');
-  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=cost_centers`)
-    .done(data => {
-      $('#selCommissionCostCenter').html(buildCostCenterOptions(data.cost_centers || []));
+  return fetchAlegraCostCenters(empresa)
+    .done(catalog => {
+      $('#selCommissionCostCenter').html(buildCostCenterOptions(catalog));
       return loadCommissionCostCenterCurrent();
     })
     .fail(xhr => {

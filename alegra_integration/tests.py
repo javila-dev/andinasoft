@@ -523,6 +523,7 @@ class ClientTests(SimpleTestCase):
         self.assertEqual(client._unwrap_rest_list(plain), plain)
         self.assertEqual(client._unwrap_rest_list({'data': plain}), plain)
         self.assertEqual(client._unwrap_rest_list({'taxes': plain}), plain)
+        self.assertEqual(client._unwrap_rest_list({'cost_centers': plain}), plain)
         self.assertEqual(
             client._unwrap_rest_list({'1': {'name': 'IVA', 'percentage': 19}})[0]['id'],
             '1',

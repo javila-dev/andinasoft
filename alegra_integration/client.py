@@ -384,7 +384,7 @@ class AlegraMCPClient:
         if isinstance(data, list):
             return data
         keys = [resource_key] if resource_key else []
-        keys.extend(('taxes', 'retentions', 'items', 'results'))
+        keys.extend(('taxes', 'retentions', 'cost_centers', 'costCenters', 'cost-centers', 'items', 'results'))
         seen = set()
         for key in keys:
             if not key or key in seen:
