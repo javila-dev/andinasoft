@@ -1586,34 +1586,35 @@ class CajaLegalizationJournalBuilder:
         return valor + (10000 - valor % 10000) % 10000
 
     def build_batch(self, *, caja, gastos, batch_id, fecha_desde, fecha_hasta):
-        """Un journal por lote: debitos CxP (uno por gasto legalizado) + creditos caja por reembolso."""
+        """Un journal por lote: debitos CxP (uno por gasto) + creditos caja por reembolso o total revisado."""
         gastos = list(gastos or [])
         if not gastos:
-            raise AlegraBuildError('El lote no tiene gastos legalizados para el journal de caja.')
+            raise AlegraBuildError('El lote no tiene gastos para el journal de caja.')
 
         cxp_category = self._cxp_category_id()
         caja_category = self._caja_credit_category_id(caja)
         cost_center_id = self.resolver.cost_center_for_caja(caja.pk, required=False)
         responsable_id = self._responsable_contact_id(caja)
         numeration_id = self.resolver.numeration('caja_legalization_journal')
+        caja_label = (caja.cuentabanco or str(caja.pk)).strip()
 
         entries = []
         pending_bills = []
         reembolsos = {}
+        orphan_total = 0
 
         for gasto in sorted(gastos, key=lambda g: (g.fecha_gasto, g.pk)):
             reembolso = gasto.reembolso
-            if not reembolso:
-                raise AlegraBuildError(
-                    f'El gasto {gasto.pk} esta Legalizado pero no tiene reembolso asociado.'
-                )
-            reembolsos[reembolso.pk] = reembolso
+            if reembolso:
+                reembolsos[reembolso.pk] = reembolso
+            else:
+                orphan_total += int(gasto.valor or 0)
             amount = _money(gasto.valor)
             provider_id = _contact_for_partner(self.resolver, gasto.tercero)
             local_key = f'caja:bill:{gasto.reembolso_id}:{gasto.pk}'
             pending_bills.append({
                 'gasto_id': gasto.pk,
-                'reembolso_id': reembolso.pk,
+                'reembolso_id': reembolso.pk if reembolso else None,
                 'local_key': local_key,
                 'amount': amount,
                 'provider_id': str(provider_id),
@@ -1653,9 +1654,19 @@ class CajaLegalizationJournalBuilder:
                 ))
             entries.append(_journal_entry(
                 account_id=caja_category,
-                description=f'REEMB CAJA {reemb_id} {(caja.cuentabanco or caja.pk)}'[:255],
+                description=f'REEMB CAJA {reemb_id} {caja_label}'[:255],
                 debit=0,
                 credit=_money(valor_aprox),
+                client_id=responsable_id,
+            ))
+
+        if orphan_total > 0:
+            total_aprox += orphan_total
+            entries.append(_journal_entry(
+                account_id=caja_category,
+                description=f'CAJA {caja_label}'[:255],
+                debit=0,
+                credit=_money(orphan_total),
                 client_id=responsable_id,
             ))
 
@@ -1670,7 +1681,6 @@ class CajaLegalizationJournalBuilder:
 
         ref_desde = _date(fecha_desde)
         ref_hasta = _date(fecha_hasta)
-        caja_label = (caja.cuentabanco or str(caja.pk)).strip()
         payload = _journal_payload(
             numeration_id=numeration_id,
             date=_date(journal_date),

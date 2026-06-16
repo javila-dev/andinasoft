@@ -242,6 +242,11 @@ class AlegraIntegrationService:
                 documents.append(self._document_summary(doc))
                 continue
 
+            if result.get('pending_journal'):
+                doc = result['pending_journal']
+                documents.append(self._document_summary(doc))
+                continue
+
             if result.get('error'):
                 invalid += 1
                 doc = self._upsert_document(
@@ -483,6 +488,8 @@ class AlegraIntegrationService:
             sync_pago_from_alegra_document(doc)
             if doc.document_type == 'caja_bill':
                 self._capture_caja_bill_cxp(client, doc)
+                if batch.document_type == AlegraSyncBatch.DOC_CAJA:
+                    self._refresh_caja_journal_progress(batch)
             return 'sent'
         except AlegraIntegrationError as exc:
             if (
@@ -1452,7 +1459,6 @@ class AlegraIntegrationService:
 
         if document_type == AlegraSyncBatch.DOC_CAJA:
             bill_builder = CajaGastoBillBuilder(empresa)
-            journal_builder = CajaLegalizationJournalBuilder(empresa)
 
             gastos_bill_qs = gastos_caja.objects.filter(
                 estado__in=(gastos_caja.ESTADO_REVISADO, 'Legalizado'),
@@ -1469,62 +1475,27 @@ class AlegraIntegrationService:
                 'cuenta_rte',
             ).order_by('fecha_gasto', 'pk')
 
-            gastos_journal_qs = gastos_caja.objects.filter(
-                estado='Legalizado',
-                reembolso__isnull=False,
-                reembolso__caja_id=caja_id,
-                forma_pago__nit_empresa=empresa,
-                fecha_gasto__range=(desde, hasta),
-            ).select_related(
-                'reembolso',
-                'reembolso__caja',
-                'tercero',
-                'concepto',
-                'forma_pago',
-                'cuenta_iva',
-                'cuenta_rte',
-            ).order_by('reembolso_id', 'fecha_gasto', 'pk')
-
             results = []
             for gasto in gastos_bill_qs:
                 results.extend(self._safe_build(bill_builder, gasto, empresa=empresa, proyecto=proyecto))
 
-            gastos_journal = list(gastos_journal_qs)
+            gastos_journal = list(gastos_bill_qs)
             if gastos_journal:
                 if not batch:
                     raise AlegraConfigurationError(
                         'El journal de caja por lote requiere un batch de preview.'
                     )
-                from andinasoft.models import cuentas_pagos
-
-                caja = cuentas_pagos.objects.get(pk=caja_id)
-                try:
-                    built = journal_builder.build_batch(
-                        caja=caja,
+                results.append(
+                    self._ensure_caja_batch_journal(
+                        batch=batch,
+                        empresa=empresa,
+                        proyecto=proyecto,
+                        caja_id=caja_id,
                         gastos=gastos_journal,
-                        batch_id=batch.pk,
                         fecha_desde=desde,
                         fecha_hasta=hasta,
                     )
-                    sent = AlegraDocument.objects.filter(
-                        empresa=empresa,
-                        document_type='caja_journal',
-                        local_key=built.local_key,
-                        status=AlegraDocument.STATUS_SENT,
-                    ).first()
-                    if sent:
-                        results.append({'existing_sent': sent})
-                    else:
-                        results.append({'built': built})
-                except (AlegraBuildError, AlegraConfigurationError) as exc:
-                    results.append({
-                        'error': str(exc),
-                        'document_type': 'caja_journal',
-                        'source_model': 'alegra_integration.AlegraSyncBatch',
-                        'source_pk': str(batch.pk),
-                        'local_key': f'invalid:caja_journal:batch:{batch.pk}',
-                        'payload': {},
-                    })
+                )
             return results
 
         builder = ExpensePaymentBuilder(empresa)
@@ -1861,6 +1832,224 @@ class AlegraIntegrationService:
         doc.response = response
         doc.save(update_fields=['response', 'updated_at'])
 
+    @staticmethod
+    def _caja_journal_local_key(batch_id):
+        return f'caja:journal:batch:{batch_id}'
+
+    @staticmethod
+    def _caja_pending_bills_from_gastos(gastos):
+        pending = []
+        for gasto in sorted(gastos, key=lambda g: (g.fecha_gasto, g.pk)):
+            pending.append({
+                'gasto_id': gasto.pk,
+                'reembolso_id': gasto.reembolso_id,
+                'local_key': f'caja:bill:{gasto.reembolso_id}:{gasto.pk}',
+            })
+        return pending
+
+    def _count_sent_caja_bills(self, empresa, batch, pending_bills):
+        ready = 0
+        for ref in pending_bills or []:
+            local_key = ref.get('local_key')
+            if not local_key:
+                continue
+            bill_doc = AlegraDocument.objects.filter(
+                batch=batch,
+                document_type='caja_bill',
+                local_key=local_key,
+                status=AlegraDocument.STATUS_SENT,
+            ).first()
+            if not bill_doc:
+                bill_doc = AlegraDocument.objects.filter(
+                    empresa=empresa,
+                    document_type='caja_bill',
+                    local_key=local_key,
+                    status=AlegraDocument.STATUS_SENT,
+                ).first()
+            if bill_doc and bill_doc.alegra_id:
+                ready += 1
+        return ready
+
+    def _ensure_caja_batch_journal(
+        self,
+        *,
+        batch,
+        empresa,
+        proyecto,
+        caja_id,
+        gastos,
+        fecha_desde,
+        fecha_hasta,
+    ):
+        local_key = self._caja_journal_local_key(batch.pk)
+        sent = AlegraDocument.objects.filter(
+            empresa=empresa,
+            document_type='caja_journal',
+            local_key=local_key,
+            status=AlegraDocument.STATUS_SENT,
+        ).first()
+        if sent:
+            return {'existing_sent': sent}
+
+        pending_bills = self._caja_pending_bills_from_gastos(gastos)
+        bills_ready = self._count_sent_caja_bills(empresa, batch, pending_bills)
+        payload = {
+            '__local': {
+                'awaiting_bills': True,
+                'batch_id': batch.pk,
+                'caja_id': caja_id,
+                'fecha_desde': fecha_desde.isoformat(),
+                'fecha_hasta': fecha_hasta.isoformat(),
+                'pending_bills': pending_bills,
+                'bills_total': len(pending_bills),
+                'bills_ready': bills_ready,
+            },
+        }
+        doc = self._upsert_document(
+            batch,
+            empresa,
+            proyecto,
+            document_type='caja_journal',
+            source_model=CajaLegalizationJournalBuilder.BATCH_SOURCE_MODEL,
+            source_pk=str(batch.pk),
+            local_key=local_key,
+            payload=payload,
+            operation='accounting__createJournal',
+            transport=AlegraDocument.ALEGRA_REST,
+            status=AlegraDocument.STATUS_PENDING,
+            error='',
+        )
+        if bills_ready >= len(pending_bills) and pending_bills:
+            try:
+                self._activate_caja_journal_doc(batch, doc)
+                return {'built': self._built_document_from_journal(doc)}
+            except (AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError) as exc:
+                doc.status = AlegraDocument.STATUS_FAILED
+                doc.error = str(exc)
+                doc.save(update_fields=['status', 'error', 'updated_at'])
+                return {
+                    'error': str(exc),
+                    'document_type': 'caja_journal',
+                    'source_model': CajaLegalizationJournalBuilder.BATCH_SOURCE_MODEL,
+                    'source_pk': str(batch.pk),
+                    'local_key': local_key,
+                    'payload': payload,
+                }
+        return {'pending_journal': doc}
+
+    def _built_document_from_journal(self, doc):
+        from alegra_integration.builders import BuiltDocument
+
+        return BuiltDocument(
+            document_type=doc.document_type,
+            operation=doc.alegra_operation,
+            transport=doc.transport,
+            source_model=doc.source_model,
+            source_pk=doc.source_pk,
+            local_key=doc.local_key,
+            payload=doc.payload,
+            empresa_id=doc.empresa_id,
+        )
+
+    def _activate_caja_journal_doc(self, batch, doc):
+        """Construye el journal con CxP reales una vez enviados todos los bills del lote."""
+        payload = dict(doc.payload or {})
+        local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
+        pending_bills = local.get('pending_bills') or []
+        if not pending_bills:
+            raise AlegraConfigurationError(
+                f'El journal de caja {doc.local_key} no tiene gastos asociados.'
+            )
+
+        bills_ready = self._count_sent_caja_bills(doc.empresa, batch, pending_bills)
+        if bills_ready < len(pending_bills):
+            raise AlegraConfigurationError(
+                f'Faltan bills enviados para el journal {doc.local_key}: '
+                f'{bills_ready}/{len(pending_bills)} listos.'
+            )
+
+        caja_id = local.get('caja_id')
+        if not caja_id:
+            raise AlegraConfigurationError(
+                f'El journal de caja {doc.local_key} no tiene caja_id en metadata local.'
+            )
+
+        from andinasoft.models import cuentas_pagos
+
+        caja = cuentas_pagos.objects.get(pk=caja_id)
+        gasto_ids = [ref.get('gasto_id') for ref in pending_bills if ref.get('gasto_id')]
+        gastos = list(
+            gastos_caja.objects.filter(pk__in=gasto_ids).select_related(
+                'reembolso',
+                'reembolso__caja',
+                'tercero',
+                'concepto',
+                'forma_pago',
+                'cuenta_iva',
+                'cuenta_rte',
+            )
+        )
+        gastos_by_id = {g.pk: g for g in gastos}
+        ordered_gastos = [gastos_by_id[g_id] for g_id in gasto_ids if g_id in gastos_by_id]
+        if len(ordered_gastos) != len(gasto_ids):
+            raise AlegraBuildError('No se encontraron todos los gastos del lote para armar el journal.')
+
+        fecha_desde = parse_date(str(local.get('fecha_desde') or '')) or batch.fecha_desde
+        fecha_hasta = parse_date(str(local.get('fecha_hasta') or '')) or batch.fecha_hasta
+        built = CajaLegalizationJournalBuilder(doc.empresa).build_batch(
+            caja=caja,
+            gastos=ordered_gastos,
+            batch_id=batch.pk,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+        )
+        doc.payload = built.payload
+        doc.alegra_operation = built.operation
+        doc.transport = built.transport
+        doc.source_model = built.source_model
+        doc.source_pk = built.source_pk
+        doc.error = ''
+        doc.save(update_fields=[
+            'payload', 'alegra_operation', 'transport', 'source_model', 'source_pk', 'error', 'updated_at',
+        ])
+        self._finalize_caja_journal_doc(doc)
+        doc.status = AlegraDocument.STATUS_VALID
+        doc.save(update_fields=['status', 'updated_at'])
+
+    def _refresh_caja_journal_progress(self, batch):
+        """Tras enviar un bill, actualiza progreso y activa el journal cuando todos estén listos."""
+        journal = batch.documents.filter(document_type='caja_journal').order_by('id').first()
+        if not journal:
+            return None
+        if journal.status in (AlegraDocument.STATUS_SENT, AlegraDocument.STATUS_SKIPPED):
+            return journal
+        if journal.status == AlegraDocument.STATUS_VALID:
+            return journal
+
+        payload = dict(journal.payload or {})
+        local = dict(payload.get('__local') or {})
+        pending_bills = local.get('pending_bills') or []
+        if not pending_bills:
+            return journal
+
+        bills_ready = self._count_sent_caja_bills(journal.empresa, batch, pending_bills)
+        local['bills_ready'] = bills_ready
+        local['bills_total'] = len(pending_bills)
+        payload['__local'] = local
+        journal.payload = payload
+        journal.save(update_fields=['payload', 'updated_at'])
+
+        if bills_ready < len(pending_bills):
+            return journal
+
+        try:
+            self._activate_caja_journal_doc(batch, journal)
+        except (AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError) as exc:
+            journal.status = AlegraDocument.STATUS_FAILED
+            journal.error = str(exc)
+            journal.save(update_fields=['status', 'error', 'updated_at'])
+        return journal
+
     def _resolve_cxp_for_caja_bill(self, bill_doc, *, client=None):
         """CxP del bill (respuesta POST/GET/contacto); fallback mapeos caja_cxp / default_cxp."""
         bill_data = bill_doc.response if isinstance(bill_doc.response, dict) else {}
@@ -1952,7 +2141,7 @@ class AlegraIntegrationService:
         return None
 
     def _document_summary(self, doc):
-        return {
+        summary = {
             'id': doc.pk,
             'document_type': doc.document_type,
             'operation': doc.alegra_operation,
@@ -1966,6 +2155,25 @@ class AlegraIntegrationService:
             'payload': doc.payload,
             'response': doc.response,
         }
+        hint = self._document_status_hint(doc)
+        if hint:
+            summary['status_hint'] = hint
+        return summary
+
+    @staticmethod
+    def _document_status_hint(doc):
+        if doc.document_type != 'caja_journal':
+            return ''
+        if doc.status == AlegraDocument.STATUS_PENDING:
+            local = (doc.payload or {}).get('__local') if isinstance((doc.payload or {}).get('__local'), dict) else {}
+            ready = int(local.get('bills_ready') or 0)
+            total = int(local.get('bills_total') or 0)
+            if total:
+                return f'Esperando bills ({ready}/{total})'
+            return 'Esperando bills del lote'
+        if doc.status == AlegraDocument.STATUS_VALID:
+            return 'Journal listo — se envía después de los bills'
+        return ''
 
     def _batch_response(self, batch, documents):
         return {

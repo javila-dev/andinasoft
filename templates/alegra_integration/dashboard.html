@@ -38,6 +38,7 @@
   .doc-row-failed  { background: rgba(220,53,69,.08); }
   .doc-row-sent    { background: rgba(0,123,255,.04); }
   .doc-row-valid   { background: rgba(40,167,69,.04); }
+  .doc-row-pending { background: rgba(108,117,125,.06); }
   .doc-row-skipped { background: rgba(255,193,7,.04); }
   .doc-row-sending {
     background: rgba(23,162,184,.12) !important;
@@ -255,9 +256,10 @@
           Pagos, anticipos y transferencias de la empresa en el rango de fechas.
         </small>
         <small class="text-muted d-block mt-1" id="cajaDocHint" style="display:none">
-          Gastos de caja en estado <strong>Revisado</strong> (bills) o <strong>Legalizado</strong> (un journal de cierre por lote) de la caja seleccionada.
-          Por gasto: factura electrónica o cuenta de cobro (<code>POST /bills</code>);
-          luego comprobante que cierra CxP (<code>POST /journals</code>).
+          Gastos de caja en estado <strong>Revisado</strong> o <strong>Legalizado</strong> de la caja seleccionada.
+          Por gasto: factura electrónica o cuenta de cobro (<code>POST /bills</code>).
+          El journal de cierre se arma <strong>automáticamente</strong> cuando todos los bills del lote estén enviados
+          (cuentas CxP y documentos asociados) y luego se envía al final.
           Configura en <a href="/accounting/alegra/references">Referencias → Caja efectivo</a>.
         </small>
       </div>
@@ -294,7 +296,7 @@
           <select class="form-control" id="selCaja">
             <option value="">— Seleccionar caja —</option>
           </select>
-          <small class="text-muted">Reembolsos legalizados de esta caja</small>
+          <small class="text-muted">Gastos revisados o legalizados de esta caja</small>
         </div>
       </div>
 
@@ -924,12 +926,28 @@ function warn(msg) {
 }
 
 // ── Badges / labels ────────────────────────────
-function statusBadge(status) {
+function statusBadge(status, hint) {
   const cfg = STATUS_CFG[status] || { label: status, cls: 'secondary', icon: 'circle' };
   const spin = (status === 'sending' || status === 'processing') ? ' fa-spin' : '';
+  const hintHtml = hint
+    ? `<br><span class="text-muted" style="font-size:10px;font-weight:normal">${escHtml(hint)}</span>`
+    : '';
   return `<span class="badge badge-${cfg.cls}" style="font-size:11px">
-            <i class="fas fa-${cfg.icon}${spin} mr-1"></i>${cfg.label}
+            <i class="fas fa-${cfg.icon}${spin} mr-1"></i>${cfg.label}${hintHtml}
           </span>`;
+}
+
+function docStatusHint(doc) {
+  if (!doc) return '';
+  if (doc.status_hint) return doc.status_hint;
+  if (doc.document_type === 'caja_journal' && doc.status === 'pending') {
+    const local = ((doc.payload || {}).__local) || {};
+    const ready = parseInt(local.bills_ready || 0, 10);
+    const total = parseInt(local.bills_total || 0, 10);
+    if (total) return `Esperando bills (${ready}/${total})`;
+    return 'Esperando bills del lote';
+  }
+  return '';
 }
 
 function opLabel(op) {
@@ -1050,7 +1068,22 @@ function previewCounts(batch, docs) {
   }
   if (ready == null) ready = batch.success_count || 0;
   if (already == null) already = 0;
-  return { ready: parseInt(ready, 10) || 0, already: parseInt(already, 10) || 0 };
+  const journalWaiting = (docs || []).filter(
+    d => d.document_type === 'caja_journal' && d.status === 'pending'
+  ).length;
+  return {
+    ready: parseInt(ready, 10) || 0,
+    already: parseInt(already, 10) || 0,
+    journalWaiting,
+  };
+}
+
+function sendPlanTotal(docs, retry_failed) {
+  let total = countSendableDocs(retry_failed);
+  if ((docs || []).some(d => d.document_type === 'caja_journal' && d.status === 'pending')) {
+    total += 1;
+  }
+  return total;
 }
 
 function updateMetrics(batch, mode, docs) {
@@ -1189,11 +1222,15 @@ function buildDocRows(docs) {
   }
   docs.forEach((doc, idx) => {
     const rowCls = { invalid:'doc-row-invalid', failed:'doc-row-failed',
-                     sent:'doc-row-sent', valid:'doc-row-valid', skipped:'doc-row-skipped' }[doc.status] || '';
+                     sent:'doc-row-sent', valid:'doc-row-valid', skipped:'doc-row-skipped',
+                     pending:'doc-row-pending' }[doc.status] || '';
 
+    const hint = docStatusHint(doc);
     const errorCell = doc.error
       ? `<span class="error-inline" title="${escHtml(doc.error)}">${escHtml(doc.error)}</span>`
-      : '<span class="text-muted" style="font-size:12px">—</span>';
+      : (hint
+        ? `<span class="text-info" style="font-size:11px">${escHtml(hint)}</span>`
+        : '<span class="text-muted" style="font-size:12px">—</span>');
 
     const alegraId = doc.alegra_id
       ? `<code style="font-size:11px">${escHtml(doc.alegra_id)}</code>`
@@ -1204,7 +1241,7 @@ function buildDocRows(docs) {
     const docIdAttr = doc.id ? ` data-doc-id="${doc.id}"` : '';
     tbody.append(`
       <tr class="${rowCls}" data-status="${doc.status}" data-idx="${globalIdx}"${docIdAttr}>
-        <td>${statusBadge(doc.status)}</td>
+        <td>${statusBadge(doc.status, hint)}</td>
         <td><small class="text-muted">${escHtml(DOC_LABELS[doc.document_type] || doc.document_type)}</small></td>
         <td><span class="local-key" title="${escHtml(doc.local_key)}">${escHtml(doc.local_key)}</span></td>
         <td>${opLabel(doc.alegra_operation)}</td>
@@ -1314,7 +1351,16 @@ function onPreviewSuccess(data) {
     log('info', `Construidos correctamente: <strong>${builtOk}</strong>`);
   }
   if (prev.ready > 0) {
-    log('success', `Listos para enviar: <strong>${prev.ready}</strong>`);
+    log('success', `Listos para enviar ahora: <strong>${prev.ready}</strong>`);
+  }
+  if (prev.journalWaiting > 0) {
+    const j = docs.find(d => d.document_type === 'caja_journal' && d.status === 'pending');
+    const hint = docStatusHint(j);
+    log('info',
+      `Journal de cierre: <strong>pendiente</strong>` +
+      (hint ? ` — ${escHtml(hint)}` : '') +
+      '. Se construirá automáticamente al enviar todos los bills.'
+    );
   }
   if (prev.already > 0) {
     log('dim', `Ya enviados (solo informativo, no se reconstruyen ni reenvían): <strong>${prev.already}</strong>`);
@@ -1338,9 +1384,14 @@ function onPreviewSuccess(data) {
 
   if (prev.ready > 0) {
     logSep();
+    const journalNote = prev.journalWaiting > 0
+      ? ' El journal de cierre se activará solo al terminar los bills.'
+      : '';
     log('label',
-      `Se enviarán <strong>${prev.ready}</strong> documento(s)` +
-      (prev.already > 0 ? ` (${prev.already} ya enviado(s) se omitirán).` : '.') +
+      `Se enviarán <strong>${prev.ready}</strong> documento(s) ahora` +
+      (prev.journalWaiting > 0 ? ` (+ journal de cierre al final).` : '.') +
+      (prev.already > 0 ? ` (${prev.already} ya enviado(s) se omitirán).` : '') +
+      journalNote +
       ` Presiona <em>Enviar a Alegra</em> para continuar.`
     );
     $('#btnSend').prop('disabled', false);
@@ -1480,20 +1531,24 @@ function patchDocRow(doc) {
     sent: 'doc-row-sent',
     valid: 'doc-row-valid',
     skipped: 'doc-row-skipped',
+    pending: 'doc-row-pending',
   }[doc.status] || '';
 
   $row.attr('class', rowCls).attr('data-status', doc.status);
   $row.removeClass('doc-row-sending').addClass('doc-row-just-updated');
   setTimeout(function() { $row.removeClass('doc-row-just-updated'); }, 1000);
 
+  const hint = docStatusHint(doc);
   const errorCell = doc.error
     ? `<span class="error-inline" title="${escHtml(doc.error)}">${escHtml(doc.error)}</span>`
-    : '<span class="text-muted" style="font-size:12px">—</span>';
+    : (hint
+      ? `<span class="text-info" style="font-size:11px">${escHtml(hint)}</span>`
+      : '<span class="text-muted" style="font-size:12px">—</span>');
   const alegraId = doc.alegra_id
     ? `<code style="font-size:11px">${escHtml(doc.alegra_id)}</code>`
     : '<span class="text-muted">—</span>';
 
-  $row.find('td').eq(0).html(statusBadge(doc.status));
+  $row.find('td').eq(0).html(statusBadge(doc.status, hint));
   $row.find('td').eq(4).html(alegraId);
   $row.find('td').eq(5).html(errorCell);
   const idx = allDocs.findIndex(d =>
@@ -1567,12 +1622,12 @@ function doSend() {
   if (p.proyecto) log('info', `Proyecto: <strong>${escHtml(p.proyecto)}</strong>`);
   logSep();
 
-  const planned = countSendableDocs(retry_failed);
+  const plannedTotal = sendPlanTotal(allDocs, retry_failed);
 
   setBusy('send', true);
   showSendLiveUI(true);
   $('#sendProgressFill, #sendLiveFill').css('width', '0%');
-  updateSendProgressUI(0, planned, null);
+  updateSendProgressUI(0, plannedTotal, null);
   $('#sendLiveText').text('Preparando envío…');
 
   let processedSoFar = 0;
@@ -1597,12 +1652,29 @@ function doSend() {
     }
   }
 
+  function syncDocsFromSendResponse(data) {
+    if (!data.documents || !data.documents.length) return;
+    const prevJournal = (allDocs || []).find(d => d.document_type === 'caja_journal');
+    allDocs = data.documents;
+    const newJournal = allDocs.find(d => d.document_type === 'caja_journal');
+    if (newJournal && prevJournal && newJournal.status === 'valid' && prevJournal.status === 'pending') {
+      log('success', 'Journal de cierre listo — se enviará automáticamente al terminar los bills.');
+    } else if (newJournal && newJournal.status === 'pending' && data.document && data.document.document_type === 'caja_bill') {
+      const jHint = docStatusHint(newJournal);
+      if (jHint) log('info', `Journal de cierre: ${escHtml(jHint)}`);
+    }
+    if (data.document) patchDocRow(data.document);
+    if (newJournal && (!data.document || newJournal.id !== data.document.id)) {
+      patchDocRow(newJournal);
+    }
+  }
+
   function sendOne(batchId) {
     const nextDoc = findNextSendableDoc(retry_failed);
     if (nextDoc) {
       ensureDocRowVisible(nextDoc);
       setDocRowSending(nextDoc, true);
-      updateSendProgressUI(processedSoFar, planned, nextDoc);
+      updateSendProgressUI(processedSoFar, plannedTotal, nextDoc);
     }
 
     $.ajax({
@@ -1616,12 +1688,13 @@ function doSend() {
         currentBatchStatus = (data.batch || {}).status;
         if (data.document) {
           if (nextDoc) setDocRowSending(nextDoc, false);
-          patchDocRow(data.document);
+          syncDocsFromSendResponse(data);
+          if (!data.documents) patchDocRow(data.document);
           processedSoFar++;
-          updateSendProgressUI(processedSoFar, planned, null);
+          updateSendProgressUI(processedSoFar, plannedTotal, null);
           const st = data.document.status || '';
           const lvl = st === 'sent' ? 'success' : (st === 'failed' ? 'error' : 'dim');
-          log(lvl, `[${processedSoFar}/${planned}] ${escHtml(data.document.local_key)} → ${escHtml(st)}`);
+          log(lvl, `[${processedSoFar}/${plannedTotal}] ${escHtml(data.document.local_key)} → ${escHtml(st)}`);
           updateLiveMetricsDuringSend();
         }
         if (data.complete) {
@@ -1644,15 +1717,18 @@ function doSend() {
   }
 
   function startSequential(batchId) {
-    const n = countSendableDocs(retry_failed) || planned;
+    const n = plannedTotal || countSendableDocs(retry_failed);
     log('loading', `Enviando <strong>${n}</strong> documento(s) — ver progreso en la tabla.`);
+    if ((allDocs || []).some(d => d.document_type === 'caja_journal' && d.status === 'pending')) {
+      log('info', 'El journal de cierre se construirá automáticamente al enviar todos los bills.');
+    }
     $('#sendLiveText').text('Iniciando envío…');
     sendOne(batchId);
   }
 
   const useBatchSend = currentBatchId != null && ['preview', 'processing'].includes(String(currentBatchStatus || ''));
   if (useBatchSend) {
-    if (!planned) {
+    if (!plannedTotal) {
       setBusy('send', false);
       showSendLiveUI(false);
       log('warning', 'No hay documentos válidos para enviar.');
