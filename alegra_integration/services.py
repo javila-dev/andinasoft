@@ -121,6 +121,9 @@ def _local_third_party_info(local_model, local_pk):
         if profile:
             return ('andinasoft.profiles', str(profile.pk), str(profile), ['provider', 'client'])
 
+    if local_model == 'andinasoft.terceros_raw':
+        return ('andinasoft.terceros_raw', ident, '', ['provider', 'client'])
+
     if local_model == 'andinasoft.clientes':
         obj = clientes.objects.filter(pk=ident).first()
         name = _pick_local_name(obj, ['nombrecompleto', 'nombres', 'apellidos', 'nombre', 'razon_social', 'razonSocial'])
@@ -207,7 +210,7 @@ def _resolve_identification_to_local(ident):
             name = _pick_local_name(obj, ['nombre', 'razon_social', 'razonSocial'])
             return ('andinasoft.empresas', str(obj.pk), name)
 
-    return None
+    return ('andinasoft.terceros_raw', raw, '')
 
 
 def _contact_index_ident(resolved_model, local_pk):
@@ -244,7 +247,7 @@ def _extract_missing_contact_refs(error):
             if resolved:
                 refs.append((resolved[0], resolved[1]))
             else:
-                refs.append(('andinasoft.profiles', ident))
+                refs.append(('andinasoft.terceros_raw', ident))
 
     if 'responsable de la caja' in err.lower() and 'identificacion=' in err.lower():
         match = re.search(r'identificacion=([^)\s,]+)', err, re.I)
@@ -254,7 +257,7 @@ def _extract_missing_contact_refs(error):
             if resolved:
                 refs.append((resolved[0], resolved[1]))
             else:
-                refs.append(('andinasoft.profiles', ident))
+                refs.append(('andinasoft.terceros_raw', ident))
 
     out = []
     for model, pk in refs:
@@ -263,6 +266,30 @@ def _extract_missing_contact_refs(error):
             seen.add(key)
             out.append(key)
     return out
+
+
+def _mirror_tercero_raw_contact_mapping(empresa_id, *, local_pk, alegra_id, name=''):
+    """
+    Guarda alias andinasoft.terceros_raw para que egresos resuelvan idtercero/NIT
+    aunque el enlace manual se haya hecho como Cliente u otro tipo.
+    """
+    pk = str(local_pk or '').strip()
+    aid = str(alegra_id or '').strip()
+    if not pk or not aid:
+        return
+    AlegraMapping.objects.update_or_create(
+        empresa_id=empresa_id,
+        proyecto=None,
+        mapping_type=AlegraMapping.CONTACT,
+        local_model='andinasoft.terceros_raw',
+        local_pk=pk,
+        local_code='',
+        defaults={
+            'alegra_id': aid,
+            'description': (name or '')[:255],
+            'active': True,
+        },
+    )
 
 
 def _upsert_contact_index_for_mapping(empresa, *, ident, alegra_id, name, contact_types):

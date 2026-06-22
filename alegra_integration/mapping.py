@@ -197,13 +197,52 @@ class MappingResolver:
         return cat_id
 
     def contact_for_cliente(self, cliente_id):
-        return self.get(AlegraMapping.CONTACT, local_model='andinasoft.clientes', local_pk=cliente_id)
+        pk = str(cliente_id or '').strip()
+        mapped = self.get(
+            AlegraMapping.CONTACT,
+            local_model='andinasoft.clientes',
+            local_pk=pk,
+            required=False,
+        )
+        if mapped:
+            return mapped
+        return self.contact_by_identification(
+            pk,
+            prefer_types=[AlegraContactIndex.TYPE_CLIENT, AlegraContactIndex.TYPE_PROVIDER],
+            required=True,
+        )
 
     def contact_for_asesor(self, asesor_id):
-        return self.get(AlegraMapping.CONTACT, local_model='andinasoft.asesores', local_pk=asesor_id)
+        pk = str(asesor_id or '').strip()
+        mapped = self.get(
+            AlegraMapping.CONTACT,
+            local_model='andinasoft.asesores',
+            local_pk=pk,
+            required=False,
+        )
+        if mapped:
+            return mapped
+        return self.contact_by_identification(
+            pk,
+            prefer_types=[AlegraContactIndex.TYPE_PROVIDER, AlegraContactIndex.TYPE_CLIENT],
+            required=True,
+        )
 
     def contact_for_empresa(self, empresa_id):
-        return self.get(AlegraMapping.CONTACT, local_model='andinasoft.empresas', local_pk=empresa_id)
+        pk = str(empresa_id or '').strip()
+        mapped = self.get(
+            AlegraMapping.CONTACT,
+            local_model='andinasoft.empresas',
+            local_pk=pk,
+            required=False,
+        )
+        if mapped:
+            return mapped
+        return self.contact_by_identification(
+            pk,
+            prefer_types=[AlegraContactIndex.TYPE_PROVIDER, AlegraContactIndex.TYPE_CLIENT],
+            required=True,
+        )
 
     def contact_for_partner(self, partner_pk, *, required=True):
         """
@@ -281,6 +320,17 @@ class MappingResolver:
         ).order_by('-updated_at').first()
         if mapped and mapped.alegra_id:
             return str(mapped.alegra_id)
+
+        raw_map = AlegraMapping.objects.filter(
+            empresa_id=self.empresa.pk,
+            mapping_type=AlegraMapping.CONTACT,
+            local_model='andinasoft.terceros_raw',
+            local_pk__in=list(variants),
+            active=True,
+            proyecto__isnull=True,
+        ).order_by('-updated_at').first()
+        if raw_map and raw_map.alegra_id:
+            return str(raw_map.alegra_id)
 
         from andinasoft.models import Profiles
 

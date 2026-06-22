@@ -511,13 +511,14 @@
             <div class="form-group col-md-6">
               <label class="font-weight-bold" style="font-size:.85rem">Tipo</label>
               <select class="form-control" id="linkLocalModel" onchange="updateLinkFormState()">
+                <option value="andinasoft.terceros_raw">Tercero egreso (idtercero / NIT)</option>
                 <option value="andinasoft.clientes">Cliente</option>
                 <option value="andinasoft.asesores">Asesor</option>
                 <option value="andinasoft.empresas">Empresa</option>
                 <option value="accounting.partners">Proveedor (caja efectivo)</option>
                 <option value="andinasoft.profiles">Responsable caja (usuario)</option>
-                <option value="andinasoft.terceros_raw">Tercero (ID factura)</option>
               </select>
+              <small class="text-muted">Para egresos sin fila en Andinasoft, usa «Tercero egreso» con el idtercero de la factura.</small>
             </div>
           </div>
           <div class="form-group">
@@ -528,7 +529,7 @@
             <div class="form-group col-md-6">
               <label class="font-weight-bold" style="font-size:.85rem">PK / Identificación local</label>
               <input class="form-control" id="linkLocalPk" placeholder="Ej: 32296973" oninput="updateLinkFormState()" />
-              <small class="text-muted">Es el `pk` usado en Andinasoft (para clientes: idTercero).</small>
+              <small class="text-muted">Es el NIT/cédula o idtercero del documento (egresos: campo idtercero de la factura).</small>
             </div>
             <div class="form-group col-md-6">
               <label class="font-weight-bold" style="font-size:.85rem">Nombre (opcional)</label>
@@ -683,6 +684,12 @@
         <div class="tab-content">
           <div class="tab-pane" id="tabError">
             <div id="detailError" class="json-viewer"></div>
+            <div id="detailContactLinkWrap" class="mt-2" style="display:none">
+              <button type="button" class="btn btn-sm btn-outline-success" id="btnDetailContactLink"
+                onclick="openManualContactLinkFromCurrentDoc()">
+                <i class="fas fa-link mr-1"></i>Enlazar contacto manualmente
+              </button>
+            </div>
           </div>
           <div class="tab-pane" id="tabLocal">
             <div id="detailLocal" class="json-viewer"></div>
@@ -1272,9 +1279,37 @@ function filterDocs(btn) {
 
 // (applyFilter removed: now we filter in-memory + paginate)
 
+let currentDetailDocIdx = null;
+
+function parseMissingContactFromError(err) {
+  const e = (err || '');
+  if (!e) return null;
+  const modelPk = e.match(/model=([^,]+),\s*pk=([^)]+)\)/);
+  if (modelPk && (e.includes('tipo "contact"') || modelPk[1].includes('partners'))) {
+    return {
+      model: modelPk[1].trim(),
+      pk: modelPk[2].trim(),
+      identification: modelPk[2].trim(),
+      name: '',
+    };
+  }
+  const ident = e.match(/identification=([^)\s,]+)/i);
+  if (ident && e.includes('índice Alegra')) {
+    const id = ident[1].trim();
+    return {
+      model: 'andinasoft.terceros_raw',
+      pk: id,
+      identification: id,
+      name: '',
+    };
+  }
+  return null;
+}
+
 function showDocDetail(idx) {
   const doc = allDocs[idx];
   if (!doc) return;
+  currentDetailDocIdx = idx;
 
   $('#detailModalTitle').html(
     `<i class="fas fa-file-code mr-2"></i>${escHtml(doc.document_type)} · ${statusBadge(doc.status)}`
@@ -1282,6 +1317,14 @@ function showDocDetail(idx) {
   $('#detailLocalKey').text(doc.local_key);
 
   $('#detailError').text(doc.error || '(sin error)');
+  const contactRef = parseMissingContactFromError(doc.error);
+  if (contactRef && isMissingContactError(doc.error)) {
+    $('#detailContactLinkWrap').show();
+    $('#btnDetailContactLink').data('contactRef', contactRef);
+  } else {
+    $('#detailContactLinkWrap').hide();
+    $('#btnDetailContactLink').removeData('contactRef');
+  }
   const local = (doc.payload || {}).__local || null;
   $('#detailLocal').text(local ? JSON.stringify(local, null, 2) : '(sin asiento local)');
   const payload = Object.assign({}, (doc.payload || {}));
@@ -1960,6 +2003,17 @@ function renderUnmatched(unmatched) {
 function openManualContactLink(idx) {
   const empresaSel = $('#selEmpresa').val();
   const u = (idx !== undefined && idx !== null) ? lastUnmatched[idx] : null;
+  openManualContactLinkWithRef(u, empresaSel);
+}
+
+function openManualContactLinkFromCurrentDoc() {
+  const ref = $('#btnDetailContactLink').data('contactRef');
+  if (!ref) return;
+  $('#detailModal').modal('hide');
+  openManualContactLinkWithRef(ref, $('#selEmpresa').val());
+}
+
+function openManualContactLinkWithRef(u, empresaSel) {
   $('#linkContactAlert').empty();
   $('#linkAlegraId').val('');
   $('#linkAlegraName').val('');
@@ -1968,19 +2022,20 @@ function openManualContactLink(idx) {
   $('#linkEmpresa').val(empresaSel || '');
 
   if (u) {
-    $('#linkLocalModel').val(u.model);
-    $('#linkLocalPk').val(String(u.pk)).trigger('input');
+    const model = u.model || 'andinasoft.terceros_raw';
+    $('#linkLocalModel').val(model);
+    $('#linkLocalPk').val(String(u.pk || u.identification || '')).trigger('input');
     $('#linkLocalName').val(u.name || '');
     $('#linkContactModal').data('payload', {
       empresa: empresaSel,
-      local_model: u.model,
-      local_pk: String(u.pk),
+      local_model: model,
+      local_pk: String(u.pk || u.identification || ''),
       name: u.name,
-      identification: u.identification,
+      identification: u.identification || u.pk,
     });
     $('#linkContactLabel').html(
-      `<div><strong>${escHtml(u.name)}</strong></div>
-       <div><small class="text-muted">${escHtml(u.model)} · ${escHtml(u.identification)} · pk=${escHtml(u.pk)}</small></div>`
+      `<div><strong>${escHtml(u.name || '(sin nombre local)')}</strong></div>
+       <div><small class="text-muted">${escHtml(model)} · ${escHtml(u.identification || u.pk)} · pk=${escHtml(u.pk || u.identification)}</small></div>`
     );
   } else {
     $('#linkLocalPk').val('');

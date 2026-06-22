@@ -1946,6 +1946,32 @@ class PartnerContactToolsTests(SimpleTestCase):
         self.assertEqual(name, 'JUAN PEREZ')
         self.assertEqual(types, ['provider'])
 
+    def test_contact_for_cliente_falls_back_to_identification(self):
+        from alegra_integration.mapping import MappingResolver
+
+        resolver = MappingResolver(SimpleNamespace(pk='900'))
+        resolver.get = Mock(return_value=None)
+        resolver.contact_by_identification = Mock(return_value='alegra-from-index')
+        self.assertEqual(resolver.contact_for_cliente('901560549'), 'alegra-from-index')
+        resolver.contact_by_identification.assert_called_once()
+
+    def test_resolve_identification_returns_terceros_raw_when_unknown(self):
+        from alegra_integration.services import _resolve_identification_to_local
+
+        with patch('alegra_integration.services.Partners') as partners_model, \
+             patch('andinasoft.models.Profiles') as profiles_model, \
+             patch('alegra_integration.services.asesores') as asesores_model, \
+             patch('alegra_integration.services.clientes') as clientes_model, \
+             patch('alegra_integration.services.empresas') as empresas_model:
+            partners_model.objects.filter.return_value.first.return_value = None
+            profiles_model.objects.filter.return_value.first.return_value = None
+            asesores_model.objects.filter.return_value.first.return_value = None
+            clientes_model.objects.filter.return_value.first.return_value = None
+            empresas_model.objects.filter.return_value.first.return_value = None
+            out = _resolve_identification_to_local('800999888')
+        self.assertEqual(out[0], 'andinasoft.terceros_raw')
+        self.assertEqual(out[1], '800999888')
+
     def test_contact_for_partner_uses_mapping_before_index(self):
         from alegra_integration.mapping import MappingResolver
 

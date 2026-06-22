@@ -25,6 +25,7 @@ from alegra_integration.services import (
     ALEGRA_WEBHOOK_EVENTS,
     _contact_index_ident,
     _local_third_party_info,
+    _mirror_tercero_raw_contact_mapping,
     _partner_display_name,
     _upsert_contact_index_for_mapping,
 )
@@ -1499,6 +1500,13 @@ def contact_link(request):
                 'active': True,
             },
         )
+        if local_model != 'andinasoft.terceros_raw':
+            _mirror_tercero_raw_contact_mapping(
+                empresa_id,
+                local_pk=local_pk,
+                alegra_id=alegra_id,
+                name=name or m.description,
+            )
         empresa = empresas.objects.get(pk=empresa_id)
         resolved_model, ident, resolved_name, contact_types = _local_third_party_info(local_model, local_pk)
         _upsert_contact_index_for_mapping(
@@ -1545,9 +1553,8 @@ def contact_link_lookup_local(request):
                 obj = Profiles.objects.filter(identificacion=local_pk).first()
             name = str(obj) if obj else ''
         elif local_model == 'andinasoft.terceros_raw':
-            # For cases where we only have an external/local id in documents (no dedicated local table).
             obj = True
-            name = ''
+            name = f'NIT/idtercero {local_pk}'
         else:
             return JsonResponse({'detail': f'local_model no soportado: {local_model}'}, status=400)
 

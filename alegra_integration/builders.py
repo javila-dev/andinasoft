@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from django.db.models import Sum
 from django.utils import timezone
 
-from accounting.models import Anticipos, Facturas, Pagos, cuentas_intercompanias, transferencias_companias, gastos_caja
+from accounting.models import Anticipos, Facturas, Pagos, Partners, cuentas_intercompanias, transferencias_companias, gastos_caja
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.models import AlegraDocument, AlegraMapping
@@ -704,7 +704,7 @@ class ExpensePaymentBuilder:
         self.resolver = MappingResolver(empresa)
 
     def _contact_id_for_tercero(self, resolver, tercero_pk, *, required=True):
-        """Resuelve contacto Alegra para idtercero de Facturas/Pagos (cliente, empresa, asesor o índice)."""
+        """Resuelve contacto Alegra para idtercero de Facturas/Pagos (tabla local o NIT suelto)."""
         tercero_pk = str(tercero_pk or '').strip()
         if not tercero_pk:
             if required:
@@ -716,6 +716,8 @@ class ExpensePaymentBuilder:
             return resolver.contact_for_empresa(tercero_pk)
         if asesores.objects.filter(pk=tercero_pk).exists():
             return resolver.contact_for_asesor(tercero_pk)
+        if Partners.objects.filter(pk=tercero_pk).exists():
+            return resolver.contact_for_partner(tercero_pk, required=required)
         return resolver.contact_by_identification(
             tercero_pk,
             prefer_types=['provider', 'client'],
