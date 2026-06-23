@@ -5927,7 +5927,6 @@ def cajas_efectivo(request):
                 gastos = gastos_caja.objects.filter(reembolso=id_reemb)
                 
                 rte_asumida = impuestos_legalizacion.objects.get(descripcion__icontains ="retefte asumida")
-                ajustes = impuestos_legalizacion.objects.get(descripcion__icontains ="ajuste al peso")
                 
                 
                 book = openpyxl.load_workbook("resources/excel_formats/InterfazSIIGO.xlsx")
@@ -5942,28 +5941,24 @@ def cajas_efectivo(request):
                         cta_iva = i.cuenta_iva.cuenta_andina if vr_iva != 0 else ""
                         cta_rte = i.cuenta_rte.cuenta_andina if vr_rte != 0 else ""
                         cta_rte_asum = rte_asumida.cuenta_andina
-                        cta_aprox = ajustes.cuenta_andina
                         
                     elif i.forma_pago.empresa == "Status Comercializadora":
                         cuenta = i.concepto.cuenta_status
                         cta_iva = i.cuenta_iva.cuenta_status if vr_iva != 0 else ""
                         cta_rte = i.cuenta_rte.cuenta_status if vr_rte != 0 else ""
                         cta_rte_asum = rte_asumida.cuenta_status
-                        cta_aprox = ajustes.cuenta_status
                         
                     elif i.forma_pago.empresa == "Quadrata Constructores":
                         cuenta = i.concepto.cuenta_quadrata
                         cta_iva = i.cuenta_iva.cuenta_quadrata if vr_iva != 0 else ""
                         cta_rte = i.cuenta_rte.cuenta_quadrata if vr_rte != 0 else ""
                         cta_rte_asum = rte_asumida.cuenta_quadrata
-                        cta_aprox = ajustes.cuenta_quadrata
                         
                     else:
                         cuenta = ""
                         cta_iva = ""
                         cta_rte = ""
                         cta_rte_asum = ""
-                        cta_aprox = ""
                     sbt = i.valor -vr_iva + vr_rte
                     if i.rte_asumida: sbt -= vr_rte
                     sheet.cell(row,4,cuenta)
@@ -6010,25 +6005,11 @@ def cajas_efectivo(request):
                             row+=1
                             
                 responsable = Profiles.objects.get(user=reembolso.caja.usuario_responsable.pk)
-                valor = reembolso.valor
-                valor_aprox = valor + (10000 - valor % 10000) % 10000
-                vr_ajuste = valor_aprox - valor
-                
-                if vr_ajuste > 0:
-                    sheet.cell(row,4,cta_aprox)
-                    sheet.cell(row,5,"D")
-                    sheet.cell(row,6, vr_ajuste)
-                    sheet.cell(row,7, reembolso.fecha_aprueba.year)
-                    sheet.cell(row,8, reembolso.fecha_aprueba.month)
-                    sheet.cell(row,9, reembolso.fecha_aprueba.day)
-                    sheet.cell(row,16, responsable.identificacion)
-                    sheet.cell(row,18, "AJUSTE POR APROXIMACION PARA RETIRO EN CAJERO")
-                    row+=1
-                
+                valor_credito = sum(int(i.valor or 0) for i in gastos)
                 
                 sheet.cell(row,4,reembolso.caja.nro_cuentacontable)
                 sheet.cell(row,5,"C")
-                sheet.cell(row,6,valor_aprox)
+                sheet.cell(row,6, valor_credito)
                 sheet.cell(row,7,reembolso.fecha_aprueba.year)
                 sheet.cell(row,8,reembolso.fecha_aprueba.month)
                 sheet.cell(row,9,reembolso.fecha_aprueba.day)
@@ -6482,14 +6463,26 @@ def cajas_efectivo(request):
                     return JsonResponse(data)
                 
                 reembolso = reembolsos_caja.objects.get(pk=id_leg)
+                gastos_qs = gastos_caja.objects.filter(reembolso=reembolso.pk)
+                total_gastos = sum(int(g.valor or 0) for g in gastos_qs)
+                try:
+                    valor_int = int(str(valor_reemb or '').replace(',', '').strip())
+                except (TypeError, ValueError):
+                    valor_int = None
+                if valor_int != total_gastos:
+                    return JsonResponse({
+                        'msj': (
+                            f'El valor a legalizar debe ser exactamente ${total_gastos:,} '
+                            f'(suma de los gastos del reembolso).'
+                        ),
+                        'class': 'alert-danger',
+                    })
                 reembolso.doc_legalizacion = causacion
                 reembolso.soporte_legalizacion = soporte
-                reembolso.valor_a_reembolsar = valor_reemb.replace(',','')
+                reembolso.valor_a_reembolsar = total_gastos
                 reembolso.save()
                 
-                gastos = gastos_caja.objects.filter(reembolso=reembolso.pk)
-                
-                for i in gastos:
+                for i in gastos_qs:
                     i.estado = 'Legalizado'
                     i.save()
                 

@@ -1292,6 +1292,9 @@
             $('#modalPagarReemb').modal('show')
             break;
           case "reg_legal":
+            $('#id_valor_reemb')
+              .val(new Intl.NumberFormat('en-EN').format(line.valor))
+              .prop('readonly', true);
             $('#modalRegLegal').modal('show')
             break;
 
@@ -1761,21 +1764,12 @@
       e.preventDefault()
       let row = tabla_reembolsos.row('.selected').data();
       let vr_reemb = $('#id_valor_reemb').val().replace(/[$,]/g,'') * 1
-      if (row.valor > vr_reemb){
+      if (vr_reemb !== row.valor) {
         $('#alert-title').text('Oh Oh!')
-        $('#alert-data').text('El valor del reembolso no puede ser menor al valor solicitado.')
-        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-        return;
-      }
-      if (vr_reemb % 10000 != 0) {
-        $('#alert-title').text('Oh Oh!')
-        $('#alert-data').text('El valor del reembolso debe ser múltiplo de 10,000.')
-        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-        return;
-      }
-      if (vr_reemb - row.valor> 9999) {
-        $('#alert-title').text('Oh Oh!')
-        $('#alert-data').text('La aproximación del pago no debe superar los $10.000')
+        $('#alert-data').text(
+          'El valor a legalizar debe ser exactamente igual a la suma de los gastos (' +
+          new Intl.NumberFormat('en-EN').format(row.valor) + ').'
+        )
         $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
         return;
       }

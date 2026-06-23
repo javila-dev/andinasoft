@@ -1593,10 +1593,6 @@ class CajaLegalizationJournalBuilder:
             required=True,
         )
 
-    @staticmethod
-    def _valor_aprox_reembolso(valor):
-        valor = int(valor or 0)
-        return valor + (10000 - valor % 10000) % 10000
 
     def build_batch(self, *, caja, gastos, batch_id, fecha_desde, fecha_hasta):
         """Un journal por lote: debitos CxP (uno por gasto) + creditos caja por reembolso o total revisado."""
@@ -1614,12 +1610,14 @@ class CajaLegalizationJournalBuilder:
         entries = []
         pending_bills = []
         reembolsos = {}
+        reembolso_totals = {}
         orphan_total = 0
 
         for gasto in sorted(gastos, key=lambda g: (g.fecha_gasto, g.pk)):
             reembolso = gasto.reembolso
             if reembolso:
                 reembolsos[reembolso.pk] = reembolso
+                reembolso_totals[reembolso.pk] = reembolso_totals.get(reembolso.pk, 0) + int(gasto.valor or 0)
             else:
                 orphan_total += int(gasto.valor or 0)
             amount = _money(gasto.valor)
@@ -1645,36 +1643,20 @@ class CajaLegalizationJournalBuilder:
             }
             entries.append(entry)
 
-        ajuste_cat = self.resolver.get(
-            AlegraMapping.CATEGORY,
-            local_code='caja_ajuste_aproximacion',
-            required=False,
-        )
-        total_aprox = 0
+        total_credito = 0
         for reemb_id in sorted(reembolsos.keys()):
-            reembolso = reembolsos[reemb_id]
-            valor = int(reembolso.valor or 0)
-            valor_aprox = self._valor_aprox_reembolso(valor)
-            total_aprox += valor_aprox
-            vr_ajuste = valor_aprox - valor
-            if vr_ajuste > 0 and ajuste_cat:
-                entries.append(_journal_entry(
-                    account_id=ajuste_cat,
-                    description=f'AJUSTE APROX REEMB {reemb_id}'[:255],
-                    debit=_money(vr_ajuste),
-                    credit=0,
-                    client_id=responsable_id,
-                ))
+            credit = reembolso_totals.get(reemb_id, 0)
+            total_credito += credit
             entries.append(_journal_entry(
                 account_id=caja_category,
                 description=f'REEMB CAJA {reemb_id} {caja_label}'[:255],
                 debit=0,
-                credit=_money(valor_aprox),
+                credit=_money(credit),
                 client_id=responsable_id,
             ))
 
         if orphan_total > 0:
-            total_aprox += orphan_total
+            total_credito += orphan_total
             entries.append(_journal_entry(
                 account_id=caja_category,
                 description=f'CAJA {caja_label}'[:255],
@@ -1708,7 +1690,7 @@ class CajaLegalizationJournalBuilder:
             'batch_id': batch_id,
             'reembolso_ids': sorted(reembolsos.keys()),
             'pending_bills': pending_bills,
-            'valor_aprox_total': total_aprox,
+            'valor_credito_total': total_credito,
             'cxp_from_bill_response': True,
             'cost_center_id': cost_center_id,
         }
@@ -1754,5 +1736,5 @@ class CajaLegalizationJournalBuilder:
         built.payload['reference'] = f'LC-{caja_label}-{reembolso.pk}'[:255]
         built.payload['observations'] = f'Legalizacion caja {caja.cuentabanco or caja.pk}'[:500]
         built.payload['__local']['reembolso_id'] = reembolso.pk
-        built.payload['__local']['valor_aprox'] = self._valor_aprox_reembolso(reembolso.valor)
+        built.payload['__local']['valor_credito'] = sum(int(g.valor or 0) for g in gastos)
         return built

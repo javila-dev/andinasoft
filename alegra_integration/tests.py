@@ -1398,6 +1398,21 @@ class CajaBuilderTests(SimpleTestCase):
             self.assertEqual(entry['costCenter'], {'id': 'cc-caja-7'})
         self.assertEqual(built.payload['__local']['cost_center_id'], 'cc-caja-7')
 
+    def test_caja_journal_credit_matches_exact_gastos_sum(self):
+        gasto, reembolso = self._gasto(valor=45500, subtotal_val=38235)
+        reembolso.valor = 45500
+        with patch('alegra_integration.builders.Profiles') as profiles_model:
+            profiles_model.objects.filter.return_value.first.return_value = SimpleNamespace(
+                identificacion='123456789'
+            )
+            built = CajaLegalizationJournalBuilder(self.empresa, self.resolver).build(
+                {'reembolso': reembolso, 'gastos': [gasto]}
+            )
+        credits = [e for e in built.payload['entries'] if e.get('credit')]
+        self.assertEqual(credits[-1]['credit'], 45500.0)
+        debits = [e for e in built.payload['entries'] if e.get('debit') and not e.get('associatedDocument')]
+        self.assertEqual(debits, [])
+
     def test_caja_journal_batch_single_comprobante_por_lote(self):
         gasto1, reembolso1 = self._gasto(valor=50000, subtotal_val=42000)
         gasto2, reembolso2 = self._gasto(valor=70000, subtotal_val=58824)
