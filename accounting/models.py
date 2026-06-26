@@ -22,7 +22,14 @@ class info_interfaces(models.Model):
         verbose_name_plural = 'Interfaces'
     
     def __str__(self):
-        return f'{self.empresa}|{self.descripcion}|{self.cuenta_credito_1}'
+        if not self.empresa_id:
+            empresa_label = '—'
+        else:
+            try:
+                empresa_label = str(self.empresa)
+            except empresas.DoesNotExist:
+                empresa_label = f'[{self.empresa_id} eliminada]'
+        return f'{empresa_label}|{self.descripcion}|{self.cuenta_credito_1}'
 
 
 class GastoAprobador(models.Model):

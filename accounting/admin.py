@@ -1,5 +1,7 @@
 from django.contrib import admin
+from django.db.models import Exists, OuterRef
 from accounting import models
+from andinasoft.models import empresas
 # Register your models here.
 
 @admin.register(models.egresos_contable)
@@ -70,6 +72,27 @@ class adminFacts(admin.ModelAdmin):
     list_filter = ['empresa', 'oficina', 'origen', 'gasto_aprobacion_estado', 'gasto_aprobado']
     search_fields = ['pk', 'nombretercero', 'nrofactura', 'alegra_bill_id']
     date_hierarchy = 'fecharadicado'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'cuenta_por_pagar':
+            valid_empresa = empresas.objects.filter(Nit=OuterRef('empresa_id'))
+            queryset = models.info_interfaces.objects.filter(Exists(valid_empresa))
+            object_id = request.resolver_match.kwargs.get('object_id')
+            if object_id:
+                try:
+                    factura = models.Facturas.objects.only(
+                        'empresa_id', 'cuenta_por_pagar_id',
+                    ).get(pk=object_id)
+                    queryset = queryset.filter(empresa_id=factura.empresa_id)
+                    if factura.cuenta_por_pagar_id:
+                        queryset = (
+                            queryset
+                            | models.info_interfaces.objects.filter(pk=factura.cuenta_por_pagar_id)
+                        ).distinct()
+                except models.Facturas.DoesNotExist:
+                    pass
+            kwargs['queryset'] = queryset.order_by('descripcion')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
     
 @admin.register(models.info_interfaces)
 class adminInterfaces(admin.ModelAdmin):
