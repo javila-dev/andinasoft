@@ -1577,7 +1577,7 @@ class AlegraIntegrationService:
             bill_builder = CajaGastoBillBuilder(empresa)
 
             gastos_bill_qs = gastos_caja.objects.filter(
-                estado__in=(gastos_caja.ESTADO_REVISADO, 'Legalizado'),
+                estado__in=gastos_caja.ESTADOS_ELEGIBLES_ALEGRA_BILL,
                 forma_pago_id=caja_id,
                 forma_pago__nit_empresa=empresa,
                 fecha_gasto__range=(desde, hasta),

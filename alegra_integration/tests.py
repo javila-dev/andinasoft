@@ -1425,6 +1425,13 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(built.document_type, 'caja_bill')
         self.assertEqual(built.local_key, 'caja:bill:None:501')
 
+    def test_caja_bill_reembolso(self):
+        gasto, _ = self._gasto(tipo='fe')
+        gasto.estado = gastos_caja.ESTADO_REEMBOLSO
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertEqual(built.document_type, 'caja_bill')
+        self.assertEqual(built.local_key, 'caja:bill:99:501')
+
     def test_caja_bill_cuenta_cobro_uses_cc_numeration(self):
         gasto, _ = self._gasto(tipo='cuenta_cobro')
         built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)

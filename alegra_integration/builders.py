@@ -1443,9 +1443,9 @@ class CajaGastoBillBuilder:
 
     def build(self, gasto):
         estado = (gasto.estado or '').strip()
-        if estado not in (gastos_caja.ESTADO_REVISADO, 'Legalizado'):
+        if estado not in gastos_caja.ESTADOS_ELEGIBLES_ALEGRA_BILL:
             raise AlegraBuildError(
-                f'El gasto {gasto.pk} debe estar Revisado o Legalizado para enviar bill (estado={gasto.estado}).'
+                f'El gasto {gasto.pk} debe estar Revisado, Reembolso o Legalizado para enviar bill (estado={gasto.estado}).'
             )
 
         tipo = (getattr(gasto, 'tipo_documento_soporte', None) or '').strip()

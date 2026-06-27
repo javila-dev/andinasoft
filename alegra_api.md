@@ -922,6 +922,7 @@ Fuente: `gastos_caja` filtrados por **`forma_pago`** (caja seleccionada en el da
 
 **Estados:**
 - **`Revisado`** — contabilidad marca el gasto en Caja efectivo (tras aprobación del aprobador de caja). Alegra envía **`POST /bills`** por gasto en este estado **sin requerir reembolso**.
+- **`Reembolso`** — el gasto ya fue incluido en una solicitud de reembolso. Alegra envía **`POST /bills`** igual que en `Revisado`.
 - **`Legalizado`** — tras registrar legalización del reembolso. Alegra envía **`POST /journals`** por reembolso (bills ya enviados o pendientes en `Legalizado`).
 
 Para solicitar reembolso, **`Revisado`** se trata igual que **`Aprobado`**.
