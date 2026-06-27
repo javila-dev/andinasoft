@@ -27,6 +27,14 @@ class ResolverStub:
     def bank_account_for_account(self, cuenta):
         return 'bank-1'
 
+    def bank_journal_category_for_account(self, cuenta, *, required=True):
+        puc = getattr(cuenta, 'nro_cuentacontable', None)
+        if puc in (None, ''):
+            if required:
+                raise AlegraConfigurationError('sin PUC')
+            return None
+        return f'cat-{puc}'
+
     def category_for_code(self, account_code):
         return f'cat-{account_code}'
 
@@ -1238,6 +1246,9 @@ class WebhookBillMappingTests(SimpleTestCase):
                     return 'cat-cxp'
                 return super().get(mapping_type, *args, **kwargs)
 
+            def bank_journal_category_for_account(self, cuenta, *, required=True):
+                return 'cat-bank-journal'
+
         empresas_model.objects.get.side_effect = lambda pk: SimpleNamespace(
             pk=pk, nombre=f'Empresa {pk}',
         )
@@ -1277,6 +1288,73 @@ class WebhookBillMappingTests(SimpleTestCase):
         self.assertEqual(built.payload['entries'][0]['credit'], 0)
         self.assertEqual(built.payload['entries'][0]['client'], 'contact-emp-900A')
         self.assertNotIn('client', built.payload['entries'][1])
+        self.assertEqual(built.payload['entries'][1]['id'], 'cat-bank-journal')
+        self.assertEqual(built.payload['entries'][1]['credit'], 500000.0)
+
+
+class BankJournalCategoryResolverTests(TestCase):
+    def setUp(self):
+        from alegra_integration.mapping import MappingResolver
+        from alegra_integration.models import AlegraMapping
+        from andinasoft.models import cuentas_pagos
+
+        self.AlegraMapping = AlegraMapping
+        self.empresa = empresas.objects.create(
+            Nit='900993044',
+            nombre='Andina prueba',
+            alegra_enabled=True,
+        )
+        self.cuenta = cuentas_pagos.objects.create(
+            idcuenta=793339,
+            nit_empresa=self.empresa,
+            cuentabanco='234-793339-39',
+            nro_cuentacontable=11100501,
+            activo=True,
+        )
+        self.resolver = MappingResolver(self.empresa)
+
+    def test_bank_journal_category_by_local_idcuenta(self):
+        self.AlegraMapping.objects.create(
+            empresa=self.empresa,
+            mapping_type=self.AlegraMapping.CATEGORY,
+            local_code='11100501',
+            alegra_id='6308',
+            alegra_payload={
+                'source': 'bank_account',
+                'bank_account_id': 'bank-1',
+                'local_idcuenta': str(self.cuenta.idcuenta),
+            },
+            active=True,
+        )
+        self.assertEqual(
+            self.resolver.bank_journal_category_for_account(self.cuenta),
+            '6308',
+        )
+
+    def test_bank_journal_category_prefers_idcuenta_over_stale_puc(self):
+        self.AlegraMapping.objects.create(
+            empresa=self.empresa,
+            mapping_type=self.AlegraMapping.CATEGORY,
+            local_code='11100501',
+            alegra_id='5144',
+            alegra_payload={'source': 'bank_account', 'local_idcuenta': '999'},
+            active=True,
+        )
+        self.AlegraMapping.objects.create(
+            empresa=self.empresa,
+            mapping_type=self.AlegraMapping.CATEGORY,
+            local_code='11100501',
+            alegra_id='6308',
+            alegra_payload={
+                'source': 'bank_account',
+                'local_idcuenta': str(self.cuenta.idcuenta),
+            },
+            active=True,
+        )
+        self.assertEqual(
+            self.resolver.bank_journal_category_for_account(self.cuenta),
+            '6308',
+        )
 
 
 class CajaBuilderTests(SimpleTestCase):

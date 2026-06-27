@@ -1029,10 +1029,7 @@ class ExpensePaymentBuilder:
                 required=False,
             ) or resolver.category_for_code(cxc_code)
 
-            bank_code = getattr(getattr(pago, 'cuenta', None), 'nro_cuentacontable', None)
-            if not bank_code:
-                raise AlegraBuildError('La cuenta bancaria del pago no tiene nro_cuentacontable.')
-            bank_cat = resolver.category_for_code(str(bank_code))
+            bank_cat = resolver.bank_journal_category_for_account(pago.cuenta)
             # Contraparte = empresa del gasto (dueña del radicado); las líneas interco/banco no usan proveedor.
             interco_client = self._contact_id_empresa_intercompany(
                 resolver, empresa_origen_id, label='empresa origen (gasto)',
@@ -1248,10 +1245,7 @@ class ExpensePaymentBuilder:
                     raise AlegraBuildError('La relación intercompany no tiene cuenta_por_pagar configurada.')
                 interco_cxp = resolver.category_for_code(cxp_code)
 
-            bank_code = getattr(getattr(transferencia, 'cuenta_entra', None), 'nro_cuentacontable', None)
-            if not bank_code:
-                raise AlegraBuildError('La cuenta que entra no tiene nro_cuentacontable.')
-            bank_cat = resolver.category_for_code(str(bank_code))
+            bank_cat = resolver.bank_journal_category_for_account(transferencia.cuenta_entra)
             # Dinero sale de empresa_sale → entra aquí: contraparte = empresa_sale (NIT).
             interco_client = self._contact_id_empresa_intercompany(
                 resolver, empresa_sale_id, label='empresa sale (origen fondos)',
@@ -1315,10 +1309,7 @@ class ExpensePaymentBuilder:
                 raise AlegraBuildError('La relación intercompany no tiene cuenta_por_cobrar configurada.')
             interco_cxc = resolver.category_for_code(cxc_code)
 
-        bank_code = getattr(getattr(transferencia, 'cuenta_sale', None), 'nro_cuentacontable', None)
-        if not bank_code:
-            raise AlegraBuildError('La cuenta que sale no tiene nro_cuentacontable.')
-        bank_cat = resolver.category_for_code(str(bank_code))
+        bank_cat = resolver.bank_journal_category_for_account(transferencia.cuenta_sale)
         interco_client = self._contact_id_empresa_intercompany(
             resolver, empresa_entra_id, label='empresa entra (destino fondos)',
         )

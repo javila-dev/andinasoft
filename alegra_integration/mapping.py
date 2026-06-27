@@ -107,6 +107,46 @@ class MappingResolver:
             local_pk=cuenta.pk,
         )
 
+    def bank_journal_category_for_account(self, cuenta, *, required=True):
+        """
+        Cuenta PUC Alegra para la linea de banco en journals (intercompany, etc.).
+        Usa el mapeo guardado en Referencias Alegra -> Bancos (source=bank_account).
+        """
+        cuenta_pk = getattr(cuenta, 'pk', None) or getattr(cuenta, 'idcuenta', None)
+        if not cuenta_pk:
+            if required:
+                raise AlegraConfigurationError(
+                    f'Cuenta bancaria local invalida para journal (empresa {self.empresa.pk}).'
+                )
+            return None
+
+        base_qs = AlegraMapping.objects.filter(
+            empresa_id=self.empresa.pk,
+            proyecto__isnull=True,
+            mapping_type=AlegraMapping.CATEGORY,
+            active=True,
+            alegra_payload__source='bank_account',
+        )
+        row = base_qs.filter(
+            alegra_payload__local_idcuenta=str(cuenta_pk),
+        ).order_by('-updated_at').first()
+        if not row:
+            puc = getattr(cuenta, 'nro_cuentacontable', None)
+            if puc not in (None, ''):
+                row = base_qs.filter(local_code=str(puc)).order_by('-updated_at').first()
+        if row:
+            return row.alegra_id
+
+        if not required:
+            return None
+        label = getattr(cuenta, 'cuentabanco', None) or cuenta_pk
+        puc = getattr(cuenta, 'nro_cuentacontable', None)
+        puc_hint = f' (PUC local {puc})' if puc not in (None, '') else ''
+        raise AlegraConfigurationError(
+            f'Falta mapeo de cuenta PUC Alegra para la cuenta bancaria {label}{puc_hint} '
+            f'en Referencias Alegra -> Bancos (empresa {self.empresa.pk}).'
+        )
+
     def category_for_code(self, account_code, *, required=True):
         return self.get(AlegraMapping.CATEGORY, local_code=str(account_code), required=required)
 
