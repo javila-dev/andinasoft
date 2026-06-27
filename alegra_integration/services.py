@@ -469,28 +469,35 @@ class AlegraIntegrationService:
             doc.error = str(exc)
             doc.save(update_fields=['status', 'error', 'updated_at'])
             batch.refresh_from_db()
-            remaining = self._count_sendable_batch_documents(batch, retry_failed=retry_failed)
+            self._finalize_batch_send(batch)
+            batch.refresh_from_db()
+            totals = self._batch_send_totals(batch)
             documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
             return {
                 **self._batch_response(batch, documents),
-                'complete': remaining == 0,
-                'remaining': remaining,
+                'complete': True,
+                'stopped_on_error': True,
+                'remaining': totals['pending'],
                 'document': self._document_summary(doc),
             }
 
         self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
+        doc.refresh_from_db()
         batch.refresh_from_db()
 
+        stopped_on_error = doc.status == AlegraDocument.STATUS_FAILED
         remaining = self._count_sendable_batch_documents(batch, retry_failed=retry_failed)
-        complete = remaining == 0
+        complete = stopped_on_error or remaining == 0
         if complete:
             self._finalize_batch_send(batch)
             batch.refresh_from_db()
+            remaining = self._batch_send_totals(batch)['pending']
 
         documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
         return {
             **self._batch_response(batch, documents),
             'complete': complete,
+            'stopped_on_error': stopped_on_error,
             'remaining': remaining,
             'document': self._document_summary(doc),
         }
@@ -628,24 +635,18 @@ class AlegraIntegrationService:
         batch.save(update_fields=['status', 'updated_at'])
 
         client_by_empresa = {}
-        sent = 0
-        skipped = 0
-        failed = 0
-        documents = []
+        stopped_on_error = False
 
         doc_list = list(batch.documents.order_by('id'))
         if batch.document_type == AlegraSyncBatch.DOC_CAJA:
             doc_list.sort(key=self._caja_document_sort_key)
 
         for doc in doc_list:
+            if stopped_on_error:
+                break
             if doc.status == AlegraDocument.STATUS_SENT:
-                skipped += 1
-                documents.append(self._document_summary(doc))
                 continue
-
             if doc.status == AlegraDocument.STATUS_INVALID:
-                failed += 1
-                documents.append(self._document_summary(doc))
                 continue
 
             try:
@@ -654,29 +655,23 @@ class AlegraIntegrationService:
                 doc.status = AlegraDocument.STATUS_FAILED
                 doc.error = str(exc)
                 doc.save(update_fields=['status', 'error', 'updated_at'])
-                failed += 1
-                documents.append(self._document_summary(doc))
-                continue
+                stopped_on_error = True
+                break
 
-            outcome = self._try_send_batch_document(batch, doc, client_by_empresa, retry_failed=retry_failed)
-            if outcome == 'sent':
-                sent += 1
-            elif outcome == 'failed':
-                failed += 1
-            elif outcome == 'skipped':
-                skipped += 1
-            elif outcome == 'invalid':
-                failed += 1
-            documents.append(self._document_summary(doc))
+            outcome = self._try_send_batch_document(
+                batch, doc, client_by_empresa, retry_failed=retry_failed,
+            )
+            if outcome == 'failed':
+                stopped_on_error = True
+                break
 
-        batch.success_count = sent
-        batch.error_count = failed
-        batch.summary = {'sent': sent, 'failed': failed, 'skipped': skipped}
-        final_status = AlegraSyncBatch.STATUS_DONE if failed == 0 else AlegraSyncBatch.STATUS_PARTIAL if sent else AlegraSyncBatch.STATUS_FAILED
-        batch.status = final_status
-        batch.completed_at = timezone.now()
-        batch.save(update_fields=['success_count', 'error_count', 'summary', 'status', 'completed_at', 'updated_at'])
-        return self._batch_response(batch, documents)
+        self._finalize_batch_send(batch)
+        batch.refresh_from_db()
+        documents = [self._document_summary(d) for d in batch.documents.order_by('id')]
+        response = self._batch_response(batch, documents)
+        if stopped_on_error:
+            response['stopped_on_error'] = True
+        return response
 
     @staticmethod
     def _reference_sections_for_type(ref_type):

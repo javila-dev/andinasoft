@@ -1741,6 +1741,16 @@ function doSend() {
           log(lvl, `[${processedSoFar}/${plannedTotal}] ${escHtml(data.document.local_key)} → ${escHtml(st)}`);
           updateLiveMetricsDuringSend();
         }
+        if (data.stopped_on_error) {
+          if (data.documents) {
+            allDocs = data.documents;
+            renderDocuments(allDocs);
+          }
+          log('error', 'Envío detenido: corrija el error antes de continuar con el resto del lote.');
+          $('#sendLiveText').text('Envío detenido por error');
+          finishSend(data);
+          return;
+        }
         if (data.complete) {
           if (data.documents) {
             allDocs = data.documents;
@@ -1824,11 +1834,13 @@ function onSendSuccess(data) {
   if (sum.skipped > 0) log('dim', `Omitidos (ya estaban enviados): <strong>${sum.skipped}</strong>`);
 
   logSep();
-  const finalMsg = {
+  const finalMsg = data.stopped_on_error
+    ? ['error', 'Envío detenido por error. Corrija el documento fallido y reintente el lote.']
+    : ({
     done:    ['success', '¡Todos los documentos enviados exitosamente!'],
     partial: ['warning', 'Envío parcial — algunos documentos fallaron. Revisa la tabla.'],
     failed:  ['error',   'El envío falló. Revisa los errores en la tabla.'],
-  }[batch.status] || ['info', `Estado: ${batch.status}`];
+  }[batch.status] || ['info', `Estado: ${batch.status}`]);
   log(finalMsg[0], `<strong>${finalMsg[1]}</strong>`);
 
   $('#logBatchBadge').html(statusBadge(batch.status)).show();

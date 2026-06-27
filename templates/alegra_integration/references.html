@@ -1203,6 +1203,42 @@ function renderMappings(refType, payload) {
   });
 }
 
+function bankJournalMappingForAccount(acc, categoryMappings) {
+  const localPk = String(acc.idcuenta);
+  const puc = acc.nro_cuentacontable != null ? String(acc.nro_cuentacontable) : '';
+  for (const m of (categoryMappings || [])) {
+    if (
+      m.local_model === 'andinasoft.cuentas_pagos'
+      && m.local_code === 'bank_journal'
+      && String(m.local_pk || '') === localPk
+    ) {
+      return m;
+    }
+  }
+  for (const m of (categoryMappings || [])) {
+    const payload = m.alegra_payload || {};
+    if (
+      payload.source === 'bank_account'
+      && String(payload.local_idcuenta || '') === localPk
+    ) {
+      return m;
+    }
+  }
+  if (puc) {
+    for (const m of (categoryMappings || [])) {
+      const payload = m.alegra_payload || {};
+      if (
+        !m.local_model && !m.local_pk
+        && String(m.local_code || '') === puc
+        && String(payload.local_idcuenta || '') === localPk
+      ) {
+        return m;
+      }
+    }
+  }
+  return null;
+}
+
 function renderLocalAccountsForBanks(localAccounts, mappings, categoryMappings) {
   const body = $('#localBody').empty();
   $('#localCount').text((localAccounts || []).length);
@@ -1210,14 +1246,6 @@ function renderLocalAccountsForBanks(localAccounts, mappings, categoryMappings) 
   const byLocalPk = {};
   (mappings || []).forEach(m => {
     if (String(m.local_pk || '') !== '') byLocalPk[String(m.local_pk)] = m;
-  });
-
-  const byPuc = {};
-  (categoryMappings || []).forEach(m => {
-    const code = String(m.local_code || '').trim();
-    if (code && !m.local_model && !m.local_pk) {
-      byPuc[code] = m;
-    }
   });
 
   const optionsHtml = buildAlegraOptionsForBanks();
@@ -1232,7 +1260,7 @@ function renderLocalAccountsForBanks(localAccounts, mappings, categoryMappings) 
     const existing = byLocalPk[localPk];
     const selected = existing ? String(existing.alegra_id) : '';
     const puc = acc.nro_cuentacontable != null ? String(acc.nro_cuentacontable) : '';
-    const catMap = puc ? byPuc[puc] : null;
+    const catMap = bankJournalMappingForAccount(acc, categoryMappings);
     const catId = catMap ? String(catMap.alegra_id) : '';
     const catLabel = catMap ? (catMap.description || `ID ${catMap.alegra_id}`) : '';
     const cuentaLabel = acc.cuentabanco || '(sin nombre)';
@@ -1327,8 +1355,8 @@ function saveBankMapping(localPk, btnEl) {
   }).done((resp) => {
     const cat = resp.category_mapping;
     let msg = 'Banco y cuenta PUC guardados.';
-    if (cat && cat.local_code) {
-      msg = `Guardado: banco Alegra ${alegraId}, PUC local ${cat.local_code} → cuenta Alegra ${cat.alegra_category_id}.`;
+    if (cat && cat.local_idcuenta) {
+      msg = `Guardado: cuenta ${cat.local_idcuenta}, PUC Alegra ${cat.alegra_category_id}.`;
     } else if (!puc) {
       msg = 'Banco guardado (sin PUC local, no aplica journal).';
     }

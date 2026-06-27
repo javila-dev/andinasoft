@@ -5,6 +5,9 @@ from alegra_integration.bill_mapping import ALEGRA_DOC_BILL, parse_alegra_bill_i
 from alegra_integration.models import AlegraContactIndex, AlegraMapping
 from django.db.models import Q
 
+BANK_JOURNAL_LOCAL_MODEL = 'andinasoft.cuentas_pagos'
+BANK_JOURNAL_LOCAL_CODE = 'bank_journal'
+
 
 class MappingResolver:
     def __init__(self, empresa, proyecto=None):
@@ -110,7 +113,7 @@ class MappingResolver:
     def bank_journal_category_for_account(self, cuenta, *, required=True):
         """
         Cuenta PUC Alegra para la linea de banco en journals (intercompany, etc.).
-        Usa el mapeo guardado en Referencias Alegra -> Bancos (source=bank_account).
+        Usa el mapeo guardado en Referencias Alegra -> Bancos (por idcuenta).
         """
         cuenta_pk = getattr(cuenta, 'pk', None) or getattr(cuenta, 'idcuenta', None)
         if not cuenta_pk:
@@ -119,21 +122,30 @@ class MappingResolver:
                     f'Cuenta bancaria local invalida para journal (empresa {self.empresa.pk}).'
                 )
             return None
+        cuenta_pk = str(cuenta_pk)
 
-        base_qs = AlegraMapping.objects.filter(
+        row = AlegraMapping.objects.filter(
+            empresa_id=self.empresa.pk,
+            proyecto__isnull=True,
+            mapping_type=AlegraMapping.CATEGORY,
+            active=True,
+            local_model=BANK_JOURNAL_LOCAL_MODEL,
+            local_pk=cuenta_pk,
+            local_code=BANK_JOURNAL_LOCAL_CODE,
+        ).order_by('-updated_at').first()
+        if row:
+            return row.alegra_id
+
+        legacy_qs = AlegraMapping.objects.filter(
             empresa_id=self.empresa.pk,
             proyecto__isnull=True,
             mapping_type=AlegraMapping.CATEGORY,
             active=True,
             alegra_payload__source='bank_account',
         )
-        row = base_qs.filter(
-            alegra_payload__local_idcuenta=str(cuenta_pk),
+        row = legacy_qs.filter(
+            alegra_payload__local_idcuenta=cuenta_pk,
         ).order_by('-updated_at').first()
-        if not row:
-            puc = getattr(cuenta, 'nro_cuentacontable', None)
-            if puc not in (None, ''):
-                row = base_qs.filter(local_code=str(puc)).order_by('-updated_at').first()
         if row:
             return row.alegra_id
 

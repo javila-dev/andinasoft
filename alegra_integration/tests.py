@@ -1317,11 +1317,66 @@ class BankJournalCategoryResolverTests(TestCase):
         self.AlegraMapping.objects.create(
             empresa=self.empresa,
             mapping_type=self.AlegraMapping.CATEGORY,
-            local_code='11100501',
+            local_model='andinasoft.cuentas_pagos',
+            local_pk=str(self.cuenta.idcuenta),
+            local_code='bank_journal',
             alegra_id='6308',
             alegra_payload={
                 'source': 'bank_account',
                 'bank_account_id': 'bank-1',
+                'local_idcuenta': str(self.cuenta.idcuenta),
+                'nro_cuentacontable': '11100501',
+            },
+            active=True,
+        )
+        self.assertEqual(
+            self.resolver.bank_journal_category_for_account(self.cuenta),
+            '6308',
+        )
+
+    def test_bank_journal_category_per_account_same_puc(self):
+        from alegra_integration.mapping import BANK_JOURNAL_LOCAL_CODE, BANK_JOURNAL_LOCAL_MODEL
+        from andinasoft.models import cuentas_pagos
+
+        cuenta_b = cuentas_pagos.objects.create(
+            idcuenta=793340,
+            nit_empresa=self.empresa,
+            cuentabanco='Caja Medellin',
+            nro_cuentacontable=11100501,
+            es_caja=True,
+            activo=True,
+        )
+        self.AlegraMapping.objects.create(
+            empresa=self.empresa,
+            mapping_type=self.AlegraMapping.CATEGORY,
+            local_model=BANK_JOURNAL_LOCAL_MODEL,
+            local_pk=str(self.cuenta.idcuenta),
+            local_code=BANK_JOURNAL_LOCAL_CODE,
+            alegra_id='6308',
+            alegra_payload={'source': 'bank_account', 'local_idcuenta': str(self.cuenta.idcuenta)},
+            active=True,
+        )
+        self.AlegraMapping.objects.create(
+            empresa=self.empresa,
+            mapping_type=self.AlegraMapping.CATEGORY,
+            local_model=BANK_JOURNAL_LOCAL_MODEL,
+            local_pk=str(cuenta_b.idcuenta),
+            local_code=BANK_JOURNAL_LOCAL_CODE,
+            alegra_id='7777',
+            alegra_payload={'source': 'bank_account', 'local_idcuenta': str(cuenta_b.idcuenta)},
+            active=True,
+        )
+        self.assertEqual(self.resolver.bank_journal_category_for_account(self.cuenta), '6308')
+        self.assertEqual(self.resolver.bank_journal_category_for_account(cuenta_b), '7777')
+
+    def test_bank_journal_category_legacy_payload(self):
+        self.AlegraMapping.objects.create(
+            empresa=self.empresa,
+            mapping_type=self.AlegraMapping.CATEGORY,
+            local_code='11100501',
+            alegra_id='6308',
+            alegra_payload={
+                'source': 'bank_account',
                 'local_idcuenta': str(self.cuenta.idcuenta),
             },
             active=True,
@@ -1331,30 +1386,98 @@ class BankJournalCategoryResolverTests(TestCase):
             '6308',
         )
 
-    def test_bank_journal_category_prefers_idcuenta_over_stale_puc(self):
-        self.AlegraMapping.objects.create(
+
+class BatchSendStopOnErrorTests(TestCase):
+    def setUp(self):
+        from alegra_integration.models import AlegraDocument, AlegraSyncBatch
+
+        self.AlegraDocument = AlegraDocument
+        self.AlegraSyncBatch = AlegraSyncBatch
+        self.empresa = empresas.objects.create(
+            Nit='900111',
+            nombre='Empresa lote',
+            alegra_enabled=True,
+        )
+        self.batch = AlegraSyncBatch.objects.create(
             empresa=self.empresa,
-            mapping_type=self.AlegraMapping.CATEGORY,
-            local_code='11100501',
-            alegra_id='5144',
-            alegra_payload={'source': 'bank_account', 'local_idcuenta': '999'},
-            active=True,
+            document_type=AlegraSyncBatch.DOC_EXPENSE,
+            fecha_desde=datetime.date(2026, 1, 1),
+            fecha_hasta=datetime.date(2026, 1, 31),
+            status=AlegraSyncBatch.STATUS_PREVIEW,
+            total_documents=2,
         )
-        self.AlegraMapping.objects.create(
+        common = dict(
+            batch=self.batch,
             empresa=self.empresa,
-            mapping_type=self.AlegraMapping.CATEGORY,
-            local_code='11100501',
-            alegra_id='6308',
-            alegra_payload={
-                'source': 'bank_account',
-                'local_idcuenta': str(self.cuenta.idcuenta),
-            },
-            active=True,
+            document_type='expense_payment',
+            alegra_operation='POST /payments',
+            transport=AlegraDocument.ALEGRA_REST,
+            source_model='accounting.Pagos',
+            payload={'amount': 1},
         )
-        self.assertEqual(
-            self.resolver.bank_journal_category_for_account(self.cuenta),
-            '6308',
+        self.doc_ok = AlegraDocument.objects.create(
+            source_pk='1',
+            local_key='expense:pago:1',
+            status=AlegraDocument.STATUS_VALID,
+            **common,
         )
+        self.doc_fail = AlegraDocument.objects.create(
+            source_pk='2',
+            local_key='expense:pago:2',
+            status=AlegraDocument.STATUS_VALID,
+            **common,
+        )
+        self.doc_pending = AlegraDocument.objects.create(
+            source_pk='3',
+            local_key='expense:pago:3',
+            status=AlegraDocument.STATUS_VALID,
+            **common,
+        )
+
+    @patch('alegra_integration.services.AlegraIntegrationService._try_send_batch_document')
+    def test_send_batch_stops_on_first_failure(self, mock_try):
+        from alegra_integration.services import AlegraIntegrationService
+
+        def _side_effect(batch, doc, client_by_empresa, *, retry_failed=True):
+            if doc.pk == self.doc_fail.pk:
+                doc.status = AlegraDocument.STATUS_FAILED
+                doc.error = 'fallo alegra'
+                doc.save(update_fields=['status', 'error', 'updated_at'])
+                return 'failed'
+            doc.status = AlegraDocument.STATUS_SENT
+            doc.save(update_fields=['status', 'updated_at'])
+            return 'sent'
+
+        mock_try.side_effect = _side_effect
+
+        result = AlegraIntegrationService()._send_batch_documents(self.batch)
+
+        self.assertTrue(result.get('stopped_on_error'))
+        self.assertEqual(mock_try.call_count, 2)
+        self.doc_pending.refresh_from_db()
+        self.assertEqual(self.doc_pending.status, AlegraDocument.STATUS_VALID)
+
+    @patch('alegra_integration.services.AlegraIntegrationService._try_send_batch_document')
+    def test_send_one_stops_on_failure(self, mock_try):
+        from alegra_integration.services import AlegraIntegrationService
+
+        def _side_effect(batch, doc, client_by_empresa, *, retry_failed=True):
+            doc.status = AlegraDocument.STATUS_FAILED
+            doc.error = 'fallo alegra'
+            doc.save(update_fields=['status', 'error', 'updated_at'])
+            return 'failed'
+
+        mock_try.side_effect = _side_effect
+
+        result = AlegraIntegrationService().send_one_batch_document(
+            batch_id=self.batch.pk,
+            document_id=self.doc_ok.pk,
+        )
+
+        self.assertTrue(result.get('complete'))
+        self.assertTrue(result.get('stopped_on_error'))
+        self.doc_pending.refresh_from_db()
+        self.assertEqual(self.doc_pending.status, AlegraDocument.STATUS_VALID)
 
 
 class CajaBuilderTests(SimpleTestCase):
@@ -2189,7 +2312,9 @@ class BankMappingViewTests(TestCase):
         cat = AlegraMapping.objects.get(
             empresa_id=self.empresa.pk,
             mapping_type=AlegraMapping.CATEGORY,
-            local_code=str(self.cuenta.nro_cuentacontable),
+            local_model='andinasoft.cuentas_pagos',
+            local_pk=str(self.cuenta.idcuenta),
+            local_code='bank_journal',
         )
         self.assertEqual(cat.alegra_id, '6308')
 

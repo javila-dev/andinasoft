@@ -32,7 +32,7 @@ from alegra_integration.services import (
 from andinasoft.models import cuentas_pagos, empresas, proyectos, clientes, asesores
 from andinasoft.shared_models import formas_pago
 from accounting.models import cuentas_intercompanias, info_interfaces, impuestos_legalizacion
-from alegra_integration.mapping import MappingResolver
+from alegra_integration.mapping import MappingResolver, BANK_JOURNAL_LOCAL_CODE, BANK_JOURNAL_LOCAL_MODEL
 from alegra_integration.client import AlegraMCPClient
 
 logger = logging.getLogger(__name__)
@@ -511,14 +511,14 @@ def _upsert_bank_journal_category_mapping(
     category_alegra_id = str(category_alegra_id or '').strip()
     if not category_alegra_id:
         return None
-    desc = (category_description or f'bank category {puc}')[:255]
+    desc = (category_description or f'bank journal {cuenta.cuentabanco or cuenta.idcuenta}')[:255]
     cat_m, cat_created = AlegraMapping.objects.update_or_create(
         empresa_id=empresa_id,
         proyecto=None,
         mapping_type=AlegraMapping.CATEGORY,
-        local_model='',
-        local_pk='',
-        local_code=str(puc),
+        local_model=BANK_JOURNAL_LOCAL_MODEL,
+        local_pk=str(cuenta.idcuenta),
+        local_code=BANK_JOURNAL_LOCAL_CODE,
         defaults={
             'alegra_id': category_alegra_id,
             'description': desc,
@@ -527,12 +527,14 @@ def _upsert_bank_journal_category_mapping(
                 'source': 'bank_account',
                 'bank_account_id': str(alegra_bank_id),
                 'local_idcuenta': str(cuenta.idcuenta),
+                'nro_cuentacontable': str(puc),
             },
         },
     )
     return {
         'created': cat_created,
         'mapping_id': cat_m.pk,
+        'local_idcuenta': str(cuenta.idcuenta),
         'local_code': str(puc),
         'alegra_category_id': category_alegra_id,
         'description': desc,
