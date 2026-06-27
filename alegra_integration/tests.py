@@ -2035,3 +2035,90 @@ class PartnerContactToolsTests(SimpleTestCase):
         self.assertEqual(built.payload['provider'], {'id': 'provider-900123456'})
         resolver.contact_for_partner.assert_called_once_with('900123456', required=True)
 
+
+class BankMappingViewTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from andinasoft.models import cuentas_pagos
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username='bank_map_tester', password='x')
+        self.client.force_login(self.user)
+        self.empresa = empresas.objects.create(
+            Nit='900993044',
+            nombre='Andina prueba',
+            alegra_enabled=True,
+        )
+        self.cuenta = cuentas_pagos.objects.create(
+            idcuenta=793339,
+            nit_empresa=self.empresa,
+            cuentabanco='234-793339-39',
+            nro_cuentacontable=11100501,
+            activo=True,
+        )
+
+    @patch('alegra_integration.views.AlegraMCPClient')
+    def test_save_bank_requires_category_when_puc_present(self, client_cls):
+        client_cls.return_value.rest.return_value = {'category': {}}
+        resp = self.client.post(
+            '/accounting/alegra/references/save-bank-mapping',
+            data=json.dumps({
+                'empresa': self.empresa.pk,
+                'local_idcuenta': self.cuenta.idcuenta,
+                'alegra_id': 'bank-99',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    @patch('alegra_integration.views.AlegraMCPClient')
+    def test_save_bank_persists_bank_and_category(self, client_cls):
+        from alegra_integration.models import AlegraMapping
+
+        client_cls.return_value.rest.return_value = {
+            'category': {'id': '6308', 'code': '1110', 'name': 'Bancos'},
+        }
+        resp = self.client.post(
+            '/accounting/alegra/references/save-bank-mapping',
+            data=json.dumps({
+                'empresa': self.empresa.pk,
+                'local_idcuenta': self.cuenta.idcuenta,
+                'alegra_id': 'bank-99',
+                'category_alegra_id': '6308',
+                'category_description': '1110 · Bancos',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertTrue(body['ok'])
+        self.assertEqual(body['category_mapping']['alegra_category_id'], '6308')
+        self.assertTrue(
+            AlegraMapping.objects.filter(
+                empresa_id=self.empresa.pk,
+                mapping_type=AlegraMapping.BANK_ACCOUNT,
+                local_pk=str(self.cuenta.idcuenta),
+                alegra_id='bank-99',
+            ).exists()
+        )
+        cat = AlegraMapping.objects.get(
+            empresa_id=self.empresa.pk,
+            mapping_type=AlegraMapping.CATEGORY,
+            local_code=str(self.cuenta.nro_cuentacontable),
+        )
+        self.assertEqual(cat.alegra_id, '6308')
+
+    @patch('alegra_integration.views.AlegraMCPClient')
+    def test_suggest_bank_category(self, client_cls):
+        client_cls.return_value.rest.return_value = {
+            'category': {'id': '5144', 'code': '1110', 'name': 'Banco Davivienda'},
+        }
+        resp = self.client.get(
+            '/accounting/alegra/references/suggest-bank-category',
+            {'empresa': self.empresa.pk, 'bank_id': 'bank-99'},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body['category_id'], '5144')
+        self.assertIn('Banco Davivienda', body['category_label'])
+

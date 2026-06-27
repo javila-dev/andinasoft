@@ -18,6 +18,7 @@ urlpatterns = [
     path('references/mappings', views.references_mappings, name='alegra-references-mappings'),
     path('references/local-accounts', views.references_local_accounts, name='alegra-references-local-accounts'),
     path('references/save-bank-mapping', views.references_save_bank_mapping, name='alegra-references-save-bank-mapping'),
+    path('references/suggest-bank-category', views.references_suggest_bank_category, name='alegra-references-suggest-bank-category'),
     path('references/save-category-mapping', views.references_save_category_mapping, name='alegra-references-save-category-mapping'),
     path('references/interfaces', views.references_interfaces, name='alegra-references-interfaces'),
     path('references/intercompany', views.references_intercompany, name='alegra-references-intercompany'),

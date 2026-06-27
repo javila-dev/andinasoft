@@ -482,6 +482,86 @@ def references_local_accounts(request):
         return _error_response(exc, status=500)
 
 
+def _alegra_bank_category_from_api(client, bank_id):
+    bank_detail = client.rest('GET', f'/bank-accounts/{bank_id}?fields=category')
+    if not isinstance(bank_detail, dict):
+        return None, ''
+    cat = bank_detail.get('category') or {}
+    if not isinstance(cat, dict):
+        return None, ''
+    cat_id = cat.get('id')
+    if not cat_id:
+        return None, ''
+    label_parts = [str(cat.get('code') or '').strip(), str(cat.get('name') or cat.get('description') or '').strip()]
+    label = ' · '.join(p for p in label_parts if p) or f'ID {cat_id}'
+    return str(cat_id), label[:255]
+
+
+def _upsert_bank_journal_category_mapping(
+    *,
+    empresa_id,
+    cuenta,
+    alegra_bank_id,
+    category_alegra_id,
+    category_description='',
+):
+    puc = getattr(cuenta, 'nro_cuentacontable', None)
+    if not puc:
+        return None
+    category_alegra_id = str(category_alegra_id or '').strip()
+    if not category_alegra_id:
+        return None
+    desc = (category_description or f'bank category {puc}')[:255]
+    cat_m, cat_created = AlegraMapping.objects.update_or_create(
+        empresa_id=empresa_id,
+        proyecto=None,
+        mapping_type=AlegraMapping.CATEGORY,
+        local_model='',
+        local_pk='',
+        local_code=str(puc),
+        defaults={
+            'alegra_id': category_alegra_id,
+            'description': desc,
+            'active': True,
+            'alegra_payload': {
+                'source': 'bank_account',
+                'bank_account_id': str(alegra_bank_id),
+                'local_idcuenta': str(cuenta.idcuenta),
+            },
+        },
+    )
+    return {
+        'created': cat_created,
+        'mapping_id': cat_m.pk,
+        'local_code': str(puc),
+        'alegra_category_id': category_alegra_id,
+        'description': desc,
+    }
+
+
+@login_required
+@require_http_methods(['GET'])
+def references_suggest_bank_category(request):
+    """Sugiere la categoría contable asociada a un banco Alegra (para journals)."""
+    try:
+        empresa_id = (request.GET.get('empresa') or '').strip()
+        bank_id = (request.GET.get('bank_id') or '').strip()
+        if not empresa_id or not bank_id:
+            return JsonResponse({'detail': 'empresa y bank_id son requeridos'}, status=400)
+        empresa = empresas.objects.get(pk=empresa_id)
+        client = AlegraMCPClient(empresa)
+        cat_id, label = _alegra_bank_category_from_api(client, bank_id)
+        if not cat_id:
+            return JsonResponse({'category_id': None, 'category_label': ''})
+        return JsonResponse({'category_id': cat_id, 'category_label': label})
+    except empresas.DoesNotExist:
+        return JsonResponse({'detail': 'Empresa no encontrada'}, status=404)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
 @login_required
 @require_http_methods(['POST'])
 def references_save_bank_mapping(request):
@@ -490,6 +570,8 @@ def references_save_bank_mapping(request):
         empresa_id = payload.get('empresa')
         local_idcuenta = payload.get('local_idcuenta')
         alegra_id = payload.get('alegra_id')
+        category_alegra_id = (payload.get('category_alegra_id') or '').strip()
+        category_description = (payload.get('category_description') or '').strip()
 
         if not empresa_id or not local_idcuenta or not alegra_id:
             return JsonResponse({'detail': 'empresa, local_idcuenta y alegra_id son requeridos'}, status=400)
@@ -512,38 +594,40 @@ def references_save_bank_mapping(request):
             },
         )
 
-        # Best-effort: if this Alegra bank account has an associated ledger category,
-        # auto-create a CATEGORY mapping for the local accounting code (nro_cuentacontable).
-        auto_category = None
+        category_mapping = None
         if getattr(cuenta, 'nro_cuentacontable', None):
-            try:
-                empresa = empresas.objects.get(pk=empresa_id)
-                client = AlegraMCPClient(empresa)
-                bank_detail = client.rest('GET', f'/bank-accounts/{alegra_id}?fields=category')
-                if isinstance(bank_detail, dict):
-                    cat = bank_detail.get('category') or {}
-                    cat_id = cat.get('id') if isinstance(cat, dict) else None
-                    if cat_id:
-                        AlegraMapping.objects.update_or_create(
-                            empresa_id=empresa_id,
-                            proyecto=None,
-                            mapping_type=AlegraMapping.CATEGORY,
-                            local_model='',
-                            local_pk='',
-                            local_code=str(cuenta.nro_cuentacontable),
-                            defaults={
-                                'alegra_id': str(cat_id),
-                                'description': (cat.get('name') or f'bank category {cuenta.nro_cuentacontable}')[:255],
-                                'active': True,
-                                'alegra_payload': {'source': 'bank_account', 'bank_account_id': str(alegra_id)},
-                            },
-                        )
-                        auto_category = {'local_code': str(cuenta.nro_cuentacontable), 'alegra_category_id': str(cat_id)}
-            except Exception:
-                # Don't block saving bank mapping if auto-category fails
-                auto_category = None
+            if not category_alegra_id:
+                try:
+                    empresa = empresas.objects.get(pk=empresa_id)
+                    client = AlegraMCPClient(empresa)
+                    suggested_id, suggested_label = _alegra_bank_category_from_api(client, alegra_id)
+                    if suggested_id:
+                        category_alegra_id = suggested_id
+                        category_description = category_description or suggested_label
+                except Exception:
+                    category_alegra_id = ''
+            if not category_alegra_id:
+                return JsonResponse({
+                    'detail': (
+                        f'La cuenta {cuenta.cuentabanco or cuenta.idcuenta} tiene PUC '
+                        f'{cuenta.nro_cuentacontable}: indica la cuenta del PUC en Alegra '
+                        f'(la misma que usa el journal intercompany).'
+                    ),
+                }, status=400)
+            category_mapping = _upsert_bank_journal_category_mapping(
+                empresa_id=empresa_id,
+                cuenta=cuenta,
+                alegra_bank_id=alegra_id,
+                category_alegra_id=category_alegra_id,
+                category_description=category_description,
+            )
 
-        return JsonResponse({'ok': True, 'created': created, 'mapping_id': m.pk, 'auto_category': auto_category})
+        return JsonResponse({
+            'ok': True,
+            'created': created,
+            'mapping_id': m.pk,
+            'category_mapping': category_mapping,
+        })
     except AlegraIntegrationError as exc:
         return _error_response(exc)
     except Exception as exc:

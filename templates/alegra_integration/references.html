@@ -755,12 +755,11 @@
 
   <div id="mainRefsTables" style="display:none">
   <div class="row">
-    <div class="col-lg-6 mb-3">
-      <div class="card shadow-sm h-100">
+    <div class="col-12 mb-3">
+      <div class="card shadow-sm">
         <div class="card-header bg-light">
           <strong><i class="fas fa-building mr-2 text-muted"></i>En Andinasoft (cuentas)</strong>
           <span class="badge badge-secondary ml-2" id="localCount">0</span>
-          <small class="text-muted ml-2" id="localTitle">—</small>
         </div>
         <div class="table-responsive" style="max-height:560px;overflow:auto">
           <table class="table table-sm table-hover mb-0">
@@ -768,71 +767,19 @@
               <tr>
                 <th style="width:80px">ID</th>
                 <th>Cuenta</th>
-                <th style="width:220px">Alegra</th>
+                <th style="width:220px">Banco Alegra</th>
+                <th style="width:320px">Cuenta PUC Alegra (journal)</th>
               </tr>
             </thead>
             <tbody id="localBody">
-              <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa y un tipo</td></tr>
+              <tr><td colspan="4" class="text-center text-muted py-3">Selecciona una empresa</td></tr>
             </tbody>
           </table>
         </div>
         <div class="card-footer text-muted" style="font-size:.8rem">
-          Para <strong>Bancos</strong>, enlaza cada cuenta local con el <strong>ID</strong> de banco/cuenta en Alegra y guarda.
-        </div>
-      </div>
-    </div>
-
-    <div class="col-lg-6 mb-3">
-      <div class="card shadow-sm h-100">
-        <div class="card-header bg-light">
-          <strong><i class="fas fa-cloud-download-alt mr-2 text-muted"></i>En Alegra</strong>
-          <span class="badge badge-secondary ml-2" id="remoteCount">0</span>
-          <small class="text-muted ml-2" id="remoteTitle">—</small>
-        </div>
-        <div class="table-responsive" style="max-height:560px;overflow:auto">
-          <table class="table table-sm table-hover mb-0">
-            <thead class="thead-light">
-              <tr>
-                <th style="width:90px">ID</th>
-                <th>Nombre / Descripción</th>
-                <th style="width:120px">Estado</th>
-              </tr>
-            </thead>
-            <tbody id="remoteBody">
-              <tr><td colspan="3" class="text-center text-muted py-3">Selecciona una empresa y un tipo</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="row">
-    <div class="col-12 mb-3">
-      <div class="card shadow-sm">
-        <div class="card-header bg-light">
-          <strong><i class="fas fa-map mr-2 text-muted"></i>Mapeos en la BD</strong>
-          <span class="badge badge-secondary ml-2" id="mapCount">0</span>
-          <small class="text-muted ml-2" id="mapTitle">—</small>
-        </div>
-        <div class="table-responsive" style="max-height:420px;overflow:auto">
-          <table class="table table-sm table-hover mb-0">
-            <thead class="thead-light">
-              <tr>
-                <th style="width:220px">Tipo</th>
-                <th>Local</th>
-                <th style="width:120px">Alegra ID</th>
-                <th style="width:170px">Actualizado</th>
-                <th style="width:90px" class="text-center">Activo</th>
-              </tr>
-            </thead>
-            <tbody id="mapBody">
-              <tr><td colspan="5" class="text-center text-muted py-3">—</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="card-footer text-muted" style="font-size:.8rem">
-          Estos mapeos son por <strong>empresa</strong>. Si falta alguno, créalo/ajústalo en Django Admin.
+          Enlaza cada cuenta local con el <strong>banco Alegra</strong> y la <strong>cuenta del PUC</strong>
+          en Alegra (misma cuenta contable que usa el journal en pagos y transferencias intercompany).
+          El banco Alegra solo aplica en transferencias de la misma empresa.
         </div>
       </div>
     </div>
@@ -851,6 +798,7 @@ const API = {
   intercompany: '/accounting/alegra/references/intercompany',
   local: '/accounting/alegra/references/local-accounts',
   saveBank: '/accounting/alegra/references/save-bank-mapping',
+  suggestBankCategory: '/accounting/alegra/references/suggest-bank-category',
   saveCategory: '/accounting/alegra/references/save-category-mapping',
   saveNumeration: '/accounting/alegra/references/save-numeration-mapping',
   saveRetention: '/accounting/alegra/references/save-retention-mapping',
@@ -1083,6 +1031,7 @@ let currentRefType = null;
 let remoteBanksIndex = [];
 let pendingLocalAccounts = null;
 let pendingBankMappings = null;
+let pendingBankCategoryMappings = null;
 let remoteCategoriesIndex = [];
 let remoteReceiptTemplates = [];
 let receiptAdvanceSearchTimer = null;
@@ -1151,7 +1100,9 @@ function buildAlegraOptionsForBanks() {
 }
 
 function renderRemote(refType, payload) {
-  const body = $('#remoteBody').empty();
+  const body = $('#remoteBody');
+  if (!body.length) return;
+  body.empty();
   let items = [];
 
   if (refType === 'banks') items = payload.banks || [];
@@ -1172,7 +1123,7 @@ function renderRemote(refType, payload) {
     remoteBanksIndex = items.slice();
     // If we already loaded local accounts + mappings, re-render now that options exist.
     if (pendingLocalAccounts && pendingBankMappings) {
-      renderLocalAccountsForBanks(pendingLocalAccounts, pendingBankMappings);
+      renderLocalAccountsForBanks(pendingLocalAccounts, pendingBankMappings, pendingBankCategoryMappings);
     }
   } else {
     remoteBanksIndex = [];
@@ -1222,7 +1173,9 @@ function renderRemote(refType, payload) {
 }
 
 function renderMappings(refType, payload) {
-  const body = $('#mapBody').empty();
+  const body = $('#mapBody');
+  if (!body.length) return;
+  body.empty();
   const items = payload.mappings || [];
   $('#mapCount').text(items.length);
   $('#mapTitle').text(mappingTypeFor(refType) || '—');
@@ -1250,9 +1203,8 @@ function renderMappings(refType, payload) {
   });
 }
 
-function renderLocalAccountsForBanks(localAccounts, mappings) {
+function renderLocalAccountsForBanks(localAccounts, mappings, categoryMappings) {
   const body = $('#localBody').empty();
-  $('#localTitle').text('banks');
   $('#localCount').text((localAccounts || []).length);
 
   const byLocalPk = {};
@@ -1260,10 +1212,18 @@ function renderLocalAccountsForBanks(localAccounts, mappings) {
     if (String(m.local_pk || '') !== '') byLocalPk[String(m.local_pk)] = m;
   });
 
+  const byPuc = {};
+  (categoryMappings || []).forEach(m => {
+    const code = String(m.local_code || '').trim();
+    if (code && !m.local_model && !m.local_pk) {
+      byPuc[code] = m;
+    }
+  });
+
   const optionsHtml = buildAlegraOptionsForBanks();
 
   if (!localAccounts || !localAccounts.length) {
-    body.append('<tr><td colspan="3" class="text-center text-muted py-3">No hay cuentas locales activas para esta empresa</td></tr>');
+    body.append('<tr><td colspan="4" class="text-center text-muted py-3">No hay cuentas locales activas para esta empresa</td></tr>');
     return;
   }
 
@@ -1271,39 +1231,85 @@ function renderLocalAccountsForBanks(localAccounts, mappings) {
     const localPk = String(acc.idcuenta);
     const existing = byLocalPk[localPk];
     const selected = existing ? String(existing.alegra_id) : '';
+    const puc = acc.nro_cuentacontable != null ? String(acc.nro_cuentacontable) : '';
+    const catMap = puc ? byPuc[puc] : null;
+    const catId = catMap ? String(catMap.alegra_id) : '';
+    const catLabel = catMap ? (catMap.description || `ID ${catMap.alegra_id}`) : '';
     const cuentaLabel = acc.cuentabanco || '(sin nombre)';
     const badge = acc.es_caja ? '<span class="badge badge-info ml-1">caja</span>' : '';
+    const pucHint = puc
+      ? `<div><small class="text-muted">PUC local: ${escHtml(puc)}</small></div>`
+      : '<div><small class="text-warning">Sin PUC local: no aplica journal</small></div>';
+    const catCell = puc
+      ? `<div style="position:relative">
+           <input class="form-control form-control-sm interface-pick bank-puc-pick" id="bankPucPick_${escHtml(localPk)}"
+                  placeholder="Buscar en Alegra…" autocomplete="off"
+                  value="${escHtml(catLabel)}"
+                  data-hidden="#bankPucId_${escHtml(localPk)}" data-menu="#bankPucMenu_${escHtml(localPk)}"/>
+           <input type="hidden" class="bank-category-id" id="bankPucId_${escHtml(localPk)}"
+                  value="${escHtml(catId)}" />
+           <div id="bankPucMenu_${escHtml(localPk)}" class="list-group shadow-sm interface-menu"
+                style="display:none;position:absolute;z-index:30;width:100%;max-height:220px;overflow:auto;margin-top:4px"></div>
+         </div>`
+      : '<small class="text-muted">—</small>';
     body.append(
-      `<tr data-local="${escHtml(localPk)}">
+      `<tr data-local="${escHtml(localPk)}" data-puc="${escHtml(puc)}">
         <td><code style="font-size:11px">${escHtml(localPk)}</code></td>
         <td>
           ${escHtml(cuentaLabel)} ${badge}
-          ${acc.nro_cuentacontable ? `<div><small class="text-muted">contable: ${escHtml(acc.nro_cuentacontable)}</small></div>` : ''}
+          ${pucHint}
         </td>
         <td>
-          <div class="d-flex" style="gap:6px;align-items:center">
-            <select class="form-control form-control-sm alegra-select" style="min-width:200px">
-              ${optionsHtml}
-            </select>
+          <select class="form-control form-control-sm alegra-select bank-alegra-select" style="min-width:180px">
+            ${optionsHtml}
+          </select>
+        </td>
+        <td>${catCell}</td>
+      </tr>
+      <tr data-local-actions="${escHtml(localPk)}">
+        <td colspan="4" class="pt-0 pb-2">
+          <div class="d-flex justify-content-end align-items-center" style="gap:8px">
+            ${existing ? `<small class="text-muted mr-auto">Banco: ${escHtml(existing.alegra_id)} · ${escHtml(existing.updated_at || '')}</small>` : '<small class="text-muted mr-auto">Sin mapear</small>'}
+            ${catMap ? `<small class="text-muted">PUC Alegra: ${escHtml(catMap.alegra_id)} · ${escHtml(catMap.updated_at || '')}</small>` : ''}
             <button class="btn btn-sm btn-success" onclick="saveBankMapping('${escHtml(localPk)}', this)">
               Guardar
             </button>
           </div>
-          ${existing ? `<small class="text-muted">Guardado: ${escHtml(existing.alegra_id)} · ${escHtml(existing.updated_at || '')}</small>` : '<small class="text-muted">Sin mapear</small>'}
         </td>
       </tr>`
     );
-    const row = body.find(`tr[data-local="${localPk.replace(/"/g,'&quot;')}"]`);
-    row.find('select.alegra-select').val(selected);
+    const row = body.find(`tr[data-local="${localPk.replace(/"/g,'&quot;')}"]`).first();
+    row.find('select.bank-alegra-select').val(selected);
   });
+}
+
+function suggestBankCategoryForRow(localPk) {
+  const empresa = $('#selEmpresa').val();
+  const row = $(`#localBody tr[data-local="${localPk}"]`).first();
+  const bankId = row.find('select.bank-alegra-select').val();
+  const puc = String(row.data('puc') || '').trim();
+  if (!empresa || !bankId || !puc) return;
+  $.get(`${API.suggestBankCategory}?empresa=${encodeURIComponent(empresa)}&bank_id=${encodeURIComponent(bankId)}`)
+    .done(data => {
+      if (!data.category_id) return;
+      row.find('.bank-category-id').val(String(data.category_id));
+      row.find('.bank-puc-pick').val(String(data.category_label || `ID ${data.category_id}`));
+    });
 }
 
 function saveBankMapping(localPk, btnEl) {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
-  const row = $(btnEl).closest('tr');
-  const alegraId = row.find('select.alegra-select').val();
+  const row = $(`#localBody tr[data-local="${localPk}"]`).first();
+  const alegraId = row.find('select.bank-alegra-select').val();
   if (!alegraId) { showAlert('error', 'Selecciona un banco de Alegra primero.'); return; }
+  const puc = String(row.data('puc') || '').trim();
+  const categoryId = row.find('.bank-category-id').val();
+  const categoryLabel = row.find('.bank-puc-pick').val();
+  if (puc && !categoryId) {
+    showAlert('error', `La cuenta tiene PUC ${puc}: indica la cuenta del PUC en Alegra (journal).`);
+    return;
+  }
 
   $(btnEl).prop('disabled', true).text('Guardando…');
   $.ajax({
@@ -1311,13 +1317,38 @@ function saveBankMapping(localPk, btnEl) {
     method: 'POST',
     contentType: 'application/json',
     headers: { 'X-CSRFToken': CSRF },
-    data: JSON.stringify({ empresa, local_idcuenta: localPk, alegra_id: alegraId }),
-  }).done(() => {
-    showAlert('success', 'Mapeo guardado.');
-    // refresh mappings panel
-    const mapType = mappingTypeFor('banks');
-    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=${encodeURIComponent(mapType)}`)
-      .done(data => renderMappings('banks', data));
+    data: JSON.stringify({
+      empresa,
+      local_idcuenta: localPk,
+      alegra_id: alegraId,
+      category_alegra_id: categoryId || '',
+      category_description: categoryLabel || '',
+    }),
+  }).done((resp) => {
+    const cat = resp.category_mapping;
+    let msg = 'Banco y cuenta PUC guardados.';
+    if (cat && cat.local_code) {
+      msg = `Guardado: banco Alegra ${alegraId}, PUC local ${cat.local_code} → cuenta Alegra ${cat.alegra_category_id}.`;
+    } else if (!puc) {
+      msg = 'Banco guardado (sin PUC local, no aplica journal).';
+    }
+    showAlert('success', msg);
+    $.when(
+      $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=bank_account`),
+      $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category`),
+    ).done((bankResp, catResp) => {
+      const bankData = bankResp[0] || bankResp;
+      const catData = catResp[0] || catResp;
+      pendingBankMappings = bankData.mappings || [];
+      pendingBankCategoryMappings = catData.mappings || [];
+      if (pendingLocalAccounts) {
+        renderLocalAccountsForBanks(
+          pendingLocalAccounts,
+          pendingBankMappings,
+          pendingBankCategoryMappings,
+        );
+      }
+    });
   }).fail(xhr => {
     const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
     showAlert('error', `Error guardando: <strong>${escHtml(msg)}</strong>`);
@@ -2822,8 +2853,7 @@ function searchReceiptAdvanceInline(query) {
         const cats = data.categories || [];
         receiptAdvanceById = {};
         cats.forEach(c => { if (c && c.id != null) receiptAdvanceById[String(c.id)] = c; });
-        // Keep remote table in sync (optional visual)
-        renderRemote('categories', { categories: cats });
+        // Optional: remote catalog table was removed from Bancos UI.
         $('#receiptAdvanceMenu').html(buildReceiptAdvanceMenu(cats)).show();
       })
       .fail(() => {
@@ -3668,59 +3698,46 @@ function doContactSyncRefs() {
   startOrResume();
 }
 
+function loadAlegraBankCatalog(empresa) {
+  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=banks`)
+    .done(data => {
+      remoteBanksIndex = (data.banks || []).slice();
+    });
+}
+
 function loadRef(refType) {
   const empresa = $('#selEmpresa').val();
   if (!empresa) { showAlert('error', 'Selecciona una empresa.'); return; }
+  if (refType !== 'banks') return;
   currentRefType = refType;
   showRefsSection('banks');
 
-  showAlert('info', 'Consultando Alegra y cargando mapeos…');
-  $('#remoteBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>');
-  $('#mapBody').html('<tr><td colspan="2" class="text-center text-muted py-3">Cargando…</td></tr>');
-  $('#localBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>');
+  showAlert('info', 'Cargando cuentas y catalogo Alegra…');
+  $('#localBody').html('<tr><td colspan="4" class="text-center text-muted py-3">Cargando…</td></tr>');
 
-  const mapType = mappingTypeFor(refType);
-
-  if (refType !== 'banks') {
-    pendingLocalAccounts = null;
-    pendingBankMappings = null;
-  }
-
-  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=${encodeURIComponent(refType)}`)
-    .done(data => {
-      renderRemote(refType, data);
-      showAlert('success', 'Datos de Alegra cargados.');
-    })
-    .fail(xhr => {
-      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
-      showAlert('error', `Error consultando Alegra: <strong>${escHtml(msg)}</strong>`);
-      $('#remoteBody').html('<tr><td colspan="3" class="text-center text-danger py-3">Error</td></tr>');
-    });
-
-  $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=${encodeURIComponent(mapType)}`)
-    .done(data => {
-      renderMappings(refType, data);
-      if (refType === 'banks') {
-        // also load local accounts for mapping UI
-        $.get(`${API.local}?empresa=${encodeURIComponent(empresa)}`)
-          .done(localData => {
-            pendingLocalAccounts = localData.local_accounts || [];
-            pendingBankMappings = data.mappings || [];
-            // If remote banks not loaded yet, we'll render once they arrive.
-            if (remoteBanksIndex && remoteBanksIndex.length) {
-              renderLocalAccountsForBanks(pendingLocalAccounts, pendingBankMappings);
-            } else {
-              $('#localBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Cargando bancos de Alegra…</td></tr>');
-            }
-          })
-          .fail(() => $('#localBody').html('<tr><td colspan="3" class="text-center text-danger py-3">Error</td></tr>'));
-      } else {
-        $('#localCount').text('0');
-        $('#localTitle').text(refType);
-        $('#localBody').html('<tr><td colspan="3" class="text-center text-muted py-3">Disponible para Bancos. (Podemos habilitar para otros tipos también.)</td></tr>');
-      }
-    })
-    .fail(() => $('#mapBody').html('<tr><td colspan="2" class="text-center text-danger py-3">Error</td></tr>'));
+  $.when(
+    loadAlegraBankCatalog(empresa),
+    $.get(`${API.local}?empresa=${encodeURIComponent(empresa)}`),
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=bank_account`),
+    $.get(`${API.maps}?empresa=${encodeURIComponent(empresa)}&mapping_type=category`),
+  ).done((_banksData, localData, bankMapData, catMapData) => {
+    const accPayload = localData[0] || localData;
+    const bankPayload = bankMapData[0] || bankMapData;
+    const catPayload = catMapData[0] || catMapData;
+    pendingLocalAccounts = accPayload.local_accounts || [];
+    pendingBankMappings = bankPayload.mappings || [];
+    pendingBankCategoryMappings = catPayload.mappings || [];
+    renderLocalAccountsForBanks(
+      pendingLocalAccounts,
+      pendingBankMappings,
+      pendingBankCategoryMappings,
+    );
+    showAlert('success', 'Cuentas cargadas.');
+  }).fail(xhr => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    showAlert('error', `Error cargando bancos: <strong>${escHtml(msg)}</strong>`);
+    $('#localBody').html('<tr><td colspan="4" class="text-center text-danger py-3">Error</td></tr>');
+  });
 }
 
 $('#selEmpresa').on('change', function() {
@@ -3787,6 +3804,11 @@ $(document).on('click', '.caja-concept-cat-menu button[data-id]', function() {
   $row.find('.caja-concept-cat-id').val(String($(this).data('id') || ''));
   $row.find('.caja-concept-cat-pick').val(String($(this).data('label') || ''));
   $(this).closest('.caja-concept-cat-menu').hide().empty();
+});
+
+$(document).on('change', 'select.bank-alegra-select', function() {
+  const localPk = $(this).closest('tr').data('local');
+  if (localPk) suggestBankCategoryForRow(String(localPk));
 });
 
 let cajaCreditSearchTimer = null;
