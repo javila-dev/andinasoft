@@ -21,6 +21,7 @@ from django.utils.html import escape
 logger = logging.getLogger(__name__)
 
 from accounting.gasto_poll import poll_gastos_alegra_notificaciones
+from accounting.gasto_aprobacion_seguimiento_poll import poll_gastos_aprobacion_seguimiento
 from accounting.gasto_tesoreria_poll import poll_gastos_tesoreria_aprobados
 from accounting.n8n_http import n8n_inbound_authorized
 from accounting.gasto_aprobacion import (
@@ -33,8 +34,10 @@ from accounting.gasto_aprobacion import (
     eliminar_gasto_alegra_pendiente_asignacion,
     crear_radicado_gasto_alegra,
     reasignar_gasto_alegra,
+    recordar_aprobador_gasto_alegra,
     empresa_config_sin_aprobador,
     factura_a_dict,
+    gasto_aprobacion_atraso_cutoff,
     sugerencias_asignacion_gasto_alegra,
     normalizar_alegra_bill_id,
     parse_aprobador_user_id_opcional,
@@ -131,6 +134,16 @@ def ajax_gastos_tesoreria_notificaciones_poll(request):
 
 @login_required
 @require_http_methods(['GET'])
+def ajax_gastos_aprobacion_seguimiento_poll(request):
+    known_pks = request.GET.get('known_pks') or ''
+    payload = poll_gastos_aprobacion_seguimiento(request.user, known_pks=known_pks)
+    if payload.get('enabled'):
+        payload['known_pks'] = known_pks
+    return JsonResponse(payload)
+
+
+@login_required
+@require_http_methods(['GET'])
 def ajax_gastos_alegra_sugerencias_asignacion(request):
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         return _json_error('Sin permiso Contabilidad.', 403)
@@ -195,12 +208,18 @@ def ajax_gastos_alegra_pendientes_asignar(request):
     if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
         return _json_error('Sin permiso Contabilidad.', 403)
     empresa = (request.GET.get('empresa') or '').strip()
+    solo_atrasados = (request.GET.get('solo_atrasados') or '').strip().lower() in ('1', 'true', 'yes')
     qs = Facturas.objects.filter(
         origen='Alegra',
         gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_ASIGNACION,
     ).select_related('empresa').order_by('-fecharadicado', '-pk')
     if empresa:
         qs = qs.filter(empresa_id=empresa)
+    if solo_atrasados:
+        from datetime import timedelta
+        from django.utils import timezone
+        ayer = timezone.localdate() - timedelta(days=1)
+        qs = qs.filter(fecharadicado__lte=ayer)
     data = [factura_a_dict(f) for f in qs[:500]]
     return JsonResponse({'data': data})
 
@@ -215,6 +234,7 @@ def ajax_gastos_alegra_pendientes_aprobar(request):
     if not usuario_es_aprobador_gasto(request.user) and not es_contabilidad:
         return _json_error('No es aprobador de gastos.', 403)
     empresa = (request.GET.get('empresa') or '').strip()
+    solo_atrasados = (request.GET.get('solo_atrasados') or '').strip().lower() in ('1', 'true', 'yes')
     qs = Facturas.objects.filter(
         origen='Alegra',
         gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
@@ -223,6 +243,8 @@ def ajax_gastos_alegra_pendientes_aprobar(request):
         qs = qs.filter(gasto_aprobador_asignado=request.user)
     if empresa:
         qs = qs.filter(empresa_id=empresa)
+    if solo_atrasados:
+        qs = qs.filter(gasto_asignado_en__lte=gasto_aprobacion_atraso_cutoff())
     qs = qs.order_by('-gasto_asignado_en', '-pk')
     data = [factura_a_dict(f) for f in qs[:500]]
     return JsonResponse({'data': data, 'es_contabilidad': es_contabilidad})
@@ -604,6 +626,30 @@ def ajax_gastos_alegra_soporte_pdf(request, radicado_pk):
     return _servir_soporte_radicado_pdf(
         request, factura, radicado_pk, log_prefix='ajax_gastos_alegra_soporte_pdf',
     )
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajax_gastos_alegra_recordar_aprobador(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            body = json.loads(request.body.decode() or '{}')
+        else:
+            body = request.POST
+        radicado = body.get('radicado')
+        fac = Facturas.objects.get(pk=radicado)
+        recordar_aprobador_gasto_alegra(request, factura=fac)
+        return JsonResponse({'ok': True, 'factura': factura_a_dict(fac)})
+    except Facturas.DoesNotExist:
+        return _json_error('Radicado no encontrado.', 404)
+    except PermissionError as exc:
+        return _json_error(exc, 403)
+    except (ValueError, TypeError) as exc:
+        return _json_error(exc, 400)
+    except Exception as exc:
+        return _json_error(exc, 500)
 
 
 @login_required

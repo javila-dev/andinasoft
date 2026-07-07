@@ -66,6 +66,13 @@
         {% endfor %}
       </select>
     </div>
+    <div class="col-md-3">
+      <label class="small font-weight-bold">Filtro</label>
+      <select id="filtroAtrasados" class="form-control form-control-sm">
+        <option value="">Todos</option>
+        <option value="1">Solo atrasados (1+ dia)</option>
+      </select>
+    </div>
     <div class="col-md-5 d-flex align-items-end flex-wrap">
       <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btnNuevoRadicado">
         <i class="fas fa-plus mr-1"></i>Nuevo radicado
@@ -87,6 +94,7 @@
           <th class="col-desc">Descripción</th>
           <th class="col-c">Factura</th>
           <th class="col-c">Fecha</th>
+          <th class="col-c">Dias</th>
           <th class="col-c">Valor</th>
           <th class="col-c">Acciones</th>
         </tr>
@@ -584,10 +592,23 @@ function cellTruncado(text, maxLen) {
   return '<span title="' + esc + '">' + escapeHtml(full.slice(0, maxLen)) + '…</span>';
 }
 
+function renderDiasAsignacion(row) {
+  var dias = row.dias_pendiente_asignacion;
+  if (dias == null || dias === '') return '<span class="text-muted">—</span>';
+  var n = Number(dias);
+  var cls = row.atrasado_asignacion ? 'text-danger font-weight-bold' : 'text-muted';
+  var txt = n === 0 ? 'Hoy' : (n === 1 ? '1 dia' : (n + ' dias'));
+  return '<span class="' + cls + '">' + txt + '</span>';
+}
+
 function loadTable() {
   const empresa = $('#filtroEmpresa').val() || '';
+  const soloAtrasados = $('#filtroAtrasados').val() || '';
   let url = '/accounting/ajax/gastos-alegra/pendientes-asignar';
-  if (empresa) url += '?empresa=' + encodeURIComponent(empresa);
+  var params = [];
+  if (empresa) params.push('empresa=' + encodeURIComponent(empresa));
+  if (soloAtrasados) params.push('solo_atrasados=' + encodeURIComponent(soloAtrasados));
+  if (params.length) url += '?' + params.join('&');
   tabla.ajax.url(url).load();
 }
 
@@ -665,6 +686,9 @@ $(function() {
       { data: 'descripcion', className: 'col-desc', orderable: false, render: function(v) { return cellTruncado(v, 55); } },
       { data: 'nrofactura', className: 'col-c', render: function(v) { return cellTruncado(v, 14); } },
       { data: 'fechafactura', className: 'col-c' },
+      { data: 'dias_pendiente_asignacion', className: 'col-c', orderable: true, render: function(v, t, row) {
+        return renderDiasAsignacion(row);
+      }},
       { data: 'valor', className: 'col-c text-nowrap', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
       { data: null, className: 'col-c text-nowrap btn-group-acciones', orderable: false, render: function(d, t, row) {
         var pk = row.pk;
@@ -682,7 +706,7 @@ $(function() {
   });
 
   $('#btnReload').on('click', loadTable);
-  $('#filtroEmpresa').on('change', loadTable);
+  $('#filtroEmpresa, #filtroAtrasados').on('change', loadTable);
 
   function consultarJournalEnModal() {
     const empresa = ($('#crearEmpresa').val() || '').trim();

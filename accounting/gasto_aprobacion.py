@@ -1,7 +1,9 @@
 """Flujo de aprobación de gastos con origen Alegra."""
 import json
 import re
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -195,10 +197,51 @@ def alegra_id_para_tabla(alegra_bill_id):
     return raw
 
 
+def gasto_aprobacion_atraso_horas():
+    try:
+        return max(1, int(getattr(settings, 'GASTO_APROBACION_ATRASO_HORAS', 24)))
+    except (TypeError, ValueError):
+        return 24
+
+
+def gasto_aprobacion_atraso_cutoff():
+    return timezone.now() - timedelta(hours=gasto_aprobacion_atraso_horas())
+
+
+def dias_desde_fecha(fecha):
+    if not fecha:
+        return None
+    return max(0, (timezone.localdate() - fecha).days)
+
+
+def dias_pendiente_aprobacion(fac):
+    if not fac.gasto_asignado_en:
+        return None
+    delta = timezone.now() - fac.gasto_asignado_en
+    return max(0, int(delta.total_seconds() // 86400))
+
+
+def gasto_aprobacion_atrasado(fac):
+    if fac.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_APROBACION:
+        return False
+    if not fac.gasto_asignado_en:
+        return False
+    return fac.gasto_asignado_en <= gasto_aprobacion_atraso_cutoff()
+
+
+def gasto_asignacion_atrasado(fac):
+    if fac.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_ASIGNACION:
+        return False
+    dias = dias_desde_fecha(fac.fecharadicado)
+    return dias is not None and dias >= 1
+
+
 def factura_a_dict(fac):
     alegra_bill = fac.alegra_bill_id or ''
     valor = int(fac.valor or 0)
     pago_neto = int(fac.pago_neto if fac.pago_neto is not None else valor)
+    dias_asignacion = dias_desde_fecha(fac.fecharadicado)
+    dias_aprobacion = dias_pendiente_aprobacion(fac)
     return {
         'pk': fac.pk,
         'nrofactura': fac.nrofactura,
@@ -223,6 +266,11 @@ def factura_a_dict(fac):
             fac.gasto_aprobador_asignado.get_full_name() or fac.gasto_aprobador_asignado.username
         ) if fac.gasto_aprobador_asignado_id else '',
         'gasto_aprobador_asignado_id': fac.gasto_aprobador_asignado_id,
+        'gasto_asignado_en': fac.gasto_asignado_en.isoformat() if fac.gasto_asignado_en else '',
+        'dias_pendiente_asignacion': dias_asignacion,
+        'dias_pendiente_aprobacion': dias_aprobacion,
+        'atrasado_asignacion': gasto_asignacion_atrasado(fac),
+        'atrasado_aprobacion': gasto_aprobacion_atrasado(fac),
         'idtercero': fac.idtercero or '',
         'gasto_es_canje': bool(getattr(fac, 'gasto_es_canje', False)),
     }
@@ -772,6 +820,36 @@ def reasignar_gasto_alegra(request, *, factura, oficina, aprobador_user_id, come
             )
 
     factura._gasto_reasignacion_notifico_aprobador = cambio_aprobador
+    return factura
+
+
+def recordar_aprobador_gasto_alegra(request, *, factura):
+    """Reenvia aviso n8n al aprobador asignado (seguimiento manual desde contabilidad)."""
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        raise PermissionError('Solo Contabilidad puede recordar al aprobador.')
+    if factura.origen != 'Alegra':
+        raise ValueError('Solo aplica a radicados con origen Alegra.')
+    if factura.gasto_aprobacion_estado != Facturas.GASTO_APROB_PENDIENTE_APROBACION:
+        raise ValueError('El radicado no esta pendiente de aprobacion.')
+    if not factura.gasto_aprobador_asignado_id:
+        raise ValueError('El radicado no tiene aprobador asignado.')
+
+    aprobador = factura.gasto_aprobador_asignado
+    label = (aprobador.get_full_name() or aprobador.username) if aprobador else '—'
+
+    from accounting.gasto_n8n_notify import notify_gasto_pendiente_aprobacion
+
+    notify_gasto_pendiente_aprobacion(
+        factura.pk,
+        assigned_by_user_id=request.user.pk,
+        trigger='recordatorio_manual',
+    )
+    history_facturas.objects.create(
+        factura=factura,
+        usuario=request.user,
+        accion=f'Recordatorio enviado al aprobador {label}'[:255],
+        ubicacion='Contabilidad',
+    )
     return factura
 
 

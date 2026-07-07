@@ -282,6 +282,7 @@ N8N_WEBHOOK_GASTO_APROBACION_SECRET = os.getenv('N8N_WEBHOOK_GASTO_APROBACION_SE
 # Links de un clic (WhatsApp): firma HMAC; default = secret webhook o SECRET_KEY
 GASTO_APROBACION_LINK_SECRET = os.getenv('GASTO_APROBACION_LINK_SECRET', '').strip()
 GASTO_APROBACION_LINK_MAX_AGE = int(os.getenv('GASTO_APROBACION_LINK_MAX_AGE', str(72 * 3600)))
+GASTO_APROBACION_ATRASO_HORAS = int(os.getenv('GASTO_APROBACION_ATRASO_HORAS', '24'))
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 

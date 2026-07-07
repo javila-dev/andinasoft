@@ -1,0 +1,118 @@
+<script>
+(function () {
+  var POLL_URL = '/accounting/ajax/gastos-alegra/aprobacion-seguimiento-poll';
+  var APROBAR_PATH = '/accounting/gastos-alegra/aprobar/';
+  var STORAGE_KEY = 'alegra_gasto_aprobacion_seguimiento_known_pks';
+  var INTERVAL_MS = 60000;
+  var timerId = null;
+  var primed = false;
+
+  function leerKnownPks() {
+    var v = sessionStorage.getItem(STORAGE_KEY);
+    if (!v) return [];
+    try {
+      var arr = JSON.parse(v);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function guardarKnownPks(pks) {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(pks || []));
+  }
+
+  function enPaginaAprobar() {
+    return window.location.pathname.indexOf(APROBAR_PATH) === 0;
+  }
+
+  function formatoValor(valor) {
+    try {
+      return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(valor);
+    } catch (e) {
+      return String(valor);
+    }
+  }
+
+  function textoDias(dias) {
+    if (dias == null || isNaN(dias)) return '';
+    var n = Number(dias);
+    if (n <= 0) return 'hoy';
+    return n === 1 ? '1 dia' : (n + ' dias');
+  }
+
+  function cuerpoToast(items) {
+    var maxLineas = 3;
+    var lineas = items.slice(0, maxLineas).map(function (it) {
+      return '<div>' + (it.nombretercero || '—') + ' · ' + (it.nrofactura || '—') +
+        '<br><span class="text-muted">' + (it.empresa_nombre || it.empresa || '') +
+        ' · ' + formatoValor(it.valor) +
+        (it.gasto_aprobador_asignado ? ' · ' + it.gasto_aprobador_asignado : '') +
+        (it.dias_pendiente != null ? ' · ' + textoDias(it.dias_pendiente) + ' sin aprobar' : '') +
+        '</span></div>';
+    });
+    var html = lineas.join('');
+    if (items.length > maxLineas) {
+      html += '<div class="text-muted mt-1">y ' + (items.length - maxLineas) + ' mas</div>';
+    }
+    html += '<div class="mt-2"><a href="' + APROBAR_PATH + '?solo_atrasados=1">Ver gastos sin aprobar</a></div>';
+    return html;
+  }
+
+  function tituloToast(n, total) {
+    if (n === 1) return 'Gasto sin aprobar';
+    if (total && total > n) return n + ' gastos sin aprobar (' + total + ' en total)';
+    return n + ' gastos sin aprobar';
+  }
+
+  function mostrarToastSiCorresponde(items, total) {
+    if (!items || !items.length) return;
+    if (enPaginaAprobar()) return;
+    if (typeof window.showAndinaToast !== 'function') return;
+    window.showAndinaToast(tituloToast(items.length, total), cuerpoToast(items), 'alert-warning');
+  }
+
+  function aplicarRespuesta(data) {
+    if (!data || !data.enabled) {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      return;
+    }
+
+    var allPks = Array.isArray(data.all_atrasados_pks) ? data.all_atrasados_pks : [];
+
+    if (!primed) {
+      primed = true;
+      guardarKnownPks(allPks);
+      return;
+    }
+
+    if (data.items && data.items.length) {
+      mostrarToastSiCorresponde(data.items, data.total_atrasados);
+    }
+    guardarKnownPks(allPks);
+  }
+
+  function poll() {
+    if (document.hidden) return;
+    var known = leerKnownPks();
+    $.getJSON(POLL_URL, { known_pks: known.join(',') })
+      .done(aplicarRespuesta)
+      .fail(function () { /* silencioso */ });
+  }
+
+  function iniciarPolling() {
+    if (timerId) return;
+    poll();
+    timerId = setInterval(poll, INTERVAL_MS);
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) poll();
+  });
+
+  $(document).ready(iniciarPolling);
+})();
+</script>

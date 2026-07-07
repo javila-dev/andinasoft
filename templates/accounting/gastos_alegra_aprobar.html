@@ -26,7 +26,7 @@
     <a class="btn btn-sm btn-outline-secondary" href="/accounting/gastos-alegra/asignar/">Asignar gastos</a>
   </div>
   {% if es_contabilidad %}
-  <p class="text-muted small">Como contabilidad ve todos los gastos pendientes de aprobación. Puede corregir oficina o transferir a otro aprobador si hubo un error; el nuevo aprobador recibe aviso por n8n.</p>
+  <p class="text-muted small">Como contabilidad ve todos los gastos pendientes de aprobacion. Puede recordar al aprobador, corregir oficina o transferir a otro aprobador; el nuevo aprobador recibe aviso por n8n.</p>
   {% else %}
   <p class="text-muted small">Gastos asignados a usted para confirmar que procede el pago. Si no ve filas, revise que contabilidad lo haya asignado a su usuario en <a href="/accounting/gastos-alegra/asignar/">Asignar gastos</a>.</p>
   {% endif %}
@@ -40,6 +40,13 @@
         {% for e in empresas %}
         <option value="{{ e.Nit }}">{{ e.nombre }}</option>
         {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="small font-weight-bold">Filtro</label>
+      <select id="filtroAtrasados" class="form-control form-control-sm">
+        <option value="">Todos</option>
+        <option value="1">Solo atrasados (24+ h)</option>
       </select>
     </div>
     <div class="col-md-2 d-flex align-items-end">
@@ -61,6 +68,7 @@
           <th>Proveedor</th>
           <th>Oficina</th>
           {% if es_contabilidad %}<th>Aprobador</th>{% endif %}
+          <th>Dias</th>
           <th>Valor</th>
           <th>Nota contable</th>
           <th></th>
@@ -172,6 +180,15 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+function renderDiasAprobacion(row) {
+  var dias = row.dias_pendiente_aprobacion;
+  if (dias == null || dias === '') return '<span class="text-muted">—</span>';
+  var n = Number(dias);
+  var cls = row.atrasado_aprobacion ? 'text-danger font-weight-bold' : 'text-muted';
+  var txt = n === 0 ? 'Hoy' : (n === 1 ? '1 dia' : (n + ' dias'));
+  return '<span class="' + cls + '">' + txt + '</span>';
+}
+
 function btnAccionIcon(cls, icon, title, attrs) {
   return '<button type="button" class="btn btn-xs btn-icon ' + cls + '" ' +
     'data-tip="' + escapeHtml(title) + '" ' +
@@ -224,6 +241,11 @@ $(function() {
       render: function(t) { return t || '—'; }
     });
   }
+  columns.push({
+    data: 'dias_pendiente_aprobacion',
+    defaultContent: '—',
+    render: function(v, t, row) { return renderDiasAprobacion(row); }
+  });
   columns.push(
     { data: 'valor', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
     { data: 'gasto_aprobacion_comentario_contable', defaultContent: '', render: function(t) {
@@ -233,7 +255,8 @@ $(function() {
       var html = btnAccionIcon('btn-outline-success btn-aprobar', 'fa-check', 'Aprobar gasto') +
         btnAccionIcon('btn-outline-secondary btn-soporte', 'fa-file-pdf', 'Ver PDF soporte');
       if (ES_CONTABILIDAD) {
-        html += btnAccionIcon('btn-outline-warning btn-reasignar', 'fa-user-edit', 'Corregir asignación');
+        html += btnAccionIcon('btn-outline-info btn-recordar', 'fa-bell', 'Recordar aprobador');
+        html += btnAccionIcon('btn-outline-warning btn-reasignar', 'fa-user-edit', 'Corregir asignacion');
       }
       return html;
     }}
@@ -263,13 +286,21 @@ $(function() {
 
   function loadTable() {
     var empresa = $('#filtroEmpresa').val() || '';
+    var soloAtrasados = $('#filtroAtrasados').val() || '';
     var url = '/accounting/ajax/gastos-alegra/pendientes-aprobar';
-    if (empresa) url += '?empresa=' + encodeURIComponent(empresa);
+    var params = [];
+    if (empresa) params.push('empresa=' + encodeURIComponent(empresa));
+    if (soloAtrasados) params.push('solo_atrasados=' + encodeURIComponent(soloAtrasados));
+    if (params.length) url += '?' + params.join('&');
     tabla.ajax.url(url).load();
   }
 
+  if (window.location.search.indexOf('solo_atrasados=1') >= 0) {
+    $('#filtroAtrasados').val('1');
+  }
+
   $('#btnReload').on('click', loadTable);
-  $('#filtroEmpresa').on('change', loadTable);
+  $('#filtroEmpresa, #filtroAtrasados').on('change', loadTable);
 
   $('#tablaPendientes').on('click', '.btn-soporte', function() {
     var row = tabla.row($(this).closest('tr')).data();
@@ -317,6 +348,27 @@ $(function() {
   });
 
   if (ES_CONTABILIDAD) {
+    $('#tablaPendientes').on('click', '.btn-recordar', function() {
+      var row = tabla.row($(this).closest('tr')).data();
+      var $btn = $(this).prop('disabled', true);
+      $.ajax({
+        url: '/accounting/ajax/gastos-alegra/recordar-aprobador',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': CSRF },
+        data: JSON.stringify({ radicado: row.pk }),
+        success: function() {
+          showAlert('success', 'Recordatorio enviado al aprobador por n8n.');
+        },
+        error: function(xhr) {
+          showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al enviar recordatorio');
+        },
+        complete: function() {
+          $btn.prop('disabled', false);
+        }
+      });
+    });
+
     $('#tablaPendientes').on('click', '.btn-reasignar', function() {
       rowReasignar = tabla.row($(this).closest('tr')).data();
       $('#lblRadReasignar').text(rowReasignar.pk);

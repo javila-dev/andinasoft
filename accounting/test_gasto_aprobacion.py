@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.utils import timezone
+from datetime import timedelta
 from unittest.mock import patch
 import json
 
@@ -11,6 +12,7 @@ from accounting.gasto_aprobacion import (
     asignar_gasto_alegra,
     factura_a_dict,
     reasignar_gasto_alegra,
+    recordar_aprobador_gasto_alegra,
     sugerencias_asignacion_gasto_alegra,
     empresa_config_sin_aprobador,
     normalizar_alegra_bill_id,
@@ -457,6 +459,48 @@ class GastoAprobacionTests(TestCase):
             trigger='reasignacion_contable',
             previous_approver_user_id=self.aprobador.pk,
         )
+
+    @patch('accounting.gasto_n8n_notify.notify_gasto_pendiente_aprobacion')
+    def test_recordar_aprobador_dispara_n8n(self, mock_notify):
+        from django.contrib.auth.models import Group
+
+        g, _ = Group.objects.get_or_create(name='Contabilidad')
+        self.contable.groups.add(g)
+        self.factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_APROBACION
+        self.factura.gasto_aprobador_asignado = self.aprobador
+        self.factura.gasto_asignado_en = timezone.now() - timedelta(days=2)
+        self.factura.save(update_fields=[
+            'gasto_aprobacion_estado',
+            'gasto_aprobador_asignado',
+            'gasto_asignado_en',
+        ])
+
+        recordar_aprobador_gasto_alegra(self._request(self.contable), factura=self.factura)
+        mock_notify.assert_called_once_with(
+            self.factura.pk,
+            assigned_by_user_id=self.contable.pk,
+            trigger='recordatorio_manual',
+        )
+        hist = history_facturas.objects.filter(factura=self.factura).order_by('-fecha').first()
+        self.assertIn('Recordatorio', hist.accion)
+
+    def test_factura_a_dict_incluye_antiguedad(self):
+        from datetime import date
+
+        self.factura.fecharadicado = date(2026, 5, 1)
+        self.factura.gasto_aprobacion_estado = Facturas.GASTO_APROB_PENDIENTE_APROBACION
+        self.factura.gasto_aprobador_asignado = self.aprobador
+        self.factura.gasto_asignado_en = timezone.now() - timedelta(days=2)
+        self.factura.save(update_fields=[
+            'fecharadicado',
+            'gasto_aprobacion_estado',
+            'gasto_aprobador_asignado',
+            'gasto_asignado_en',
+        ])
+        data = factura_a_dict(self.factura)
+        self.assertEqual(data['dias_pendiente_aprobacion'], 2)
+        self.assertTrue(data['atrasado_aprobacion'])
+        self.assertIn('gasto_asignado_en', data)
 
     @patch('accounting.gasto_n8n_notify.notify_gasto_pendiente_aprobacion')
     def test_reasignar_solo_oficina_no_dispara_n8n(self, mock_notify):

@@ -42,6 +42,7 @@ from accounting.gasto_aprobacion_views import (
     gastos_alegra_asignar,
     gastos_alegra_aprobar,
     ajax_gastos_alegra_notificaciones_poll,
+    ajax_gastos_aprobacion_seguimiento_poll,
     ajax_gastos_tesoreria_notificaciones_poll,
     ajax_gastos_alegra_sugerencias_asignacion,
     ajax_gastos_alegra_pendientes_asignar,
@@ -51,6 +52,7 @@ from accounting.gasto_aprobacion_views import (
     ajax_gastos_alegra_eliminar,
     ajax_gastos_alegra_aprobar,
     ajax_gastos_alegra_reasignar,
+    ajax_gastos_alegra_recordar_aprobador,
     ajax_gastos_alegra_soporte_pdf,
     ajax_gastos_alegra_crear,
     ajax_gastos_alegra_journal_preview,
@@ -7100,6 +7102,10 @@ urls = [
     ),
     path('ajax/gastos-alegra/notificaciones-poll', ajax_gastos_alegra_notificaciones_poll),
     path(
+        'ajax/gastos-alegra/aprobacion-seguimiento-poll',
+        ajax_gastos_aprobacion_seguimiento_poll,
+    ),
+    path(
         'ajax/gastos-alegra/tesoreria-notificaciones-poll',
         ajax_gastos_tesoreria_notificaciones_poll,
     ),
@@ -7117,6 +7123,7 @@ urls = [
     path('ajax/gastos-alegra/eliminar', ajax_gastos_alegra_eliminar),
     path('ajax/gastos-alegra/aprobar', ajax_gastos_alegra_aprobar),
     path('ajax/gastos-alegra/reasignar', ajax_gastos_alegra_reasignar),
+    path('ajax/gastos-alegra/recordar-aprobador', ajax_gastos_alegra_recordar_aprobador),
     path(
         'ajax/gastos-alegra/soporte-pdf/<int:radicado_pk>',
         ajax_gastos_alegra_soporte_pdf,
