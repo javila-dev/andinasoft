@@ -47,6 +47,7 @@ from accounting.gasto_aprobacion_views import (
     ajax_gastos_alegra_sugerencias_asignacion,
     ajax_gastos_alegra_pendientes_asignar,
     ajax_gastos_alegra_pendientes_aprobar,
+    ajax_gastos_alegra_seguimiento_aprobacion_resumen,
     ajax_gastos_alegra_aprobadores,
     ajax_gastos_alegra_asignar,
     ajax_gastos_alegra_eliminar,
@@ -7112,6 +7113,10 @@ urls = [
     path('ajax/gastos-alegra/sugerencias-asignacion', ajax_gastos_alegra_sugerencias_asignacion),
     path('ajax/gastos-alegra/pendientes-asignar', ajax_gastos_alegra_pendientes_asignar),
     path('ajax/gastos-alegra/pendientes-aprobar', ajax_gastos_alegra_pendientes_aprobar),
+    path(
+        'ajax/gastos-alegra/seguimiento-aprobacion-resumen',
+        ajax_gastos_alegra_seguimiento_aprobacion_resumen,
+    ),
     path('ajax/gastos-alegra/aprobadores', ajax_gastos_alegra_aprobadores),
     path('ajax/gastos-alegra/crear', ajax_gastos_alegra_crear),
     path('ajax/gastos-alegra/journal-preview', ajax_gastos_alegra_journal_preview),

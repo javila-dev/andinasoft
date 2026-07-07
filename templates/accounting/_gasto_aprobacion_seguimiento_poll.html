@@ -1,7 +1,7 @@
 <script>
 (function () {
   var POLL_URL = '/accounting/ajax/gastos-alegra/aprobacion-seguimiento-poll';
-  var APROBAR_PATH = '/accounting/gastos-alegra/aprobar/';
+  var ASIGNAR_PATH = '/accounting/gastos-alegra/asignar/';
   var STORAGE_KEY = 'alegra_gasto_aprobacion_seguimiento_known_pks';
   var INTERVAL_MS = 60000;
   var timerId = null;
@@ -22,8 +22,8 @@
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(pks || []));
   }
 
-  function enPaginaAprobar() {
-    return window.location.pathname.indexOf(APROBAR_PATH) === 0;
+  function enPaginaAsignar() {
+    return window.location.pathname.indexOf(ASIGNAR_PATH) === 0;
   }
 
   function formatoValor(valor) {
@@ -55,7 +55,7 @@
     if (items.length > maxLineas) {
       html += '<div class="text-muted mt-1">y ' + (items.length - maxLineas) + ' mas</div>';
     }
-    html += '<div class="mt-2"><a href="' + APROBAR_PATH + '?solo_atrasados=1">Ver gastos sin aprobar</a></div>';
+    html += '<div class="mt-2"><a href="' + ASIGNAR_PATH + '?abrir_seguimiento=1">Ver gastos sin aprobar</a></div>';
     return html;
   }
 
@@ -67,7 +67,7 @@
 
   function mostrarToastSiCorresponde(items, total) {
     if (!items || !items.length) return;
-    if (enPaginaAprobar()) return;
+    if (enPaginaAsignar()) return;
     if (typeof window.showAndinaToast !== 'function') return;
     window.showAndinaToast(tituloToast(items.length, total), cuerpoToast(items), 'alert-warning');
   }

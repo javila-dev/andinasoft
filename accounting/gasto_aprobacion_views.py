@@ -38,6 +38,7 @@ from accounting.gasto_aprobacion import (
     empresa_config_sin_aprobador,
     factura_a_dict,
     gasto_aprobacion_atraso_cutoff,
+    gasto_aprobacion_atraso_horas,
     sugerencias_asignacion_gasto_alegra,
     normalizar_alegra_bill_id,
     parse_aprobador_user_id_opcional,
@@ -248,6 +249,29 @@ def ajax_gastos_alegra_pendientes_aprobar(request):
     qs = qs.order_by('-gasto_asignado_en', '-pk')
     data = [factura_a_dict(f) for f in qs[:500]]
     return JsonResponse({'data': data, 'es_contabilidad': es_contabilidad})
+
+
+@login_required
+@require_http_methods(['GET'])
+def ajax_gastos_alegra_seguimiento_aprobacion_resumen(request):
+    if not check_groups(request, ('Contabilidad',), raise_exception=False) and not request.user.is_superuser:
+        return _json_error('Sin permiso Contabilidad.', 403)
+    empresa = (request.GET.get('empresa') or '').strip()
+    qs = Facturas.objects.filter(
+        origen='Alegra',
+        gasto_aprobacion_estado=Facturas.GASTO_APROB_PENDIENTE_APROBACION,
+    )
+    if empresa:
+        qs = qs.filter(empresa_id=empresa)
+    total_atrasados = qs.filter(
+        gasto_asignado_en__isnull=False,
+        gasto_asignado_en__lte=gasto_aprobacion_atraso_cutoff(),
+    ).count()
+    return JsonResponse({
+        'total_pendientes': qs.count(),
+        'total_atrasados': total_atrasados,
+        'atraso_horas': gasto_aprobacion_atraso_horas(),
+    })
 
 
 @login_required

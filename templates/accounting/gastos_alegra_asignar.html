@@ -44,15 +44,23 @@
   .historial-asignacion .hist-line { margin-bottom: 0.2rem; }
   .historial-asignacion .hist-line:last-child { margin-bottom: 0; }
   .sugerencia-hint { font-size: 10px; color: #17a2b8; }
+  #tablaSeguimiento th, #tablaSeguimiento td { text-align: center; }
+  #btnAbrirSeguimiento .badge { font-size: 10px; vertical-align: middle; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="container-fluid py-4" style="max-width:1200px">
-  <div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
     <h4 class="mb-0"><i class="fas fa-tasks mr-2"></i>Asignar gastos Alegra</h4>
-    <a class="btn btn-sm btn-outline-secondary" href="/accounting/alegra/webhooks/">Webhooks Alegra</a>
+    <div class="d-flex align-items-center flex-wrap">
+      <button type="button" class="btn btn-sm btn-warning mr-2 mb-1 d-none" id="btnAbrirSeguimiento" data-tip="Gastos esperando aprobacion del responsable">
+        <i class="fas fa-bell mr-1"></i>Seguimiento aprobacion
+        <span class="badge badge-danger ml-1" id="badgeSeguimiento">0</span>
+      </button>
+      <a class="btn btn-sm btn-outline-secondary mb-1" href="/accounting/alegra/webhooks/">Webhooks Alegra</a>
+    </div>
   </div>
-  <p class="text-muted small">Radicados Alegra pendientes de oficina (webhook o <strong>manual</strong>). Sin aprobador solo si la empresa tiene tope configurado en Admin y el valor no lo supera; se pedirá confirmación antes de guardar. Use <strong>Descartar</strong> para quitar facturas que no requieren radicación (solo elimina el registro en AndinaSoft; el bill en Alegra no se borra).</p>
+  <p class="text-muted small">Radicados Alegra pendientes de oficina (webhook o <strong>manual</strong>). Sin aprobador solo si la empresa tiene tope configurado en Admin y el valor no lo supera; se pedira confirmacion antes de guardar. Use <strong>Descartar</strong> para quitar facturas que no requieren radicacion (solo elimina el registro en AndinaSoft; el bill en Alegra no se borra).</p>
 
   <div id="alertBox"></div>
 
@@ -67,10 +75,10 @@
       </select>
     </div>
     <div class="col-md-3">
-      <label class="small font-weight-bold">Filtro</label>
+      <label class="small font-weight-bold">Filtro asignacion</label>
       <select id="filtroAtrasados" class="form-control form-control-sm">
         <option value="">Todos</option>
-        <option value="1">Solo atrasados (1+ dia)</option>
+        <option value="1">Solo atrasados (1+ dia sin asignar)</option>
       </select>
     </div>
     <div class="col-md-5 d-flex align-items-end flex-wrap">
@@ -100,6 +108,54 @@
         </tr>
       </thead>
     </table>
+  </div>
+</div>
+
+<div class="modal fade" id="modalSeguimiento" tabindex="-1">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-hourglass-half mr-2"></i>Seguimiento de aprobacion</h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Gastos ya asignados que esperan respuesta del aprobador. Use <strong>Recordar</strong> para reenviar el aviso por WhatsApp (n8n) o corrija la asignacion si hubo error.</p>
+        <div class="form-row mb-3">
+          <div class="col-md-4">
+            <label class="small font-weight-bold">Filtro</label>
+            <select id="filtroAtrasadosAprobacion" class="form-control form-control-sm">
+              <option value="">Todos pendientes</option>
+              <option value="1">Solo sin aprobar (24+ h)</option>
+            </select>
+            <small class="text-muted">Respeta la empresa seleccionada en la pantalla principal.</small>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button type="button" class="btn btn-sm btn-outline-primary mb-1" id="btnReloadSeguimiento" data-tip="Actualizar lista">
+              <i class="fas fa-sync-alt"></i><span class="sr-only">Actualizar</span>
+            </button>
+          </div>
+        </div>
+        <div class="table-responsive bg-white border rounded p-2">
+          <table id="tablaSeguimiento" class="table table-sm table-hover w-100 gasto-alegra-table">
+            <thead>
+              <tr>
+                <th class="col-c">Rad</th>
+                <th class="col-c col-emp">Empresa</th>
+                <th class="col-c col-prov">Proveedor</th>
+                <th class="col-c">Oficina</th>
+                <th class="col-c">Aprobador</th>
+                <th class="col-c">Dias</th>
+                <th class="col-c">Valor</th>
+                <th class="col-c">Acciones</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -280,13 +336,56 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalReasignar" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Corregir asignacion #<span id="lblRadReasignar"></span></h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted" id="resumenReasignar"></p>
+        <div class="form-group">
+          <label class="small font-weight-bold">Oficina</label>
+          <select id="selOficinaReasignar" class="form-control form-control-sm" required>
+            <option value="">Seleccione…</option>
+            <option value="MONTERIA">MONTERIA</option>
+            <option value="MEDELLIN">MEDELLIN</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="small font-weight-bold">Aprobador</label>
+          <select id="selAprobadorReasignar" class="form-control form-control-sm" required>
+            <option value="">Cargando…</option>
+          </select>
+        </div>
+        <div class="form-group mb-0">
+          <label class="small font-weight-bold">Comentario para el aprobador</label>
+          <textarea id="txtComentarioReasignar" class="form-control form-control-sm" rows="3" maxlength="2000" placeholder="Opcional: aclaracion del cambio"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-primary btn-sm btn-icon-modal" id="btnVerSoporteReasignar" data-tip="Ver soporte PDF">
+          <i class="fas fa-file-pdf"></i><span class="sr-only">Ver soporte PDF</span>
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm btn-icon-modal" data-dismiss="modal" data-tip="Cancelar">
+          <i class="fas fa-times"></i><span class="sr-only">Cancelar</span>
+        </button>
+        <button type="button" class="btn btn-warning btn-sm btn-icon-modal" id="btnConfirmarReasignar" data-tip="Guardar y notificar">
+          <i class="fas fa-paper-plane"></i><span class="sr-only">Guardar y notificar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block js %}
 <script>
 const CSRF = '{{ csrf_token }}';
-let tabla, radicadoActual = null, empresaRad = '', radicadoValor = 0, radicadoPagoNeto = null;
-let radicadoRequierePagoNetoAlegra = false, radicadoRow = null, pagoNetoPreviewOk = true;
+let tabla, tablaSeguimiento, radicadoActual = null, empresaRad = '', radicadoValor = 0, radicadoPagoNeto = null;
+let radicadoRequierePagoNetoAlegra = false, radicadoRow = null, pagoNetoPreviewOk = true, rowReasignar = null;
 const OPT_SIN_APROB = '<option value="">— Sin aprobador (aprobación automática) —</option>';
 
 function showAlert(type, html) {
@@ -328,7 +427,7 @@ function confirmarYEliminarRadicado(row, onSuccessExtra) {
     var el = res.eliminado || {};
     showAlert('success', 'Radicado #' + el.pk + ' descartado.');
     if (typeof onSuccessExtra === 'function') onSuccessExtra();
-    loadTable();
+    refrescarPantallaAsignar();
   });
 }
 
@@ -601,6 +700,15 @@ function renderDiasAsignacion(row) {
   return '<span class="' + cls + '">' + txt + '</span>';
 }
 
+function renderDiasAprobacion(row) {
+  var dias = row.dias_pendiente_aprobacion;
+  if (dias == null || dias === '') return '<span class="text-muted">—</span>';
+  var n = Number(dias);
+  var cls = row.atrasado_aprobacion ? 'text-danger font-weight-bold' : 'text-muted';
+  var txt = n === 0 ? 'Hoy' : (n === 1 ? '1 dia' : (n + ' dias'));
+  return '<span class="' + cls + '">' + txt + '</span>';
+}
+
 function loadTable() {
   const empresa = $('#filtroEmpresa').val() || '';
   const soloAtrasados = $('#filtroAtrasados').val() || '';
@@ -610,6 +718,106 @@ function loadTable() {
   if (soloAtrasados) params.push('solo_atrasados=' + encodeURIComponent(soloAtrasados));
   if (params.length) url += '?' + params.join('&');
   tabla.ajax.url(url).load();
+}
+
+function loadTableSeguimiento() {
+  if (!tablaSeguimiento) return;
+  const empresa = $('#filtroEmpresa').val() || '';
+  const soloAtrasados = $('#filtroAtrasadosAprobacion').val() || '';
+  let url = '/accounting/ajax/gastos-alegra/pendientes-aprobar';
+  var params = [];
+  if (empresa) params.push('empresa=' + encodeURIComponent(empresa));
+  if (soloAtrasados) params.push('solo_atrasados=' + encodeURIComponent(soloAtrasados));
+  if (params.length) url += '?' + params.join('&');
+  tablaSeguimiento.ajax.url(url).load();
+}
+
+var tablaSeguimientoInicializada = false;
+
+function initTablaSeguimientoSiHaceFalta() {
+  if (tablaSeguimientoInicializada) return;
+  tablaSeguimiento = $('#tablaSeguimiento').DataTable({
+    ajax: {
+      url: '/accounting/ajax/gastos-alegra/pendientes-aprobar',
+      dataSrc: 'data',
+      error: function(xhr) {
+        var msg = (xhr.responseJSON || {}).detail || ('Error ' + xhr.status + ' al cargar seguimiento');
+        showAlert('danger', msg);
+      }
+    },
+    columns: [
+      { data: 'pk', className: 'col-c' },
+      { data: 'empresa_nombre', className: 'col-c col-emp', render: function(v) { return cellTruncado(v, 18); } },
+      { data: 'nombretercero', className: 'col-c col-prov', render: function(v) { return cellTruncado(v, 22); } },
+      { data: 'oficina', className: 'col-c', defaultContent: '—' },
+      { data: 'gasto_aprobador_asignado', className: 'col-c', defaultContent: '—', render: function(v) { return v || '—'; } },
+      { data: 'dias_pendiente_aprobacion', className: 'col-c', render: function(v, t, row) { return renderDiasAprobacion(row); } },
+      { data: 'valor', className: 'col-c text-nowrap', render: function(v) { return v != null ? Number(v).toLocaleString('es-CO') : ''; } },
+      { data: null, className: 'col-c text-nowrap btn-group-acciones', orderable: false, render: function(d, t, row) {
+        return btnAccionIcon('btn-outline-info btn-recordar', 'fa-bell', 'Recordar aprobador') +
+          btnAccionIcon('btn-outline-warning btn-reasignar', 'fa-user-edit', 'Corregir asignacion') +
+          btnAccionIcon('btn-outline-secondary btn-soporte-seg', 'fa-file-pdf', 'Ver PDF soporte');
+      }}
+    ],
+    order: [[5, 'desc'], [0, 'desc']],
+    autoWidth: false,
+    scrollX: true,
+    language: { url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Spanish.json' }
+  });
+  tablaSeguimientoInicializada = true;
+}
+
+function actualizarBadgeSeguimiento(data) {
+  var total = Number((data && data.total_pendientes) || 0);
+  var atrasados = Number((data && data.total_atrasados) || 0);
+  if (total > 0) {
+    $('#btnAbrirSeguimiento').removeClass('d-none');
+    $('#badgeSeguimiento').text(atrasados > 0 ? atrasados : total);
+    $('#btnAbrirSeguimiento').toggleClass('btn-danger', atrasados > 0).toggleClass('btn-warning', atrasados <= 0);
+  } else {
+    $('#btnAbrirSeguimiento').addClass('d-none');
+  }
+}
+
+function actualizarResumenSeguimiento() {
+  var empresa = $('#filtroEmpresa').val() || '';
+  return $.getJSON(
+    '/accounting/ajax/gastos-alegra/seguimiento-aprobacion-resumen',
+    empresa ? { empresa: empresa } : {}
+  ).done(function(data) {
+    actualizarBadgeSeguimiento(data);
+    window._resumenSeguimientoAlegra = data;
+  });
+}
+
+function mostrarToastSeguimientoAlCargar(data) {
+  if (!data || !data.total_pendientes) return;
+  if (typeof window.showAndinaToast !== 'function') return;
+  var atrasados = Number(data.total_atrasados || 0);
+  var titulo = atrasados > 0 ? 'Gastos sin aprobar' : 'Gastos en aprobacion';
+  var msg = atrasados > 0
+    ? 'Hay ' + atrasados + ' gasto(s) con mas de 24 h sin respuesta del aprobador.'
+    : 'Hay ' + data.total_pendientes + ' gasto(s) esperando aprobacion.';
+  var html = msg + '<div class="mt-2"><a href="#" class="alert-link" id="toastLinkSeguimiento">Abrir seguimiento</a></div>';
+  window.showAndinaToast(titulo, html, 'alert-warning');
+  setTimeout(function() {
+    $('#toastLinkSeguimiento').on('click', function(e) {
+      e.preventDefault();
+      abrirModalSeguimiento(atrasados > 0);
+    });
+  }, 0);
+}
+
+function abrirModalSeguimiento(soloAtrasados) {
+  $('#filtroAtrasadosAprobacion').val(soloAtrasados ? '1' : '');
+  $('#modalSeguimiento').modal('show');
+}
+
+window.abrirSeguimientoAprobacion = abrirModalSeguimiento;
+
+function refrescarPantallaAsignar() {
+  loadTable();
+  actualizarResumenSeguimiento();
 }
 
 function resetFormCrear() {
@@ -705,8 +913,128 @@ $(function() {
     language: { url: '//cdn.datatables.net/plug-ins/1.10.24/i18n/Spanish.json' }
   });
 
-  $('#btnReload').on('click', loadTable);
-  $('#filtroEmpresa, #filtroAtrasados').on('change', loadTable);
+  $('#btnAbrirSeguimiento').on('click', function() {
+    abrirModalSeguimiento(false);
+  });
+
+  $('#modalSeguimiento').on('shown.bs.modal', function() {
+    initTablaSeguimientoSiHaceFalta();
+    loadTableSeguimiento();
+    if (tablaSeguimiento) {
+      tablaSeguimiento.columns.adjust();
+    }
+  });
+
+  $('#btnReload').on('click', refrescarPantallaAsignar);
+  $('#btnReloadSeguimiento').on('click', loadTableSeguimiento);
+  $('#filtroEmpresa').on('change', refrescarPantallaAsignar);
+  $('#filtroAtrasados').on('change', loadTable);
+  $('#filtroAtrasadosAprobacion').on('change', loadTableSeguimiento);
+
+  actualizarResumenSeguimiento().done(function(data) {
+    mostrarToastSeguimientoAlCargar(data);
+    if (window.location.search.indexOf('abrir_seguimiento=1') >= 0 ||
+        window.location.search.indexOf('seguimiento_atrasados=1') >= 0) {
+      abrirModalSeguimiento(window.location.search.indexOf('seguimiento_atrasados=1') >= 0);
+    }
+  });
+
+  $('#tablaSeguimiento').on('click', '.btn-soporte-seg', function() {
+    var row = tablaSeguimiento.row($(this).closest('tr')).data();
+    window.open('/accounting/ajax/gastos-alegra/soporte-pdf/' + row.pk, '_blank', 'noopener');
+  });
+
+  $('#tablaSeguimiento').on('click', '.btn-recordar', function() {
+    var row = tablaSeguimiento.row($(this).closest('tr')).data();
+    var $btn = $(this).prop('disabled', true);
+    $.ajax({
+      url: '/accounting/ajax/gastos-alegra/recordar-aprobador',
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({ radicado: row.pk }),
+      success: function() {
+        showAlert('success', 'Recordatorio enviado al aprobador por n8n.');
+      },
+      error: function(xhr) {
+        showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al enviar recordatorio');
+      },
+      complete: function() {
+        $btn.prop('disabled', false);
+      }
+    });
+  });
+
+  $('#tablaSeguimiento').on('click', '.btn-reasignar', function() {
+    rowReasignar = tablaSeguimiento.row($(this).closest('tr')).data();
+    $('#lblRadReasignar').text(rowReasignar.pk);
+    $('#resumenReasignar').html(
+      '<strong>' + escapeHtml(rowReasignar.nombretercero || '—') + '</strong> · $' +
+      Number(rowReasignar.valor || 0).toLocaleString('es-CO') +
+      '<br>Actual: <strong>' + escapeHtml(rowReasignar.oficina || '—') + '</strong> · ' +
+      escapeHtml(rowReasignar.gasto_aprobador_asignado || '—')
+    );
+    $('#selOficinaReasignar').val(rowReasignar.oficina || '');
+    $('#txtComentarioReasignar').val(rowReasignar.gasto_aprobacion_comentario_contable || '');
+    loadAprobadores(
+      rowReasignar.empresa,
+      $('#selAprobadorReasignar'),
+      null
+    ).always(function() {
+      if (rowReasignar.gasto_aprobador_asignado_id) {
+        $('#selAprobadorReasignar').val(String(rowReasignar.gasto_aprobador_asignado_id));
+      }
+    });
+    $('#modalReasignar').modal('show');
+  });
+
+  $('#btnVerSoporteReasignar').on('click', function() {
+    if (rowReasignar) {
+      window.open('/accounting/ajax/gastos-alegra/soporte-pdf/' + rowReasignar.pk, '_blank', 'noopener');
+    }
+  });
+
+  $('#btnConfirmarReasignar').on('click', function() {
+    if (!rowReasignar) return;
+    var oficina = $('#selOficinaReasignar').val();
+    var aprobador_id = $('#selAprobadorReasignar').val();
+    if (!oficina) {
+      showAlert('warning', 'Seleccione la oficina.');
+      return;
+    }
+    if (!aprobador_id) {
+      showAlert('warning', 'Seleccione un aprobador.');
+      return;
+    }
+    var $btn = $(this).prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i><span class="sr-only">Guardando</span>');
+    $.ajax({
+      url: '/accounting/ajax/gastos-alegra/reasignar',
+      method: 'POST',
+      contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify({
+        radicado: rowReasignar.pk,
+        oficina: oficina,
+        aprobador_id: aprobador_id,
+        comentario_contable: $('#txtComentarioReasignar').val()
+      }),
+      success: function(res) {
+        $('#modalReasignar').modal('hide');
+        var msg = res.notifico_aprobador
+          ? 'Asignacion corregida. Se notifico al nuevo aprobador por n8n.'
+          : 'Asignacion corregida (sin cambio de aprobador; no se envio aviso n8n).';
+        showAlert('success', msg);
+        loadTableSeguimiento();
+        actualizarResumenSeguimiento();
+      },
+      error: function(xhr) {
+        showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al reasignar');
+      },
+      complete: function() {
+        $btn.prop('disabled', false).html('<i class="fas fa-paper-plane"></i><span class="sr-only">Guardar y notificar</span>');
+      }
+    });
+  });
 
   function consultarJournalEnModal() {
     const empresa = ($('#crearEmpresa').val() || '').trim();
@@ -843,7 +1171,7 @@ $(function() {
           ? 'Radicado #' + res.factura.pk + ' creado y aprobado (sin aprobador).'
           : 'Radicado #' + res.factura.pk + ' creado y enviado al aprobador.';
         showAlert('success', msg);
-        loadTable();
+        refrescarPantallaAsignar();
       },
       error: function(xhr) {
         var detail = (xhr.responseJSON || {}).detail;
@@ -985,7 +1313,7 @@ $(function() {
           ? (fac.gasto_es_canje ? 'Asignación guardada. Gasto en canje listo para tesorería.' : 'Asignación guardada. Gasto aprobado.')
           : 'Asignación guardada. Pendiente de aprobación.';
         showAlert('success', msg);
-        loadTable();
+        refrescarPantallaAsignar();
       },
       error: function(xhr) {
         showAlert('danger', (xhr.responseJSON || {}).detail || 'Error al asignar');
