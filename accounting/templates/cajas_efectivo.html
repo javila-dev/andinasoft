@@ -627,35 +627,28 @@
     $('.rowpagos').hide()
     $('#id_check_pagado').parent('.form-check').hide()
 
-    // Initialize datepicker for datefield elements with date restrictions
+    // Restriccion de fechas: solo aplica al modal "Registrar gasto" (#id_fecha).
     let today = new Date()
-    let initmonth;
+    let gastoMinDate;
 
     if (today.getDate() <= 5){
-      // Go back to day 16 of previous month (Date constructor handles year boundary automatically)
-      initmonth = new Date(today.getFullYear(), today.getMonth() - 1, 16)
+      // Primeros 5 dias: permitir gastos desde el dia 16 del mes anterior
+      gastoMinDate = new Date(today.getFullYear(), today.getMonth() - 1, 16)
     }
     else {
-      // First day of current month
-      initmonth = new Date(today.getFullYear(), today.getMonth(), 1)
+      // Resto del mes: solo gastos del mes actual
+      gastoMinDate = new Date(today.getFullYear(), today.getMonth(), 1)
     }
 
     if (abrir_mes){
-      // Override with specific month from parameter
-      // If mes_abrir is greater than current month, it's from the previous year
+      // Parametro abrir_mes_anterior: abrir un mes especifico
       let yearForAbrirMes = today.getFullYear();
       if (mes_abrir > today.getMonth() + 1) {
         yearForAbrirMes = today.getFullYear() - 1;
       }
-      initmonth = new Date(yearForAbrirMes, mes_abrir - 1, 1)
+      gastoMinDate = new Date(yearForAbrirMes, mes_abrir - 1, 1)
     }
 
-    let endMonth = new Date()
-
-    // Quitar readonly para permitir apertura por click/teclado en todos los navegadores.
-    $('#id_fecha_arqueo, #id_fecha_desde, #id_fecha_hasta, #id_fecha').removeAttr('readonly');
-
-    // Usar datepicker nativo del navegador para evitar fallos silenciosos de plugins/CDN.
     const toIsoDate = (dateObj) => {
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -663,14 +656,23 @@
       return `${year}-${month}-${day}`;
     };
 
-    const minDateStr = toIsoDate(initmonth);
-    const maxDateStr = toIsoDate(endMonth);
-    $('#id_fecha_arqueo').attr({ type: 'date', max: maxDateStr }).removeAttr('readonly');
-    $("#id_fecha_desde, #id_fecha_hasta, #id_fecha").each(function() {
-      $(this).attr({ type: 'date', min: minDateStr, max: maxDateStr }).removeAttr('readonly');
-    });
+    const gastoMinDateStr = toIsoDate(gastoMinDate);
+    const maxDateStr = toIsoDate(today);
 
-    // En Chrome algunos inputs date no abren picker visual sin invocarlo explícitamente.
+    // Quitar readonly para permitir apertura por click/teclado en todos los navegadores.
+    $('#id_fecha_arqueo, #id_fecha_desde, #id_fecha_hasta, #id_fecha').removeAttr('readonly');
+
+    // Filtros de movimientos: sin restriccion de mes anterior
+    $('#id_fecha_desde').attr({ type: 'date' }).removeAttr('min readonly');
+    $('#id_fecha_hasta').attr({ type: 'date', max: maxDateStr }).removeAttr('min readonly');
+
+    // Arqueo: solo limite superior (hoy)
+    $('#id_fecha_arqueo').attr({ type: 'date', max: maxDateStr }).removeAttr('min readonly');
+
+    // Modal registrar gasto: restriccion de 5 dias del mes anterior
+    $('#id_fecha').attr({ type: 'date', min: gastoMinDateStr, max: maxDateStr }).removeAttr('readonly');
+
+    // En Chrome algunos inputs date no abren picker visual sin invocarlo explicitamente.
     $('#id_fecha_arqueo, #id_fecha_desde, #id_fecha_hasta, #id_fecha').on('focus click', function() {
       if (typeof this.showPicker === 'function') {
         try {
@@ -683,7 +685,7 @@
 
     function isDateInAllowedRange(dateStr) {
       if (!dateStr) return false;
-      return dateStr >= minDateStr && dateStr <= maxDateStr;
+      return dateStr >= gastoMinDateStr && dateStr <= maxDateStr;
     }
 
     $('#modalchangeconcept').find('.modal-body').append(
@@ -1438,7 +1440,7 @@
       }
       if (!isDateInAllowedRange(fechaGasto)) {
         $('#alert-title').text('Andinasoft dice:')
-        $('#alert-data').text(`La fecha del gasto debe estar entre ${minDateStr} y ${maxDateStr}`)
+        $('#alert-data').text(`La fecha del gasto debe estar entre ${gastoMinDateStr} y ${maxDateStr}`)
         $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
         return;
       }
