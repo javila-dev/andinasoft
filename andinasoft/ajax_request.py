@@ -17,6 +17,7 @@ from apis.dlocal.api import Dlocal
 import openpyxl
 from django.db.models.fields.related import ForeignKey, ManyToManyField
 from django.db.models.fields.files import FileField, ImageField
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth.decorators import login_required
 import datetime
 import os
@@ -796,7 +797,7 @@ class JSONRender():
         for obj in self.queryset:
             item = {}
             for field in fields:
-                field_value = eval("obj."+field.name)     
+                field_value = self._safe_getattr(obj, field.name)
                 if isinstance(field, ForeignKey):
                     field_value = self.ForeingKeyRender(field,field_value)
                 elif isinstance(field, ManyToManyField):
@@ -805,7 +806,7 @@ class JSONRender():
                     field_value = self._media_value(field_value)
                 item[field.name] = field_value
             for func in self.query_functions:
-                item[func] = eval('obj.'+func+'()')
+                item[func] = getattr(obj, func)()
             object_dict.append(item)
         return object_dict
 
@@ -816,7 +817,7 @@ class JSONRender():
             if queryset_item == None:
                 field_value = None
             else:
-                field_value = eval(f'queryset_item.{field.name}')
+                field_value = self._safe_getattr(queryset_item, field.name)
                 if isinstance(field, ForeignKey):
                     field_value = self.ForeingKeyRender(field,field_value)
                 elif isinstance(field, ManyToManyField):
@@ -825,6 +826,12 @@ class JSONRender():
                     field_value = self._media_value(field_value)
             query_dict[field.name] = field_value
         return query_dict
+
+    def _safe_getattr(self, obj, field_name):
+        try:
+            return getattr(obj, field_name)
+        except ObjectDoesNotExist:
+            return None
 
     def _media_value(self, field_value):
         if not field_value:
