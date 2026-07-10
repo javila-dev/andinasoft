@@ -1,4 +1,5 @@
 <div class="modal fade" id="modalCambiarLote" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <form method="POST" action="">{% csrf_token %}
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -9,26 +10,24 @@
           </button>
         </div>
         <div class="modal-body">
-      <form method='POST'>{%csrf_token%}
-            <select class="custom-select" id='lotecambiar' name='lotecambiar' required>
-              <option value='' selected>Selecciona un lote</option>
-              {%for lote in lotes_libres%}
-              <option value="{{lote.idinmueble}}">{{lote.idinmueble}}</option>
-              {%endfor%}
-            </select>
-              <label class='mt-2' for="nuevoEstadoLote">Nuevo estado del lote liberado</label>
-              <select class="custom-select" id="nuevoEstadoLote" name='nuevoEstadoLote' required>
-                <option value="Libre">Libre</option>
-                <option value="Sin Liberar">Sin Liberar</option>
-                <option value="Eliminado">Eliminado</option>
-              </select>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-        <input type="submit" id='btnCambiarLote' name ='btnCambiarLote' class="btn btn-primary" value='Cambiar'>
-      </div>
-    </form>
-            
+          <select class="custom-select" id="lotecambiar" name="lotecambiar" required>
+            <option value="" selected>Selecciona un lote</option>
+            {% for lote in lotes_libres %}
+            <option value="{{ lote.idinmueble }}">{{ lote.idinmueble }}</option>
+            {% endfor %}
+          </select>
+          <label class="mt-2" for="nuevoEstadoLote">Nuevo estado del lote liberado</label>
+          <select class="custom-select" id="nuevoEstadoLote" name="nuevoEstadoLote" required>
+            <option value="Libre">Libre</option>
+            <option value="Sin Liberar">Sin Liberar</option>
+            <option value="Eliminado">Eliminado</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+          <input type="submit" id="btnCambiarLote" name="btnCambiarLote" class="btn btn-primary" value="Cambiar">
+        </div>
       </div>
     </div>
-  </div>
+  </form>
+</div>

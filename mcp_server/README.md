@@ -58,7 +58,7 @@ Consulta el inventario de lotes/inmuebles de un proyecto.
 
 ### 2. `lotes_change_status`
 
-Cambia el estado de un lote entre `Libre`, `Bloqueado` y `Sin Liberar`.
+Cambia el estado de un lote a `Libre`, `Bloqueado` o `Sin Liberar`.
 
 | Parámetro | Tipo | Requerido | Descripción |
 |---|---|---|---|
@@ -67,14 +67,15 @@ Cambia el estado de un lote entre `Libre`, `Bloqueado` y `Sin Liberar`.
 | `estado` | string | ✅ | Nuevo estado: `Libre` · `Bloqueado` · `Sin Liberar` |
 | `motivo_bloqueo` | string | Cond. | Obligatorio si `estado = Bloqueado` |
 
-> No se puede cambiar el estado de lotes `Adjudicado` o `Reservado`.
+> Solo se pueden modificar lotes cuyo estado actual sea `Bloqueado` o `Sin Liberar`.
+> `Adjudicado`, `Reservado` y `Libre` **nunca** se pueden cambiar por MCP.
 
 **Respuesta:**
 ```json
 {
   "idinmueble": "F-001",
-  "estado_anterior": "Libre",
-  "estado_actual": "Bloqueado"
+  "estado_anterior": "Bloqueado",
+  "estado_actual": "Libre"
 }
 ```
 

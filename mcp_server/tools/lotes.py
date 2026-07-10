@@ -211,6 +211,9 @@ def lotes_change_status(
     """
     Cambia el estado de un lote entre Libre, Bloqueado y Sin Liberar.
 
+    Solo se pueden modificar lotes cuyo estado actual sea Bloqueado o Sin Liberar.
+    Adjudicado, Reservado y Libre no se pueden cambiar por MCP.
+
     Args:
         proyecto: Nombre del proyecto (requerido)
         idinmueble: ID del lote (requerido)
@@ -249,16 +252,21 @@ def lotes_change_status(
         return {'error': 'Error al buscar el lote.', 'detail': str(exc)}
 
     estado_actual = (lote.estado or '').strip()
+    estados_modificables = ('Bloqueado', 'Sin Liberar')
 
-    if estado_actual in ('Adjudicado', 'Reservado'):
+    if estado_actual not in estados_modificables:
         return {
-            'error': f'No se puede modificar el estado de un lote {estado_actual}. Esta acción requiere gestión directa en el sistema.',
-            'estado_actual': estado_actual
+            'error': (
+                f'No se puede modificar el estado de un lote {estado_actual or "sin estado"}. '
+                f'Por MCP solo se pueden cambiar lotes en estado Bloqueado o Sin Liberar.'
+            ),
+            'estado_actual': estado_actual,
+            'estados_modificables': list(estados_modificables),
         }
 
     estado_nuevo_norm = _normalize_lote_estado(estado)
 
-    if not estado_nuevo_norm:
+    if not estado_nuevo_norm or estado_nuevo_norm not in ('Libre', 'Bloqueado', 'Sin Liberar'):
         return {
             'error': 'El estado enviado no es válido.',
             'estado_permitido': ['Libre', 'Bloqueado', 'Sin Liberar']
@@ -318,7 +326,11 @@ LOTES_TOOLS = [
     },
     {
         'name': 'lotes_change_status',
-        'description': 'Cambia el estado de un lote.',
+        'description': (
+            'Cambia el estado de un lote a Libre, Bloqueado o Sin Liberar. '
+            'Solo aplica a lotes que hoy estén Bloqueado o Sin Liberar. '
+            'Nunca modifica Adjudicado, Reservado ni Libre.'
+        ),
         'inputSchema': {
             'type': 'object',
             'properties': {

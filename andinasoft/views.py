@@ -115,6 +115,20 @@ def _to_storage_key(path):
     return normalized.lstrip("/").replace("\\", "/")
 
 
+def _lote_tiene_venta_activa(proyecto, idinmueble, exclude_adj=None):
+    """True si el lote tiene adjudicación activa o venta nueva Pendiente/Aprobada."""
+    adj_qs = Adjudicacion.objects.using(proyecto).filter(
+        idinmueble=idinmueble
+    ).exclude(estado='Desistido')
+    if exclude_adj:
+        adj_qs = adj_qs.exclude(pk=exclude_adj)
+    venta_qs = ventas_nuevas.objects.using(proyecto).filter(
+        Q(estado='Pendiente') | Q(estado='Aprobado'),
+        inmueble=idinmueble,
+    )
+    return adj_qs.exists() or venta_qs.exists()
+
+
 def _normalize_soporte_key(soporte_path):
     if not soporte_path:
         return None
@@ -3362,29 +3376,87 @@ def detalle_adjudicacion(request,proyecto,adj):
                 mensaje=f'La {tipo} fue radicada con el id = {pqrs.pk}'
             if request.POST.get('btnCambiarLote'):
                 check_perms(request,('andinasoft.change_adjudicacion',))
-                nuevo_lote = request.POST.get('lotecambiar')
-                nuevo_estado = request.POST.get('nuevoEstadoLote')
+                nuevo_lote = (request.POST.get('lotecambiar') or '').strip()
+                nuevo_estado = (request.POST.get('nuevoEstadoLote') or '').strip()
+                # Normalizar variante de desistimiento / formularios antiguos
+                if nuevo_estado.lower() == 'sin liberar':
+                    nuevo_estado = 'Sin Liberar'
                 lote_actual = obj_adj.idinmueble
-                #Primero hacemos el cambio del estado del lote
-                obj_nuevolote = Inmuebles.objects.using(proyecto).get(idinmueble=nuevo_lote)
-                obj_nuevolote.estado = 'Adjudicado'
-                obj_loteanterior = Inmuebles.objects.using(proyecto).get(idinmueble=lote_actual)
-                obj_loteanterior.estado = nuevo_estado
-                obj_nuevolote.save()
-                obj_loteanterior.save()
-                
-                obj_adj.idinmueble=nuevo_lote
-                obj_adj.save()
-                obj_adj=Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
-                
-                obj_timeline=timeline.objects.using(proyecto)
-                obj_timeline.create(adj=adj,
-                            fecha=datetime.date.today(),
-                            usuario=request.user,
-                            accion=f'Cambió el lote de {lote_actual} a {nuevo_lote}')
-                alerta=True
-                titulo='¡Hecho!'
-                mensaje=f'El lote fue cambiado con exito'
+                estados_liberacion = ('Libre', 'Sin Liberar', 'Eliminado')
+
+                if not nuevo_lote:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'Debes seleccionar el nuevo lote.'
+                elif nuevo_estado not in estados_liberacion:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'El estado del lote liberado no es válido.'
+                elif nuevo_lote == lote_actual:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'El nuevo lote debe ser diferente al actual.'
+                else:
+                    try:
+                        obj_nuevolote = Inmuebles.objects.using(proyecto).get(idinmueble=nuevo_lote)
+                    except Inmuebles.DoesNotExist:
+                        alerta = True
+                        titulo = 'Error'
+                        mensaje = 'El lote seleccionado no existe.'
+                    else:
+                        estado_nuevo_lote = (obj_nuevolote.estado or '').strip()
+                        if estado_nuevo_lote != 'Libre':
+                            alerta = True
+                            titulo = 'Error'
+                            mensaje = (
+                                f'El lote {nuevo_lote} no está disponible '
+                                f'(estado actual: {estado_nuevo_lote or "sin estado"}).'
+                            )
+                        elif _lote_tiene_venta_activa(proyecto, nuevo_lote, exclude_adj=adj):
+                            alerta = True
+                            titulo = 'Error'
+                            mensaje = (
+                                f'El lote {nuevo_lote} ya está asignado a otra '
+                                f'adjudicación o venta pendiente/aprobada.'
+                            )
+                        else:
+                            try:
+                                with transaction.atomic(using=proyecto):
+                                    # update() garantiza escritura en la BD del proyecto
+                                    actualizados = Inmuebles.objects.using(proyecto).filter(
+                                        idinmueble=nuevo_lote,
+                                        estado='Libre',
+                                    ).update(estado='Adjudicado')
+                                    if actualizados != 1:
+                                        raise ValueError('lote_no_disponible')
+                                    Inmuebles.objects.using(proyecto).filter(
+                                        idinmueble=lote_actual
+                                    ).update(estado=nuevo_estado)
+                                    Adjudicacion.objects.using(proyecto).filter(
+                                        idadjudicacion=adj
+                                    ).update(idinmueble=nuevo_lote)
+
+                                obj_adj = Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
+                                timeline.objects.using(proyecto).create(
+                                    adj=adj,
+                                    fecha=datetime.date.today(),
+                                    usuario=request.user,
+                                    accion=f'Cambió el lote de {lote_actual} a {nuevo_lote}',
+                                )
+                                alerta = True
+                                titulo = '¡Hecho!'
+                                mensaje = 'El lote fue cambiado con exito'
+                            except ValueError:
+                                alerta = True
+                                titulo = 'Error'
+                                mensaje = f'El lote {nuevo_lote} ya no está libre. Intenta de nuevo.'
+                            except Exception:
+                                alerta = True
+                                titulo = 'Error'
+                                mensaje = (
+                                    f'No se pudo cambiar al lote {nuevo_lote}. '
+                                    f'Revisa si ya está asociado a otra adjudicación.'
+                                )
             
             
         lista_clientes=clientes.objects.using('default').all()
@@ -3790,31 +3862,46 @@ def nueva_venta(request,proyecto,inmueble):
             periodo_ce=form.cleaned_data.get('periodo_ce')
             observaciones=form.cleaned_data.get('observaciones')
             tasa = request.POST.get('tasafn')
-            nueva_venta=ventas_nuevas.objects.using(proyecto)
-            nueva_venta.create(id_t1=idtercero1,id_t2=idtercero2,id_t3=idtercero3,id_t4=idtercero4,
-                            inmueble=inmueble,valor_venta=valor_lote,forma_pago=forma_pago,cuota_inicial=valor_ci,
-                            cant_ci1=cant_ci1,cant_ci2=cant_ci2,cant_ci3=cant_ci3,cant_ci4=cant_ci4,
-                            cant_ci5=cant_ci5,cant_ci6=cant_ci6,cant_ci7=cant_ci7,
-                            fecha_ci1=fecha_ci1,fecha_ci2=fecha_ci2,fecha_ci3=fecha_ci3,
-                            fecha_ci4=fecha_ci4,fecha_ci5=fecha_ci5,fecha_ci6=fecha_ci6,fecha_ci7=fecha_ci7,
-                            valor_ci1=valor_ci1,valor_ci2=valor_ci2,valor_ci3=valor_ci3,valor_ci4=valor_ci4,
-                            valor_ci5=valor_ci5,valor_ci6=valor_ci6,valor_ci7=valor_ci7,
-                            saldo=valor_saldo,forma_saldo=plan_pago,valor_ctas_fn=valor_fn,inicio_fn=fecha_fn,nro_cuotas_fn=cant_fn,
-                            valor_ctas_ce=valor_ce,inicio_ce=fecha_ce,nro_cuotas_ce=cant_ce,period_ce=periodo_ce,
-                            observaciones=observaciones,fecha_contrato=datetime.datetime.today(),usuario=request.user,estado='Pendiente',
-                            tasa=Decimal(tasa))
-            lote=Inmuebles.objects.using(proyecto).get(idinmueble=inmueble)
-            lote.estado='Reservado'
-            lote.save()
-            msj_notif=f'Hola!, te informamos que {request.user.first_name} ha creado un nuevo contrato en {proyecto} sobre el inmueble {inmueble} por valor de ${valor_lote:,} y está disponible para tu revisión. '
-            """ if proyecto=='Vegas de Venecia' or proyecto=='Tesoro Escondido':
-                envio_notificacion(msj_notif,f'Se creó un contrato sobre el inmueble {inmueble} en {proyecto}',['jorgeavila@somosandina.co','sb@somosandina.co'])
+
+            lote = Inmuebles.objects.using(proyecto).get(idinmueble=inmueble)
+            if (lote.estado or '').strip() != 'Libre':
+                context['alerta'] = True
+                context['mensaje'] = 'Este inmueble ya no esta disponible'
+                context['redirect'] = f"/venta/inventario/{proyecto}"
+                context['titulo_alerta'] = 'Error'
+            elif _lote_tiene_venta_activa(proyecto, inmueble):
+                context['alerta'] = True
+                context['mensaje'] = (
+                    f'El lote {inmueble} ya tiene una adjudicación activa o una '
+                    f'venta nueva en estado Pendiente o Aprobada.'
+                )
+                context['redirect'] = f"/venta/inventario/{proyecto}"
+                context['titulo_alerta'] = 'Error'
             else:
-                    envio_notificacion(msj_notif,f'Se creó un contrato sobre el inmueble {inmueble} en {proyecto}',['jorgeavila@somosandina.co']) """
-            context['alerta']=True
-            context['mensaje']='El Contrato fué creado con exito'
-            context['redirect']=f"/comercial/ventas_sin_aprobar/{proyecto}"
-            context['titulo_alerta']='¡Todo salió Perfecto!'
+                nueva_venta=ventas_nuevas.objects.using(proyecto)
+                nueva_venta.create(id_t1=idtercero1,id_t2=idtercero2,id_t3=idtercero3,id_t4=idtercero4,
+                                inmueble=inmueble,valor_venta=valor_lote,forma_pago=forma_pago,cuota_inicial=valor_ci,
+                                cant_ci1=cant_ci1,cant_ci2=cant_ci2,cant_ci3=cant_ci3,cant_ci4=cant_ci4,
+                                cant_ci5=cant_ci5,cant_ci6=cant_ci6,cant_ci7=cant_ci7,
+                                fecha_ci1=fecha_ci1,fecha_ci2=fecha_ci2,fecha_ci3=fecha_ci3,
+                                fecha_ci4=fecha_ci4,fecha_ci5=fecha_ci5,fecha_ci6=fecha_ci6,fecha_ci7=fecha_ci7,
+                                valor_ci1=valor_ci1,valor_ci2=valor_ci2,valor_ci3=valor_ci3,valor_ci4=valor_ci4,
+                                valor_ci5=valor_ci5,valor_ci6=valor_ci6,valor_ci7=valor_ci7,
+                                saldo=valor_saldo,forma_saldo=plan_pago,valor_ctas_fn=valor_fn,inicio_fn=fecha_fn,nro_cuotas_fn=cant_fn,
+                                valor_ctas_ce=valor_ce,inicio_ce=fecha_ce,nro_cuotas_ce=cant_ce,period_ce=periodo_ce,
+                                observaciones=observaciones,fecha_contrato=datetime.datetime.today(),usuario=request.user,estado='Pendiente',
+                                tasa=Decimal(tasa))
+                lote.estado='Reservado'
+                lote.save(using=proyecto)
+                msj_notif=f'Hola!, te informamos que {request.user.first_name} ha creado un nuevo contrato en {proyecto} sobre el inmueble {inmueble} por valor de ${valor_lote:,} y está disponible para tu revisión. '
+                """ if proyecto=='Vegas de Venecia' or proyecto=='Tesoro Escondido':
+                    envio_notificacion(msj_notif,f'Se creó un contrato sobre el inmueble {inmueble} en {proyecto}',['jorgeavila@somosandina.co','sb@somosandina.co'])
+                else:
+                        envio_notificacion(msj_notif,f'Se creó un contrato sobre el inmueble {inmueble} en {proyecto}',['jorgeavila@somosandina.co']) """
+                context['alerta']=True
+                context['mensaje']='El Contrato fué creado con exito'
+                context['redirect']=f"/comercial/ventas_sin_aprobar/{proyecto}"
+                context['titulo_alerta']='¡Todo salió Perfecto!'
     
     
     if proyecto.lower() == 'fractal':
