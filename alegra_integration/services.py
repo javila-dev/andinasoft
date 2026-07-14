@@ -608,8 +608,6 @@ class AlegraIntegrationService:
             sync_pago_from_alegra_document(doc)
             if doc.document_type == 'caja_bill':
                 self._capture_caja_bill_cxp(client, doc)
-                if batch.document_type == AlegraSyncBatch.DOC_CAJA:
-                    self._refresh_caja_journal_progress(batch)
             return 'sent'
         except AlegraIntegrationError as exc:
             if (
@@ -1591,23 +1589,7 @@ class AlegraIntegrationService:
             for gasto in gastos_bill_qs:
                 results.extend(self._safe_build(bill_builder, gasto, empresa=empresa, proyecto=proyecto))
 
-            gastos_journal = list(gastos_bill_qs)
-            if gastos_journal:
-                if not batch:
-                    raise AlegraConfigurationError(
-                        'El journal de caja por lote requiere un batch de preview.'
-                    )
-                results.append(
-                    self._ensure_caja_batch_journal(
-                        batch=batch,
-                        empresa=empresa,
-                        proyecto=proyecto,
-                        caja_id=caja_id,
-                        gastos=gastos_journal,
-                        fecha_desde=desde,
-                        fecha_hasta=hasta,
-                    )
-                )
+            # El journal se arma después, con selección explícita de bills enviados.
             return results
 
         builder = ExpensePaymentBuilder(empresa)
@@ -1945,8 +1927,10 @@ class AlegraIntegrationService:
         doc.save(update_fields=['response', 'updated_at'])
 
     @staticmethod
-    def _caja_journal_local_key(batch_id):
-        return f'caja:journal:batch:{batch_id}'
+    def _caja_journal_local_key(batch_id, part=None):
+        if part is None:
+            return f'caja:journal:batch:{batch_id}'
+        return f'caja:journal:batch:{batch_id}:part:{part}'
 
     @staticmethod
     def _caja_pending_bills_from_gastos(gastos):
@@ -1982,6 +1966,314 @@ class AlegraIntegrationService:
                 ready += 1
         return ready
 
+    def _caja_journaled_bills_index(self, empresa, *, caja_id=None):
+        """
+        Bills ya cerrados en un journal enviado.
+        Returns {local_key: journal_ref, ...} and {alegra_bill_id: journal_ref, ...}.
+        """
+        by_local_key = {}
+        by_alegra_id = {}
+        qs = AlegraDocument.objects.filter(
+            empresa=empresa,
+            document_type='caja_journal',
+            status=AlegraDocument.STATUS_SENT,
+        ).order_by('id')
+        for journal in qs:
+            payload = journal.payload if isinstance(journal.payload, dict) else {}
+            local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
+            if caja_id is not None and local.get('caja_id') not in (None, '', caja_id, str(caja_id)):
+                try:
+                    if int(local.get('caja_id')) != int(caja_id):
+                        continue
+                except (TypeError, ValueError):
+                    continue
+            journal_ref = (
+                (payload.get('reference') or '').strip()
+                or journal.local_key
+                or f'journal:{journal.pk}'
+            )
+            pending = local.get('pending_bills') or []
+            found_any = False
+            for ref in pending:
+                local_key = (ref.get('local_key') or '').strip()
+                if local_key and local_key not in by_local_key:
+                    by_local_key[local_key] = journal_ref
+                    found_any = True
+                bill_id = ref.get('alegra_bill_id')
+                if bill_id is not None and str(bill_id).strip():
+                    by_alegra_id[str(bill_id).strip()] = journal_ref
+                    found_any = True
+            if found_any:
+                continue
+            for entry in payload.get('entries') or []:
+                if not isinstance(entry, dict):
+                    continue
+                assoc = entry.get('associatedDocument') or {}
+                if (assoc.get('resourceType') or '') != 'bill':
+                    continue
+                resource = assoc.get('idResource')
+                if resource is None or str(resource).strip() in ('', '0'):
+                    continue
+                by_alegra_id[str(resource).strip()] = journal_ref
+        return by_local_key, by_alegra_id
+
+    def _next_caja_journal_part(self, batch):
+        prefix = f'caja:journal:batch:{batch.pk}:part:'
+        legacy = f'caja:journal:batch:{batch.pk}'
+        existing = list(
+            batch.documents.filter(document_type='caja_journal').values_list('local_key', flat=True)
+        )
+        max_part = 0
+        for key in existing:
+            key = str(key or '')
+            if key.startswith(prefix):
+                suffix = key[len(prefix):]
+                try:
+                    max_part = max(max_part, int(suffix))
+                except (TypeError, ValueError):
+                    continue
+            elif key == legacy:
+                max_part = max(max_part, 1)
+        return max_part + 1
+
+    def _discard_caja_journal_drafts(self, batch):
+        """Invalida borradores de journal no enviados del lote (pending/valid/failed)."""
+        drafts = batch.documents.filter(
+            document_type='caja_journal',
+            status__in=(
+                AlegraDocument.STATUS_PENDING,
+                AlegraDocument.STATUS_VALID,
+                AlegraDocument.STATUS_FAILED,
+            ),
+        )
+        for doc in drafts:
+            doc.status = AlegraDocument.STATUS_INVALID
+            doc.error = 'Reemplazado por una nueva selección de bills para el journal.'
+            doc.save(update_fields=['status', 'error', 'updated_at'])
+
+    def list_caja_journal_bills(self, batch_id):
+        batch = AlegraSyncBatch.objects.select_related('empresa').get(pk=batch_id)
+        if batch.document_type != AlegraSyncBatch.DOC_CAJA:
+            raise AlegraConfigurationError('Este lote no es de tipo caja efectivo.')
+
+        caja_id = (batch.summary or {}).get('caja_id') if isinstance(batch.summary, dict) else None
+        by_local_key, by_alegra_id = self._caja_journaled_bills_index(
+            batch.empresa, caja_id=caja_id,
+        )
+
+        bill_docs = list(
+            batch.documents.filter(
+                document_type='caja_bill',
+                status=AlegraDocument.STATUS_SENT,
+            ).exclude(alegra_id__isnull=True).exclude(alegra_id='').order_by('id')
+        )
+        gasto_ids = []
+        for doc in bill_docs:
+            try:
+                gasto_ids.append(int(str(doc.source_pk)))
+            except (TypeError, ValueError):
+                continue
+        gastos = {
+            g.pk: g
+            for g in gastos_caja.objects.filter(pk__in=gasto_ids).select_related('tercero')
+        }
+
+        rows = []
+        available = 0
+        used_count = 0
+        for doc in bill_docs:
+            try:
+                gasto_id = int(str(doc.source_pk))
+            except (TypeError, ValueError):
+                gasto_id = None
+            gasto = gastos.get(gasto_id) if gasto_id is not None else None
+            local = (doc.payload or {}).get('__local') if isinstance((doc.payload or {}).get('__local'), dict) else {}
+            alegra_id = str(doc.alegra_id or '').strip()
+            journal_ref = by_local_key.get(doc.local_key) or by_alegra_id.get(alegra_id) or ''
+            used = bool(journal_ref)
+            if used:
+                used_count += 1
+            else:
+                available += 1
+            fecha = None
+            if gasto and getattr(gasto, 'fecha_gasto', None):
+                fecha = gasto.fecha_gasto.isoformat()
+            valor = None
+            if gasto is not None and getattr(gasto, 'valor', None) is not None:
+                valor = int(gasto.valor)
+            elif local.get('valor_esperado') is not None:
+                try:
+                    valor = int(float(local.get('valor_esperado')))
+                except (TypeError, ValueError):
+                    valor = None
+            rows.append({
+                'document_id': doc.pk,
+                'local_key': doc.local_key,
+                'bill_id': alegra_id,
+                'gasto_id': gasto_id,
+                'fecha': fecha,
+                'tercero': _partner_display_name(getattr(gasto, 'tercero', None)) if gasto else '',
+                'valor': valor,
+                'used': used,
+                'journal_ref': journal_ref,
+            })
+
+        rows.sort(key=lambda r: (r.get('fecha') or '', r.get('document_id') or 0))
+        return {
+            'batch_id': batch.pk,
+            'empresa': batch.empresa_id,
+            'caja_id': caja_id,
+            'available': available,
+            'used': used_count,
+            'total': len(rows),
+            'bills': rows,
+        }
+
+    def build_caja_journal_from_selection(self, batch_id, document_ids):
+        batch = AlegraSyncBatch.objects.select_related('empresa').get(pk=batch_id)
+        if batch.document_type != AlegraSyncBatch.DOC_CAJA:
+            raise AlegraConfigurationError('Este lote no es de tipo caja efectivo.')
+
+        ids = []
+        for raw in document_ids or []:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                raise AlegraConfigurationError(f'document_id inválido: {raw}')
+        if not ids:
+            raise AlegraConfigurationError('Selecciona al menos un bill para armar el journal.')
+
+        bill_docs = list(
+            batch.documents.filter(
+                pk__in=ids,
+                document_type='caja_bill',
+            ).order_by('id')
+        )
+        if len(bill_docs) != len(set(ids)):
+            raise AlegraConfigurationError('Uno o más document_ids no pertenecen a este lote de caja.')
+
+        caja_id = (batch.summary or {}).get('caja_id') if isinstance(batch.summary, dict) else None
+        by_local_key, by_alegra_id = self._caja_journaled_bills_index(
+            batch.empresa, caja_id=caja_id,
+        )
+
+        selected = []
+        for doc in bill_docs:
+            if doc.status != AlegraDocument.STATUS_SENT or not doc.alegra_id:
+                raise AlegraConfigurationError(
+                    f'El bill {doc.pk} aún no está enviado a Alegra.'
+                )
+            alegra_id = str(doc.alegra_id).strip()
+            if by_local_key.get(doc.local_key) or by_alegra_id.get(alegra_id):
+                raise AlegraConfigurationError(
+                    f'El bill Alegra {alegra_id} ya fue usado en un journal enviado.'
+                )
+            selected.append(doc)
+
+        gasto_ids = []
+        for doc in selected:
+            try:
+                gasto_ids.append(int(str(doc.source_pk)))
+            except (TypeError, ValueError):
+                raise AlegraConfigurationError(f'El bill {doc.pk} no tiene gasto_id válido.')
+
+        gastos = list(
+            gastos_caja.objects.filter(pk__in=gasto_ids).select_related(
+                'reembolso',
+                'reembolso__caja',
+                'tercero',
+                'concepto',
+                'forma_pago',
+                'cuenta_iva',
+                'cuenta_rte',
+            )
+        )
+        gastos_by_id = {g.pk: g for g in gastos}
+        ordered_gastos = []
+        for gid in gasto_ids:
+            gasto = gastos_by_id.get(gid)
+            if not gasto:
+                raise AlegraBuildError(f'No se encontró el gasto {gid} para armar el journal.')
+            ordered_gastos.append(gasto)
+
+        if not caja_id:
+            caja_id = getattr(ordered_gastos[0], 'forma_pago_id', None)
+        if not caja_id:
+            raise AlegraConfigurationError('No se pudo determinar la caja del lote.')
+
+        from andinasoft.models import cuentas_pagos
+
+        caja = cuentas_pagos.objects.filter(
+            pk=caja_id, nit_empresa=batch.empresa, es_caja=True,
+        ).first()
+        if not caja:
+            raise AlegraConfigurationError('Caja no encontrada para armar el journal.')
+
+        self._discard_caja_journal_drafts(batch)
+        part = self._next_caja_journal_part(batch)
+        local_key = self._caja_journal_local_key(batch.pk, part=part)
+        pending_bills = self._caja_pending_bills_from_gastos(ordered_gastos)
+
+        payload = {
+            '__local': {
+                'awaiting_bills': False,
+                'selection_part': part,
+                'batch_id': batch.pk,
+                'caja_id': caja.pk,
+                'fecha_desde': batch.fecha_desde.isoformat(),
+                'fecha_hasta': batch.fecha_hasta.isoformat(),
+                'pending_bills': pending_bills,
+                'bills_total': len(pending_bills),
+                'bills_ready': len(pending_bills),
+            },
+        }
+        doc = self._upsert_document(
+            batch,
+            batch.empresa,
+            None,
+            document_type='caja_journal',
+            source_model=CajaLegalizationJournalBuilder.BATCH_SOURCE_MODEL,
+            source_pk=f'{batch.pk}:part:{part}',
+            local_key=local_key,
+            payload=payload,
+            operation='accounting__createJournal',
+            transport=AlegraDocument.ALEGRA_REST,
+            status=AlegraDocument.STATUS_PENDING,
+            error='',
+        )
+        try:
+            self._activate_caja_journal_doc(batch, doc)
+        except (AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError) as exc:
+            doc.status = AlegraDocument.STATUS_FAILED
+            doc.error = str(exc)
+            doc.save(update_fields=['status', 'error', 'updated_at'])
+            raise
+
+        # Preserve selection metadata after activate overwrites payload.
+        payload = dict(doc.payload or {})
+        local = dict(payload.get('__local') or {})
+        local.update({
+            'selection_part': part,
+            'batch_id': batch.pk,
+            'caja_id': caja.pk,
+            'fecha_desde': batch.fecha_desde.isoformat(),
+            'fecha_hasta': batch.fecha_hasta.isoformat(),
+            'awaiting_bills': False,
+        })
+        payload['__local'] = local
+        if payload.get('reference'):
+            payload['reference'] = f'LC-{(caja.cuentabanco or caja.pk)}-LOTE-{batch.pk}-P{part}'[:255]
+        doc.payload = payload
+        doc.save(update_fields=['payload', 'updated_at'])
+
+        batch.total_documents = batch.documents.count()
+        batch.save(update_fields=['total_documents', 'updated_at'])
+
+        return self._batch_response(
+            batch,
+            [self._document_summary(d) for d in batch.documents.order_by('id')],
+        )
+
     def _ensure_caja_batch_journal(
         self,
         *,
@@ -1993,6 +2285,7 @@ class AlegraIntegrationService:
         fecha_desde,
         fecha_hasta,
     ):
+        """Legacy helper (tests). El preview ya no crea journal automático."""
         local_key = self._caja_journal_local_key(batch.pk)
         sent = AlegraDocument.objects.filter(
             empresa=empresa,
@@ -2031,22 +2324,6 @@ class AlegraIntegrationService:
             status=AlegraDocument.STATUS_PENDING,
             error='',
         )
-        if bills_ready >= len(pending_bills) and pending_bills:
-            try:
-                self._activate_caja_journal_doc(batch, doc)
-                return {'built': self._built_document_from_journal(doc)}
-            except (AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError) as exc:
-                doc.status = AlegraDocument.STATUS_FAILED
-                doc.error = str(exc)
-                doc.save(update_fields=['status', 'error', 'updated_at'])
-                return {
-                    'error': str(exc),
-                    'document_type': 'caja_journal',
-                    'source_model': CajaLegalizationJournalBuilder.BATCH_SOURCE_MODEL,
-                    'source_pk': str(batch.pk),
-                    'local_key': local_key,
-                    'payload': payload,
-                }
         return {'pending_journal': doc}
 
     def _built_document_from_journal(self, doc):
@@ -2064,7 +2341,7 @@ class AlegraIntegrationService:
         )
 
     def _activate_caja_journal_doc(self, batch, doc):
-        """Construye el journal con CxP reales una vez enviados todos los bills del lote."""
+        """Construye el journal con CxP reales una vez enviados los bills de pending_bills."""
         payload = dict(doc.payload or {})
         local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
         pending_bills = local.get('pending_bills') or []
@@ -2115,6 +2392,11 @@ class AlegraIntegrationService:
             fecha_desde=fecha_desde,
             fecha_hasta=fecha_hasta,
         )
+        merged_local = dict(built.payload.get('__local') or {})
+        for key in ('caja_id', 'fecha_desde', 'fecha_hasta', 'selection_part', 'batch_id', 'awaiting_bills'):
+            if key in local:
+                merged_local[key] = local[key]
+        built.payload['__local'] = merged_local
         doc.payload = built.payload
         doc.alegra_operation = built.operation
         doc.transport = built.transport
@@ -2129,38 +2411,8 @@ class AlegraIntegrationService:
         doc.save(update_fields=['status', 'updated_at'])
 
     def _refresh_caja_journal_progress(self, batch):
-        """Tras enviar un bill, actualiza progreso y activa el journal cuando todos estén listos."""
-        journal = batch.documents.filter(document_type='caja_journal').order_by('id').first()
-        if not journal:
-            return None
-        if journal.status in (AlegraDocument.STATUS_SENT, AlegraDocument.STATUS_SKIPPED):
-            return journal
-        if journal.status == AlegraDocument.STATUS_VALID:
-            return journal
-
-        payload = dict(journal.payload or {})
-        local = dict(payload.get('__local') or {})
-        pending_bills = local.get('pending_bills') or []
-        if not pending_bills:
-            return journal
-
-        bills_ready = self._count_sent_caja_bills(journal.empresa, batch, pending_bills)
-        local['bills_ready'] = bills_ready
-        local['bills_total'] = len(pending_bills)
-        payload['__local'] = local
-        journal.payload = payload
-        journal.save(update_fields=['payload', 'updated_at'])
-
-        if bills_ready < len(pending_bills):
-            return journal
-
-        try:
-            self._activate_caja_journal_doc(batch, journal)
-        except (AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError) as exc:
-            journal.status = AlegraDocument.STATUS_FAILED
-            journal.error = str(exc)
-            journal.save(update_fields=['status', 'error', 'updated_at'])
-        return journal
+        """Legacy no-op: el journal ya no se activa automáticamente al enviar bills."""
+        return None
 
     def _resolve_cxp_for_caja_bill(self, bill_doc, *, client=None):
         """CxP del bill (respuesta POST/GET/contacto); fallback mapeos caja_cxp / default_cxp.
@@ -2426,14 +2678,9 @@ class AlegraIntegrationService:
         if doc.document_type != 'caja_journal':
             return ''
         if doc.status == AlegraDocument.STATUS_PENDING:
-            local = (doc.payload or {}).get('__local') if isinstance((doc.payload or {}).get('__local'), dict) else {}
-            ready = int(local.get('bills_ready') or 0)
-            total = int(local.get('bills_total') or 0)
-            if total:
-                return f'Esperando bills ({ready}/{total})'
-            return 'Esperando bills del lote'
+            return 'Selecciona bills y arma el journal'
         if doc.status == AlegraDocument.STATUS_VALID:
-            return 'Journal listo — se envía después de los bills'
+            return 'Journal listo para enviar'
         return ''
 
     def _batch_response(self, batch, documents):

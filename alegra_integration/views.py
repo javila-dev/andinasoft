@@ -12,7 +12,7 @@ from django.core.cache import cache
 
 from django.views.decorators.csrf import csrf_exempt
 
-from alegra_integration.exceptions import AlegraIntegrationError
+from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 from alegra_integration.models import (
     AlegraMapping,
     AlegraSyncBatch,
@@ -1453,6 +1453,42 @@ def batch_send_one(request, batch_id):
         return JsonResponse(data)
     except AlegraSyncBatch.DoesNotExist:
         return JsonResponse({'detail': 'Lote no encontrado'}, status=404)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['GET'])
+def batch_caja_journal_bills(request, batch_id):
+    """Lista bills enviados del lote para armar el journal (marca los ya usados)."""
+    try:
+        data = AlegraIntegrationService(user=request.user).list_caja_journal_bills(batch_id)
+        return JsonResponse(data)
+    except AlegraSyncBatch.DoesNotExist:
+        return JsonResponse({'detail': 'Lote no encontrado'}, status=404)
+    except AlegraConfigurationError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def batch_caja_journal_build(request, batch_id):
+    """Arma un journal de caja con la selección de bills enviados."""
+    try:
+        payload = _payload(request)
+        document_ids = payload.get('document_ids') or payload.get('documentIds') or []
+        data = AlegraIntegrationService(user=request.user).build_caja_journal_from_selection(
+            batch_id, document_ids,
+        )
+        return JsonResponse(data)
+    except AlegraSyncBatch.DoesNotExist:
+        return JsonResponse({'detail': 'Lote no encontrado'}, status=404)
+    except (AlegraConfigurationError, AlegraBuildError) as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
     except AlegraIntegrationError as exc:
         return _error_response(exc)
     except Exception as exc:

@@ -394,6 +394,49 @@
       </div>
     </div>
 
+    <!-- Caja journal bill picker -->
+    <div class="card shadow-sm mb-4" id="cajaJournalPickerCard" style="display:none">
+      <div class="card-header card-header-soft d-flex justify-content-between align-items-center flex-wrap" style="gap:8px">
+        <span>
+          <i class="fas fa-balance-scale mr-2 text-muted"></i>Armar journal de caja
+          <span class="badge badge-secondary ml-1" id="cajaJournalPickerCount">0</span>
+        </span>
+        <small class="text-muted">Elige bills ya enviados. Los usados en un journal exitoso quedan bloqueados.</small>
+      </div>
+      <div class="card-body py-2">
+        <div class="d-flex align-items-center flex-wrap mb-2" style="gap:12px">
+          <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="cajaJournalSelectAll" onchange="toggleCajaJournalSelectAll(this)">
+            <label class="custom-control-label" for="cajaJournalSelectAll">Seleccionar todo (disponibles)</label>
+          </div>
+          <span class="text-muted" style="font-size:.85rem" id="cajaJournalSelectedLabel">0 seleccionados</span>
+          <span class="text-warning" style="font-size:.8rem;display:none" id="cajaJournalWarn40">
+            Más de 40 bills: Alegra puede rechazar el journal por límite de asociaciones.
+          </span>
+          <button type="button" class="btn btn-sm btn-primary ml-auto" id="btnBuildCajaJournal" onclick="buildCajaJournalFromSelection()" disabled>
+            <i class="fas fa-file-invoice-dollar mr-1"></i>Armar journal
+          </button>
+        </div>
+        <div class="table-responsive" style="max-height:320px;overflow-y:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:36px"></th>
+                <th style="width:110px">Fecha</th>
+                <th>Tercero</th>
+                <th style="width:110px" class="text-right">Valor</th>
+                <th style="width:90px">Bill ID</th>
+                <th style="width:180px">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="cajaJournalPickerBody">
+              <tr><td colspan="6" class="text-center text-muted py-3">Sin bills enviados aún</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Documents Table -->
     <div class="card shadow-sm mb-4">
       <div class="card-header card-header-soft d-flex justify-content-between align-items-center">
@@ -1087,11 +1130,7 @@ function previewCounts(batch, docs) {
 }
 
 function sendPlanTotal(docs, retry_failed) {
-  let total = countSendableDocs(retry_failed);
-  if ((docs || []).some(d => d.document_type === 'caja_journal' && d.status === 'pending')) {
-    total += 1;
-  }
-  return total;
+  return countSendableDocs(retry_failed);
 }
 
 function updateMetrics(batch, mode, docs) {
@@ -1114,8 +1153,138 @@ function updateMetrics(batch, mode, docs) {
 }
 
 // ── Documents table ────────────────────────────
+let cajaJournalBills = [];
+
+function formatMoneyCop(n) {
+  if (n == null || n === '') return '—';
+  const v = Number(n);
+  if (Number.isNaN(v)) return escHtml(n);
+  return '$' + v.toLocaleString('es-CO');
+}
+
+function refreshCajaJournalPicker() {
+  const card = $('#cajaJournalPickerCard');
+  if (currentDocType !== 'caja' || !currentBatchId) {
+    card.hide();
+    return;
+  }
+  const hasSentBills = (allDocs || []).some(
+    d => d.document_type === 'caja_bill' && d.status === 'sent' && d.alegra_id
+  );
+  if (!hasSentBills) {
+    card.hide();
+    return;
+  }
+  card.show();
+  $.get(`${API.batches}${currentBatchId}/caja-journal-bills`)
+    .done(data => {
+      cajaJournalBills = data.bills || [];
+      renderCajaJournalPicker();
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      $('#cajaJournalPickerBody').html(
+        `<tr><td colspan="6" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`
+      );
+    });
+}
+
+function renderCajaJournalPicker() {
+  const tbody = $('#cajaJournalPickerBody').empty();
+  $('#cajaJournalPickerCount').text(cajaJournalBills.length);
+  if (!cajaJournalBills.length) {
+    tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">Sin bills enviados</td></tr>');
+    updateCajaJournalSelectionUI();
+    return;
+  }
+  cajaJournalBills.forEach(row => {
+    const used = !!row.used;
+    const checked = !used && $(`#cajaBillSel-${row.document_id}`).is(':checked');
+    const status = used
+      ? `<span class="text-muted">Ya en journal${row.journal_ref ? ` <code style="font-size:10px">${escHtml(row.journal_ref)}</code>` : ''}</span>`
+      : '<span class="text-success">Disponible</span>';
+    tbody.append(`
+      <tr class="${used ? 'table-secondary' : ''}">
+        <td>
+          <input type="checkbox" class="caja-journal-bill-cb" id="cajaBillSel-${row.document_id}"
+            data-doc-id="${row.document_id}" ${used ? 'disabled' : ''} ${checked ? 'checked' : ''}
+            onchange="updateCajaJournalSelectionUI()">
+        </td>
+        <td><small>${escHtml(row.fecha || '—')}</small></td>
+        <td><small>${escHtml(row.tercero || '—')}</small></td>
+        <td class="text-right"><small>${formatMoneyCop(row.valor)}</small></td>
+        <td><code style="font-size:11px">${escHtml(row.bill_id || '—')}</code></td>
+        <td><small>${status}</small></td>
+      </tr>
+    `);
+  });
+  updateCajaJournalSelectionUI();
+}
+
+function getSelectedCajaJournalBillIds() {
+  return $('.caja-journal-bill-cb:checked:not(:disabled)').map(function() {
+    return parseInt($(this).data('doc-id'), 10);
+  }).get().filter(Boolean);
+}
+
+function updateCajaJournalSelectionUI() {
+  const selected = getSelectedCajaJournalBillIds();
+  const available = cajaJournalBills.filter(b => !b.used).length;
+  $('#cajaJournalSelectedLabel').text(`${selected.length} seleccionados`);
+  $('#btnBuildCajaJournal').prop('disabled', selected.length === 0);
+  $('#cajaJournalWarn40').toggle(selected.length > 40);
+  const allAvailChecked = available > 0 && selected.length === available;
+  $('#cajaJournalSelectAll').prop('checked', allAvailChecked);
+}
+
+function toggleCajaJournalSelectAll(el) {
+  const on = !!(el && el.checked);
+  $('.caja-journal-bill-cb:not(:disabled)').prop('checked', on);
+  updateCajaJournalSelectionUI();
+}
+
+function buildCajaJournalFromSelection() {
+  if (!currentBatchId) return;
+  const document_ids = getSelectedCajaJournalBillIds();
+  if (!document_ids.length) {
+    log('warning', 'Selecciona al menos un bill disponible.');
+    return;
+  }
+  $('#btnBuildCajaJournal').prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Armando…');
+  log('info', `Armando journal con <strong>${document_ids.length}</strong> bill(s)…`);
+  $.ajax({
+    url: `${API.batches}${currentBatchId}/caja-journal-build`,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ document_ids }),
+  })
+    .done(data => {
+      allDocs = data.documents || [];
+      renderDocuments(allDocs);
+      updateMetrics(data.batch || {}, 'preview', allDocs);
+      const journal = (allDocs || []).find(d => d.document_type === 'caja_journal' && d.status === 'valid');
+      if (journal) {
+        log('success', `Journal listo (<code>${escHtml(journal.local_key)}</code>). Ya puedes enviarlo.`);
+        $('#btnSend').prop('disabled', false);
+      } else {
+        log('warning', 'Journal armado pero no quedó en estado válido. Revisa la tabla de documentos.');
+      }
+    })
+    .fail(xhr => {
+      const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+      log('error', `No se pudo armar el journal: <strong>${escHtml(msg)}</strong>`);
+    })
+    .always(() => {
+      $('#btnBuildCajaJournal').prop('disabled', false)
+        .html('<i class="fas fa-file-invoice-dollar mr-1"></i>Armar journal');
+      updateCajaJournalSelectionUI();
+    });
+}
+
 function renderDocuments(docs) {
   allDocs = docs;
+  refreshCajaJournalPicker();
   $('#docsCount').text(docs.length);
   docsPage = 1;
   docsFilter = ($('.filter-btn.active').data('filter') || 'all');
@@ -1190,6 +1359,7 @@ function onSingleDocSendSuccess(data) {
   if (data.complete) {
     log('info', 'Lote finalizado (todos los documentos enviables procesados).');
   }
+  refreshCajaJournalPicker();
   loadHistory();
 }
 
@@ -1397,14 +1567,8 @@ function onPreviewSuccess(data) {
   if (prev.ready > 0) {
     log('success', `Listos para enviar ahora: <strong>${prev.ready}</strong>`);
   }
-  if (prev.journalWaiting > 0) {
-    const j = docs.find(d => d.document_type === 'caja_journal' && d.status === 'pending');
-    const hint = docStatusHint(j);
-    log('info',
-      `Journal de cierre: <strong>pendiente</strong>` +
-      (hint ? ` — ${escHtml(hint)}` : '') +
-      '. Se construirá automáticamente al enviar todos los bills.'
-    );
+  if (currentDocType === 'caja') {
+    log('info', 'Tras enviar los bills, elige cuáles incluir en el journal de cierre.');
   }
   if (prev.already > 0) {
     log('dim', `Ya enviados (solo informativo, no se reconstruyen ni reenvían): <strong>${prev.already}</strong>`);
@@ -1698,19 +1862,12 @@ function doSend() {
 
   function syncDocsFromSendResponse(data) {
     if (!data.documents || !data.documents.length) return;
-    const prevJournal = (allDocs || []).find(d => d.document_type === 'caja_journal');
     allDocs = data.documents;
-    const newJournal = allDocs.find(d => d.document_type === 'caja_journal');
-    if (newJournal && prevJournal && newJournal.status === 'valid' && prevJournal.status === 'pending') {
-      log('success', 'Journal de cierre listo — se enviará automáticamente al terminar los bills.');
-    } else if (newJournal && newJournal.status === 'pending' && data.document && data.document.document_type === 'caja_bill') {
-      const jHint = docStatusHint(newJournal);
-      if (jHint) log('info', `Journal de cierre: ${escHtml(jHint)}`);
-    }
     if (data.document) patchDocRow(data.document);
-    if (newJournal && (!data.document || newJournal.id !== data.document.id)) {
-      patchDocRow(newJournal);
-    }
+    (allDocs || []).filter(d => d.document_type === 'caja_journal').forEach(j => {
+      if (!data.document || j.id !== data.document.id) patchDocRow(j);
+    });
+    refreshCajaJournalPicker();
   }
 
   function sendOne(batchId) {
@@ -1773,8 +1930,8 @@ function doSend() {
   function startSequential(batchId) {
     const n = plannedTotal || countSendableDocs(retry_failed);
     log('loading', `Enviando <strong>${n}</strong> documento(s) — ver progreso en la tabla.`);
-    if ((allDocs || []).some(d => d.document_type === 'caja_journal' && d.status === 'pending')) {
-      log('info', 'El journal de cierre se construirá automáticamente al enviar todos los bills.');
+    if (currentDocType === 'caja') {
+      log('info', 'Tras enviar bills, usa el panel «Armar journal de caja» para elegir cuáles cerrar.');
     }
     $('#sendLiveText').text('Iniciando envío…');
     sendOne(batchId);

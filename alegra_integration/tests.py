@@ -1975,87 +1975,230 @@ class CajaJournalProgressTests(SimpleTestCase):
         self.assertEqual(local['bills_total'], 1)
         self.assertEqual(local['pending_bills'][0]['local_key'], 'caja:bill:None:501')
 
-    @patch('alegra_integration.services.CajaLegalizationJournalBuilder')
-    @patch('alegra_integration.services.gastos_caja.objects')
-    @patch('andinasoft.models.cuentas_pagos.objects')
-    def test_refresh_activates_journal_when_all_bills_sent(
-        self, mock_caja_objects, mock_gastos_objects, mock_builder_cls,
-    ):
-        from alegra_integration.models import AlegraDocument, AlegraSyncBatch
+    def test_refresh_does_not_auto_activate_journal(self):
         from alegra_integration.services import AlegraIntegrationService
 
-        batch = SimpleNamespace(
-            pk=56,
-            document_type=AlegraSyncBatch.DOC_CAJA,
-            fecha_desde=datetime.date(2026, 6, 1),
-            fecha_hasta=datetime.date(2026, 6, 30),
-        )
+        batch = SimpleNamespace(pk=56)
+        svc = AlegraIntegrationService()
+        with patch.object(svc, '_activate_caja_journal_doc') as activate:
+            out = svc._refresh_caja_journal_progress(batch)
+        self.assertIsNone(out)
+        activate.assert_not_called()
+
+
+class CajaJournalSelectionTests(SimpleTestCase):
+    def test_journaled_bills_index_from_pending_bills(self):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
         empresa = SimpleNamespace(pk='901')
         journal = SimpleNamespace(
-            pk=901,
-            empresa=empresa,
-            document_type='caja_journal',
-            status=AlegraDocument.STATUS_PENDING,
-            local_key='caja:journal:batch:56',
+            pk=1,
+            local_key='caja:journal:batch:10:part:1',
             payload={
+                'reference': 'LC-CAJA-LOTE-10-P1',
                 '__local': {
-                    'awaiting_bills': True,
                     'caja_id': 7,
-                    'fecha_desde': '2026-06-01',
-                    'fecha_hasta': '2026-06-30',
-                    'pending_bills': [{'local_key': 'caja:bill:None:501', 'gasto_id': 501}],
-                    'bills_total': 1,
-                    'bills_ready': 0,
+                    'pending_bills': [
+                        {'local_key': 'caja:bill:190:501', 'alegra_bill_id': 211},
+                        {'local_key': 'caja:bill:190:502', 'alegra_bill_id': 212},
+                    ],
                 },
             },
-            alegra_operation='accounting__createJournal',
-            transport='alegra_rest',
-            source_model='alegra_integration.AlegraSyncBatch',
-            source_pk='56',
-            error='',
-            save=Mock(),
         )
-        built = SimpleNamespace(
-            payload={
-                'entries': [{
-                    'id': 'placeholder',
-                    'debit': 1000,
-                    'credit': 0,
-                    'associatedDocument': {'idResource': 0, 'resourceType': 'bill'},
-                }],
-                '__local': {
-                    'pending_bills': [{'local_key': 'caja:bill:None:501', 'gasto_id': 501, 'amount': 1000}],
-                },
-            },
-            operation='accounting__createJournal',
-            transport='alegra_rest',
-            source_model='alegra_integration.AlegraSyncBatch',
-            source_pk='56',
-        )
-        gasto = SimpleNamespace(pk=501)
-        mock_gastos_objects.filter.return_value.select_related.return_value = [gasto]
-        mock_caja_objects.get.return_value = SimpleNamespace(pk=7, cuentabanco='Caja Menor')
-        mock_builder_cls.return_value.build_batch.return_value = built
 
-        class _JournalQs:
+        class _Qs(list):
             def filter(self, **kwargs):
                 return self
             def order_by(self, *args):
                 return self
-            def first(self):
-                return journal
 
-        batch.documents = _JournalQs()
-        svc = AlegraIntegrationService()
+        with patch.object(AlegraDocument.objects, 'filter', return_value=_Qs([journal])):
+            by_key, by_id = AlegraIntegrationService()._caja_journaled_bills_index(empresa, caja_id=7)
 
-        with patch.object(svc, '_count_sent_caja_bills', return_value=1), \
-             patch.object(svc, '_finalize_caja_journal_doc') as finalize:
-            out = svc._refresh_caja_journal_progress(batch)
+        self.assertEqual(by_key['caja:bill:190:501'], 'LC-CAJA-LOTE-10-P1')
+        self.assertEqual(by_id['211'], 'LC-CAJA-LOTE-10-P1')
+        self.assertEqual(by_id['212'], 'LC-CAJA-LOTE-10-P1')
 
-        self.assertIs(out, journal)
-        self.assertEqual(journal.status, AlegraDocument.STATUS_VALID)
-        finalize.assert_called_once_with(journal)
-        mock_builder_cls.return_value.build_batch.assert_called_once()
+    def test_list_marks_used_bills(self):
+        from alegra_integration.models import AlegraDocument, AlegraSyncBatch
+        from alegra_integration.services import AlegraIntegrationService
+
+        empresa = SimpleNamespace(pk='901')
+        batch = SimpleNamespace(
+            pk=10,
+            empresa=empresa,
+            empresa_id='901',
+            document_type=AlegraSyncBatch.DOC_CAJA,
+            summary={'caja_id': 7},
+        )
+        bill_used = SimpleNamespace(
+            pk=1, local_key='caja:bill:None:501', source_pk='501', alegra_id='211',
+            status=AlegraDocument.STATUS_SENT, payload={'__local': {}},
+        )
+        bill_free = SimpleNamespace(
+            pk=2, local_key='caja:bill:None:502', source_pk='502', alegra_id='212',
+            status=AlegraDocument.STATUS_SENT, payload={'__local': {}},
+        )
+        gasto501 = SimpleNamespace(
+            pk=501, fecha_gasto=datetime.date(2026, 6, 2), valor=11300,
+            tercero=SimpleNamespace(nombres='PAULA', apellidos='HENAO', nombre_completo=lambda: 'PAULA HENAO'),
+        )
+        gasto502 = SimpleNamespace(
+            pk=502, fecha_gasto=datetime.date(2026, 6, 3), valor=50000,
+            tercero=SimpleNamespace(nombres='JUAN', apellidos='PEREZ', nombre_completo=lambda: 'JUAN PEREZ'),
+        )
+
+        class _BillQs(list):
+            def filter(self, **kwargs):
+                return self
+            def exclude(self, **kwargs):
+                return self
+            def order_by(self, *args):
+                return self
+
+        batch.documents = SimpleNamespace(
+            filter=lambda **kw: _BillQs([bill_used, bill_free])
+        )
+
+        with patch.object(AlegraSyncBatch.objects, 'select_related') as sel, \
+             patch.object(AlegraIntegrationService, '_caja_journaled_bills_index', return_value=(
+                 {'caja:bill:None:501': 'LC-REF'}, {'211': 'LC-REF'},
+             )), \
+             patch('alegra_integration.services.gastos_caja.objects') as gastos_objects:
+            sel.return_value.get.return_value = batch
+            gastos_objects.filter.return_value.select_related.return_value = [gasto501, gasto502]
+            data = AlegraIntegrationService().list_caja_journal_bills(10)
+
+        self.assertEqual(data['total'], 2)
+        self.assertEqual(data['used'], 1)
+        self.assertEqual(data['available'], 1)
+        used_row = next(r for r in data['bills'] if r['bill_id'] == '211')
+        free_row = next(r for r in data['bills'] if r['bill_id'] == '212')
+        self.assertTrue(used_row['used'])
+        self.assertEqual(used_row['journal_ref'], 'LC-REF')
+        self.assertFalse(free_row['used'])
+        self.assertEqual(free_row['tercero'], 'JUAN PEREZ')
+
+    def test_build_rejects_already_used_bill(self):
+        from alegra_integration.models import AlegraDocument, AlegraSyncBatch
+        from alegra_integration.services import AlegraIntegrationService
+        from alegra_integration.exceptions import AlegraConfigurationError
+
+        empresa = SimpleNamespace(pk='901')
+        batch = SimpleNamespace(
+            pk=10,
+            empresa=empresa,
+            document_type=AlegraSyncBatch.DOC_CAJA,
+            summary={'caja_id': 7},
+            fecha_desde=datetime.date(2026, 6, 1),
+            fecha_hasta=datetime.date(2026, 6, 30),
+        )
+        bill = SimpleNamespace(
+            pk=1, local_key='caja:bill:None:501', source_pk='501', alegra_id='211',
+            status=AlegraDocument.STATUS_SENT, payload={},
+        )
+
+        class _BillQs(list):
+            def filter(self, **kwargs):
+                return self
+            def order_by(self, *args):
+                return self
+
+        batch.documents = SimpleNamespace(filter=lambda **kw: _BillQs([bill]))
+
+        with patch.object(AlegraSyncBatch.objects, 'select_related') as sel, \
+             patch.object(AlegraIntegrationService, '_caja_journaled_bills_index', return_value=(
+                 {'caja:bill:None:501': 'LC-REF'}, {'211': 'LC-REF'},
+             )):
+            sel.return_value.get.return_value = batch
+            with self.assertRaises(AlegraConfigurationError) as ctx:
+                AlegraIntegrationService().build_caja_journal_from_selection(10, [1])
+        self.assertIn('ya fue usado', str(ctx.exception))
+
+    def test_build_creates_part_local_key_and_activates(self):
+        from alegra_integration.models import AlegraDocument, AlegraSyncBatch
+        from alegra_integration.services import AlegraIntegrationService
+
+        empresa = SimpleNamespace(pk='901')
+        batch = SimpleNamespace(
+            pk=10,
+            empresa=empresa,
+            empresa_id='901',
+            proyecto_id=None,
+            document_type=AlegraSyncBatch.DOC_CAJA,
+            summary={'caja_id': 7},
+            fecha_desde=datetime.date(2026, 6, 1),
+            fecha_hasta=datetime.date(2026, 6, 30),
+            status='preview',
+            total_documents=1,
+            success_count=0,
+            error_count=0,
+            created_by_id=None,
+            save=Mock(),
+        )
+        bill = SimpleNamespace(
+            pk=1, local_key='caja:bill:None:501', source_pk='501', alegra_id='211',
+            status=AlegraDocument.STATUS_SENT, payload={'__local': {'reembolso_id': None}},
+        )
+        gasto = SimpleNamespace(
+            pk=501, reembolso_id=None, fecha_gasto=datetime.date(2026, 6, 2),
+            forma_pago_id=7, valor=11299,
+        )
+        journal_doc = SimpleNamespace(
+            pk=99,
+            status=AlegraDocument.STATUS_PENDING,
+            local_key='caja:journal:batch:10:part:1',
+            payload={'__local': {}, 'reference': 'old'},
+            save=Mock(),
+        )
+
+        class _BillQs(list):
+            def filter(self, **kwargs):
+                return self
+            def order_by(self, *args):
+                return self
+            def count(self):
+                return len(self)
+            def values_list(self, *args, **kwargs):
+                return []
+
+        def documents_filter(**kwargs):
+            if kwargs.get('document_type') == 'caja_bill':
+                return _BillQs([bill])
+            if kwargs.get('document_type') == 'caja_journal':
+                return _BillQs([])
+            return _BillQs([])
+
+        batch.documents = SimpleNamespace(
+            filter=documents_filter,
+            count=lambda: 2,
+            order_by=lambda *a: [bill, journal_doc],
+        )
+
+        with patch.object(AlegraSyncBatch.objects, 'select_related') as sel, \
+             patch.object(AlegraIntegrationService, '_caja_journaled_bills_index', return_value=({}, {})), \
+             patch.object(AlegraIntegrationService, '_discard_caja_journal_drafts'), \
+             patch.object(AlegraIntegrationService, '_upsert_document', return_value=journal_doc) as upsert, \
+             patch.object(AlegraIntegrationService, '_activate_caja_journal_doc') as activate, \
+             patch.object(AlegraIntegrationService, '_document_summary', side_effect=lambda d: {'id': getattr(d, 'pk', None)}), \
+             patch('alegra_integration.services.gastos_caja.objects') as gastos_objects, \
+             patch('andinasoft.models.cuentas_pagos.objects') as caja_objects:
+            sel.return_value.get.return_value = batch
+            gastos_objects.filter.return_value.select_related.return_value = [gasto]
+            caja_objects.filter.return_value.first.return_value = SimpleNamespace(pk=7, cuentabanco='CAJA')
+            journal_doc.status = AlegraDocument.STATUS_VALID
+            journal_doc.payload = {
+                'reference': 'LC-CAJA-LOTE-10',
+                '__local': {'pending_bills': [{'local_key': 'caja:bill:None:501'}]},
+            }
+            data = AlegraIntegrationService().build_caja_journal_from_selection(10, [1])
+
+        upsert.assert_called_once()
+        self.assertEqual(upsert.call_args.kwargs['local_key'], 'caja:journal:batch:10:part:1')
+        activate.assert_called_once()
+        self.assertIn('documents', data)
+        self.assertEqual(journal_doc.payload['reference'], 'LC-CAJA-LOTE-10-P1')
 
 
 class PaymentReconcileTests(SimpleTestCase):
