@@ -1542,11 +1542,18 @@ class CajaLegalizationJournalBuilder:
         self.resolver = resolver or MappingResolver(empresa)
 
     def _cxp_category_id(self):
-        """Placeholder en preview; al enviar se reemplaza por la CxP del bill (respuesta Alegra)."""
+        """Placeholder en preview; al enviar se reemplaza por la CxP del bill (respuesta Alegra).
+
+        caja_cxp / default_cxp son opcionales (respaldo). Si faltan, usa '0' como en
+        associatedDocument.idResource; _finalize_caja_journal_doc inyecta la CxP real.
+        """
         cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='caja_cxp', required=False)
         if cat_id:
             return cat_id
-        return self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=True)
+        cat_id = self.resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=False)
+        if cat_id:
+            return cat_id
+        return '0'
 
     def _caja_credit_category_id(self, caja):
         return self.resolver.get(

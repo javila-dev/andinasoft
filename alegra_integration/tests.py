@@ -1681,6 +1681,33 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(len(credits), 1)
         self.assertEqual(credits[0]['credit'], 120000.0)
 
+    def test_caja_journal_batch_uses_zero_placeholder_without_cxp_mapping(self):
+        """Sin caja_cxp/default_cxp el journal igual se arma; CxP se inyecta al finalizar."""
+        gasto, reembolso = self._gasto(valor=50000, subtotal_val=42000)
+        caja = reembolso.caja
+
+        class ResolverNoCxp(ResolverStub):
+            def get(self, *args, **kwargs):
+                code = kwargs.get('local_code', '')
+                if code in ('caja_cxp', 'default_cxp'):
+                    return None
+                return super().get(*args, **kwargs)
+
+        with patch('alegra_integration.builders.Profiles') as profiles_model:
+            profiles_model.objects.filter.return_value.first.return_value = SimpleNamespace(
+                identificacion='123456789'
+            )
+            built = CajaLegalizationJournalBuilder(self.empresa, ResolverNoCxp()).build_batch(
+                caja=caja,
+                gastos=[gasto],
+                batch_id=44,
+                fecha_desde=datetime.date(2026, 6, 1),
+                fecha_hasta=datetime.date(2026, 6, 30),
+            )
+        debits = [e for e in built.payload['entries'] if e.get('debit')]
+        self.assertEqual(debits[0]['id'], '0')
+        self.assertEqual(debits[0]['associatedDocument']['idResource'], 0)
+
     @patch('andinasoft.models.cuentas_pagos.objects.filter')
     @patch('alegra_integration.services.empresas.objects.get')
     def test_validate_caja_requires_caja_id(self, mock_emp_get, mock_caja_filter):
@@ -1782,6 +1809,61 @@ class CajaJournalFinalizeTests(SimpleTestCase):
         self.assertEqual(entry['id'], 'cat-cxp-88')
         self.assertEqual(entry['associatedDocument']['idResource'], 555)
         journal_doc.save.assert_called_once()
+
+    @patch('alegra_integration.services.MappingResolver')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_finalize_reports_gasto_and_bill_when_cxp_missing(self, mock_client_cls, mock_resolver_cls):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+        from alegra_integration.exceptions import AlegraConfigurationError
+
+        empresa = SimpleNamespace(pk='901018375')
+        bill_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_bill',
+            local_key='caja:bill:99:501',
+            alegra_id='777',
+            status=AlegraDocument.STATUS_SENT,
+            response={'id': '777'},  # sin __cxp_category_id ni journal
+        )
+        journal_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_journal',
+            local_key='caja:journal:batch:99',
+            payload={
+                'entries': [{
+                    'id': '0',
+                    'debit': 1000,
+                    'credit': 0,
+                    'associatedDocument': {'idResource': 0, 'resourceType': 'bill'},
+                }],
+                '__local': {
+                    'pending_bills': [{
+                        'local_key': 'caja:bill:99:501',
+                        'gasto_id': 501,
+                        'amount': 1000,
+                    }],
+                },
+            },
+            save=Mock(),
+        )
+        mock_client = Mock()
+        mock_client.get_bill.return_value = {'id': '777'}
+        mock_client_cls.return_value = mock_client
+        mock_resolver_cls.return_value.get.return_value = None
+
+        with patch.object(AlegraDocument.objects, 'filter') as doc_filter:
+            doc_filter.return_value.first.return_value = bill_doc
+            with self.assertRaises(AlegraConfigurationError) as ctx:
+                AlegraIntegrationService()._finalize_caja_journal_doc(journal_doc)
+
+        msg = str(ctx.exception)
+        self.assertIn('Linea 1', msg)
+        self.assertIn('gasto 501', msg)
+        self.assertIn('Alegra id 777', msg)
+        self.assertIn('caja:bill:99:501', msg)
+        self.assertIn('901018375', msg)
+        self.assertIn('caja_cxp/default_cxp', msg)
 
 
 class CajaJournalProgressTests(SimpleTestCase):

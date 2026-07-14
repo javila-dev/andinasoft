@@ -2162,18 +2162,34 @@ class AlegraIntegrationService:
         return journal
 
     def _resolve_cxp_for_caja_bill(self, bill_doc, *, client=None):
-        """CxP del bill (respuesta POST/GET/contacto); fallback mapeos caja_cxp / default_cxp."""
+        """CxP del bill (respuesta POST/GET/contacto); fallback mapeos caja_cxp / default_cxp.
+
+        Devuelve str o None si el bill no trae CxP y no hay mapeo de respaldo.
+        """
         bill_data = bill_doc.response if isinstance(bill_doc.response, dict) else {}
         cxp_id = self._fetch_bill_cxp_category_id(
             client, bill_data=bill_data, alegra_id=bill_doc.alegra_id,
         )
         if cxp_id:
-            return cxp_id
+            return str(cxp_id).strip()
         resolver = MappingResolver(bill_doc.empresa)
         cxp_id = resolver.get(AlegraMapping.CATEGORY, local_code='caja_cxp', required=False)
         if not cxp_id:
-            cxp_id = resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=True)
-        return str(cxp_id)
+            cxp_id = resolver.get(AlegraMapping.CATEGORY, local_code='default_cxp', required=False)
+        if not cxp_id:
+            return None
+        return str(cxp_id).strip()
+
+    @staticmethod
+    def _caja_cxp_missing_message(*, empresa_id, gasto_id, bill_alegra_id, local_key, line_idx):
+        parts = [
+            f'Linea {line_idx + 1} del journal: el bill del gasto {gasto_id or "?"} '
+            f'(Alegra id {bill_alegra_id or "?"}) no trajo cuenta CxP',
+            f'y falta mapeo de respaldo caja_cxp/default_cxp para empresa {empresa_id}',
+        ]
+        if local_key:
+            parts.append(f'(clave {local_key})')
+        return ' '.join(parts) + '.'
 
     def _finalize_caja_journal_doc(self, doc):
         """Inyecta idResource y cuenta CxP (desde bill) en cada línea del journal de caja."""
@@ -2209,6 +2225,16 @@ class AlegraIntegrationService:
                 missing.append(local_key)
                 continue
             cxp_id = self._resolve_cxp_for_caja_bill(bill_doc, client=client)
+            if not cxp_id:
+                raise AlegraConfigurationError(
+                    self._caja_cxp_missing_message(
+                        empresa_id=doc.empresa.pk,
+                        gasto_id=ref.get('gasto_id'),
+                        bill_alegra_id=bill_doc.alegra_id,
+                        local_key=local_key,
+                        line_idx=idx,
+                    )
+                )
             entries[idx]['id'] = cxp_id
             assoc = entries[idx].get('associatedDocument') or {}
             entries[idx]['associatedDocument'] = {
