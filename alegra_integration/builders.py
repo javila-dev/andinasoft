@@ -1668,9 +1668,12 @@ class CajaLegalizationJournalBuilder:
         ]
         journal_date = max(journal_dates) if journal_dates else gastos[-1].fecha_gasto
 
+        # Alegra LED2096: líneas con associatedDocument deben tener el mismo CC del bill
+        # (o ninguno). El CC de caja solo aplica a créditos de caja, no a débitos CxP.
         if cost_center_id:
             for entry in entries:
-                entry['costCenter'] = {'id': cost_center_id}
+                if float(entry.get('credit') or 0) > 0:
+                    entry['costCenter'] = {'id': cost_center_id}
 
         ref_desde = _date(fecha_desde)
         ref_hasta = _date(fecha_hasta)

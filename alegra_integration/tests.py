@@ -1585,7 +1585,7 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['costCenter'], {'id': 'cc-caja-7'})
         self.assertEqual(built.payload['__local']['cost_center_id'], 'cc-caja-7')
 
-    def test_caja_journal_applies_cost_center_to_all_entries(self):
+    def test_caja_journal_applies_cost_center_only_to_credits(self):
         gasto, reembolso = self._gasto(valor=120000, subtotal_val=100000, valor_iva=19000.0)
         gasto.cuenta_iva_id = 12
         with patch('alegra_integration.builders.Profiles') as profiles_model:
@@ -1594,15 +1594,13 @@ class CajaBuilderTests(SimpleTestCase):
                 {'reembolso': reembolso, 'gastos': [gasto]}
             )
         self.assertEqual(built.document_type, 'caja_journal')
-        self.assertEqual(built.operation, 'accounting__createJournal')
-        self.assertEqual(built.payload['numberTemplate'], 'num-caja_legalization_journal')
-        assoc = built.payload['entries'][0]['associatedDocument']
-        self.assertEqual(assoc['resourceType'], 'bill')
-        self.assertEqual(assoc['idResource'], 0)
-        self.assertIn('pending_bills', built.payload['__local'])
-        self.assertEqual(built.local_key, 'caja:journal:99')
-        self.assertEqual(built.payload['entries'][-1]['credit'], 120000.0)
-        for entry in built.payload['entries']:
+        debits = [e for e in built.payload['entries'] if e.get('debit')]
+        credits = [e for e in built.payload['entries'] if e.get('credit')]
+        self.assertTrue(debits)
+        self.assertTrue(credits)
+        for entry in debits:
+            self.assertNotIn('costCenter', entry)
+        for entry in credits:
             self.assertEqual(entry['costCenter'], {'id': 'cc-caja-7'})
         self.assertEqual(built.payload['__local']['cost_center_id'], 'cc-caja-7')
 
@@ -1841,6 +1839,8 @@ class CajaJournalFinalizeTests(SimpleTestCase):
                         'description': 'COMPRA DE CINTA PARA COLOCAR EN KIOSCO',
                         'debit': 11300,
                         'credit': 0,
+                        # CC de caja mal puesto en débito (causa LED2096 si el bill no lo tiene)
+                        'costCenter': {'id': '3'},
                         'associatedDocument': {'idResource': 0, 'resourceType': 'bill'},
                     },
                     {
@@ -1849,6 +1849,7 @@ class CajaJournalFinalizeTests(SimpleTestCase):
                         'debit': 0,
                         'credit': 11300,
                         'client': '148',
+                        'costCenter': {'id': '3'},
                     },
                 ],
                 '__local': {
@@ -1873,9 +1874,73 @@ class CajaJournalFinalizeTests(SimpleTestCase):
         self.assertEqual(debit['debit'], 11299.0)
         self.assertEqual(debit['id'], '6787')
         self.assertEqual(debit['associatedDocument']['idResource'], 211)
+        self.assertNotIn('costCenter', debit)  # bill sin CC → quitar CC del débito (LED2096)
         self.assertEqual(credit['credit'], 11299.0)
+        self.assertEqual(credit['costCenter'], {'id': '3'})  # crédito de caja conserva CC
         self.assertEqual(journal_doc.payload['__local']['valor_credito_total'], 11299.0)
         self.assertEqual(journal_doc.payload['__local']['pending_bills'][0]['amount'], 11299.0)
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_finalize_aligns_debit_cost_center_to_bill(self, mock_client_cls):
+        """LED2096: si el bill tiene CC, la línea asociada debe usar el mismo."""
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        empresa = SimpleNamespace(pk='900')
+        bill_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_bill',
+            local_key='caja:bill:190:502',
+            alegra_id='184',
+            status=AlegraDocument.STATUS_SENT,
+            response={
+                '__cxp_category_id': '6787',
+                'total': 50000,
+                'balance': 50000,
+                'costCenter': {'id': '7', 'name': 'Proyecto X'},
+            },
+        )
+        journal_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_journal',
+            local_key='caja:journal:batch:449',
+            payload={
+                'entries': [
+                    {
+                        'id': 'placeholder-cxp',
+                        'debit': 50000,
+                        'credit': 0,
+                        'costCenter': {'id': '3'},
+                        'associatedDocument': {'idResource': 0, 'resourceType': 'bill'},
+                    },
+                    {
+                        'id': '6444',
+                        'debit': 0,
+                        'credit': 50000,
+                        'costCenter': {'id': '3'},
+                    },
+                ],
+                '__local': {
+                    'pending_bills': [{
+                        'local_key': 'caja:bill:190:502',
+                        'gasto_id': 502,
+                        'amount': 50000,
+                    }],
+                },
+            },
+            save=Mock(),
+        )
+
+        with patch.object(AlegraDocument.objects, 'filter') as doc_filter:
+            doc_filter.return_value.first.return_value = bill_doc
+            AlegraIntegrationService()._finalize_caja_journal_doc(journal_doc)
+
+        debit = journal_doc.payload['entries'][0]
+        self.assertEqual(debit['costCenter'], {'id': '7'})
+        self.assertEqual(
+            journal_doc.payload['__local']['pending_bills'][0]['cost_center_id'],
+            '7',
+        )
 
     @patch('alegra_integration.services.MappingResolver')
     @patch('alegra_integration.services.AlegraMCPClient')

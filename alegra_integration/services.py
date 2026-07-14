@@ -2549,6 +2549,36 @@ class AlegraIntegrationService:
 
         return sum(debit_amounts)
 
+    @classmethod
+    def _bill_cost_center_id(cls, bill_doc, *, client=None):
+        """Id de centro de costo del bill Alegra (si lo tiene)."""
+        bill_data = bill_doc.response if isinstance(bill_doc.response, dict) else {}
+        cc = bill_data.get('costCenter') if isinstance(bill_data, dict) else None
+        if isinstance(cc, dict) and cc.get('id') is not None and str(cc.get('id')).strip():
+            return str(cc['id']).strip()
+        if isinstance(cc, (int, str)) and str(cc).strip():
+            return str(cc).strip()
+        if client is not None and bill_doc.alegra_id:
+            try:
+                fresh = client.get_bill(bill_doc.alegra_id)
+                if isinstance(fresh, dict):
+                    cc = fresh.get('costCenter')
+                    if isinstance(cc, dict) and cc.get('id') is not None and str(cc.get('id')).strip():
+                        return str(cc['id']).strip()
+                    if isinstance(cc, (int, str)) and str(cc).strip():
+                        return str(cc).strip()
+            except AlegraIntegrationError:
+                pass
+        return None
+
+    @staticmethod
+    def _apply_associated_bill_cost_center(entry, bill_cost_center_id):
+        """LED2096: la línea asociada debe tener el mismo CC del bill, o ninguno."""
+        if bill_cost_center_id:
+            entry['costCenter'] = {'id': bill_cost_center_id}
+        else:
+            entry.pop('costCenter', None)
+
     def _finalize_caja_journal_doc(self, doc):
         """Inyecta idResource, CxP y monto (saldo del bill) en cada línea del journal de caja."""
         payload = dict(doc.payload or {})
@@ -2598,9 +2628,11 @@ class AlegraIntegrationService:
             close_amount = self._bill_close_amount(
                 bill_doc, client=client, fallback=fallback,
             )
+            bill_cc = self._bill_cost_center_id(bill_doc, client=client)
             entries[idx]['id'] = cxp_id
             entries[idx]['debit'] = close_amount
             entries[idx]['credit'] = 0
+            self._apply_associated_bill_cost_center(entries[idx], bill_cc)
             assoc = entries[idx].get('associatedDocument') or {}
             entries[idx]['associatedDocument'] = {
                 'idResource': bill_id,
@@ -2609,6 +2641,8 @@ class AlegraIntegrationService:
             debit_amounts.append(close_amount)
             ref['amount'] = close_amount
             ref['alegra_bill_id'] = bill_id
+            if bill_cc:
+                ref['cost_center_id'] = bill_cc
         if missing:
             raise AlegraConfigurationError(
                 f'Faltan bills enviados para el journal {doc.local_key}: {", ".join(missing)}'
