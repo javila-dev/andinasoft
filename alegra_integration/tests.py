@@ -1810,6 +1810,73 @@ class CajaJournalFinalizeTests(SimpleTestCase):
         self.assertEqual(entry['associatedDocument']['idResource'], 555)
         journal_doc.save.assert_called_once()
 
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_finalize_aligns_debit_to_bill_balance(self, mock_client_cls):
+        """Redondeo IVA: gasto.valor 11300 vs balance Alegra 11299 → cerrar con 11299."""
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        empresa = SimpleNamespace(pk='900')
+        bill_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_bill',
+            local_key='caja:bill:190:501',
+            alegra_id='211',
+            status=AlegraDocument.STATUS_SENT,
+            response={
+                '__cxp_category_id': '6787',
+                'total': 11299,
+                'balance': 11299,
+                'totalPaid': 0,
+            },
+        )
+        journal_doc = SimpleNamespace(
+            empresa=empresa,
+            document_type='caja_journal',
+            local_key='caja:journal:batch:448',
+            payload={
+                'entries': [
+                    {
+                        'id': 'placeholder-cxp',
+                        'description': 'COMPRA DE CINTA PARA COLOCAR EN KIOSCO',
+                        'debit': 11300,
+                        'credit': 0,
+                        'associatedDocument': {'idResource': 0, 'resourceType': 'bill'},
+                    },
+                    {
+                        'id': '6444',
+                        'description': 'REEMB CAJA 190 CAJA ALTTUM CARMELO',
+                        'debit': 0,
+                        'credit': 11300,
+                        'client': '148',
+                    },
+                ],
+                '__local': {
+                    'pending_bills': [{
+                        'local_key': 'caja:bill:190:501',
+                        'gasto_id': 501,
+                        'reembolso_id': 190,
+                        'amount': 11300,
+                    }],
+                    'valor_credito_total': 11300,
+                },
+            },
+            save=Mock(),
+        )
+
+        with patch.object(AlegraDocument.objects, 'filter') as doc_filter:
+            doc_filter.return_value.first.return_value = bill_doc
+            AlegraIntegrationService()._finalize_caja_journal_doc(journal_doc)
+
+        debit = journal_doc.payload['entries'][0]
+        credit = journal_doc.payload['entries'][1]
+        self.assertEqual(debit['debit'], 11299.0)
+        self.assertEqual(debit['id'], '6787')
+        self.assertEqual(debit['associatedDocument']['idResource'], 211)
+        self.assertEqual(credit['credit'], 11299.0)
+        self.assertEqual(journal_doc.payload['__local']['valor_credito_total'], 11299.0)
+        self.assertEqual(journal_doc.payload['__local']['pending_bills'][0]['amount'], 11299.0)
+
     @patch('alegra_integration.services.MappingResolver')
     @patch('alegra_integration.services.AlegraMCPClient')
     def test_finalize_reports_gasto_and_bill_when_cxp_missing(self, mock_client_cls, mock_resolver_cls):

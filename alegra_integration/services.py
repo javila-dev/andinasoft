@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from decimal import Decimal, InvalidOperation
 from urllib.parse import quote, urlparse
 
 from django.db import transaction
@@ -2191,8 +2192,113 @@ class AlegraIntegrationService:
             parts.append(f'(clave {local_key})')
         return ' '.join(parts) + '.'
 
+    @staticmethod
+    def _money_amount(value):
+        try:
+            return float(Decimal(str(value)).quantize(Decimal('0.01')))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _bill_close_amount_from_data(cls, bill_data):
+        """Saldo a cerrar en journal: balance (preferido) o total del bill Alegra."""
+        if not isinstance(bill_data, dict):
+            return None
+        for key in ('balance', 'total'):
+            amount = cls._money_amount(bill_data.get(key))
+            if amount is not None:
+                return amount
+        return None
+
+    def _bill_close_amount(self, bill_doc, *, client=None, fallback=None):
+        """
+        Monto del débito CxP al asociar el bill: debe igualar el saldo en Alegra.
+        gasto.valor puede diferir por redondeo de IVA (ej. 11300 local vs 11299 en Alegra).
+        """
+        bill_data = bill_doc.response if isinstance(bill_doc.response, dict) else {}
+        amount = self._bill_close_amount_from_data(bill_data)
+        if amount is not None:
+            return amount
+        if client is not None and bill_doc.alegra_id:
+            try:
+                fresh = client.get_bill(bill_doc.alegra_id)
+                amount = self._bill_close_amount_from_data(fresh)
+                if amount is not None:
+                    return amount
+            except AlegraIntegrationError:
+                pass
+        fallback_amount = self._money_amount(fallback)
+        return fallback_amount if fallback_amount is not None else 0.0
+
+    @staticmethod
+    def _rebalance_caja_journal_credits(entries, pending, debit_amounts):
+        """Ajusta créditos caja para que sumen lo mismo que los débitos (tras alinear a bills)."""
+        reemb_totals = {}
+        orphan_total = 0.0
+        for idx, ref in enumerate(pending):
+            amount = float(debit_amounts[idx])
+            reemb_id = ref.get('reembolso_id')
+            if reemb_id not in (None, ''):
+                key = str(reemb_id)
+                reemb_totals[key] = reemb_totals.get(key, 0.0) + amount
+            else:
+                orphan_total += amount
+
+        credit_entries = [e for e in entries[len(pending):] if float(e.get('credit') or 0) > 0]
+        if not credit_entries:
+            return sum(debit_amounts)
+
+        used = set()
+        for reemb_id in sorted(reemb_totals.keys(), key=lambda x: (len(x), x)):
+            prefix = f'REEMB CAJA {reemb_id} '
+            matched = None
+            for entry in credit_entries:
+                desc = entry.get('description') or ''
+                if id(entry) in used:
+                    continue
+                if desc.startswith(prefix) or desc.startswith(f'REEMB CAJA {reemb_id}'):
+                    matched = entry
+                    break
+            if matched is None:
+                for entry in credit_entries:
+                    if id(entry) not in used and (entry.get('description') or '').startswith('REEMB CAJA '):
+                        matched = entry
+                        break
+            if matched is None:
+                continue
+            matched['credit'] = reemb_totals[reemb_id]
+            matched['debit'] = 0
+            used.add(id(matched))
+
+        if orphan_total > 0:
+            orphan_entry = None
+            for entry in credit_entries:
+                if id(entry) in used:
+                    continue
+                desc = entry.get('description') or ''
+                if desc.startswith('CAJA ') and not desc.startswith('REEMB CAJA '):
+                    orphan_entry = entry
+                    break
+            if orphan_entry is None:
+                for entry in credit_entries:
+                    if id(entry) not in used:
+                        orphan_entry = entry
+                        break
+            if orphan_entry is not None:
+                orphan_entry['credit'] = orphan_total
+                orphan_entry['debit'] = 0
+                used.add(id(orphan_entry))
+
+        # Si quedó un solo crédito sin casar (un reembolso), usar total débitos.
+        unused = [e for e in credit_entries if id(e) not in used]
+        if len(credit_entries) == 1 and unused:
+            unused[0]['credit'] = sum(debit_amounts)
+            unused[0]['debit'] = 0
+
+        return sum(debit_amounts)
+
     def _finalize_caja_journal_doc(self, doc):
-        """Inyecta idResource y cuenta CxP (desde bill) en cada línea del journal de caja."""
+        """Inyecta idResource, CxP y monto (saldo del bill) en cada línea del journal de caja."""
         payload = dict(doc.payload or {})
         local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
         pending = local.get('pending_bills') or []
@@ -2208,6 +2314,7 @@ class AlegraIntegrationService:
             )
         client = AlegraMCPClient(doc.empresa)
         missing = []
+        debit_amounts = []
         for idx, ref in enumerate(pending):
             local_key = ref.get('local_key')
             bill_doc = AlegraDocument.objects.filter(
@@ -2235,16 +2342,33 @@ class AlegraIntegrationService:
                         line_idx=idx,
                     )
                 )
+            fallback = entries[idx].get('debit') or ref.get('amount') or 0
+            close_amount = self._bill_close_amount(
+                bill_doc, client=client, fallback=fallback,
+            )
             entries[idx]['id'] = cxp_id
+            entries[idx]['debit'] = close_amount
+            entries[idx]['credit'] = 0
             assoc = entries[idx].get('associatedDocument') or {}
             entries[idx]['associatedDocument'] = {
                 'idResource': bill_id,
                 'resourceType': assoc.get('resourceType') or 'bill',
             }
+            debit_amounts.append(close_amount)
+            ref['amount'] = close_amount
+            ref['alegra_bill_id'] = bill_id
         if missing:
             raise AlegraConfigurationError(
                 f'Faltan bills enviados para el journal {doc.local_key}: {", ".join(missing)}'
             )
+        if len(debit_amounts) != len(pending):
+            raise AlegraConfigurationError(
+                f'No se pudieron alinear todos los débitos del journal {doc.local_key}.'
+            )
+        total_credito = self._rebalance_caja_journal_credits(entries, pending, debit_amounts)
+        local['pending_bills'] = pending
+        local['valor_credito_total'] = total_credito
+        payload['__local'] = local
         payload['entries'] = entries
         doc.payload = payload
         doc.save(update_fields=['payload', 'updated_at'])
