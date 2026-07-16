@@ -4,8 +4,9 @@ Extracción de líneas CxP desde GET /journals/{id} (Alegra).
 Regla acordada:
 - Movimiento con crédito > 0 y tercero identificado.
 - Cuenta de pasivo orden 2 (código empieza por "2") cuando esté disponible.
-- Excluir retenciones/impuestos por pagar solo si el comprobante también tiene CxP en cuenta 22x
-  (p. ej. arriendo + retención); en pago de impuestos (solo créditos 23x) sí se radican.
+- Excluir retenciones/impuestos por pagar solo si el comprobante también tiene CxP de proveedor
+  (p. ej. arriendo + retención); en pago de impuestos/retención 23x/2345 sí se radican.
+  No confiar en debtToPay 22x del contacto cuando el nombre de la línea es retención.
 - Priorizar líneas con associatedDocument v_bill.
 - Nómina: si el comprobante incluye «Salarios por pagar», solo esas líneas (no anticipos/cesantías/aportes en 22050501).
 """
@@ -51,6 +52,11 @@ def _client_nombre(client):
     return (client.get('name') or '').strip()[:255]
 
 
+def _es_retencion_o_impuesto(entry):
+    texto = f"{entry.get('name') or ''} {entry.get('description') or ''}"
+    return bool(_EXCLUIR_PASIVO_TEXTO.search(texto))
+
+
 def _entry_account_code(entry):
     """Código contable del pasivo si Alegra lo envía en la línea o en el contacto."""
     for key in ('code', 'accountCode'):
@@ -62,7 +68,11 @@ def _entry_account_code(entry):
         return str(cat['code']).strip()
     client = entry.get('client') or {}
     debt = (client.get('accounting') or {}).get('debtToPay') or {}
-    return str(debt.get('code') or '').strip()
+    debt_code = str(debt.get('code') or '').strip()
+    # debtToPay del contacto suele ser CxP 22x aunque la línea sea 2345 (retención).
+    if debt_code.startswith('22') and _es_retencion_o_impuesto(entry):
+        return ''
+    return debt_code
 
 
 def _entry_category_id(entry):
@@ -80,17 +90,15 @@ def _entry_category_id(entry):
     entry_id = entry.get('id')
     if entry_id is not None and str(entry_id).strip():
         return str(entry_id).strip()
+    # No usar debtToPay del contacto si la línea es retención/impuesto (suele ser CxP 22x).
+    if _es_retencion_o_impuesto(entry):
+        return ''
     client = entry.get('client') or {}
     debt = (client.get('accounting') or {}).get('debtToPay') or {}
     debt_id = debt.get('id')
     if debt_id is not None and str(debt_id).strip():
         return str(debt_id).strip()
     return ''
-
-
-def _es_retencion_o_impuesto(entry):
-    texto = f"{entry.get('name') or ''} {entry.get('description') or ''}"
-    return bool(_EXCLUIR_PASIVO_TEXTO.search(texto))
 
 
 def _journal_tiene_salarios_por_pagar(journal):
@@ -152,27 +160,34 @@ def _credit_entries_con_tercero(entries):
     return result
 
 
-def _journal_es_comprobante_impuestos(journal):
+def _journal_tiene_cxp_proveedor(journal):
     """
-    Pago de impuestos/retenciones (cuentas 23x): no hay crédito CxP en 22x, solo pasivo tributario.
+    Hay crédito CxP de proveedor/comisionado (no retención/impuesto 23x/2345).
+    Si existe, las líneas de retención del mismo comprobante se excluyen
+    (p. ej. arriendo + retención). En pago solo de impuestos/retenciones, no.
     """
     credits = _credit_entries_con_tercero(
         (journal.get('entries') if isinstance(journal, dict) else []) or []
     )
-    if not credits:
-        return False
-    tiene_22 = False
-    tiene_23 = False
     for entry in credits:
+        if _es_retencion_o_impuesto(entry):
+            continue
+        assoc = entry.get('associatedDocument') or {}
+        if (assoc.get('resourceType') or '') == 'v_bill':
+            return True
         code = _entry_account_code(entry)
-        if code.startswith('22'):
-            tiene_22 = True
-        elif code.startswith('23'):
-            tiene_23 = True
-    return tiene_23 and not tiene_22
+        if code:
+            if code.startswith('22'):
+                return True
+            if code.startswith('2') and not code.startswith('23'):
+                return True
+            continue
+        # Sin código PUC: crédito con tercero y sin texto de retención (comisiones, etc.).
+        return True
+    return False
 
 
-def _es_cxp_entry(entry, *, comprobante_impuestos=False):
+def _es_cxp_entry(entry, *, excluir_retenciones=False):
     if (entry.get('type') or '').lower() != 'category':
         return False
     credit = _money(entry.get('credit'))
@@ -180,7 +195,7 @@ def _es_cxp_entry(entry, *, comprobante_impuestos=False):
         return False
     if not _client_identification(entry.get('client')):
         return False
-    if _es_retencion_o_impuesto(entry) and not comprobante_impuestos:
+    if excluir_retenciones and _es_retencion_o_impuesto(entry):
         return False
 
     assoc = entry.get('associatedDocument') or {}
@@ -190,7 +205,7 @@ def _es_cxp_entry(entry, *, comprobante_impuestos=False):
     code = _entry_account_code(entry)
     if code:
         return code.startswith('2')
-    # Sin código en payload: crédito con tercero y sin exclusión (p. ej. Comisiones).
+    # Sin código en payload: crédito con tercero y sin exclusión (p. ej. Comisiones / 2345).
     return True
 
 
@@ -203,12 +218,12 @@ def extraer_lineas_cxp(journal):
     aunque anticipos, cesantías y aportes usen la misma cuenta 22050501.
     """
     entries = journal.get('entries') if isinstance(journal, dict) else []
-    comprobante_impuestos = _journal_es_comprobante_impuestos(journal)
+    excluir_retenciones = _journal_tiene_cxp_proveedor(journal)
     solo_salarios_por_pagar = _journal_tiene_salarios_por_pagar(journal)
     buckets = defaultdict(lambda: {'nombre_tercero': '', 'valor': 0, 'lineas': []})
 
     for entry in entries or []:
-        if not _es_cxp_entry(entry, comprobante_impuestos=comprobante_impuestos):
+        if not _es_cxp_entry(entry, excluir_retenciones=excluir_retenciones):
             continue
         if solo_salarios_por_pagar and not _es_linea_salarios_por_pagar(entry):
             continue

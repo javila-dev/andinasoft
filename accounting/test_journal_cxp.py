@@ -293,6 +293,53 @@ class JournalCxpTests(SimpleTestCase):
         self.assertEqual(r['id_tercero'], '800197268')
         self.assertIn('RETENCION', r['nro_factura'].upper())
 
+    def test_retencion_2345_con_debtToPay_22x_del_contacto(self):
+        """Alegra a veces manda debtToPay 22x aunque la línea sea 2345 (retención)."""
+        journal = {
+            'id': '99',
+            'date': '2026-05-14',
+            'observations': 'RETENCION 2-2026',
+            'entries': [{
+                'type': 'category',
+                'name': 'Retencion en la fuente por pagar',
+                'id': 'cat-2345',
+                'debit': 0,
+                'credit': 3518000,
+                'client': {
+                    'identification': '800197268',
+                    'name': 'DIAN',
+                    'accounting': {'debtToPay': {'code': '22050501', 'id': 'cxp-22'}},
+                },
+            }],
+        }
+        lineas = extraer_lineas_cxp(journal)
+        self.assertEqual(len(lineas), 1)
+        self.assertEqual(lineas[0]['valor'], 3518000)
+        self.assertEqual(lineas[0]['alegra_category_id'], 'cat-2345')
+        # No persistir el 22x engañoso del contacto.
+        self.assertEqual(lineas[0]['account_code'], '')
+        r = parsear_journal_para_radicado(journal)
+        self.assertEqual(r['valor'], 3518000)
+
+    def test_retencion_2345_sin_codigo_puc_se_radica(self):
+        journal = {
+            'id': '100',
+            'date': '2026-05-14',
+            'observations': 'PAGO RETENCION',
+            'entries': [{
+                'type': 'category',
+                'name': 'Retencion en la fuente por pagar',
+                'id': 'cat-2345-b',
+                'debit': 0,
+                'credit': 1000000,
+                'client': {'identification': '800197268', 'name': 'DIAN'},
+            }],
+        }
+        lineas = extraer_lineas_cxp(journal)
+        self.assertEqual(len(lineas), 1)
+        self.assertEqual(lineas[0]['valor'], 1000000)
+        self.assertEqual(lineas[0]['alegra_category_id'], 'cat-2345-b')
+
     def test_fila_journal_para_tercero(self):
         from accounting.journal_cxp import extraer_lineas_cxp, fila_journal_para_tercero, serializar_detalle_journal_pago
 
