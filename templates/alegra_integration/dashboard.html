@@ -470,10 +470,12 @@
         <table class="table table-sm table-hover mb-0" id="docsTable">
           <thead class="thead-light">
             <tr>
-              <th style="width:105px">Estado</th>
-              <th style="width:130px">Tipo</th>
-              <th>Clave local</th>
-              <th style="width:150px">Operación</th>
+              <th style="width:95px">Estado</th>
+              <th style="width:110px">Tipo</th>
+              <th style="width:95px">Fecha</th>
+              <th>Tercero / detalle</th>
+              <th style="width:110px" class="text-right">Valor</th>
+              <th style="width:130px">Clave</th>
               <th style="width:90px">ID Alegra</th>
               <th>Error / Info</th>
               <th style="width:88px" class="text-center">Acciones</th>
@@ -1370,7 +1372,7 @@ function sendSingleDoc(docId, globalIdx) {
   }
   const doc = allDocs[globalIdx];
   if (!doc || !canSendDoc(doc)) return;
-  if (!confirm(`¿Enviar este documento a Alegra?\n\n${doc.local_key}`)) return;
+  if (!confirm(`¿Enviar este documento a Alegra?\n\n${doc.etiqueta || doc.local_key}${doc.tercero ? '\n' + doc.tercero : ''}${doc.valor != null ? '\n' + formatMoneyCop(doc.valor) : ''}`)) return;
 
   setDocRowSending(doc, true);
   $.ajax({
@@ -1394,7 +1396,7 @@ function sendSingleDoc(docId, globalIdx) {
 function buildDocRows(docs) {
   const tbody = $('#docsBody').empty();
   if (!docs.length) {
-    tbody.append('<tr><td colspan="7" class="text-center text-muted py-3">Sin documentos</td></tr>');
+    tbody.append('<tr><td colspan="9" class="text-center text-muted py-3">Sin documentos</td></tr>');
     $('#docsFooter').hide();
     return;
   }
@@ -1414,6 +1416,26 @@ function buildDocRows(docs) {
       ? `<code style="font-size:11px">${escHtml(doc.alegra_id)}</code>`
       : '<span class="text-muted">—</span>';
 
+    const fecha = doc.fecha
+      ? `<small>${escHtml(doc.fecha)}</small>`
+      : '<span class="text-muted">—</span>';
+
+    const detalleParts = [];
+    if (doc.etiqueta) detalleParts.push(doc.etiqueta);
+    if (doc.tercero && doc.tercero !== doc.etiqueta) detalleParts.push(doc.tercero);
+    const detalleTitle = detalleParts.join(' · ') || doc.local_key || '';
+    const detalleCell = detalleParts.length
+      ? `<span title="${escHtml(detalleTitle)}" style="font-size:12px">${escHtml(detalleParts[0])}${
+          detalleParts.length > 1
+            ? `<br><span class="text-muted" style="font-size:11px">${escHtml(detalleParts.slice(1).join(' · '))}</span>`
+            : ''
+        }</span>`
+      : `<span class="text-muted" style="font-size:11px">${escHtml(doc.local_key || '—')}</span>`;
+
+    const valorCell = (doc.valor != null && doc.valor !== '')
+      ? `<small class="font-weight-bold">${formatMoneyCop(doc.valor)}</small>`
+      : '<span class="text-muted">—</span>';
+
     // Use a stable index into allDocs for the detail modal.
     const globalIdx = allDocs.indexOf(doc);
     const docIdAttr = doc.id ? ` data-doc-id="${doc.id}"` : '';
@@ -1421,8 +1443,10 @@ function buildDocRows(docs) {
       <tr class="${rowCls}" data-status="${doc.status}" data-idx="${globalIdx}"${docIdAttr}>
         <td>${statusBadge(doc.status, hint)}</td>
         <td><small class="text-muted">${escHtml(DOC_LABELS[doc.document_type] || doc.document_type)}</small></td>
+        <td>${fecha}</td>
+        <td>${detalleCell}</td>
+        <td class="text-right">${valorCell}</td>
         <td><span class="local-key" title="${escHtml(doc.local_key)}">${escHtml(doc.local_key)}</span></td>
-        <td>${opLabel(doc.alegra_operation)}</td>
         <td>${alegraId}</td>
         <td>${errorCell}</td>
         <td class="text-center">${buildDocActionButtons(doc, globalIdx)}</td>
@@ -1799,7 +1823,7 @@ function updateSendProgressUI(processed, planned, currentDoc) {
   $('#sendLiveCounter').text(planned ? `${processed} / ${planned}` : String(processed));
   if (currentDoc && currentDoc.local_key) {
     $('#sendLiveText').html(
-      'Enviando <span class="send-live-key">' + escHtml(currentDoc.local_key) + '</span>…'
+      'Enviando <span class="send-live-key">' + escHtml(currentDoc.etiqueta || currentDoc.local_key) + '</span>…'
     );
   } else if (processed >= planned && planned > 0) {
     $('#sendLiveText').text('Finalizando…');

@@ -2424,6 +2424,320 @@ class PaymentReconcileTests(SimpleTestCase):
         mock_reconcile.assert_called_once()
 
 
+class ReceiptReconcileTests(SimpleTestCase):
+    def test_reference_from_payload_strips_local(self):
+        from alegra_integration.receipt_reconcile import reference_from_payload
+
+        self.assertEqual(
+            reference_from_payload({'reference': 'RC-Oasis-12', '__local': {'x': 1}}),
+            'RC-Oasis-12',
+        )
+
+    def test_find_journal_requires_exact_reference(self):
+        from alegra_integration import journal_reconcile
+
+        client = Mock()
+        client.list_journals.return_value = [
+            {'id': '10', 'reference': 'RC-Oasis-1'},
+            {'id': '11', 'reference': 'RC-Oasis-10'},
+        ]
+        # contains filter can return both; exact match for RC-Oasis-1 is unique
+        self.assertEqual(
+            journal_reconcile.find_journal_by_exact_reference(client, 'RC-Oasis-1')['id'],
+            '10',
+        )
+
+    def test_find_journal_rejects_ambiguous_exact_matches(self):
+        from alegra_integration import journal_reconcile
+
+        client = Mock()
+        client.list_journals.return_value = [
+            {'id': '10', 'reference': 'RC-Oasis-1'},
+            {'id': '12', 'reference': 'RC-Oasis-1'},
+        ]
+        self.assertIsNone(journal_reconcile.find_journal_by_exact_reference(client, 'RC-Oasis-1'))
+
+    @patch('alegra_integration.journal_reconcile.sync_pago_from_alegra_document')
+    def test_claim_existing_marks_sent(self, mock_sync):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration import journal_reconcile
+
+        doc = SimpleNamespace(
+            pk=1,
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='receipt',
+            alegra_operation='accounting__createJournal',
+            payload={'reference': 'RC-Oasis-99', 'date': '2026-07-21'},
+            status='valid',
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            save=Mock(),
+        )
+        client = Mock()
+        client.list_journals.return_value = [{'id': '555', 'reference': 'RC-Oasis-99'}]
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.exists.return_value = False
+            self.assertTrue(journal_reconcile.claim_existing_journal(doc, client))
+
+        self.assertEqual(doc.status, AlegraDocument.STATUS_SENT)
+        self.assertEqual(doc.alegra_id, '555')
+        self.assertEqual(doc.response.get('reconciled_reason'), 'journal_already_exists_by_reference')
+        mock_sync.assert_called_once_with(doc)
+
+    @patch('alegra_integration.services.claim_existing_journal')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_precheck_skips_post(self, mock_client_cls, mock_claim):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=20,
+            empresa_id='901018375',
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='receipt',
+            alegra_operation='accounting__createJournal',
+            status=AlegraDocument.STATUS_VALID,
+            local_key='receipt:Oasis:20',
+            payload={'reference': 'RC-Oasis-20'},
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            save=Mock(),
+        )
+        mock_client_cls.return_value = Mock()
+        mock_claim.return_value = True
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        mock_claim.assert_called_once()
+
+    @patch('alegra_integration.services.reconcile_journal_document')
+    @patch('alegra_integration.services.claim_existing_journal', return_value=False)
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_reconciles_receipt_on_error(self, mock_client_cls, _mock_claim, mock_reconcile):
+        from alegra_integration.exceptions import AlegraClientError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=21,
+            empresa_id='901018375',
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='receipt',
+            alegra_operation='accounting__createJournal',
+            status=AlegraDocument.STATUS_VALID,
+            local_key='receipt:Oasis:21',
+            payload={'reference': 'RC-Oasis-21'},
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            save=Mock(),
+        )
+        client = Mock()
+        client.create_journal.side_effect = AlegraClientError('Alegra request failed after retries: timeout')
+        mock_client_cls.return_value = client
+        mock_reconcile.return_value = True
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        mock_reconcile.assert_called_once()
+
+    def test_commission_journal_is_reconcile_eligible(self):
+        from alegra_integration.journal_reconcile import should_attempt_journal_reconcile
+
+        doc = SimpleNamespace(
+            document_type='commission_internal_advance',
+            alegra_operation='accounting__createJournal',
+            payload={'reference': 'COM-Oasis-88'},
+        )
+        self.assertTrue(should_attempt_journal_reconcile(doc))
+
+    def test_bill_document_is_not_journal_reconcile_eligible(self):
+        from alegra_integration.journal_reconcile import should_attempt_journal_reconcile
+
+        doc = SimpleNamespace(
+            document_type='gtt_support',
+            alegra_operation='POST /bills',
+            payload={'observations': 'GTT#1'},
+        )
+        self.assertFalse(should_attempt_journal_reconcile(doc))
+
+    @patch('alegra_integration.services.claim_existing_journal')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_precheck_works_for_commission_journal(self, mock_client_cls, mock_claim):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=30,
+            empresa_id='901018375',
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='commission_internal_advance',
+            alegra_operation='accounting__createJournal',
+            status=AlegraDocument.STATUS_VALID,
+            local_key='commission:internal:Oasis:30',
+            payload={'reference': 'COM-Oasis-30'},
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            save=Mock(),
+        )
+        mock_client_cls.return_value = Mock()
+        mock_claim.return_value = True
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        mock_claim.assert_called_once()
+
+    @patch('alegra_integration.services.sync_pago_from_alegra_document')
+    @patch('alegra_integration.services.claim_existing_journal', side_effect=RuntimeError('list journals down'))
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_continues_when_precheck_errors(self, mock_client_cls, _mock_claim, _mock_sync):
+        """Si GET /journals falla en el pre-check, no debe bloquear el POST."""
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=31,
+            empresa_id='901018375',
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='receipt',
+            alegra_operation='accounting__createJournal',
+            status=AlegraDocument.STATUS_VALID,
+            local_key='receipt:Oasis:31',
+            payload={'reference': 'RC-Oasis-31'},
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            save=Mock(),
+        )
+        client = Mock()
+        client.create_journal.return_value = {'id': '900'}
+        mock_client_cls.return_value = client
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        self.assertEqual(doc.alegra_id, '900')
+        client.create_journal.assert_called_once()
+
+
+class NonIdempotentPostRetryTests(SimpleTestCase):
+    def test_non_idempotent_paths(self):
+        from alegra_integration.client import _is_non_idempotent_post
+
+        self.assertTrue(_is_non_idempotent_post('POST', '/journals'))
+        self.assertTrue(_is_non_idempotent_post('POST', '/bills'))
+        self.assertTrue(_is_non_idempotent_post('POST', '/payments'))
+        self.assertTrue(_is_non_idempotent_post('POST', '/bank-accounts/12/transfer'))
+        self.assertFalse(_is_non_idempotent_post('GET', '/journals'))
+        self.assertFalse(_is_non_idempotent_post('POST', '/contacts'))
+
+
+class DocumentTrackingSummaryTests(SimpleTestCase):
+    def test_doc_tracking_prefers_local_fields(self):
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            source_pk='12',
+            payload={
+                'date': '2026-01-01',
+                'reference': 'RC-X-12',
+                'entries': [{'debit': 999, 'credit': 0}],
+                '__local': {
+                    'fecha': '2026-07-21',
+                    'tercero': 'JUAN PEREZ',
+                    'valor': 150000.5,
+                    'etiqueta': 'Recibo 12',
+                },
+            },
+        )
+        tracking = AlegraIntegrationService._doc_tracking(doc)
+        self.assertEqual(tracking['fecha'], '2026-07-21')
+        self.assertEqual(tracking['tercero'], 'JUAN PEREZ')
+        self.assertEqual(tracking['valor'], 150000.5)
+        self.assertEqual(tracking['etiqueta'], 'Recibo 12')
+
+    def test_doc_tracking_falls_back_to_payload(self):
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            source_pk='99',
+            payload={
+                'date': '2026-03-15',
+                'reference': 'COM-Oasis-99',
+                'observations': 'COMISION Ana Oasis',
+                'entries': [
+                    {'debit': 1000, 'credit': 0},
+                    {'debit': 0, 'credit': 1000},
+                ],
+                '__local': {},
+            },
+        )
+        tracking = AlegraIntegrationService._doc_tracking(doc)
+        self.assertEqual(tracking['fecha'], '2026-03-15')
+        self.assertEqual(tracking['valor'], 1000.0)
+        self.assertEqual(tracking['etiqueta'], 'COM-Oasis-99')
+        self.assertIn('COMISION', tracking['tercero'] or '')
+
+    def test_document_summary_includes_tracking(self):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=1,
+            document_type='receipt',
+            alegra_operation='accounting__createJournal',
+            transport='rest',
+            source_model='andinasoft.Recaudos_general',
+            source_pk='1',
+            local_key='receipt:Oasis:1',
+            status=AlegraDocument.STATUS_VALID,
+            alegra_id='',
+            error='',
+            payload={
+                '__local': {
+                    'fecha': '2026-07-21',
+                    'tercero': 'CLIENTE',
+                    'valor': 50000,
+                    'etiqueta': 'Recibo 1',
+                },
+            },
+            response={},
+        )
+        summary = AlegraIntegrationService()._document_summary(doc)
+        self.assertEqual(summary['fecha'], '2026-07-21')
+        self.assertEqual(summary['tercero'], 'CLIENTE')
+        self.assertEqual(summary['valor'], 50000.0)
+        self.assertEqual(summary['etiqueta'], 'Recibo 1')
+
+
 class AnticipoPaymentBuilderTests(SimpleTestCase):
     @patch('alegra_integration.builders.asesores')
     @patch('alegra_integration.builders.empresas')

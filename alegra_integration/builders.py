@@ -19,6 +19,28 @@ def _date(value):
     return value.isoformat() if value else None
 
 
+def _tracking(*, fecha=None, tercero=None, valor=None, etiqueta=None, **extra):
+    """Campos estándar en __local para la tabla de preview/envío del dashboard."""
+    out = {}
+    if fecha:
+        out['fecha'] = fecha if isinstance(fecha, str) else _date(fecha)
+    tercero = (str(tercero).strip() if tercero is not None else '') or ''
+    if tercero:
+        out['tercero'] = tercero[:180]
+    if valor is not None and valor != '':
+        try:
+            out['valor'] = float(valor)
+        except (TypeError, ValueError):
+            pass
+    etiqueta = (str(etiqueta).strip() if etiqueta is not None else '') or ''
+    if etiqueta:
+        out['etiqueta'] = etiqueta[:120]
+    for key, val in extra.items():
+        if val is not None and val != '':
+            out[key] = val
+    return out
+
+
 def _journal_payload(*, numeration_id, date, reference, observations, entries):
     """
     POST /journals — mismo contrato que recibos de caja (numberTemplate + status open).
@@ -310,6 +332,13 @@ class ReceiptPaymentBuilder:
             'credit_category_id': credit_account,
             'intercompany': bool(forma_cfg.get('intercompany')),
             'counterparty_nit': (forma_cfg.get('counterparty_nit') or '').strip() or None,
+            **_tracking(
+                fecha=receipt.fecha,
+                tercero=titular_name,
+                valor=float(total),
+                etiqueta=f'Recibo {receipt.numrecibo}',
+                tercero_id=titular_ids[0] if titular_ids else None,
+            ),
         }
 
         return BuiltDocument(
@@ -482,6 +511,12 @@ class InternalCommissionAdvanceBuilder:
             'commission_debit_category_id': debit_account,
             'commission_credit_category_id': credit_account,
             'cost_center_id': cost_center_id,
+            **_tracking(
+                fecha=commission.fecha,
+                tercero=getattr(asesor, 'nombre', None),
+                valor=value,
+                etiqueta=f'Comisión {commission.id_pago}',
+            ),
         }
         return BuiltDocument(
             document_type='commission_internal_advance',
@@ -570,6 +605,12 @@ class ExternalCommissionSupportDocumentBuilder:
             'amount': amount,
             'retefuente': retefuente_amount if amount_mode == 'gross' else 0,
             'cost_center_id': cost_center_id,
+            **_tracking(
+                fecha=commission.fecha,
+                tercero=getattr(asesor, 'nombre', None),
+                valor=amount,
+                etiqueta=f'Comisión {commission.id_pago}',
+            ),
         }
 
         return BuiltDocument(
@@ -647,6 +688,12 @@ class GttSupportDocumentBuilder:
         payload['__local'] = {
             'gtt_expense_category_id': expense_category,
             'gtt_cxp_category_id': cxp_category,
+            **_tracking(
+                fecha=getattr(gtt, 'fecha_desde', None),
+                tercero=getattr(asesor, 'nombre', None),
+                valor=value,
+                etiqueta=f'GTT {gtt.pk} línea {detalle.pk}',
+            ),
         }
 
         return BuiltDocument(
@@ -776,7 +823,7 @@ class ExpensePaymentBuilder:
             return f'expense:pago:{pago_pk}:t:{_ident_norm(id_tercero)}'
         return f'expense:pago:{pago_pk}'
 
-    def _base_payment(self, *, date, cuenta, value, description, local_key, source_model, source_pk, contact_id=None, numeration_id=None):
+    def _base_payment(self, *, date, cuenta, value, description, local_key, source_model, source_pk, contact_id=None, numeration_id=None, tercero=None, etiqueta=None):
         bank_account_id = self.resolver.bank_account_for_account(cuenta)
         payment_method = self.resolver.payment_method(cuenta.cuentabanco, required=False) or 'transfer'
         # Optional company-level cost center for expense payments (when configured).
@@ -794,6 +841,12 @@ class ExpensePaymentBuilder:
             payload['costCenter'] = {'id': cost_center_id}
         if contact_id:
             payload['client'] = {'id': contact_id}
+        payload['__local'] = _tracking(
+            fecha=date,
+            tercero=tercero,
+            valor=_money(value),
+            etiqueta=etiqueta or (description or '')[:120],
+        )
         return BuiltDocument(
             document_type='expense_payment',
             operation='POST /payments',
@@ -846,6 +899,8 @@ class ExpensePaymentBuilder:
             source_pk=pago.pk,
             contact_id=contact_id,
             numeration_id=self.resolver.numeration('expense_payment', required=False),
+            tercero=nombre or id_tercero,
+            etiqueta=f'Pago {pago.pk} · Fact {factura.nrofactura}',
         )
         bill_id = self.resolver.bill_for_factura(factura.pk, required=False, factura=factura)
         if bill_id:
@@ -919,6 +974,8 @@ class ExpensePaymentBuilder:
             source_pk=pago.pk,
             contact_id=contact_id,
             numeration_id=self.resolver.numeration('expense_payment', required=False),
+            tercero=getattr(factura, 'idtercero', None),
+            etiqueta=f'Pago {pago.pk} · Fact {factura.nrofactura}',
         )
         bill_id = self.resolver.bill_for_factura(factura.pk, required=False, factura=factura)
         if bill_id:
@@ -1052,6 +1109,12 @@ class ExpensePaymentBuilder:
                     ),
                 ],
             )
+            payload['__local'] = _tracking(
+                fecha=getattr(pago, 'fecha_pago', None),
+                tercero=prov,
+                valor=value,
+                etiqueta=f'Interco pago {pago.pk}',
+            )
             return BuiltDocument(
                 document_type='expense_intercompany',
                 operation='accounting__createJournal',
@@ -1112,6 +1175,12 @@ class ExpensePaymentBuilder:
                 ),
             ],
         )
+        payload['__local'] = _tracking(
+            fecha=getattr(pago, 'fecha_pago', None),
+            tercero=prov,
+            valor=value,
+            etiqueta=f'Interco pago {pago.pk}',
+        )
         return BuiltDocument(
             document_type='expense_intercompany',
             operation='accounting__createJournal',
@@ -1141,6 +1210,8 @@ class ExpensePaymentBuilder:
             source_pk=anticipo.pk,
             contact_id=contact_id,
             numeration_id=self.resolver.numeration('expense_anticipo', required=False),
+            tercero=anticipo.nombre_tercero or anticipo.id_tercero,
+            etiqueta=f'Anticipo {anticipo.pk}',
         )
         debit_code = getattr(getattr(anticipo, 'tipo_anticipo', None), 'cuenta_debito_1', None)
         # 1) Try mapping per interface (concept)
@@ -1197,6 +1268,12 @@ class ExpensePaymentBuilder:
                 'date': _date(getattr(transferencia, 'fecha', None)),
                 'observations': obs[:500],
             }
+            payload['__local'] = _tracking(
+                fecha=getattr(transferencia, 'fecha', None),
+                tercero=obs,
+                valor=value,
+                etiqueta=f'Transferencia {transferencia.pk}',
+            )
             return BuiltDocument(
                 document_type='expense_bank_transfer',
                 operation=f'POST /bank-accounts/{origin_bank}/transfer',
@@ -1269,6 +1346,12 @@ class ExpensePaymentBuilder:
                     ),
                 ],
             )
+            payload['__local'] = _tracking(
+                fecha=getattr(transferencia, 'fecha', None),
+                tercero=origen_name or empresa_sale_id,
+                valor=value,
+                etiqueta=f'Interco transf {transferencia.pk} (entrada)',
+            )
             return BuiltDocument(
                 document_type='expense_intercompany_transfer_in',
                 operation='accounting__createJournal',
@@ -1331,6 +1414,13 @@ class ExpensePaymentBuilder:
                     client_id=interco_client,
                 ),
             ],
+        )
+        dest_name = getattr(getattr(transferencia, 'empresa_entra', None), 'nombre', '') or empresa_entra_id
+        payload['__local'] = _tracking(
+            fecha=getattr(transferencia, 'fecha', None),
+            tercero=dest_name,
+            valor=value,
+            etiqueta=f'Interco transf {transferencia.pk} (salida)',
         )
         return BuiltDocument(
             document_type='expense_intercompany_transfer_out',
@@ -1401,6 +1491,25 @@ def _contact_for_partner(resolver, partner):
     if not tercero_pk:
         raise AlegraBuildError('El gasto no tiene tercero identificado.')
     return resolver.contact_for_partner(tercero_pk, required=True)
+
+
+def _partner_display_name(partner):
+    if partner is None:
+        return ''
+    fn = getattr(partner, 'nombre_completo', None)
+    if callable(fn):
+        try:
+            name = fn()
+            if name:
+                return str(name).strip()
+        except Exception:
+            pass
+    for attr in ('nombres', 'nombre', 'nombre_tercero', 'razonsocial'):
+        val = getattr(partner, attr, None)
+        if val:
+            return str(val).strip()
+    pk = getattr(partner, 'idTercero', None) or getattr(partner, 'pk', None)
+    return str(pk).strip() if pk is not None else ''
 
 
 class CajaGastoBillBuilder:
@@ -1518,6 +1627,12 @@ class CajaGastoBillBuilder:
             'impuesto_iva_id': gasto.cuenta_iva_id,
             'impuesto_rte_id': gasto.cuenta_rte_id,
             'cost_center_id': cost_center_id,
+            **_tracking(
+                fecha=gasto.fecha_gasto,
+                tercero=_partner_display_name(getattr(gasto, 'tercero', None)),
+                valor=valor_esperado,
+                etiqueta=f'Gasto caja {gasto.pk}',
+            ),
         }
 
         return BuiltDocument(
@@ -1694,6 +1809,12 @@ class CajaLegalizationJournalBuilder:
             'valor_credito_total': total_credito,
             'cxp_from_bill_response': True,
             'cost_center_id': cost_center_id,
+            **_tracking(
+                fecha=journal_date,
+                tercero=f'Caja {caja_label}',
+                valor=total_credito,
+                etiqueta=f'Journal caja lote {batch_id}',
+            ),
         }
 
         return BuiltDocument(

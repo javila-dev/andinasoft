@@ -24,9 +24,33 @@ from alegra_integration.client import AlegraMCPClient
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.pago_link import sync_pago_from_alegra_document
 from alegra_integration.pago_reconcile import reconcile_expense_payment_document, should_attempt_payment_reconcile
+from alegra_integration.journal_reconcile import (
+    claim_existing_journal,
+    reconcile_journal_document,
+    should_attempt_journal_reconcile,
+)
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 
 logger = logging.getLogger(__name__)
+
+
+# #region agent log
+def _agent_dbg(hypothesis_id, location, message, data=None):
+    try:
+        import json as _json
+        with open('/code/.cursor/debug-fa765a.log', 'a') as _f:
+            _f.write(_json.dumps({
+                'sessionId': 'fa765a',
+                'hypothesisId': hypothesis_id,
+                'location': location,
+                'message': message,
+                'data': data or {},
+                'timestamp': int(time.time() * 1000),
+            }, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+# #endregion
+
 from alegra_integration.models import (
     AlegraContactIndex,
     AlegraDocument,
@@ -462,6 +486,21 @@ class AlegraIntegrationService:
                 'document': None,
             }
 
+        # #region agent log
+        _agent_dbg('C', 'services.py:send_one_batch_document', 'send-one entry', {
+            'batch_id': batch.pk,
+            'document_id': doc.pk,
+            'explicit_document_id': bool(document_id),
+            'retry_failed': retry_failed,
+            'doc_status': doc.status,
+            'document_type': doc.document_type,
+            'local_key': doc.local_key,
+            'alegra_id': doc.alegra_id,
+            'alegra_operation': doc.alegra_operation,
+            'batch_status': batch.status,
+        })
+        # #endregion
+
         client_by_empresa = {}
         try:
             self._prepare_caja_document_for_send(batch, doc)
@@ -570,6 +609,18 @@ class AlegraIntegrationService:
             self._finalize_caja_journal_doc(doc)
 
     def _try_send_batch_document(self, batch, doc, client_by_empresa, *, retry_failed=True):
+        # #region agent log
+        _agent_dbg('B', 'services.py:_try_send_batch_document:entry', 'try send start', {
+            'batch_id': getattr(batch, 'pk', None),
+            'document_id': doc.pk,
+            'status': doc.status,
+            'retry_failed': retry_failed,
+            'document_type': doc.document_type,
+            'local_key': doc.local_key,
+            'alegra_id': doc.alegra_id,
+            'error_prev': (doc.error or '')[:180],
+        })
+        # #endregion
         if doc.status == AlegraDocument.STATUS_SENT:
             return 'skipped'
         if doc.status == AlegraDocument.STATUS_INVALID:
@@ -584,6 +635,14 @@ class AlegraIntegrationService:
             status=AlegraDocument.STATUS_SENT,
         ).exclude(pk=doc.pk).first()
         if existing_sent:
+            # #region agent log
+            _agent_dbg('B', 'services.py:_try_send_batch_document:already_sent', 'skipped local already_sent', {
+                'document_id': doc.pk,
+                'local_key': doc.local_key,
+                'existing_document_id': existing_sent.pk,
+                'existing_alegra_id': existing_sent.alegra_id,
+            })
+            # #endregion
             doc.status = AlegraDocument.STATUS_SKIPPED
             doc.response = {'skipped_reason': 'already_sent', 'existing_document_id': existing_sent.pk}
             doc.alegra_id = existing_sent.alegra_id
@@ -598,6 +657,52 @@ class AlegraIntegrationService:
             if not client:
                 client = AlegraMCPClient(doc.empresa)
                 client_by_empresa[emp_id] = client
+            if should_attempt_journal_reconcile(doc):
+                # #region agent log
+                _agent_dbg('E', 'services.py:_try_send_batch_document:precheck', 'journal reference pre-check', {
+                    'document_id': doc.pk,
+                    'document_type': doc.document_type,
+                    'local_key': doc.local_key,
+                    'reference': (doc.payload or {}).get('reference') if isinstance(doc.payload, dict) else None,
+                })
+                # #endregion
+                try:
+                    claimed = claim_existing_journal(doc, client)
+                except Exception as precheck_exc:
+                    # No bloquear el POST si la consulta de journals falla (rate limit, timeout, etc.).
+                    logger.warning(
+                        'Alegra journal pre-check failed doc=%s local_key=%s: %s',
+                        doc.pk,
+                        doc.local_key,
+                        precheck_exc,
+                    )
+                    # #region agent log
+                    _agent_dbg('E', 'services.py:_try_send_batch_document:precheck_error', 'pre-check failed; continuing to POST', {
+                        'document_id': doc.pk,
+                        'local_key': doc.local_key,
+                        'error': str(precheck_exc)[:300],
+                    })
+                    # #endregion
+                    claimed = False
+                if claimed:
+                    # #region agent log
+                    _agent_dbg('E', 'services.py:_try_send_batch_document:precheck_hit', 'claimed existing journal by reference', {
+                        'document_id': doc.pk,
+                        'document_type': doc.document_type,
+                        'local_key': doc.local_key,
+                        'alegra_id': doc.alegra_id,
+                    })
+                    # #endregion
+                    return 'sent'
+            # #region agent log
+            _agent_dbg('A', 'services.py:_try_send_batch_document:before_post', 'about to POST to Alegra', {
+                'document_id': doc.pk,
+                'local_key': doc.local_key,
+                'document_type': doc.document_type,
+                'status_before': doc.status,
+                'operation': doc.alegra_operation,
+            })
+            # #endregion
             response = self._send_document(client, doc)
             doc.status = AlegraDocument.STATUS_SENT
             doc.response = response
@@ -605,11 +710,46 @@ class AlegraIntegrationService:
             doc.error = ''
             doc.sent_at = timezone.now()
             doc.save(update_fields=['status', 'response', 'alegra_id', 'error', 'sent_at', 'updated_at'])
+            # #region agent log
+            _agent_dbg('A', 'services.py:_try_send_batch_document:after_post', 'marked sent after Alegra response', {
+                'document_id': doc.pk,
+                'local_key': doc.local_key,
+                'alegra_id': doc.alegra_id,
+                'document_type': doc.document_type,
+            })
+            # #endregion
             sync_pago_from_alegra_document(doc)
             if doc.document_type == 'caja_bill':
                 self._capture_caja_bill_cxp(client, doc)
             return 'sent'
         except AlegraIntegrationError as exc:
+            # #region agent log
+            _agent_dbg('B', 'services.py:_try_send_batch_document:failed', 'send failed (may already exist in Alegra)', {
+                'document_id': doc.pk,
+                'local_key': doc.local_key,
+                'document_type': doc.document_type,
+                'status_before_fail_save': doc.status,
+                'error': str(exc)[:300],
+            })
+            # #endregion
+            if should_attempt_journal_reconcile(doc):
+                try:
+                    reconcile_client = client or AlegraMCPClient(doc.empresa)
+                    if reconcile_journal_document(doc, reconcile_client, exc):
+                        # #region agent log
+                        _agent_dbg('E', 'services.py:_try_send_batch_document:reconciled', 'journal reconciled by reference after error', {
+                            'document_id': doc.pk,
+                            'document_type': doc.document_type,
+                            'local_key': doc.local_key,
+                            'alegra_id': doc.alegra_id,
+                        })
+                        # #endregion
+                        return 'sent'
+                except Exception as reconcile_exc:
+                    doc.status = AlegraDocument.STATUS_FAILED
+                    doc.error = f'{exc} · Reconciliación journal falló: {reconcile_exc}'
+                    doc.save(update_fields=['status', 'error', 'updated_at'])
+                    return 'failed'
             if (
                 doc.alegra_operation == 'POST /payments'
                 and doc.document_type == 'expense_payment'
@@ -2688,6 +2828,7 @@ class AlegraIntegrationService:
         return None
 
     def _document_summary(self, doc):
+        tracking = self._doc_tracking(doc)
         summary = {
             'id': doc.pk,
             'document_type': doc.document_type,
@@ -2701,11 +2842,126 @@ class AlegraIntegrationService:
             'error': doc.error,
             'payload': doc.payload,
             'response': doc.response,
+            'fecha': tracking.get('fecha'),
+            'tercero': tracking.get('tercero'),
+            'valor': tracking.get('valor'),
+            'etiqueta': tracking.get('etiqueta'),
         }
         hint = self._document_status_hint(doc)
         if hint:
             summary['status_hint'] = hint
         return summary
+
+    @staticmethod
+    def _doc_tracking(doc):
+        """
+        Extrae fecha / tercero / valor / etiqueta para la tabla de preview.
+        Preferencia: __local enriquecido; fallback desde payload Alegra.
+        """
+        payload = doc.payload if isinstance(getattr(doc, 'payload', None), dict) else {}
+        local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
+
+        def _as_date(value):
+            if value is None or value == '':
+                return None
+            if hasattr(value, 'isoformat'):
+                try:
+                    return value.isoformat()[:10]
+                except Exception:
+                    return str(value)[:10]
+            return str(value)[:10]
+
+        def _as_float(value):
+            if value is None or value == '':
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        fecha = (
+            local.get('fecha')
+            or local.get('fecha_pago')
+            or local.get('fecha_gasto')
+            or payload.get('date')
+            or local.get('fecha_desde')
+        )
+        fecha = _as_date(fecha)
+
+        valor = local.get('valor')
+        if valor is None:
+            for key in ('total', 'amount', 'valor_esperado', 'valor_credito_total', 'valor_credito'):
+                if local.get(key) is not None:
+                    valor = local.get(key)
+                    break
+        if valor is None and isinstance(payload.get('amount'), (int, float, str)):
+            valor = payload.get('amount')
+        if valor is None and isinstance(payload.get('entries'), list):
+            try:
+                valor = sum(float((e or {}).get('debit') or 0) for e in payload['entries'] if isinstance(e, dict))
+            except (TypeError, ValueError):
+                valor = None
+        if valor is None and isinstance(payload.get('bills'), list):
+            try:
+                valor = sum(float((b or {}).get('amount') or 0) for b in payload['bills'] if isinstance(b, dict))
+            except (TypeError, ValueError):
+                valor = None
+        if valor is None:
+            categories = payload.get('categories')
+            purchases = payload.get('purchases') if isinstance(payload.get('purchases'), dict) else {}
+            if not categories and purchases:
+                categories = purchases.get('categories')
+            if isinstance(categories, list):
+                try:
+                    total = 0.0
+                    for row in categories:
+                        if not isinstance(row, dict):
+                            continue
+                        qty = float(row.get('quantity') or 1)
+                        price = float(row.get('price') or 0)
+                        total += qty * price
+                    valor = total if categories else None
+                except (TypeError, ValueError):
+                    valor = None
+        valor = _as_float(valor)
+
+        tercero = (
+            local.get('tercero')
+            or local.get('tercero_nombre')
+            or local.get('proveedor')
+            or local.get('asesor_nombre')
+            or ''
+        )
+        if not tercero:
+            asesor = local.get('asesor')
+            if isinstance(asesor, dict):
+                tercero = asesor.get('nombre') or ''
+        if not tercero:
+            desc = local.get('descripcion') or ''
+            if desc:
+                tercero = desc
+        if not tercero:
+            observations = payload.get('observations') or ''
+            if observations:
+                # Primera parte legible (sin IDs técnicos largos)
+                tercero = str(observations).split(' · ')[0].strip()[:180]
+        tercero = (str(tercero).strip() if tercero else '') or None
+
+        etiqueta = local.get('etiqueta') or ''
+        if not etiqueta and local.get('numrecibo'):
+            etiqueta = f"Recibo {local.get('numrecibo')}"
+        if not etiqueta and payload.get('reference'):
+            etiqueta = str(payload.get('reference')).strip()
+        if not etiqueta and getattr(doc, 'source_pk', None):
+            etiqueta = f"#{doc.source_pk}"
+        etiqueta = (str(etiqueta).strip() if etiqueta else '') or None
+
+        return {
+            'fecha': fecha,
+            'tercero': tercero,
+            'valor': valor,
+            'etiqueta': etiqueta,
+        }
 
     @staticmethod
     def _document_status_hint(doc):

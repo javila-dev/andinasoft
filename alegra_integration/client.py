@@ -13,6 +13,38 @@ from alegra_integration.exceptions import AlegraClientError, AlegraConfiguration
 logger = logging.getLogger(__name__)
 
 
+# #region agent log
+def _agent_dbg(hypothesis_id, location, message, data=None):
+    try:
+        with open('/code/.cursor/debug-fa765a.log', 'a') as _f:
+            _f.write(json.dumps({
+                'sessionId': 'fa765a',
+                'hypothesisId': hypothesis_id,
+                'location': location,
+                'message': message,
+                'data': data or {},
+                'timestamp': int(time.time() * 1000),
+            }, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+# #endregion
+
+
+def _is_non_idempotent_post(method, path):
+    """
+    POSTs que no deben reintentarse tras timeout/502–504 (pueden haber creado el recurso).
+    429 sí se reintenta (la API no creó el documento).
+    """
+    if str(method or '').upper() != 'POST':
+        return False
+    clean = str(path or '').split('?', 1)[0]
+    if clean in ('/journals', '/bills', '/payments'):
+        return True
+    if clean.startswith('/bank-accounts/') and clean.endswith('/transfer'):
+        return True
+    return False
+
+
 class AlegraMCPClient:
     MCP_URL = 'https://mcp.alegra.com/mcp'
     API_URL = 'https://api.alegra.com/api/v1'
@@ -208,7 +240,9 @@ class AlegraMCPClient:
                 json=json_payload,
                 files=files,
                 timeout=self.timeout,
-            )
+            ),
+            method=method,
+            path=path,
         )
 
     def create_income_payment(self, payload):
@@ -217,6 +251,14 @@ class AlegraMCPClient:
 
     def create_journal(self, payload):
         # REST equivalent of MCP accounting__createJournal
+        # #region agent log
+        ref = payload.get('reference') if isinstance(payload, dict) else None
+        _agent_dbg('A', 'client.py:create_journal', 'POST /journals about to call', {
+            'empresa_id': getattr(self.empresa, 'pk', None),
+            'reference': ref,
+            'date': (payload or {}).get('date') if isinstance(payload, dict) else None,
+        })
+        # #endregion
         return self.rest('POST', '/journals', json_payload=payload)
 
     def create_out_payment(self, payload):
@@ -293,6 +335,41 @@ class AlegraMCPClient:
         if fields:
             path = f'{path}?fields={fields}'
         return self.rest('GET', path)
+
+    def list_journals(
+        self,
+        *,
+        start=0,
+        limit=30,
+        date=None,
+        reference=None,
+        client_id=None,
+        observations=None,
+        order_field=None,
+        order_direction=None,
+        fields=None,
+    ):
+        """
+        GET /journals — lista/filtra comprobantes.
+        Nota: `reference` en Alegra es contains; el caller debe validar match exacto si aplica.
+        """
+        params = {'start': int(start), 'limit': min(int(limit), 30)}
+        if date:
+            params['date'] = str(date)[:10]
+        if reference:
+            params['reference'] = str(reference)
+        if client_id:
+            params['client_id'] = str(client_id)
+        if observations:
+            params['observations'] = str(observations)
+        if order_field:
+            params['order_field'] = str(order_field)
+        if order_direction:
+            params['order_direction'] = str(order_direction)
+        if fields:
+            params['fields'] = str(fields)
+        qs = '&'.join(f'{k}={requests.utils.quote(str(v))}' for k, v in params.items())
+        return self.rest('GET', f'/journals?{qs}')
 
     def post_webhooks_subscription(self, event, url):
         """
@@ -522,7 +599,7 @@ class AlegraMCPClient:
             pages += 1
         return list(by_id.values())
 
-    def _request_with_retry(self, make_request, *, max_retries=5, raw=False):
+    def _request_with_retry(self, make_request, *, max_retries=5, raw=False, method=None, path=None):
         """
         Alegra rate-limit can surface as:
         - HTTP 429
@@ -533,7 +610,21 @@ class AlegraMCPClient:
             try:
                 response = make_request()
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
-                if attempt >= max_retries:
+                # POSTs no idempotentes: reintentar tras timeout puede duplicar en Alegra.
+                no_retry = _is_non_idempotent_post(method, path)
+                # #region agent log
+                _agent_dbg('A', 'client.py:_request_with_retry', 'network error on request', {
+                    'method': method,
+                    'path': path,
+                    'attempt': attempt,
+                    'max_retries': max_retries,
+                    'will_retry': (not no_retry) and attempt < max_retries,
+                    'exc_type': type(exc).__name__,
+                    'exc': str(exc)[:200],
+                    'empresa_id': getattr(self.empresa, 'pk', None),
+                })
+                # #endregion
+                if no_retry or attempt >= max_retries:
                     raise AlegraClientError(f'Alegra request failed after retries: {exc}')
                 # Exponential backoff on transient network issues
                 sleep_s = min(30.0, 2.0 ** attempt)
@@ -547,10 +638,25 @@ class AlegraMCPClient:
 
             # Retry on transient gateway/service errors
             if response.status_code in (502, 503, 504) and attempt < max_retries:
-                sleep_s = min(60.0, 2.0 ** attempt)
-                time.sleep(sleep_s)
-                attempt += 1
-                continue
+                no_retry = _is_non_idempotent_post(method, path)
+                # #region agent log
+                _agent_dbg('D', 'client.py:_request_with_retry', 'gateway error on request', {
+                    'method': method,
+                    'path': path,
+                    'attempt': attempt,
+                    'status_code': response.status_code,
+                    'will_retry': not no_retry,
+                    'empresa_id': getattr(self.empresa, 'pk', None),
+                })
+                # #endregion
+                if no_retry:
+                    # No re-POST: dejar que el caller reconcilie o marque failed.
+                    pass
+                else:
+                    sleep_s = min(60.0, 2.0 ** attempt)
+                    time.sleep(sleep_s)
+                    attempt += 1
+                    continue
 
             retry_after = None
             if isinstance(payload, dict) and payload.get('code') == 429:
@@ -571,6 +677,19 @@ class AlegraMCPClient:
 
             if raw:
                 return response, payload
+            # #region agent log
+            if method == 'POST' and path == '/journals':
+                alegra_id = None
+                if isinstance(payload, dict):
+                    alegra_id = payload.get('id')
+                _agent_dbg('A', 'client.py:_request_with_retry:success', 'POST /journals response', {
+                    'status_code': response.status_code,
+                    'attempt': attempt,
+                    'retried': attempt > 0,
+                    'alegra_id': alegra_id,
+                    'empresa_id': getattr(self.empresa, 'pk', None),
+                })
+            # #endregion
             return self._handle_decoded_response(response, payload)
 
     def _handle_decoded_response(self, response, payload):
