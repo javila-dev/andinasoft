@@ -21,7 +21,7 @@
                     <th class="text-align-center">Forma de Pago</th>
                     <th class="text-align-center">Valor</th>
                     <th class="text-align-center">Soporte</th>
-                    
+                    <th class="text-align-center">Recibo</th>
                 </tr>
             </thead>
             <tbody>
@@ -34,12 +34,12 @@
                         <span class="badge badge-warning text-dark">Pendiente</span>
                         {%endif%}
                     </td>
-                    <td class="text-align-center" width="15%">{{recaudo.numrecibo}}</td>
-                    <td class="text-align-center" width="20%">{{recaudo.fecha|date:'d/m/Y'}}</td>
-                    <td class="text-align-center" width="15%">{{recaudo.operacion}}</td>
-                    <td class="text-align-center" width="20%">{{recaudo.formapago}}</td>
-                    <td class="text-align-center" width="15%">{{recaudo.valor}}</td>
-                    <td class="text-align-center" width="15%">
+                    <td class="text-align-center" width="12%">{{recaudo.numrecibo}}</td>
+                    <td class="text-align-center" width="15%">{{recaudo.fecha|date:'d/m/Y'}}</td>
+                    <td class="text-align-center" width="12%">{{recaudo.operacion}}</td>
+                    <td class="text-align-center" width="15%">{{recaudo.formapago}}</td>
+                    <td class="text-align-center" width="12%">{{recaudo.valor}}</td>
+                    <td class="text-align-center" width="12%">
                         {% if recaudo.soporte_url %}
                         <a href="{{ recaudo.soporte_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
                             <i class="far fa-file-pdf"></i> Ver
@@ -48,14 +48,21 @@
                         <span class="badge badge-light text-muted">Sin soporte</span>
                         {% endif %}
                     </td>
-                    
+                    <td class="text-align-center" width="12%">
+                        <a href="/finance/printreceipts?proyecto={{proyecto}}&recibo={{recaudo.numrecibo}}"
+                           target="_blank" class="btn btn-sm btn-outline-secondary"
+                           title="Imprimir recibo">
+                            <i class="fas fa-print"></i> Imprimir
+                        </a>
+                    </td>
                 </tr>
                 {%endfor%}
             </tbody>
             <tfoot>
                 <tr>
-                    <th class="text-right" colspan=6>Total</th>
+                    <th class="text-right" colspan="5">Total</th>
                     <th class="text-align-center">{{total_recaudo.valor__sum}}</th>
+                    <th></th>
                     <th></th>
                 </tr>
             </tfoot>
@@ -82,7 +89,7 @@
             ],
         columnDefs: [
        { type: 'date-uk', targets: 2 },
-       { orderable: false, targets: 6 }
+       { orderable: false, targets: [6, 7] }
      ]
   });
   tabla_rec_det.buttons().container()
