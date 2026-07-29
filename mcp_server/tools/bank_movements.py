@@ -185,10 +185,10 @@ def bank_movements_list(
     if empresa_obj:
         queryset = queryset.filter(empresa=empresa_obj)
     if estado:
-        estado_upper = estado.upper()
+        estado_upper = ' '.join(str(estado).strip().upper().split())
         if estado_upper not in ('CONCILIADO', 'SIN CONCILIAR'):
             return {'error': 'El estado debe ser CONCILIADO o SIN CONCILIAR'}
-        queryset = queryset.filter(estado=estado_upper)
+        queryset = queryset.filter(estado__iexact=estado_upper)
     if usado_agente is not None:
         queryset = queryset.filter(usado_agente=usado_agente)
     if valor_positivo:

@@ -12,16 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_lote_estado(value: str) -> Optional[str]:
-    """Normaliza el estado del lote a uno de los valores válidos."""
+    """Normaliza el estado del lote a su forma canónica (case-insensitive)."""
     if value is None:
         return None
-    normalized = ' '.join(str(value).strip().lower().split())
+    # Colapsa espacios y unifica separadores (_, -) para aceptar variantes de casing/formato.
+    normalized = ' '.join(str(value).strip().lower().replace('_', ' ').replace('-', ' ').split())
     estados = {
         'libre': 'Libre',
         'bloqueado': 'Bloqueado',
         'sin liberar': 'Sin Liberar',
+        'sinliberar': 'Sin Liberar',
         'adjudicado': 'Adjudicado',
-        'reservado': 'Reservado'
+        'reservado': 'Reservado',
     }
     return estados.get(normalized)
 
@@ -130,10 +132,11 @@ def lotes_list(
             if normalized:
                 estados.append(normalized)
 
+    estados_consulta = ['Libre', 'Bloqueado', 'Sin Liberar', 'Adjudicado', 'Reservado']
     if estado and not estados and not idinmueble:
         return {
             'error': 'El estado enviado no es válido.',
-            'estado_permitido': ['Libre', 'Bloqueado', 'Sin Liberar'],
+            'estado_permitido': estados_consulta,
             'count': 0,
             'data': []
         }
@@ -158,8 +161,8 @@ def lotes_list(
         data = []
         for lote in inventario:
             relacion = None
-            estado_lote = (lote.estado or '').strip().lower()
-            if estado_lote == 'adjudicado':
+            estado_lote_norm = _normalize_lote_estado(lote.estado)
+            if estado_lote_norm == 'Adjudicado':
                 adj = Adjudicacion.objects.using(proyecto).filter(idinmueble=lote.idinmueble).first()
                 if adj:
                     cliente_nombre = _get_cliente_nombre(adj.idtercero1)
@@ -168,7 +171,7 @@ def lotes_list(
                         'referencia': adj.idadjudicacion,
                         'cliente': cliente_nombre
                     }
-            elif estado_lote == 'reservado':
+            elif estado_lote_norm == 'Reservado':
                 venta = (ventas_nuevas.objects.using(proyecto)
                          .filter(inmueble=lote.idinmueble)
                          .order_by('-fecha_contrato', '-id_venta')
@@ -183,7 +186,7 @@ def lotes_list(
 
             data.append({
                 'idinmueble': lote.idinmueble,
-                'estado': lote.estado,
+                'estado': estado_lote_norm or lote.estado,
                 'manzana': lote.manzananumero,
                 'lote': lote.lotenumero,
                 'area_privada': float(lote.areaprivada) if lote.areaprivada else None,
@@ -211,8 +214,8 @@ def lotes_change_status(
     """
     Cambia el estado de un lote entre Libre, Bloqueado y Sin Liberar.
 
-    Solo se pueden modificar lotes cuyo estado actual sea Bloqueado o Sin Liberar.
-    Adjudicado, Reservado y Libre no se pueden cambiar por MCP.
+    Solo se pueden modificar lotes cuyo estado actual sea Libre, Bloqueado o Sin Liberar.
+    Adjudicado y Reservado no se pueden cambiar por MCP.
 
     Args:
         proyecto: Nombre del proyecto (requerido)
@@ -252,13 +255,15 @@ def lotes_change_status(
         return {'error': 'Error al buscar el lote.', 'detail': str(exc)}
 
     estado_actual = (lote.estado or '').strip()
-    estados_modificables = ('Bloqueado', 'Sin Liberar')
+    estado_actual_norm = _normalize_lote_estado(estado_actual) or estado_actual
+    estados_modificables = ('Libre', 'Bloqueado', 'Sin Liberar')
 
-    if estado_actual not in estados_modificables:
+    if estado_actual_norm not in estados_modificables:
         return {
             'error': (
                 f'No se puede modificar el estado de un lote {estado_actual or "sin estado"}. '
-                f'Por MCP solo se pueden cambiar lotes en estado Bloqueado o Sin Liberar.'
+                f'Por MCP solo se pueden cambiar lotes en estado Libre, Bloqueado o Sin Liberar '
+                f'(no Adjudicado ni Reservado).'
             ),
             'estado_actual': estado_actual,
             'estados_modificables': list(estados_modificables),
@@ -266,16 +271,16 @@ def lotes_change_status(
 
     estado_nuevo_norm = _normalize_lote_estado(estado)
 
-    if not estado_nuevo_norm or estado_nuevo_norm not in ('Libre', 'Bloqueado', 'Sin Liberar'):
+    if not estado_nuevo_norm or estado_nuevo_norm not in estados_modificables:
         return {
             'error': 'El estado enviado no es válido.',
-            'estado_permitido': ['Libre', 'Bloqueado', 'Sin Liberar']
+            'estado_permitido': list(estados_modificables)
         }
 
     if estado_nuevo_norm == 'Bloqueado' and not (motivo_bloqueo or '').strip():
         return {'error': 'Debes enviar "motivo_bloqueo" para bloquear un lote.'}
 
-    if estado_actual == estado_nuevo_norm:
+    if estado_actual_norm == estado_nuevo_norm:
         return {
             'error': 'El lote ya se encuentra en el estado solicitado.',
             'estado_actual': estado_actual
@@ -315,8 +320,12 @@ LOTES_TOOLS = [
             'properties': {
                 'proyecto': {'type': 'string'},
                 'estado': {
-                    'type': 'string', 
-                    'enum': ['Libre', 'Bloqueado', 'Sin Liberar', 'Adjudicado', 'Reservado']
+                    'type': 'string',
+                    'description': (
+                        'Estado del lote (case-insensitive): '
+                        'Libre, Bloqueado, Sin Liberar, Adjudicado, Reservado. '
+                        'Acepta varias mayúsculas/minúsculas (ej: libre, LIBRE, Libre).'
+                    ),
                 },
                 'manzana': {'type': 'string', 'description': 'Separadas por comas (ej: 1,2,3)'},
                 'idinmueble': {'type': 'string'}
@@ -328,8 +337,8 @@ LOTES_TOOLS = [
         'name': 'lotes_change_status',
         'description': (
             'Cambia el estado de un lote a Libre, Bloqueado o Sin Liberar. '
-            'Solo aplica a lotes que hoy estén Bloqueado o Sin Liberar. '
-            'Nunca modifica Adjudicado, Reservado ni Libre.'
+            'Solo aplica a lotes que hoy estén Libre, Bloqueado o Sin Liberar. '
+            'Nunca modifica Adjudicado ni Reservado. El parámetro estado es case-insensitive.'
         ),
         'inputSchema': {
             'type': 'object',
@@ -337,8 +346,11 @@ LOTES_TOOLS = [
                 'proyecto': {'type': 'string'},
                 'idinmueble': {'type': 'string'},
                 'estado': {
-                    'type': 'string', 
-                    'enum': ['Libre', 'Bloqueado', 'Sin Liberar']
+                    'type': 'string',
+                    'description': (
+                        'Nuevo estado (case-insensitive): Libre, Bloqueado o Sin Liberar. '
+                        'Acepta varias mayúsculas/minúsculas (ej: bloqueado, BLOQUEADO).'
+                    ),
                 },
                 'motivo_bloqueo': {'type': 'string', 'description': 'Requerido si estado=Bloqueado'}
             },

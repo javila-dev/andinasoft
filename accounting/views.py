@@ -236,11 +236,14 @@ def _calculate_lote_valor(lote):
 def _normalize_lote_estado(value):
     if value is None:
         return None
-    normalized = ' '.join(str(value).strip().lower().split())
+    normalized = ' '.join(str(value).strip().lower().replace('_', ' ').replace('-', ' ').split())
     estados = {
         'libre': 'Libre',
         'bloqueado': 'Bloqueado',
-        'sin liberar': 'Sin Liberar'
+        'sin liberar': 'Sin Liberar',
+        'sinliberar': 'Sin Liberar',
+        'adjudicado': 'Adjudicado',
+        'reservado': 'Reservado',
     }
     return estados.get(normalized)
 
@@ -443,7 +446,7 @@ def api_lotes(request):
     if estado_raw and not estados and not idinmueble:
         return JsonResponse({
             'detail': 'El estado enviado no es válido.',
-            'estado_permitido': ['Libre', 'Bloqueado', 'Sin Liberar']
+            'estado_permitido': ['Libre', 'Bloqueado', 'Sin Liberar', 'Adjudicado', 'Reservado']
         }, status=400)
     try:
         inventario = Inmuebles.objects.using(proyecto).all()
@@ -462,9 +465,9 @@ def api_lotes(request):
         data = []
         for lote in inventario:
             relacion = None
+            estado_lote_norm = _normalize_lote_estado(lote.estado)
             if idinmueble:
-                estado_lote = (lote.estado or '').strip().lower()
-                if estado_lote == 'adjudicado':
+                if estado_lote_norm == 'Adjudicado':
                     adj = Adjudicacion.objects.using(proyecto).filter(idinmueble=lote.idinmueble).first()
                     if adj:
                         cliente_nombre = _get_cliente_nombre(adj.idtercero1)
@@ -473,7 +476,7 @@ def api_lotes(request):
                             'referencia': adj.idadjudicacion,
                             'cliente': cliente_nombre
                         }
-                elif estado_lote == 'reservado':
+                elif estado_lote_norm == 'Reservado':
                     venta = (ventas_nuevas.objects.using(proyecto)
                              .filter(inmueble=lote.idinmueble)
                              .order_by('-fecha_contrato', '-id_venta')
@@ -487,7 +490,7 @@ def api_lotes(request):
                         }
             data.append({
                 'idinmueble': lote.idinmueble,
-                'estado': lote.estado,
+                'estado': estado_lote_norm or lote.estado,
                 'manzana': lote.manzananumero,
                 'lote': lote.lotenumero,
                 'area_privada': lote.areaprivada,
@@ -537,15 +540,16 @@ def api_cambiar_estado_lote(request):
         return JsonResponse({'detail': 'Error al buscar el lote.', 'error': str(exc)}, status=500)
 
     estado_actual = (lote.estado or '').strip()
+    estado_actual_norm = _normalize_lote_estado(estado_actual) or estado_actual
     estado_nuevo_norm = _normalize_lote_estado(estado_nuevo)
-    if not estado_nuevo_norm:
+    if not estado_nuevo_norm or estado_nuevo_norm not in ('Libre', 'Bloqueado', 'Sin Liberar'):
         return JsonResponse({
             'detail': 'El estado enviado no es válido.',
             'estado_permitido': ['Libre', 'Bloqueado', 'Sin Liberar']
         }, status=400)
     if estado_nuevo_norm == 'Bloqueado' and not (motivo_bloqueo or '').strip():
         return JsonResponse({'detail': 'Debes enviar "motivo_bloqueo" para bloquear un lote.'}, status=400)
-    if estado_actual == estado_nuevo_norm:
+    if estado_actual_norm == estado_nuevo_norm:
         return JsonResponse({
             'detail': 'El lote ya se encuentra en el estado solicitado.',
             'estado_actual': estado_actual

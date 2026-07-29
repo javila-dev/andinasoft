@@ -27,7 +27,7 @@ Consulta el inventario de lotes/inmuebles de un proyecto.
 | Parámetro | Tipo | Requerido | Descripción |
 |---|---|---|---|
 | `proyecto` | string | ✅ | Nombre del proyecto (ej: `"Fractal"`, `"Casas de Verano"`) |
-| `estado` | string | — | `Libre` · `Bloqueado` · `Sin Liberar` · `Adjudicado` · `Reservado`. Default: `Libre` |
+| `estado` | string | — | `Libre` · `Bloqueado` · `Sin Liberar` · `Adjudicado` · `Reservado` (case-insensitive). Default: `Libre` |
 | `manzana` | string | — | Manzanas separadas por coma: `"1,2,3"` |
 | `idinmueble` | string | — | ID exacto de un lote. Si se envía, ignora `estado` y `manzana` |
 
@@ -64,11 +64,11 @@ Cambia el estado de un lote a `Libre`, `Bloqueado` o `Sin Liberar`.
 |---|---|---|---|
 | `proyecto` | string | ✅ | Nombre del proyecto |
 | `idinmueble` | string | ✅ | ID del lote |
-| `estado` | string | ✅ | Nuevo estado: `Libre` · `Bloqueado` · `Sin Liberar` |
+| `estado` | string | ✅ | Nuevo estado: `Libre` · `Bloqueado` · `Sin Liberar` (case-insensitive) |
 | `motivo_bloqueo` | string | Cond. | Obligatorio si `estado = Bloqueado` |
 
-> Solo se pueden modificar lotes cuyo estado actual sea `Bloqueado` o `Sin Liberar`.
-> `Adjudicado`, `Reservado` y `Libre` **nunca** se pueden cambiar por MCP.
+> Solo se pueden modificar lotes cuyo estado actual sea `Libre`, `Bloqueado` o `Sin Liberar`.
+> `Adjudicado` y `Reservado` **nunca** se pueden cambiar por MCP.
 
 **Respuesta:**
 ```json
