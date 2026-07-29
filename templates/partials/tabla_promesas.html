@@ -1,0 +1,60 @@
+<div class="bg-white rounded shadow mb-3 p-2">
+    <table class="table table-sm table-hover promesa-table w-100" id="{{table_id}}">
+        <thead class="thead-dark">
+            <tr>
+                <th>Adj</th>
+                <th>Nro</th>
+                <th>Cliente</th>
+                <th>Inmueble</th>
+                <th>F. promesa</th>
+                <th>F. entrega</th>
+                <th>Estado entrega</th>
+                <th>F. escritura</th>
+                <th>Estado escritura</th>
+                <th style="width: 2.5rem;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {%for r in lista%}
+            <tr class="{{r.row_class}}">
+                <td>{{r.adj}}</td>
+                <td>{{r.nropromesa}}</td>
+                <td>{{r.titular}}</td>
+                <td>{{r.inmueble}}</td>
+                <td class="text-center" data-order="{%if r.fechapromesa%}{{r.fechapromesa|date:'Ymd'}}{%else%}0{%endif%}">{%if r.fechapromesa%}{{r.fechapromesa|date:'Y-m-d'}}{%else%}—{%endif%}</td>
+                <td class="text-center" data-order="{%if r.fechaentrega%}{{r.fechaentrega|date:'Ymd'}}{%else%}0{%endif%}">{%if r.fechaentrega%}{{r.fechaentrega|date:'Y-m-d'}}{%else%}—{%endif%}</td>
+                <td class="text-center" data-order="{{r.estado_entrega}}">
+                    <span class="badge badge-estado {{r.estado_entrega_badge}}">{{r.estado_entrega_label}}</span>
+                    {%if r.fecha_entrega_real%}<div class="text-muted" style="font-size:0.65rem;">{{r.fecha_entrega_real|date:'Y-m-d'}}</div>{%endif%}
+                </td>
+                <td class="text-center" data-order="{%if r.fechaescritura%}{{r.fechaescritura|date:'Ymd'}}{%else%}0{%endif%}">{%if r.fechaescritura%}{{r.fechaescritura|date:'Y-m-d'}}{%else%}—{%endif%}</td>
+                <td class="text-center" data-order="{{r.estado_escritura}}">
+                    <span class="badge badge-estado {{r.estado_escritura_badge}}">{{r.estado_escritura_label}}</span>
+                    {%if r.fecha_escritura_real%}<div class="text-muted" style="font-size:0.65rem;">{{r.fecha_escritura_real|date:'Y-m-d'}}</div>{%endif%}
+                </td>
+                <td class="text-center">
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary btn-accion-toggle" data-toggle="dropdown" title="Acciones" aria-label="Acciones">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            {%if r.puede_editar_fechas%}
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="fechas" data-adj="{{r.adj}}">Registrar fechas</a>
+                            {%else%}
+                            <span class="dropdown-item disabled" title="Las fechas ya estan registradas; use otrosi para cambios">Registrar fechas</span>
+                            {%endif%}
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="entrega" data-adj="{{r.adj}}">Entrega</a>
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="escritura" data-adj="{{r.adj}}">Escritura</a>
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="otrosi" data-adj="{{r.adj}}">Registrar otrosi</a>
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="historial" data-adj="{{r.adj}}">Historial otrosi</a>
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="documentos" data-adj="{{r.adj}}">Ver documentos</a>
+                            <div class="dropdown-divider"></div>
+                            <a class="dropdown-item btn-accion-promesa" href="#" data-accion="reimprimir" data-adj="{{r.adj}}">Reimprimir promesa</a>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+</div>

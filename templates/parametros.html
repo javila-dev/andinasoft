@@ -8,10 +8,6 @@
         <div class='bg-white rounded shadow' style='padding: 1rem;'>
             <p class='lead border-bottom border-gray'>Ventas</p>
             <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="formasOpcionManual">
-                <label class="custom-control-label" for="formasOpcionManual">Activar forma de pago manual en contrato</label>
-            </div>
-            <div class="custom-control custom-switch">
                 <input type="checkbox" class="custom-control-input" id="formasVerificacionManual">
                 <label class="custom-control-label" for="formasVerificacionManual">Activar forma de pago manual en verificacion</label>
             </div>
@@ -25,13 +21,87 @@
             </div>
         </div>
     </div>
+    <div class='col-6'>
+        <div class='bg-white rounded shadow' style='padding: 1rem;'>
+            <p class='lead border-bottom border-gray'>Documento (venta / promesas)</p>
+            <p class='text-muted small'>Un documento por origen. Use Previsualizar para confirmar el formato con datos de muestra antes de guardar.</p>
+
+            <form id='formConfigVenta'>
+                <p class='font-weight-bold mb-2'>Desde venta</p>
+                <div class="form-group">
+                    <label for="venta_motor">Motor</label>
+                    <select class="form-control" id="venta_motor" name="motor">
+                        <option value="reportlab">ReportLab</option>
+                        <option value="xhtml2pdf">xhtml2pdf</option>
+                        <option value="weasyprint">WeasyPrint</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="venta_plantilla">Plantilla / funcion</label>
+                    <input type="text" class="form-control" id="venta_plantilla" name="plantilla"
+                           placeholder="pdf/Proyecto/contrato.html o ExportPromesa...">
+                </div>
+                <div class="custom-control custom-switch mb-3">
+                    <input type="checkbox" class="custom-control-input" id="venta_forma_pago_manual" name="forma_pago_manual">
+                    <label class="custom-control-label" for="venta_forma_pago_manual">Forma de pago manual (cajas de texto al imprimir)</label>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnPreviewConfigVenta">Previsualizar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSaveConfigVenta">Guardar venta</button>
+            </form>
+
+            <hr>
+
+            <form id='formConfigModulo'>
+                <p class='font-weight-bold mb-2'>Desde modulo de promesas</p>
+                <div class="form-group">
+                    <label for="modulo_motor">Motor</label>
+                    <select class="form-control" id="modulo_motor" name="motor">
+                        <option value="reportlab">ReportLab</option>
+                        <option value="xhtml2pdf">xhtml2pdf</option>
+                        <option value="weasyprint">WeasyPrint</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modulo_plantilla">Plantilla / funcion</label>
+                    <input type="text" class="form-control" id="modulo_plantilla" name="plantilla"
+                           placeholder="pdf/Proyecto/contrato.html o ExportPromesa...">
+                </div>
+                <div class="custom-control custom-switch mb-3">
+                    <input type="checkbox" class="custom-control-input" id="modulo_forma_pago_manual" name="forma_pago_manual">
+                    <label class="custom-control-label" for="modulo_forma_pago_manual">Forma de pago manual (cajas de texto al imprimir)</label>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnPreviewConfigModulo">Previsualizar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSaveConfigModulo">Guardar modulo</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalPreviewDocumento" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document" style="max-width: 95%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Previsualizacion del documento</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0">
+                <p class="px-3 pt-2 mb-1 text-muted small" id="previewDocHint">Datos de muestra para confirmar el formato.</p>
+                <iframe id="previewDocFrame" title="Previsualizacion PDF" style="width:100%; height:75vh; border:0;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <a id="previewDocOpen" href="#" target="_blank" class="btn btn-secondary">Abrir en nueva pestana</a>
+                <button type="button" class="btn btn-primary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
     cargarParametros()
-    $('#formasOpcionManual').click(function(){
-        sendParameter('formasOpcionManual',$(this))
-    })
+    cargarConfigDocumento()
+
     $('#formasVerificacionManual').on('change',function(){
         sendParameter('formasVerificacionManual',$(this))
     })
@@ -41,6 +111,19 @@
     $('#credicontadoMayor12Cuotas').on('change',function(){
         sendParameter('credicontadoMayor12Cuotas',$(this))
     })
+    $('#btnSaveConfigVenta').on('click', function(){
+        saveConfigDocumento('venta')
+    })
+    $('#btnSaveConfigModulo').on('click', function(){
+        saveConfigDocumento('modulo')
+    })
+    $('#btnPreviewConfigVenta').on('click', function(){
+        previewConfigDocumento('venta', $(this))
+    })
+    $('#btnPreviewConfigModulo').on('click', function(){
+        previewConfigDocumento('modulo', $(this))
+    })
+
     function sendParameter(param,idcheck){
         var ischecked = idcheck.is(':checked')
         $.ajax({
@@ -67,6 +150,81 @@
                 $('#'+parametro).prop('checked','true')
             }
         }
+    }
+    function cargarConfigDocumento(){
+        var configs = JSON.parse('{{config_documentos|escapejs}}')
+        for (var i=0;i<configs.length;i++){
+            var origen = configs[i]['origen']
+            var prefix = origen === 'modulo' ? 'modulo' : 'venta'
+            $('#'+prefix+'_motor').val(configs[i]['motor'])
+            $('#'+prefix+'_plantilla').val(configs[i]['plantilla'])
+            $('#'+prefix+'_forma_pago_manual').prop('checked', !!configs[i]['forma_pago_manual'])
+        }
+    }
+    function saveConfigDocumento(origen){
+        var prefix = origen === 'modulo' ? 'modulo' : 'venta'
+        $.ajax({
+            type: 'POST',
+            url: '/operaciones/parametros/{{proyecto}}',
+            data: {
+                csrfmiddlewaretoken: '{{csrf_token}}',
+                action: 'config_documento',
+                origen: origen,
+                motor: $('#'+prefix+'_motor').val(),
+                plantilla: $('#'+prefix+'_plantilla').val(),
+                forma_pago_manual: $('#'+prefix+'_forma_pago_manual').is(':checked')
+            },
+            success: function(response){
+                if (response['passed']){
+                    alert(response['msj'])
+                } else {
+                    alert(response['msj'] || 'No se pudo guardar')
+                }
+            },
+            error: function(xhr){
+                var msg = (xhr.responseJSON && xhr.responseJSON.msj) ? xhr.responseJSON.msj : 'Error al guardar'
+                alert(msg)
+            }
+        })
+    }
+    function previewConfigDocumento(origen, btn){
+        var prefix = origen === 'modulo' ? 'modulo' : 'venta'
+        var original = btn.html()
+        btn.prop('disabled', true).html('Generando...')
+        fetch('/operaciones/parametros/{{proyecto}}', {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: new URLSearchParams({
+                csrfmiddlewaretoken: '{{csrf_token}}',
+                action: 'preview_documento',
+                origen: origen,
+                motor: $('#'+prefix+'_motor').val(),
+                plantilla: $('#'+prefix+'_plantilla').val()
+            })
+        }).then(async function(response){
+            var contentType = (response.headers.get('content-type') || '').toLowerCase()
+            if (!response.ok || contentType.indexOf('application/pdf') === -1){
+                var data = {}
+                try { data = await response.json() } catch (e) {}
+                throw new Error(data.msj || 'No se pudo previsualizar')
+            }
+            var blob = await response.blob()
+            if (window._previewDocObjectUrl){
+                URL.revokeObjectURL(window._previewDocObjectUrl)
+            }
+            var url = URL.createObjectURL(blob)
+            window._previewDocObjectUrl = url
+            $('#previewDocFrame').attr('src', url)
+            $('#previewDocOpen').attr('href', url)
+            $('#previewDocHint').text('Datos de muestra para confirmar el formato.')
+            $('#modalPreviewDocumento').modal('show')
+        }).catch(function(err){
+            alert(err.message || 'Error al previsualizar')
+        }).finally(function(){
+            btn.prop('disabled', false).html(original)
+        })
     }
 </script>
 

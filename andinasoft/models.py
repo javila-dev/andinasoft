@@ -263,6 +263,120 @@ class proyectos(models.Model):
     def __str__(self):
         return self.proyecto
 
+
+class ConfigDocumento(models.Model):
+    """Plantilla/motor del documento unico por proyecto y origen (venta o modulo)."""
+
+    ORIGEN_VENTA = 'venta'
+    ORIGEN_MODULO = 'modulo'
+    ORIGEN_CHOICES = (
+        (ORIGEN_VENTA, 'Venta'),
+        (ORIGEN_MODULO, 'Modulo promesas'),
+    )
+
+    MOTOR_REPORTLAB = 'reportlab'
+    MOTOR_XHTML2PDF = 'xhtml2pdf'
+    MOTOR_WEASYPRINT = 'weasyprint'
+    MOTOR_CHOICES = (
+        (MOTOR_REPORTLAB, 'ReportLab'),
+        (MOTOR_XHTML2PDF, 'xhtml2pdf'),
+        (MOTOR_WEASYPRINT, 'WeasyPrint'),
+    )
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='config_documentos',
+        db_constraint=False,
+    )
+    origen = models.CharField(max_length=20, choices=ORIGEN_CHOICES)
+    motor = models.CharField(max_length=20, choices=MOTOR_CHOICES)
+    plantilla = models.CharField(
+        max_length=255,
+        help_text='Ruta HTML (pdf/.../contrato.html) o nombre de exportador ReportLab',
+    )
+    forma_pago_manual = models.BooleanField(
+        default=False,
+        help_text='Si esta activo, quien imprime debe digitar forma CI y forma saldo',
+    )
+
+    class Meta:
+        unique_together = ('proyecto', 'origen')
+        verbose_name = 'Configuracion documento'
+        verbose_name_plural = 'Configuraciones documento'
+
+    def __str__(self):
+        return f'{self.proyecto_id} / {self.origen} / {self.motor}'
+
+
+class PromesaOtrosi(models.Model):
+    """Historial de otrosi/prorrogas de entrega y/o escritura por negocio."""
+
+    TIPO_ENTREGA = 'entrega'
+    TIPO_ESCRITURA = 'escritura'
+    TIPO_AMBOS = 'ambos'
+    TIPO_CHOICES = (
+        (TIPO_ENTREGA, 'Entrega'),
+        (TIPO_ESCRITURA, 'Escritura'),
+        (TIPO_AMBOS, 'Entrega y escritura'),
+    )
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='promesa_otrosi',
+        db_constraint=False,
+    )
+    adj = models.CharField(max_length=255, db_index=True)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    fecha_entrega_anterior = models.DateField(null=True, blank=True)
+    fecha_entrega_nueva = models.DateField(null=True, blank=True)
+    fecha_escritura_anterior = models.DateField(null=True, blank=True)
+    fecha_escritura_nueva = models.DateField(null=True, blank=True)
+    observaciones = models.TextField(blank=True, default='')
+    documento = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Nombre/ruta del PDF del otrosi en documentos del contrato',
+    )
+    usuario = models.CharField(max_length=255)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha_registro']
+        verbose_name = 'Otrosi de promesa'
+        verbose_name_plural = 'Otrosi de promesas'
+
+    def __str__(self):
+        return f'{self.proyecto_id} {self.adj} {self.tipo} {self.fecha_registro:%Y-%m-%d}'
+
+
+class PromesaCumplimiento(models.Model):
+    """Fechas reales de entrega y/o escritura (distintas de las fechas pactadas)."""
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='promesa_cumplimiento',
+        db_constraint=False,
+    )
+    adj = models.CharField(max_length=255, db_index=True)
+    fecha_entrega_real = models.DateField(null=True, blank=True)
+    fecha_escritura_real = models.DateField(null=True, blank=True)
+    usuario_entrega = models.CharField(max_length=255, blank=True, default='')
+    usuario_escritura = models.CharField(max_length=255, blank=True, default='')
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('proyecto', 'adj')
+        verbose_name = 'Cumplimiento de promesa'
+        verbose_name_plural = 'Cumplimientos de promesas'
+
+    def __str__(self):
+        return f'{self.proyecto_id} {self.adj}'
+
+
 class parametros(models.Model):
     parametro=models.CharField(max_length=255)
     valor=models.DecimalField(max_digits=10,decimal_places=2)

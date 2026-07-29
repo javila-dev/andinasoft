@@ -206,6 +206,8 @@ class documentos_contrato(forms.Form):
         ('Centrales de Riesgo','Centrales de Riesgo'),
         ('Pago devolucion','Pago devolucion'),
         ('Acta de entrega','Acta de entrega'),
+        ('Escritura','Escritura'),
+        ('Otrosi','Otrosi'),
         ('Reestructuracion','Reestructuracion'),
         ('Cesion','Cesion'),
         ('Peticion','Peticion'),

@@ -4,7 +4,8 @@ from django.db import connections
 from django.utils.http import urlencode
 from django.core.exceptions import PermissionDenied
 from andinasoft.models import (asesores, clientes, Facturas, Pagos, timeline_radicados, Usuarios_Proyectos, 
-                                Avatars, Profiles, empresas,notificaciones_correo, parametros, proyectos)
+                                Avatars, Profiles, empresas,notificaciones_correo, parametros, proyectos, ConfigDocumento,
+                                PromesaOtrosi, PromesaCumplimiento)
 from andinasoft.shared_models import Inmuebles, ventas_nuevas, Parametros_Operaciones
 
 # Register your models here.
@@ -243,6 +244,9 @@ admin.site.register(Pagos,adminPagos)
 admin.site.register(timeline_radicados,adminTimeline)
 admin.site.register(Usuarios_Proyectos,adminProyectos)
 admin.site.register(proyectos,adminProyecto)
+admin.site.register(ConfigDocumento)
+admin.site.register(PromesaOtrosi)
+admin.site.register(PromesaCumplimiento)
 admin.site.register(Avatars,adminAvatars)
 admin.site.register(Profiles,adminProfiles)
 admin.site.register(empresas,adminEmpresas)

@@ -33,7 +33,18 @@ from andinasoft.forms import form_radicar_factura, form_causar, form_pagar, form
 from andinasoft.models import ( asesores, bk_bfchangeplan, bk_planpagos, bk_recaudodetallado,clientes,Facturas, reestructuraciones_otrosi,
                                 timeline_radicados, Pagos, cuentas_pagos, Usuarios_Proyectos, Gtt, Detalle_gtt,
                                 GastosInforme, CuentasAsociadas, ItemsInforme, CentrosCostos, proyectos, entidades_bancarias, 
-                                Profiles, Avatars, Countries, States, Cities, sagrilaft_info, CIUU, empresas)
+                                Profiles, Avatars, Countries, States, Cities, sagrilaft_info, CIUU, empresas, ConfigDocumento,
+                                PromesaOtrosi, PromesaCumplimiento)
+from andinasoft.promesa_pdf import (
+    DocumentoNoConfigurado,
+    ConfigDocumentoInvalida,
+    ORIGEN_VENTA,
+    ORIGEN_MODULO,
+    MOTOR_REPORTLAB,
+    forma_pago_es_manual,
+    get_config_documento,
+    generar_documento_pdf,
+)
 from andinasoft.shared_models import Adjudicacion, Vista_Adjudicacion, documentos_contratos, fractales_ventas,saldos_adj,titulares_por_adj, fractales_ventas
 from andinasoft.shared_models import Recaudos, consecutivos, Recaudos_general, AsignacionComisiones, CargosFijos, InfoCartera, Cargos_comisiones
 from andinasoft.shared_models import timeline,seguimientos, Inmuebles, ventas_nuevas, RecaudosNoradicados, Pagocomision
@@ -4515,7 +4526,8 @@ def acciones_venta(request,proyecto,contrato):
             if (not (check_perms(request,('andinasoft.delete_ventas_nuevas',),raise_exception=False) 
                      or check_perms(request,('andinasoft.add_recaudos_general',),raise_exception=False))
                 and today>datos_venta.fecha_contrato 
-                and (request.POST.get('impContrato') 
+                and (request.POST.get('impDocumento')
+                     or request.POST.get('impPromesa')
                      or request.POST.get('impPagare') 
                      or request.POST.get('impVerificacion') 
                      or request.POST.get('impRecaudo'))):
@@ -4524,7 +4536,7 @@ def acciones_venta(request,proyecto,contrato):
                 titulo='Error'
                 link=False
             else:
-                if request.POST.get('impPromesa'):
+                if request.POST.get('impDocumento') or request.POST.get('impPromesa'):
                     fecha_entrega=request.POST.get('fechaentrega')
                     fecha_entrega=datetime.datetime.strptime(fecha_entrega,'%Y-%m-%d')
                     meses_entrega = (fecha_entrega - datetime.datetime.today()).days
@@ -4533,705 +4545,79 @@ def acciones_venta(request,proyecto,contrato):
                     fecha_escritura=datetime.datetime.strptime(fecha_escritura,'%Y-%m-%d')
                     oficina=request.POST.get('oficinaopcion')
                     ruta=settings.DIR_EXPORT+f'{proyecto}_contrato_{contrato}.pdf'
-                    
-                    parametro=obj_parametro.get(descripcion='formasOpcionManual')
-                    if parametro.estado:
+
+                    if forma_pago_es_manual(proyecto, ORIGEN_VENTA):
                         formaCI = request.POST.get('formaci')
                         formaFN = request.POST.get('formasaldo')
-                    if proyecto=='Sandville Beach':
-                        pdf.ExportPromesaSandvilleBeach(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    fecha_escritura=fecha_escritura,
-                                                    fecha_entrega=fecha_entrega,
-                                                    ciudad_entrega=oficina,
-                                                    ruta=ruta)
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto=='Perla del Mar':
-                                                
-                        context = {
-                            'proyecto':proyecto,
-                            'ctr':obj_ctr,
-                            'fecha_escritura':fecha_escritura,
-                            'meses_entrega':meses_entrega,
-                            'oficina':oficina
+
+                    try:
+                        cfg = get_config_documento(proyecto, ORIGEN_VENTA)
+                    except DocumentoNoConfigurado:
+                        alerta=True
+                        mensaje='El proyecto seleccionado no tiene formato de documento asignado'
+                        titulo='Error'
+                    else:
+                        reportlab_kwargs = {
+                            'nro_contrato': nro_contrato,
+                            'nombre_t1': nombre_t1, 'cc_t1': cc_t1, 'tel_t1': tel_t1, 'cel_t1': cel_t1,
+                            'ofic_t1': ofic_t1, 'cdof_t1': cdof_t1, 'telof_t1': telof_t1,
+                            'resid_t1': resid_t1, 'cdresid_t1': cdresid_t1, 'telresid_t1': telresid_t1, 'email_t1': email_t1,
+                            'nombre_t2': nombre_t2, 'cc_t2': cc_t2, 'tel_t2': tel_t2, 'cel_t2': cel_t2,
+                            'ofic_t2': ofic_t2, 'cdof_t2': cdof_t2, 'telof_t2': telof_t2,
+                            'resid_t2': resid_t2, 'cdresid_t2': cdresid_t2, 'telresid_t2': telresid_t2, 'email_t2': email_t2,
+                            'nombre_t3': nombre_t3, 'cc_t3': cc_t3, 'tel_t3': tel_t3, 'cel_t3': cel_t3,
+                            'ofic_t3': ofic_t3, 'cdof_t3': cdof_t3, 'telof_t3': telof_t3,
+                            'resid_t3': resid_t3, 'cdresid_t3': cdresid_t3, 'telresid_t3': telresid_t3, 'email_t3': email_t3,
+                            'nombre_t4': nombre_t4, 'cc_t4': cc_t4, 'tel_t4': tel_t4, 'cel_t4': cel_t4,
+                            'ofic_t4': ofic_t4, 'cdof_t4': cdof_t4, 'telof_t4': telof_t4,
+                            'resid_t4': resid_t4, 'cdresid_t4': cdresid_t4, 'telresid_t4': telresid_t4, 'email_t4': email_t4,
+                            'lote': lote, 'manzana': manzana, 'area': area,
+                            'mtsnorte': mtsnorte, 'colnorte': colnorte, 'mtseste': mtseste, 'coleste': coleste,
+                            'mtssur': mtssur, 'colsur': colsur, 'mtsoeste': mtsoeste, 'coloeste': coloeste,
+                            'valor': valor, 'valor_letras': valor_letras, 'ci': ci, 'saldo': saldo,
+                            'contado_x': contado_x, 'credic_x': credic_x, 'amort_x': amort_x,
+                            'formaCI': formaCI, 'formaFN': formaFN, 'obs': obs,
+                            'dia_contrato': dia_contrato, 'mes_contrato': mes_contrato, 'año_contrato': año_contrato,
+                            'fecha_escritura': fecha_escritura, 'fecha_entrega': fecha_entrega,
+                            'ciudad_entrega': oficina, 'ruta': ruta,
                         }
-                        
-                        filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
-                        
-                            
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
-                        
-                        file = pdf.get('root')
-                                                
-                        return _file_response_from_pdf_root(file, filename=filename)
-                    elif proyecto=='Tesoro Escondido':
-                        porcDerecho=f'{(datos_inmueble.areaprivada*100/datos_inmueble.area_mz):.2f}'
-                        pdf.ExportPromesaBugambilias(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    fecha_escritura=fecha_escritura,
-                                                    fecha_entrega=fecha_entrega,
-                                                    ciudad_entrega=oficina,
-                                                    ruta=ruta,
-                                                    porcderecho=porcDerecho,
-                                                    area_parcela=str(datos_inmueble.area_mz))
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto=='Sandville del Sol':
-                        porcDerecho=f'{(datos_inmueble.areaprivada*100/datos_inmueble.area_mz):.2f}'
-                        pdf.ExportOpcionAraza(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    porcderecho=porcDerecho,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    fecha_escritura=fecha_escritura,
-                                                    fecha_entrega=fecha_entrega,
-                                                    ciudad_entrega=oficina,
-                                                    ruta=ruta)
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto == 'Vegas de Venecia':
-                        pdf.ExportCBFVegasVenecia(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    fecha_escritura=fecha_escritura,
-                                                    fecha_entrega=fecha_entrega,
-                                                    ciudad_entrega=oficina,
-                                                    meses_entrega=tiempo_entrega,
-                                                    ruta=ruta)
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto == 'Carmelo Reservado':
-                        context = {
-                            'proyecto':proyecto,
-                            'ctr':obj_ctr,
-                            'fecha_escritura':fecha_escritura,
-                            'meses_entrega':meses_entrega,
-                            'oficina':oficina
+                        if cfg.plantilla == 'ExportPromesaBugambilias':
+                            reportlab_kwargs['porcderecho'] = f'{(datos_inmueble.areaprivada*100/datos_inmueble.area_mz):.2f}'
+                            reportlab_kwargs['area_parcela'] = str(datos_inmueble.area_mz)
+                        if cfg.plantilla == 'ExportCBFVegasVenecia':
+                            reportlab_kwargs['meses_entrega'] = tiempo_entrega
+
+                        html_context = {
+                            'proyecto': proyecto,
+                            'ctr': obj_ctr,
+                            'fecha_escritura': fecha_escritura,
+                            'meses_entrega': meses_entrega,
+                            'oficina': oficina,
                         }
-                        
                         filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
-                        
-                            
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
-                        
-                        file = pdf.get('root')
-                                                
-                        return _file_response_from_pdf_root(file, filename=filename)
-                    elif proyecto == 'Casas de Verano' or proyecto == 'Oasis':
-                        context = {
-                            'proyecto':proyecto,
-                            'ctr':obj_ctr,
-                            'fecha_escritura':fecha_escritura,
-                            'meses_entrega':meses_entrega,
-                            'oficina':oficina
-                        }
-                        
-                        filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
-                        
-                            
-                        if proyecto == 'Oasis':
-                            pdf = pdf_gen_weasy(f'pdf/{proyecto}/contrato.html', context, filename)
+
+                        try:
+                            result = generar_documento_pdf(
+                                proyecto,
+                                ORIGEN_VENTA,
+                                reportlab_kwargs=reportlab_kwargs if cfg.motor == MOTOR_REPORTLAB else None,
+                                html_context=html_context if cfg.motor != MOTOR_REPORTLAB else None,
+                                filename=filename if cfg.motor != MOTOR_REPORTLAB else f'{proyecto}_contrato_{contrato}.pdf',
+                            )
+                        except (DocumentoNoConfigurado, ConfigDocumentoInvalida) as exc:
+                            alerta=True
+                            mensaje=str(exc)
+                            titulo='Error'
                         else:
-                            pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
-                        
-                        file = pdf.get('root')
-                                                
-                        return _file_response_from_pdf_root(file, filename=filename)
-                    else:
-                        mensaje='El proyecto seleccionado no tiene formato de promesa asignado'
-                        titulo='Error'
-                    alerta=True
-                    parameter=obj_parametro.get(descripcion='formasOpcionManual')
-                    parameter.estado=False
-                    parameter.save()
-                    ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_contrato_{contrato}.pdf'
-                    
-                if request.POST.get('impContrato'):
-                    ruta=settings.DIR_EXPORT+f'{proyecto}_contrato_{contrato}.pdf'
-                    parametro=obj_parametro.get(descripcion='formasOpcionManual')
-                    if parametro.estado:
-                        formaCI = request.POST.get('formaci')
-                        formaFN = request.POST.get('formasaldo')
-                    if proyecto=='Vegas de Venecia':
-                        pdf.ExportOpcionContratoVenecia(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    ruta=ruta)
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto=='Tesoro Escondido':
-                        porcDerecho=f'{(datos_inmueble.areaprivada*100/datos_inmueble.area_mz):.2f}'
-                        pdf.ExportOpcionTesoro(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote[:-1],
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    ruta=ruta,
-                                                    parcelacion='1',
-                                                    porcDerecho=str(porcDerecho),
-                                                    fraccion=lote[-1],
-                                                    meses_entrega=tiempo_entrega)
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto=='Sotavento':
-                        pdf.ExportOpcionSotavento(nro_contrato=nro_contrato,
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    meses_entrega=tiempo_entrega,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    ruta=ruta)
-                        mensaje='Descarga el contrato aqui'
-                        titulo='¡Listo!'
-                        link=True
-                    elif proyecto=='Sandville del Sol':
-                        pdf.ExportOpcionTamarindos(nro_contrato="010",
-                                                    nombre_t1=nombre_t1,
-                                                    cc_t1=cc_t1,
-                                                    tel_t1=tel_t1,
-                                                    cel_t1=cel_t1,
-                                                    ofic_t1=ofic_t1,
-                                                    cdof_t1=cdof_t1,
-                                                    telof_t1=telof_t1,
-                                                    resid_t1=resid_t1,
-                                                    cdresid_t1=cdresid_t1,
-                                                    telresid_t1=telresid_t1,
-                                                    email_t1=email_t1,
-                                                    nombre_t2=nombre_t2,
-                                                    cc_t2=cc_t2,
-                                                    tel_t2=tel_t2,
-                                                    cel_t2=cel_t2,
-                                                    ofic_t2=ofic_t2,
-                                                    cdof_t2=cdof_t2,
-                                                    telof_t2=telof_t2,
-                                                    resid_t2=resid_t2,
-                                                    cdresid_t2=cdresid_t2,
-                                                    telresid_t2=telresid_t2,
-                                                    email_t2=email_t2,
-                                                    nombre_t3=nombre_t3,
-                                                    cc_t3=cc_t3,
-                                                    tel_t3=tel_t3,
-                                                    cel_t3=cel_t3,
-                                                    ofic_t3=ofic_t3,
-                                                    cdof_t3=cdof_t3,
-                                                    telof_t3=telof_t3,
-                                                    resid_t3=resid_t3,
-                                                    cdresid_t3=cdresid_t3,
-                                                    telresid_t3=telresid_t3,
-                                                    email_t3=email_t3,
-                                                    nombre_t4=nombre_t4,
-                                                    cc_t4=cc_t4,
-                                                    tel_t4=tel_t4,
-                                                    cel_t4=cel_t4,
-                                                    ofic_t4=ofic_t4,
-                                                    cdof_t4=cdof_t4,
-                                                    telof_t4=telof_t4,
-                                                    resid_t4=resid_t4,
-                                                    cdresid_t4=cdresid_t4,
-                                                    telresid_t4=telresid_t4,
-                                                    email_t4=email_t4,
-                                                    lote=lote,
-                                                    manzana=manzana,
-                                                    area=area,
-                                                    mtsnorte=mtsnorte,
-                                                    colnorte=colnorte,
-                                                    mtseste=mtseste,
-                                                    coleste=coleste,
-                                                    mtssur=mtssur,
-                                                    colsur=colsur,
-                                                    mtsoeste=mtsoeste,
-                                                    coloeste=coloeste,
-                                                    valor=valor,
-                                                    valor_letras=valor_letras,
-                                                    ci=ci,
-                                                    saldo=saldo,
-                                                    contado_x=contado_x,
-                                                    credic_x=credic_x,
-                                                    amort_x=amort_x,
-                                                    formaCI=formaCI,
-                                                    formaFN=formaFN,
-                                                    obs=obs,
-                                                    dia_contrato=dia_contrato,
-                                                    mes_contrato=mes_contrato,
-                                                    año_contrato=año_contrato,
-                                                    ruta=ruta,
-                                                    parcelacion='3',
-                                                    porcDerecho='100',
-                                                    fraccion='-')
-                    else:
-                        mensaje='El proyecto seleccionado no tiene formato de opcion de promesa asignado'
-                        titulo='Error'
-                    alerta=True
-                    ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_contrato_{contrato}.pdf'
-                    parameter=obj_parametro.get(descripcion='formasOpcionManual')
-                    parameter.estado=False
-                    parameter.save()
+                            if result['motor'] == MOTOR_REPORTLAB:
+                                mensaje='Descarga el contrato aqui'
+                                titulo='¡Listo!'
+                                link=True
+                                alerta=True
+                                ruta_link=settings.DIR_DOWNLOADS+f'{proyecto}_contrato_{contrato}.pdf'
+                            else:
+                                return _file_response_from_pdf_root(result['root'], filename=result['filename'])
+
                 if request.POST.get('impPagare'):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_pagare_{contrato}.pdf'
                     if proyecto=='Vegas de Venecia':
@@ -5482,6 +4868,7 @@ def acciones_venta(request,proyecto,contrato):
         jsonparametros=serializers.serialize('json',obj_parametro.all())
         
         context['parameters']=jsonparametros
+        context['forma_pago_manual_venta']=forma_pago_es_manual(proyecto, ORIGEN_VENTA)
         context['adj']=contrato
         context['alerta']=alerta
         context['mensaje']=mensaje
@@ -7618,440 +7005,451 @@ def descuentos_condicionados(request,proyecto):
 
 @group_perm_required(('andinasoft.view_promesas',),raise_exception=True)
 def promesas(request,proyecto):
+    from andinasoft.promesas_service import (
+        build_promesa_rows,
+        filter_rows,
+        ensure_promesa,
+        ESTADO_POR_VENCER,
+        ESTADO_VENCIDO,
+        _boolish,
+    )
+
+    check_project(request, proyecto)
     alerta=False
     titulo_alerta=None
     mensaje_alerta=None
     link=False
     ruta_link=None
-    pdf=GenerarPDF()
-    impresion=False
-    if request.method == 'POST':
-        if not request.is_ajax():
-            check_perms(request,('andinasoft.add_promesas',),raise_exception=True)
-            if request.POST.get('btnOpciones'):
-                adj=request.POST.get('adjopcion')
-                tipo_fecha=request.POST.get('tipofechas')
-                ciudad=request.POST.get('oficinaopcion')
-                fecha_promesa = request.POST.get('fechapromesa')
-                fecha_entrega=request.POST.get('fechaentrega')
-                fecha_escritura=request.POST.get('fechaescritura')
-                formaci = request.POST.get('formaci')
-                formasaldo = request.POST.get('formasaldo')
-                obs = request.POST.get('observaciones')
-                formapago = request.POST.get('formapago')
-                dias_prorroga = request.POST.get('prorroga')
-                diacontrato=datetime.date.today().day
-                mescontrato=datetime.date.today().month
-                añocontrato=datetime.date.today().year
-                impresion=True
-            elif request.POST.get('EstadoPromesa'):
-                adj=request.POST.get('adjOpcionPromesa')
-                escriturado = request.POST.get('escriturado')
-                if escriturado=='on': escriturado=True
-                else: escriturado=False
-                entregado = request.POST.get('entregado')
-                if entregado=='on': entregado=True
-                else: entregado=False
-                prorrogado = request.POST.get('prorrogado')
-                if prorrogado=='on': prorrogado=True
-                else: prorrogado=False
-                obj_promesa=Promesas.objects.using(proyecto).get(idadjudicacion=adj)
-                obj_promesa.escriturado=escriturado
-                obj_promesa.entregado=entregado
-                obj_promesa.prorroga=prorrogado
-                obj_promesa.save()
-            elif request.POST.get('btnAprobar'):
-                if check_perms(request,('andinasoft.delete_promesas',),raise_exception=False):
-                    adj=request.POST.get('adjpromesa')
-                    promesa=Promesas.objects.using(proyecto).get(idadjudicacion=adj)
-                    obj_adj=Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
-                    obj_adj.tipocontrato='Promesa'
-                    obj_adj.contrato=promesa.nropromesa
-                    obj_adj.save()
-                    promesa.estado='Aprobado'
-                    promesa.usuarioaprueba=str(request.user)
-                    promesa.fechaaprueba=datetime.date.today()
-                    promesa.save()
-                    obj_timeline=timeline.objects.using(proyecto).create(adj=adj,fecha=datetime.date.today(),usuario=request.user,accion='Aprobó promesa de compraventa')
-                    alerta=True
-                    titulo_alerta='¡Todo salio Perfecto!'
-                    mensaje_alerta=f'La promesa del {adj} fue aprobada y ya se encuentra en modulo de promesas vigentes'
-                else: raise PermissionDenied
-            else:
-                adj=request.POST.get('adjpromesa')
-                tipo_fecha='Reimpresion'
-                data_promesa=Promesas.objects.using(proyecto).get(idadjudicacion=adj)
-                fecha_entrega=data_promesa.fechaentrega
-                fecha_escritura=data_promesa.fechaescritura
-                formaci=data_promesa.formaci
-                formasaldo=data_promesa.formasaldo
-                ciudad=data_promesa.ciudad
-                fecha_prom=data_promesa.fechapromesa
-                diacontrato=fecha_prom.day
-                mescontrato=fecha_prom.month
-                añocontrato=fecha_prom.year
-                obs=data_promesa.observaciones
-                if obs is None: obs=''
-                formapago=data_promesa.formapago
-                impresion=True
-            if impresion:
-                #objects
-                obj_consecprom=consecutivos.objects.using(proyecto).get(documento='PROMESA')
-                obj_adj=Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
-                obj_saldos=saldos_adj.objects.using(proyecto).filter(adj=adj)
-                obj_promesas=Promesas.objects.using(proyecto).filter(idadjudicacion=adj)
-                obj_planpagos=PlanPagos.objects.using(proyecto).filter(adj=adj)
-                obj_inmueble=Inmuebles.objects.using(proyecto).get(idinmueble=obj_adj.idinmueble)
-                if tipo_fecha=='Automatico':
-                    fecha_entrega=datetime.date(obj_inmueble.finobra.year,obj_inmueble.finobra.month,obj_inmueble.finobra.day)
-                    fin_pagos=obj_planpagos.aggregate(Max('fecha'))['fecha__max']
-                    if fin_pagos<=fecha_entrega:
-                        fecha_escritura=fecha_entrega+relativedelta(fecha_entrega,months=1)
-                    elif fin_pagos>fecha_entrega:
-                        fecha_escritura=fin_pagos+relativedelta(fin_pagos,months=1)
-                elif tipo_fecha=='Manual':
-                    fecha_escritura=datetime.datetime.strptime(fecha_escritura,"%Y-%m-%d")
-                    fecha_entrega=datetime.datetime.strptime(fecha_entrega,"%Y-%m-%d")
-                    
-                #titulares
-                titular1=clientes.objects.filter(idTercero=obj_adj.idtercero1)
-                if titular1.exists(): titular1=titular1[0]
-                else: titular1=clientes.objects.get(idTercero="")
-                titular2=clientes.objects.filter(idTercero=obj_adj.idtercero2)
-                if titular2.exists(): titular2=titular2[0]
-                else: titular2=clientes.objects.get(idTercero="")
-                titular3=clientes.objects.filter(idTercero=obj_adj.idtercero3)
-                if titular3.exists(): titular3=titular3[0]
-                else: titular3=clientes.objects.get(idTercero="")
-                titular4=clientes.objects.filter(idTercero=obj_adj.idtercero4)
-                if titular4.exists(): titular4=titular4[0]
-                else: titular4=clientes.objects.get(idTercero="")
-                #variables
-                valor_letras=Utilidades().numeros_letras(obj_adj.valor)
-                cuota_inicial=obj_planpagos.filter(tipocta='CI').aggregate(Sum('capital'))['capital__sum']
-                if cuota_inicial==None: cuota_inicial=0
-                saldo=obj_planpagos.exclude(tipocta='CI').aggregate(Sum('capital'))['capital__sum']
-                if saldo==None: saldo=0
-                if formapago=='Contado':
-                    forma=('x','','')
-                elif formapago=='Credicontado':
-                    forma=('','x','')
-                elif formapago=='Amortizacion':
-                    forma=('','','x')
-                
-                
-                if request.POST.get('btnReimpPromesa') or request.POST.get('btnOpciones'):
-                    ruta=settings.DIR_EXPORT+f'Promesa_{proyecto}_{adj}.pdf'
-                    alerta=True
-                    titulo_alerta='¡Todo salio Perfecto!'
-                    mensaje_alerta='Puedes previsualizar la promesa aquí'
-                    link=True
-                    ruta_link=settings.DIR_DOWNLOADS+f'Promesa_{proyecto}_{adj}.pdf'
-                    if request.POST.get('btnOpciones'):
-                        if obj_promesas.exists():
-                            promesa=Promesas.objects.using(proyecto).get(idadjudicacion=adj)
-                            promesa.ciudad=ciudad
-                            promesa.fechapromesa = fecha_promesa
-                            promesa.fechaentrega=fecha_entrega
-                            promesa.fechaescritura=fecha_escritura
-                            promesa.formaci=formaci
-                            promesa.formasaldo=formasaldo
-                            promesa.observaciones=obs
-                            promesa.formapago=formapago
-                            promesa.prorroga=False
-                            promesa.dias_prorroga=dias_prorroga
-                            try: 
-                                consec_promesa=int(promesa.nropromesa)
-                            except ValueError:
-                                promesa.nropromesa = obj_consecprom.consecutivo
-                                consec_promesa=obj_consecprom.consecutivo
-                                obj_consecprom.consecutivo+=1
-                                obj_consecprom.save()
-                            promesa.save()
-                            
-                        else:
-                            consec_promesa=obj_consecprom.consecutivo
-                            promesa = Promesas.objects.using(proyecto).create(idadjudicacion=adj,formapago=formapago,estado='Pendiente',fechaentrega=fecha_entrega,
-                                                    fechaescritura=fecha_escritura,fechapromesa=datetime.date.today(),nropromesa=consec_promesa,
-                                                    formaci=formaci,formasaldo=formasaldo,usuariocrea=request.user,observaciones=obs,ciudad=ciudad,dias_prorroga=dias_prorroga)
-                            obj_consecprom.consecutivo+=1
-                            obj_consecprom.save()
-                            obj_timeline=timeline.objects.using(proyecto).create(adj=adj,fecha=datetime.date.today(),usuario=request.user,accion='Creó promesa de compraventa')
-                    else:
-                        promesa=Promesas.objects.using(proyecto).get(idadjudicacion=adj)
-                        dias_prorroga=promesa.dias_prorroga
-                        consec_promesa=promesa.nropromesa
-                        
-                    if proyecto=='Sandville Beach':
-                        GenerarPDF().ExportPromesaSandvilleBeach(nro_contrato=consec_promesa,
-                        nombre_t1=titular1.nombrecompleto,cc_t1=titular1.idTercero,tel_t1=titular1.telefono1,cel_t1=titular1.celular1,ofic_t1=titular1.oficina,cdof_t1=titular1.ciudad,
-                        telof_t1=titular1.telefono2,resid_t1=titular1.domicilio,cdresid_t1=titular1.ciudad,telresid_t1=titular1.telefono1,email_t1=titular1.email,
-                        nombre_t2=titular2.nombrecompleto,cc_t2=titular2.idTercero,tel_t2=titular2.telefono1,cel_t2=titular2.celular1,ofic_t2=titular2.oficina,cdof_t2=titular2.ciudad,
-                        telof_t2=titular2.telefono2,resid_t2=titular2.domicilio,cdresid_t2=titular2.ciudad,telresid_t2=titular2.telefono1,email_t2=titular2.email,
-                        nombre_t3=titular3.nombrecompleto,cc_t3=titular3.idTercero,tel_t3=titular3.telefono1,cel_t3=titular3.celular1,ofic_t3=titular3.oficina,cdof_t3=titular3.ciudad,
-                        telof_t3=titular3.telefono2,resid_t3=titular3.domicilio,cdresid_t3=titular3.ciudad,telresid_t3=titular3.telefono1,email_t3=titular3.email,
-                        nombre_t4=titular4.nombrecompleto,cc_t4=titular4.idTercero,tel_t4=titular4.telefono1,cel_t4=titular4.celular1,ofic_t4=titular4.oficina,cdof_t4=titular4.ciudad,
-                        telof_t4=titular4.telefono2,resid_t4=titular4.domicilio,cdresid_t4=titular4.ciudad,telresid_t4=titular4.telefono1,email_t4=titular4.email,
-                        lote=obj_inmueble.lotenumero,manzana=obj_inmueble.manzananumero,area=str(obj_inmueble.areaprivada),
-                        mtsnorte=str(obj_inmueble.norte),colnorte=obj_inmueble.colindante_norte,mtseste=str(obj_inmueble.este),coleste=obj_inmueble.colidante_este,
-                        mtssur=str(obj_inmueble.sur),colsur=obj_inmueble.colindante_sur,mtsoeste=str(obj_inmueble.oeste),coloeste=obj_inmueble.colindante_oeste,
-                        valor=int(obj_adj.valor),valor_letras=valor_letras,ci=int(cuota_inicial),saldo=int(saldo),contado_x=forma[0],credic_x=forma[1],amort_x=forma[2],
-                        formaCI=formaci,formaFN=formasaldo,obs=obs,dia_contrato=str(diacontrato),mes_contrato=mescontrato,año_contrato=str(añocontrato),
-                        fecha_entrega=fecha_entrega,fecha_escritura=fecha_escritura,ciudad_entrega=ciudad,ruta=ruta)
-                        
-                        filename = f'Promesa_{proyecto}_{adj}.pdf'
-                        
-                    elif proyecto=='Perla del Mar':
-                        print('entra')
-                        condominios = {
-                            '1':'Alameda',
-                            '2':'Caracola',
-                        }
-                        nro_condominio = obj_inmueble.etapa
-                        nombre_condominio = condominios[nro_condominio]
-                        
-                        try:
-                            meses_entrega = math.ceil((promesa.fechaentrega - datetime.date.today()).days / 30)
-                        except:
-                            meses_entrega = math.ceil((promesa.fechaentrega - datetime.datetime.today()).days / 30)
-                        
-                        context = {
-                            'es_promesa':True,
-                            'proyecto':proyecto,
-                            'ctr':promesa,
-                            'fecha_escritura':fecha_escritura,
-                            'meses_entrega':meses_entrega,
-                            'oficina':ciudad
-                        }
-                        
-                        filename = f'Contrato_bien_futuro_{adj}_{proyecto}.pdf'
-                        
-                            
-                        pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
-                        
-                        ruta = pdf.get('root')
-                                                
-                        ruta_link=pdf.get('url')
-                        
-                        
-                        """ GenerarPDF().ExportPromesaSandvilleMar(nro_contrato=consec_promesa,
-                        nombre_t1=titular1.nombrecompleto,cc_t1=titular1.idTercero,tel_t1=titular1.telefono1,cel_t1=titular1.celular1,ofic_t1=titular1.oficina,cdof_t1=titular1.ciudad,
-                        telof_t1=titular1.telefono2,resid_t1=titular1.domicilio,cdresid_t1=titular1.ciudad,telresid_t1=titular1.telefono1,email_t1=titular1.email,
-                        nombre_t2=titular2.nombrecompleto,cc_t2=titular2.idTercero,tel_t2=titular2.telefono1,cel_t2=titular2.celular1,ofic_t2=titular2.oficina,cdof_t2=titular2.ciudad,
-                        telof_t2=titular2.telefono2,resid_t2=titular2.domicilio,cdresid_t2=titular2.ciudad,telresid_t2=titular2.telefono1,email_t2=titular2.email,
-                        nombre_t3=titular3.nombrecompleto,cc_t3=titular3.idTercero,tel_t3=titular3.telefono1,cel_t3=titular3.celular1,ofic_t3=titular3.oficina,cdof_t3=titular3.ciudad,
-                        telof_t3=titular3.telefono2,resid_t3=titular3.domicilio,cdresid_t3=titular3.ciudad,telresid_t3=titular3.telefono1,email_t3=titular3.email,
-                        nombre_t4=titular4.nombrecompleto,cc_t4=titular4.idTercero,tel_t4=titular4.telefono1,cel_t4=titular4.celular1,ofic_t4=titular4.oficina,cdof_t4=titular4.ciudad,
-                        telof_t4=titular4.telefono2,resid_t4=titular4.domicilio,cdresid_t4=titular4.ciudad,telresid_t4=titular4.telefono1,email_t4=titular4.email,
-                        lote=obj_inmueble.lotenumero,manzana=obj_inmueble.manzananumero,area=str(obj_inmueble.areaprivada),
-                        mtsnorte=str(obj_inmueble.norte),colnorte=obj_inmueble.colindante_norte,mtseste=str(obj_inmueble.este),coleste=obj_inmueble.colidante_este,
-                        mtssur=str(obj_inmueble.sur),colsur=obj_inmueble.colindante_sur,mtsoeste=str(obj_inmueble.oeste),coloeste=obj_inmueble.colindante_oeste,
-                        valor=int(obj_adj.valor),valor_letras=valor_letras,ci=int(cuota_inicial),saldo=int(saldo),contado_x=forma[0],credic_x=forma[1],amort_x=forma[2],
-                        formaCI=formaci,formaFN=formasaldo,obs=obs,dia_contrato=str(diacontrato),mes_contrato=mescontrato,año_contrato=str(añocontrato),
-                        fecha_entrega=fecha_entrega,fecha_escritura=fecha_escritura,ciudad_entrega=ciudad,ruta=ruta,nro_condominio=nro_condominio,nombre_con=nombre_condominio,prorroga=dias_prorroga) """
-                    
-                    elif proyecto=='Tesoro Escondido':
-                        porcDerecho=f'{(obj_inmueble.areaprivada*100/obj_inmueble.area_mz):.2f}'
-                        GenerarPDF().ExportPromesaBugambilias(nro_contrato=consec_promesa,
-                        nombre_t1=titular1.nombrecompleto,cc_t1=titular1.idTercero,tel_t1=titular1.telefono1,cel_t1=titular1.celular1,ofic_t1=titular1.oficina,cdof_t1=titular1.ciudad,
-                        telof_t1=titular1.telefono2,resid_t1=titular1.domicilio,cdresid_t1=titular1.ciudad,telresid_t1=titular1.telefono1,email_t1=titular1.email,
-                        nombre_t2=titular2.nombrecompleto,cc_t2=titular2.idTercero,tel_t2=titular2.telefono1,cel_t2=titular2.celular1,ofic_t2=titular2.oficina,cdof_t2=titular2.ciudad,
-                        telof_t2=titular2.telefono2,resid_t2=titular2.domicilio,cdresid_t2=titular2.ciudad,telresid_t2=titular2.telefono1,email_t2=titular2.email,
-                        nombre_t3=titular3.nombrecompleto,cc_t3=titular3.idTercero,tel_t3=titular3.telefono1,cel_t3=titular3.celular1,ofic_t3=titular3.oficina,cdof_t3=titular3.ciudad,
-                        telof_t3=titular3.telefono2,resid_t3=titular3.domicilio,cdresid_t3=titular3.ciudad,telresid_t3=titular3.telefono1,email_t3=titular3.email,
-                        nombre_t4=titular4.nombrecompleto,cc_t4=titular4.idTercero,tel_t4=titular4.telefono1,cel_t4=titular4.celular1,ofic_t4=titular4.oficina,cdof_t4=titular4.ciudad,
-                        telof_t4=titular4.telefono2,resid_t4=titular4.domicilio,cdresid_t4=titular4.ciudad,telresid_t4=titular4.telefono1,email_t4=titular4.email,
-                        lote=obj_inmueble.lotenumero,manzana=obj_inmueble.manzananumero,area=str(obj_inmueble.areaprivada),
-                        mtsnorte=str(obj_inmueble.norte),colnorte=obj_inmueble.colindante_norte,mtseste=str(obj_inmueble.este),coleste=obj_inmueble.colidante_este,
-                        mtssur=str(obj_inmueble.sur),colsur=obj_inmueble.colindante_sur,mtsoeste=str(obj_inmueble.oeste),coloeste=obj_inmueble.colindante_oeste,
-                        valor=int(obj_adj.valor),valor_letras=valor_letras,ci=int(cuota_inicial),saldo=int(saldo),contado_x=forma[0],credic_x=forma[1],amort_x=forma[2],
-                        formaCI=formaci,formaFN=formasaldo,obs=obs,dia_contrato=str(diacontrato),mes_contrato=mescontrato,año_contrato=str(añocontrato),
-                        fecha_entrega=fecha_entrega,fecha_escritura=fecha_escritura,ciudad_entrega=ciudad,ruta=ruta,porcderecho=porcDerecho,area_parcela=str(obj_inmueble.area_mz))
-                        ruta_link=ruta
-                        
-                        filename = f'Promesa_{proyecto}_{adj}.pdf'
-                        
-                    elif proyecto=='Vegas de Venecia':
-                        try:
-                            meses_entrega = math.ceil((promesa.fechaentrega - datetime.date.today()).days / 30)
-                        except:
-                            meses_entrega = math.ceil((promesa.fechaentrega - datetime.datetime.today()).days / 30)
-                        GenerarPDF().ExportCBFVegasVenecia(nro_contrato=consec_promesa,
-                        nombre_t1=titular1.nombrecompleto,cc_t1=titular1.idTercero,tel_t1=titular1.telefono1,cel_t1=titular1.celular1,ofic_t1=titular1.oficina,cdof_t1=titular1.ciudad,
-                        telof_t1=titular1.telefono2,resid_t1=titular1.domicilio,cdresid_t1=titular1.ciudad,telresid_t1=titular1.telefono1,email_t1=titular1.email,
-                        nombre_t2=titular2.nombrecompleto,cc_t2=titular2.idTercero,tel_t2=titular2.telefono1,cel_t2=titular2.celular1,ofic_t2=titular2.oficina,cdof_t2=titular2.ciudad,
-                        telof_t2=titular2.telefono2,resid_t2=titular2.domicilio,cdresid_t2=titular2.ciudad,telresid_t2=titular2.telefono1,email_t2=titular2.email,
-                        nombre_t3=titular3.nombrecompleto,cc_t3=titular3.idTercero,tel_t3=titular3.telefono1,cel_t3=titular3.celular1,ofic_t3=titular3.oficina,cdof_t3=titular3.ciudad,
-                        telof_t3=titular3.telefono2,resid_t3=titular3.domicilio,cdresid_t3=titular3.ciudad,telresid_t3=titular3.telefono1,email_t3=titular3.email,
-                        nombre_t4=titular4.nombrecompleto,cc_t4=titular4.idTercero,tel_t4=titular4.telefono1,cel_t4=titular4.celular1,ofic_t4=titular4.oficina,cdof_t4=titular4.ciudad,
-                        telof_t4=titular4.telefono2,resid_t4=titular4.domicilio,cdresid_t4=titular4.ciudad,telresid_t4=titular4.telefono1,email_t4=titular4.email,
-                        lote=obj_inmueble.lotenumero,manzana=obj_inmueble.manzananumero,area=str(obj_inmueble.areaprivada),
-                        mtsnorte=str(obj_inmueble.norte),colnorte=obj_inmueble.colindante_norte,mtseste=str(obj_inmueble.este),coleste=obj_inmueble.colidante_este,
-                        mtssur=str(obj_inmueble.sur),colsur=obj_inmueble.colindante_sur,mtsoeste=str(obj_inmueble.oeste),coloeste=obj_inmueble.colindante_oeste,
-                        valor=int(obj_adj.valor),valor_letras=valor_letras,ci=int(cuota_inicial),saldo=int(saldo),contado_x=forma[0],credic_x=forma[1],amort_x=forma[2],
-                        formaCI=formaci,formaFN=formasaldo,obs=obs,dia_contrato=str(diacontrato),mes_contrato=mescontrato,año_contrato=str(añocontrato),
-                        fecha_entrega=fecha_entrega,fecha_escritura=fecha_escritura,ciudad_entrega=ciudad,ruta=ruta,meses_entrega=str(meses_entrega))
-                        ruta_link=ruta
-                        
-                        filename = f'Promesa_{proyecto}_{adj}.pdf'
-                        
-                    elif proyecto=='Sandville del Sol':
-                        GenerarPDF().ExportPromesaSandvilleMar(nro_contrato=consec_promesa,
-                        nombre_t1=titular1.nombrecompleto,cc_t1=titular1.idTercero,tel_t1=titular1.telefono1,cel_t1=titular1.celular1,ofic_t1=titular1.oficina,cdof_t1=titular1.ciudad,
-                        telof_t1=titular1.telefono2,resid_t1=titular1.domicilio,cdresid_t1=titular1.ciudad,telresid_t1=titular1.telefono1,email_t1=titular1.email,
-                        nombre_t2=titular2.nombrecompleto,cc_t2=titular2.idTercero,tel_t2=titular2.telefono1,cel_t2=titular2.celular1,ofic_t2=titular2.oficina,cdof_t2=titular2.ciudad,
-                        telof_t2=titular2.telefono2,resid_t2=titular2.domicilio,cdresid_t2=titular2.ciudad,telresid_t2=titular2.telefono1,email_t2=titular2.email,
-                        nombre_t3=titular3.nombrecompleto,cc_t3=titular3.idTercero,tel_t3=titular3.telefono1,cel_t3=titular3.celular1,ofic_t3=titular3.oficina,cdof_t3=titular3.ciudad,
-                        telof_t3=titular3.telefono2,resid_t3=titular3.domicilio,cdresid_t3=titular3.ciudad,telresid_t3=titular3.telefono1,email_t3=titular3.email,
-                        nombre_t4=titular4.nombrecompleto,cc_t4=titular4.idTercero,tel_t4=titular4.telefono1,cel_t4=titular4.celular1,ofic_t4=titular4.oficina,cdof_t4=titular4.ciudad,
-                        telof_t4=titular4.telefono2,resid_t4=titular4.domicilio,cdresid_t4=titular4.ciudad,telresid_t4=titular4.telefono1,email_t4=titular4.email,
-                        lote=obj_inmueble.lotenumero,manzana=obj_inmueble.manzananumero,area=str(obj_inmueble.areaprivada),
-                        mtsnorte=str(obj_inmueble.norte),colnorte=obj_inmueble.colindante_norte,mtseste=str(obj_inmueble.este),coleste=obj_inmueble.colidante_este,
-                        mtssur=str(obj_inmueble.sur),colsur=obj_inmueble.colindante_sur,mtsoeste=str(obj_inmueble.oeste),coloeste=obj_inmueble.colindante_oeste,
-                        valor=int(obj_adj.valor),valor_letras=valor_letras,ci=int(cuota_inicial),saldo=int(saldo),contado_x=forma[0],credic_x=forma[1],amort_x=forma[2],
-                        formaCI=formaci,formaFN=formasaldo,obs=obs,dia_contrato=str(diacontrato),mes_contrato=mescontrato,año_contrato=str(añocontrato),
-                        fecha_entrega=fecha_entrega,fecha_escritura=fecha_escritura,ciudad_entrega=ciudad,ruta=ruta)
 
-                        filename = f'Promesa_{proyecto}_{adj}.pdf'
-                        
-                    elif proyecto == 'Sotavento' or proyecto == 'Oasis':
-                        try:
-                            meses_entrega = math.ceil((promesa.fechaentrega - datetime.date.today()).days / 30)
-                        except:
-                            meses_entrega = math.ceil((promesa.fechaentrega - datetime.datetime.today()).days / 30)
-                        
-                        context = {
-                            'es_promesa':True,
-                            'proyecto':proyecto,
-                            'ctr':promesa,
-                            'fecha_escritura':fecha_escritura,
-                            'meses_entrega':meses_entrega,
-                            'oficina':ciudad
-                        }
-                        
-                        filename = f'Contrato_bien_futuro_{adj}_{proyecto}.pdf'
-                        
-                            
-                        if proyecto == 'Oasis':
-                            pdf = pdf_gen_weasy(f'pdf/{proyecto}/contrato.html', context, filename)
-                        else:
-                            pdf = pdf_gen(f'pdf/{proyecto}/contrato.html', context, filename)
-                        
-                        file = pdf.get('root')
-                                                
-                        ruta_link=pdf.get('url')
-                    
-                    return _file_response_from_pdf_root(ruta, filename=filename)
-                    
-                elif request.POST.get('btnReimpPagare'):
-                    contrato=obj_promesas[0].nropromesa
-                    nombre_t1=titular1.nombrecompleto
-                    cc_t1=titular1.idTercero
-                    nombre_t2=titular2.nombrecompleto
-                    cc_t2=titular2.idTercero
-                    nombre_t3=titular3.nombrecompleto
-                    cc_t3=titular3.idTercero
-                    nombre_t4=titular4.nombrecompleto
-                    cc_t4=titular4.idTercero
-                    ruta=settings.DIR_EXPORT+f'{proyecto}_pagare_{adj}.pdf'
-                    if proyecto=='Perla del Mar':
-                        pdf.PagareSandvilleMar(nroPagare=contrato,
-                                                nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
-                                                nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
-                                                diaPagare=str(diacontrato),mesPagare=str(mescontrato),añoPagare=str(añocontrato),ciudad=ciudad,ruta=ruta)
-                    elif proyecto=='Sandville Beach':
-                        pdf.PagareSandvilleBeach(nroPagare=contrato,
-                                                nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
-                                                nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
-                                                diaPagare=str(diacontrato),mesPagare=str(mescontrato),añoPagare=str(añocontrato),ciudad=ciudad,ruta=ruta)
-                    elif proyecto=='Sandville del Sol':
-                        pdf.PagareSandvilleBeach(nroPagare=contrato,
-                                                nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
-                                                nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
-                                                diaPagare=str(diacontrato),mesPagare=str(mescontrato),añoPagare=str(añocontrato),ciudad=ciudad,ruta=ruta)
-                    elif proyecto=='Tesoro Escondido':
-                        pdf.PagareTesoro(nroPagare=contrato,
-                                                nombreT1=nombre_t1,ccT1=cc_t1,nombreT2=nombre_t2,ccT2=cc_t2,
-                                                nombreT3=nombre_t3,ccT3=cc_t3,nombreT4=nombre_t4,ccT4=cc_t4,
-                                                diaPagare=str(diacontrato),mesPagare=str(mescontrato),añoPagare=str(añocontrato),ciudad=ciudad,ruta=ruta)
-                    
-                    alerta=True
-                    mensaje_alerta='Descarga el Pagaré aqui'
-                    titulo_alerta='¡Listo!'
-                    link=True
-                    ruta_link=_tmp_download_url(f'{proyecto}_pagare_{adj}.pdf')
+    def _parse_date(value):
+        if not value:
+            return None
+        if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+            return value
+        if isinstance(value, datetime.datetime):
+            return value.date()
+        return datetime.datetime.strptime(str(value), '%Y-%m-%d').date()
 
-    if request.is_ajax():
+    def _empty_titular():
+        return clientes.objects.get(idTercero='')
+
+    def _titulares_adj(obj_adj):
+        out = []
+        for tid in (obj_adj.idtercero1, obj_adj.idtercero2, obj_adj.idtercero3, obj_adj.idtercero4):
+            qs = clientes.objects.filter(idTercero=tid) if tid else clientes.objects.none()
+            out.append(qs[0] if qs.exists() else _empty_titular())
+        return out
+
+    def _reimprimir_promesa(adj):
+        promesa = ensure_promesa(proyecto, adj, usuario=request.user)
+        obj_adj = Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
+        obj_inmueble = Inmuebles.objects.using(proyecto).get(idinmueble=obj_adj.idinmueble)
+        obj_planpagos = PlanPagos.objects.using(proyecto).filter(adj=adj)
+        titular1, titular2, titular3, titular4 = _titulares_adj(obj_adj)
+        valor_letras = Utilidades().numeros_letras(obj_adj.valor)
+        cuota_inicial = obj_planpagos.filter(tipocta='CI').aggregate(Sum('capital'))['capital__sum'] or 0
+        saldo = obj_planpagos.exclude(tipocta='CI').aggregate(Sum('capital'))['capital__sum'] or 0
+        formapago = promesa.formapago or ''
+        if formapago == 'Contado':
+            forma = ('x', '', '')
+        elif formapago == 'Credicontado':
+            forma = ('', 'x', '')
+        elif formapago == 'Amortizacion':
+            forma = ('', '', 'x')
+        else:
+            forma = ('', '', '')
+        formaci = promesa.formaci or ''
+        formasaldo = promesa.formasaldo or ''
+        if not forma_pago_es_manual(proyecto, ORIGEN_MODULO):
+            formaci = formaci or ''
+            formasaldo = formasaldo or ''
+        obs = promesa.observaciones or ''
+        ciudad = promesa.ciudad or ''
+        fecha_prom = promesa.fechapromesa or datetime.date.today()
+        fecha_entrega = promesa.fechaentrega
+        fecha_escritura = promesa.fechaescritura
+        diacontrato = fecha_prom.day
+        mescontrato = fecha_prom.month
+        añocontrato = fecha_prom.year
+        try:
+            consec_promesa = int(promesa.nropromesa)
+        except (TypeError, ValueError):
+            consec_promesa = promesa.nropromesa
+        try:
+            meses_entrega = math.ceil((fecha_entrega - datetime.date.today()).days / 30) if fecha_entrega else 0
+        except Exception:
+            meses_entrega = 0
+        ruta = settings.DIR_EXPORT + f'Promesa_{proyecto}_{adj}.pdf'
+        reportlab_kwargs = {
+            'nro_contrato': consec_promesa,
+            'nombre_t1': titular1.nombrecompleto, 'cc_t1': titular1.idTercero,
+            'tel_t1': titular1.telefono1, 'cel_t1': titular1.celular1,
+            'ofic_t1': titular1.oficina, 'cdof_t1': titular1.ciudad,
+            'telof_t1': titular1.telefono2, 'resid_t1': titular1.domicilio,
+            'cdresid_t1': titular1.ciudad, 'telresid_t1': titular1.telefono1, 'email_t1': titular1.email,
+            'nombre_t2': titular2.nombrecompleto, 'cc_t2': titular2.idTercero,
+            'tel_t2': titular2.telefono1, 'cel_t2': titular2.celular1,
+            'ofic_t2': titular2.oficina, 'cdof_t2': titular2.ciudad,
+            'telof_t2': titular2.telefono2, 'resid_t2': titular2.domicilio,
+            'cdresid_t2': titular2.ciudad, 'telresid_t2': titular2.telefono1, 'email_t2': titular2.email,
+            'nombre_t3': titular3.nombrecompleto, 'cc_t3': titular3.idTercero,
+            'tel_t3': titular3.telefono1, 'cel_t3': titular3.celular1,
+            'ofic_t3': titular3.oficina, 'cdof_t3': titular3.ciudad,
+            'telof_t3': titular3.telefono2, 'resid_t3': titular3.domicilio,
+            'cdresid_t3': titular3.ciudad, 'telresid_t3': titular3.telefono1, 'email_t3': titular3.email,
+            'nombre_t4': titular4.nombrecompleto, 'cc_t4': titular4.idTercero,
+            'tel_t4': titular4.telefono1, 'cel_t4': titular4.celular1,
+            'ofic_t4': titular4.oficina, 'cdof_t4': titular4.ciudad,
+            'telof_t4': titular4.telefono2, 'resid_t4': titular4.domicilio,
+            'cdresid_t4': titular4.ciudad, 'telresid_t4': titular4.telefono1, 'email_t4': titular4.email,
+            'lote': obj_inmueble.lotenumero, 'manzana': obj_inmueble.manzananumero,
+            'area': str(obj_inmueble.areaprivada),
+            'mtsnorte': str(obj_inmueble.norte), 'colnorte': obj_inmueble.colindante_norte,
+            'mtseste': str(obj_inmueble.este), 'coleste': obj_inmueble.colidante_este,
+            'mtssur': str(obj_inmueble.sur), 'colsur': obj_inmueble.colindante_sur,
+            'mtsoeste': str(obj_inmueble.oeste), 'coloeste': obj_inmueble.colindante_oeste,
+            'valor': int(obj_adj.valor), 'valor_letras': valor_letras,
+            'ci': int(cuota_inicial), 'saldo': int(saldo),
+            'contado_x': forma[0], 'credic_x': forma[1], 'amort_x': forma[2],
+            'formaCI': formaci, 'formaFN': formasaldo, 'obs': obs,
+            'dia_contrato': str(diacontrato), 'mes_contrato': mescontrato, 'año_contrato': str(añocontrato),
+            'fecha_entrega': fecha_entrega, 'fecha_escritura': fecha_escritura,
+            'ciudad_entrega': ciudad, 'ruta': ruta,
+        }
+        html_context = {
+            'es_promesa': True,
+            'proyecto': proyecto,
+            'ctr': promesa,
+            'fecha_escritura': fecha_escritura,
+            'meses_entrega': meses_entrega,
+            'oficina': ciudad,
+        }
+        cfg = get_config_documento(proyecto, ORIGEN_MODULO)
+        if cfg.plantilla == 'ExportPromesaBugambilias':
+            reportlab_kwargs['porcderecho'] = f'{(obj_inmueble.areaprivada*100/obj_inmueble.area_mz):.2f}'
+            reportlab_kwargs['area_parcela'] = str(obj_inmueble.area_mz)
+        if cfg.plantilla == 'ExportCBFVegasVenecia':
+            reportlab_kwargs['meses_entrega'] = str(meses_entrega)
+        filename_html = f'Contrato_bien_futuro_{adj}_{proyecto}.pdf'
+        filename_rl = f'Promesa_{proyecto}_{adj}.pdf'
+        return generar_documento_pdf(
+            proyecto,
+            ORIGEN_MODULO,
+            reportlab_kwargs=reportlab_kwargs if cfg.motor == MOTOR_REPORTLAB else None,
+            html_context=html_context if cfg.motor != MOTOR_REPORTLAB else None,
+            filename=filename_rl if cfg.motor == MOTOR_REPORTLAB else filename_html,
+        )
+
+    # ---- AJAX ----
+    if request.is_ajax() or request.headers.get('x-requested-with') == 'XMLHttpRequest':
         if request.method == 'GET':
-            adj=request.GET.get('adj')
-            obj_promesa=Promesas.objects.using(proyecto).filter(idadjudicacion=adj)
-            escriturado = obj_promesa[0].escriturado
-            entregado = obj_promesa[0].entregado
-            prorrogado = obj_promesa[0].prorroga
-            data={
-                'escriturado':escriturado,
-                'entregado':entregado,
-                'prorrogado':prorrogado,
-                'datos_promesa':serializers.serialize('json',obj_promesa)
-            }
-            return JsonResponse(data)
-        
+            adj = request.GET.get('adj')
+            tipo = request.GET.get('tipo')
+            if tipo == 'historial_otrosi':
+                hist = list(
+                    PromesaOtrosi.objects.filter(proyecto_id=proyecto, adj=adj)
+                    .order_by('-fecha_registro')
+                    .values(
+                        'id', 'tipo', 'fecha_entrega_anterior', 'fecha_entrega_nueva',
+                        'fecha_escritura_anterior', 'fecha_escritura_nueva',
+                        'observaciones', 'documento', 'usuario', 'fecha_registro',
+                    )
+                )
+                for item in hist:
+                    if item.get('fecha_registro'):
+                        item['fecha_registro'] = item['fecha_registro'].strftime('%Y-%m-%d %H:%M')
+                    for k in (
+                        'fecha_entrega_anterior', 'fecha_entrega_nueva',
+                        'fecha_escritura_anterior', 'fecha_escritura_nueva',
+                    ):
+                        if item.get(k):
+                            item[k] = item[k].strftime('%Y-%m-%d')
+                return JsonResponse({'passed': True, 'historial': hist})
+
+            if tipo == 'documentos':
+                docs = list(
+                    documentos_contratos.objects.using(proyecto)
+                    .filter(adj=adj)
+                    .values('descripcion_doc', 'fecha_carga', 'usuario_carga')
+                )
+                for doc in docs:
+                    nombre = doc.get('descripcion_doc') or ''
+                    filename = nombre if str(nombre).lower().endswith('.pdf') else f'{nombre}.pdf'
+                    doc_path = f'docs_andinasoft/doc_contratos/{proyecto}/{adj}/{filename}'
+                    try:
+                        doc['url'] = default_storage.url(doc_path)
+                    except Exception:
+                        doc['url'] = f'{settings.MEDIA_URL}{doc_path}'
+                    doc['fecha_carga'] = str(doc.get('fecha_carga') or '')
+                    doc['usuario_carga'] = str(doc.get('usuario_carga') or '')
+                docs.sort(key=lambda d: d.get('fecha_carga') or '', reverse=True)
+                return JsonResponse({'passed': True, 'documentos': docs, 'adj': adj})
+
+            cumplimiento = PromesaCumplimiento.objects.filter(proyecto_id=proyecto, adj=adj).first()
+            fecha_entrega_real = (
+                cumplimiento.fecha_entrega_real.strftime('%Y-%m-%d')
+                if cumplimiento and cumplimiento.fecha_entrega_real else ''
+            )
+            fecha_escritura_real = (
+                cumplimiento.fecha_escritura_real.strftime('%Y-%m-%d')
+                if cumplimiento and cumplimiento.fecha_escritura_real else ''
+            )
+
+            obj_promesa = Promesas.objects.using(proyecto).filter(idadjudicacion=adj)
+            if not obj_promesa.exists():
+                try:
+                    obj_adj = Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
+                except Adjudicacion.DoesNotExist:
+                    return JsonResponse({'passed': False, 'msj': 'No existe adjudicacion para este negocio'}, status=404)
+                fp = obj_adj.fechacontrato.strftime('%Y-%m-%d') if obj_adj.fechacontrato else ''
+                return JsonResponse({
+                    'passed': True,
+                    'escriturado': False,
+                    'entregado': False,
+                    'fechapromesa': fp,
+                    'fechaentrega': '',
+                    'fechaescritura': '',
+                    'fecha_entrega_real': fecha_entrega_real,
+                    'fecha_escritura_real': fecha_escritura_real,
+                    'nropromesa': obj_adj.contrato or '',
+                    'observaciones': '',
+                    'datos_promesa': '[]',
+                })
+            p = obj_promesa[0]
+            return JsonResponse({
+                'passed': True,
+                'escriturado': _boolish(p.escriturado),
+                'entregado': _boolish(p.entregado),
+                'fechapromesa': p.fechapromesa.strftime('%Y-%m-%d') if p.fechapromesa else '',
+                'fechaentrega': p.fechaentrega.strftime('%Y-%m-%d') if p.fechaentrega else '',
+                'fechaescritura': p.fechaescritura.strftime('%Y-%m-%d') if p.fechaescritura else '',
+                'fecha_entrega_real': fecha_entrega_real,
+                'fecha_escritura_real': fecha_escritura_real,
+                'nropromesa': p.nropromesa or '',
+                'observaciones': p.observaciones or '',
+                'datos_promesa': serializers.serialize('json', obj_promesa),
+            })
+
         if request.method == 'POST':
+            check_perms(request, ('andinasoft.change_promesas',), raise_exception=True)
             tipo = request.POST.get('tipo')
-            check_perms(request,('andinasoft.change_promesas',),raise_exception=True)
             adj = request.POST.get('adj')
-            obj_promesa = Promesas.objects.using(proyecto).get(idadjudicacion=adj)
-            
-            if tipo == 'solofecha':
-                obj_promesa.fechapromesa = request.POST.get('fecha_promesa')
-                obj_promesa.fechaentrega = request.POST.get('fecha_entrega')
-                obj_promesa.fechaescritura = request.POST.get('fecha_escritura')
-                accion=f'Cambio las fechas de la promesa de compraventa'
-                
-            else:
-                obj_promesa.estado = 'Pendiente'
-                accion=f'Desaprobó la promesa de compraventa'
-                
-            obj_promesa.save()
-            obj_timeline=timeline.objects.using(proyecto)
-            obj_timeline.create(adj=adj,
-                            fecha=datetime.date.today(),
-                            usuario=request.user,
-                            accion=accion)
-            data = {
-                'success':'si'
-            }
-            return JsonResponse(data)
-        
-        
-    obj_opciones_vigentes=Adjudicacion.objects.using(proyecto).raw('CALL opciones_vigentes()')
-    obj_opciones_vencidas=Adjudicacion.objects.using(proyecto).raw('CALL opciones_vencidas()')
-    obj_opciones_porvencer=Adjudicacion.objects.using(proyecto).raw('CALL opciones_por_vencer()')
-    obj_promesas_vigentes=Promesas.objects.using(proyecto).raw('CALL promesas_vigentes()')
-    obj_entregas_vencidas=Promesas.objects.using(proyecto).raw('CALL entregas_vencidas()')
-    obj_escrituras_vencidas=Promesas.objects.using(proyecto).raw('CALL escrituras_vencidas()')
-    obj_entregas_porvencer=Promesas.objects.using(proyecto).raw('CALL entregas_por_vencer()')
-    obj_escrituras_porvencer=Promesas.objects.using(proyecto).raw('CALL escrituras_por_vencer()')
-    obj_promesas_pendientes=Promesas.objects.using(proyecto).raw('CALL promesas_sinaprobar()')
-    context={
-        'proyecto':proyecto,
-        'opciones_vigentes':obj_opciones_vigentes,
-        'opciones_vencidas':obj_opciones_vencidas,
-        'promesas_vigentes':obj_promesas_vigentes,
-        'entregas_vencidas':obj_entregas_vencidas,
-        'escrituras_vencidas':obj_escrituras_vencidas,
-        'opciones_porvencer':obj_opciones_porvencer,
-        'entregas_porvencer':obj_entregas_porvencer,
-        'escrituras_porvencer':obj_escrituras_porvencer,
-        'promesas_pendientes':obj_promesas_pendientes,
-        'alerta':alerta,
-        'titulo_alerta':titulo_alerta,
-        'mensaje':mensaje_alerta,
-        'link':link,
-        'ruta_link':ruta_link,
+            if not adj:
+                return JsonResponse({'passed': False, 'msj': 'Falta el negocio'}, status=400)
+            try:
+                Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
+            except Adjudicacion.DoesNotExist:
+                return JsonResponse({'passed': False, 'msj': 'No existe adjudicacion para este negocio'}, status=404)
+            obj_promesa = ensure_promesa(proyecto, adj, usuario=request.user)
+
+            if tipo == 'cambiar_fechas':
+                if obj_promesa.fechaentrega or obj_promesa.fechaescritura:
+                    return JsonResponse({
+                        'passed': False,
+                        'msj': 'Las fechas ya estan registradas. Para modificarlas use un otrosi',
+                    }, status=400)
+                obj_promesa.fechapromesa = _parse_date(request.POST.get('fecha_promesa'))
+                obj_promesa.fechaentrega = _parse_date(request.POST.get('fecha_entrega'))
+                obj_promesa.fechaescritura = _parse_date(request.POST.get('fecha_escritura'))
+                obj_promesa.save()
+                timeline.objects.using(proyecto).create(
+                    adj=adj, fecha=datetime.date.today(), usuario=request.user,
+                    accion='Registro las fechas firmadas de la promesa',
+                )
+                return JsonResponse({'passed': True, 'msj': 'Fechas actualizadas'})
+
+            if tipo == 'marcar_entregado':
+                entregado = request.POST.get('entregado') in ('true', 'True', '1', 'on')
+                fecha_real = _parse_date(request.POST.get('fecha_entrega_real'))
+                if entregado and not fecha_real:
+                    return JsonResponse({
+                        'passed': False,
+                        'msj': 'Indique la fecha real de entrega',
+                    }, status=400)
+                obj_promesa.entregado = entregado
+                obj_promesa.save()
+                archivo = request.FILES.get('documento')
+                doc_name = ''
+                if archivo:
+                    if not str(archivo.name).lower().endswith('.pdf'):
+                        return JsonResponse({'passed': False, 'msj': 'El acta debe ser PDF'}, status=400)
+                    doc_name = f"Acta de entrega_{datetime.datetime.today()}"
+                    upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                    documentos_contratos.objects.using(proyecto).create(
+                        adj=adj, descripcion_doc=doc_name,
+                        fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                    )
+                proy, _ = proyectos.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
+                cumplimiento, _ = PromesaCumplimiento.objects.get_or_create(proyecto=proy, adj=adj)
+                if entregado:
+                    cumplimiento.fecha_entrega_real = fecha_real
+                    cumplimiento.usuario_entrega = str(request.user)
+                else:
+                    cumplimiento.fecha_entrega_real = None
+                    cumplimiento.usuario_entrega = ''
+                cumplimiento.save()
+                accion = (
+                    f'Marco la promesa como entregada el {fecha_real.isoformat()}'
+                    if entregado else 'Marco la promesa como no entregada'
+                )
+                if doc_name:
+                    accion += ' y cargo acta de entrega'
+                timeline.objects.using(proyecto).create(
+                    adj=adj, fecha=datetime.date.today(), usuario=request.user, accion=accion,
+                )
+                return JsonResponse({'passed': True, 'msj': 'Estado de entrega actualizado'})
+
+            if tipo == 'marcar_escriturado':
+                escriturado = request.POST.get('escriturado') in ('true', 'True', '1', 'on')
+                fecha_real = _parse_date(request.POST.get('fecha_escritura_real'))
+                archivo = request.FILES.get('documento')
+                if escriturado and not fecha_real:
+                    return JsonResponse({
+                        'passed': False,
+                        'msj': 'Indique la fecha real de escritura',
+                    }, status=400)
+                if escriturado and not archivo:
+                    return JsonResponse({
+                        'passed': False,
+                        'msj': 'Para marcar escriturado debe cargar el PDF de la escritura',
+                    }, status=400)
+                doc_name = ''
+                if archivo:
+                    if not str(archivo.name).lower().endswith('.pdf'):
+                        return JsonResponse({'passed': False, 'msj': 'La escritura debe ser PDF'}, status=400)
+                    doc_name = f"Escritura_{datetime.datetime.today()}"
+                    upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                    documentos_contratos.objects.using(proyecto).create(
+                        adj=adj, descripcion_doc=doc_name,
+                        fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                    )
+                obj_promesa.escriturado = escriturado
+                obj_promesa.save()
+                proy, _ = proyectos.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
+                cumplimiento, _ = PromesaCumplimiento.objects.get_or_create(proyecto=proy, adj=adj)
+                if escriturado:
+                    cumplimiento.fecha_escritura_real = fecha_real
+                    cumplimiento.usuario_escritura = str(request.user)
+                else:
+                    cumplimiento.fecha_escritura_real = None
+                    cumplimiento.usuario_escritura = ''
+                cumplimiento.save()
+                accion = (
+                    f'Marco la promesa como escriturada el {fecha_real.isoformat()}'
+                    if escriturado else 'Marco la promesa como no escriturada'
+                )
+                if doc_name:
+                    accion += ' y cargo la escritura'
+                timeline.objects.using(proyecto).create(
+                    adj=adj, fecha=datetime.date.today(), usuario=request.user, accion=accion,
+                )
+                return JsonResponse({'passed': True, 'msj': 'Estado de escritura actualizado'})
+
+            if tipo == 'registrar_otrosi':
+                tipo_otrosi = request.POST.get('tipo_otrosi')
+                if tipo_otrosi not in (
+                    PromesaOtrosi.TIPO_ENTREGA,
+                    PromesaOtrosi.TIPO_ESCRITURA,
+                    PromesaOtrosi.TIPO_AMBOS,
+                ):
+                    return JsonResponse({'passed': False, 'msj': 'Tipo de otrosi invalido'}, status=400)
+                archivo = request.FILES.get('documento')
+                if not archivo or not str(archivo.name).lower().endswith('.pdf'):
+                    return JsonResponse({'passed': False, 'msj': 'Debe cargar el PDF del otrosi'}, status=400)
+
+                fecha_entrega_nueva = _parse_date(request.POST.get('fecha_entrega_nueva'))
+                fecha_escritura_nueva = _parse_date(request.POST.get('fecha_escritura_nueva'))
+                if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS) and not fecha_entrega_nueva:
+                    return JsonResponse({'passed': False, 'msj': 'Indique la nueva fecha de entrega'}, status=400)
+                if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS) and not fecha_escritura_nueva:
+                    return JsonResponse({'passed': False, 'msj': 'Indique la nueva fecha de escritura'}, status=400)
+
+                obs = request.POST.get('observaciones') or ''
+                fe_ant = obj_promesa.fechaentrega
+                fs_ant = obj_promesa.fechaescritura
+                if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS):
+                    obj_promesa.fechaentrega = fecha_entrega_nueva
+                    obj_promesa.entregado = False
+                if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS):
+                    obj_promesa.fechaescritura = fecha_escritura_nueva
+                    obj_promesa.escriturado = False
+                obj_promesa.save()
+
+                doc_name = f"Otrosi_{datetime.datetime.today()}"
+                upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                documentos_contratos.objects.using(proyecto).create(
+                    adj=adj, descripcion_doc=doc_name,
+                    fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                )
+                proy, _ = proyectos.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
+                PromesaOtrosi.objects.create(
+                    proyecto=proy,
+                    adj=adj,
+                    tipo=tipo_otrosi,
+                    fecha_entrega_anterior=fe_ant if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS) else None,
+                    fecha_entrega_nueva=fecha_entrega_nueva if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS) else None,
+                    fecha_escritura_anterior=fs_ant if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS) else None,
+                    fecha_escritura_nueva=fecha_escritura_nueva if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS) else None,
+                    observaciones=obs,
+                    documento=doc_name,
+                    usuario=str(request.user),
+                )
+                timeline.objects.using(proyecto).create(
+                    adj=adj, fecha=datetime.date.today(), usuario=request.user,
+                    accion=f'Registro otrosi de {tipo_otrosi}',
+                )
+                return JsonResponse({'passed': True, 'msj': 'Otrosi registrado'})
+
+            return JsonResponse({'passed': False, 'msj': 'Accion no reconocida'}, status=400)
+
+    # ---- POST no AJAX: reimpresion ----
+    if request.method == 'POST' and request.POST.get('btnReimpPromesa'):
+        check_perms(request, ('andinasoft.add_promesas',), raise_exception=True)
+        adj = request.POST.get('adjpromesa')
+        try:
+            result = _reimprimir_promesa(adj)
+        except Adjudicacion.DoesNotExist:
+            alerta = True
+            titulo_alerta = 'Error'
+            mensaje_alerta = 'No se encontro la adjudicacion asociada'
+        except Promesas.DoesNotExist:
+            alerta = True
+            titulo_alerta = 'Error'
+            mensaje_alerta = 'Este negocio no tiene promesa registrada'
+        except Inmuebles.DoesNotExist:
+            alerta = True
+            titulo_alerta = 'Error'
+            mensaje_alerta = 'La adjudicacion no tiene inmueble valido; no se puede reimprimir'
+        except (DocumentoNoConfigurado, ConfigDocumentoInvalida) as exc:
+            alerta = True
+            titulo_alerta = 'Error'
+            mensaje_alerta = str(exc)
+        except Exception as exc:
+            alerta = True
+            titulo_alerta = 'Error'
+            mensaje_alerta = f'No se pudo reimprimir: {exc}'
+        else:
+            if result.get('url'):
+                ruta_link = result['url']
+            return _file_response_from_pdf_root(result['root'], filename=result['filename'])
+
+    rows = build_promesa_rows(proyecto)
+    context = {
+        'proyecto': proyecto,
+        'promesas': rows,
+        'entregas_por_vencer': filter_rows(rows, entrega_estado=ESTADO_POR_VENCER),
+        'entregas_vencidas': filter_rows(rows, entrega_estado=ESTADO_VENCIDO),
+        'escrituras_por_vencer': filter_rows(rows, escritura_estado=ESTADO_POR_VENCER),
+        'escrituras_vencidas': filter_rows(rows, escritura_estado=ESTADO_VENCIDO),
+        'alerta': alerta,
+        'titulo_alerta': titulo_alerta,
+        'mensaje': mensaje_alerta,
+        'link': link,
+        'ruta_link': ruta_link,
+        'forma_pago_manual_modulo': forma_pago_es_manual(proyecto, ORIGEN_MODULO),
     }
-    
-    return render(request,'estados_promesas.html',context)
+    return render(request, 'estados_promesas.html', context)
+
 
 @group_perm_required(('andinasoft.view_pqrs',),raise_exception=True)
 def lista_pqrs(request,proyecto):
@@ -8490,14 +7888,27 @@ def general_gastos(request):
 
 @group_perm_required(('andinasoft.change_parametros_operaciones',),raise_exception=True)
 def parametros(request,proyecto):
+    from andinasoft.models import ConfigDocumento, proyectos as ProyectosModel
+    from andinasoft.promesa_pdf import (
+        validar_config,
+        ConfigDocumentoInvalida,
+        generar_preview_documento,
+    )
+
     obj_parametro=Parametros_Operaciones.objects.using(proyecto)
     jsonparametros=serializers.serialize('json',obj_parametro.all())
+    configs = list(
+        ConfigDocumento.objects.filter(proyecto_id=proyecto).values(
+            'origen', 'motor', 'plantilla', 'forma_pago_manual'
+        )
+    )
     context={
         'proyecto':proyecto,
         'parameters':jsonparametros,
+        'config_documentos': json.dumps(configs),
     }
-    
-    if request.is_ajax():
+
+    if request.is_ajax() or request.headers.get('x-requested-with') == 'XMLHttpRequest':
         if request.method == 'GET':
             parametro=request.GET.get('parametro')
             status=request.GET.get('status')
@@ -8510,10 +7921,61 @@ def parametros(request,proyecto):
                 mensaje='Parametro Activado'
             else:
                 mensaje='Parametro Desactivado'
-            
+
             data={'passed':True,'msj':mensaje}
             return JsonResponse(data)
-    
+
+        if request.method == 'POST' and request.POST.get('action') == 'config_documento':
+            origen = request.POST.get('origen')
+            motor = request.POST.get('motor')
+            plantilla = (request.POST.get('plantilla') or '').strip()
+            forma_manual = request.POST.get('forma_pago_manual') in ('true', 'True', 'on', '1')
+            if origen not in (ConfigDocumento.ORIGEN_VENTA, ConfigDocumento.ORIGEN_MODULO):
+                return JsonResponse({'passed': False, 'msj': 'Origen invalido'}, status=400)
+            try:
+                validar_config(motor, plantilla)
+            except ConfigDocumentoInvalida as exc:
+                return JsonResponse({'passed': False, 'msj': str(exc)}, status=400)
+            proy, _ = ProyectosModel.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
+            ConfigDocumento.objects.update_or_create(
+                proyecto=proy,
+                origen=origen,
+                defaults={
+                    'motor': motor,
+                    'plantilla': plantilla,
+                    'forma_pago_manual': forma_manual,
+                },
+            )
+            return JsonResponse({'passed': True, 'msj': 'Configuracion de documento guardada'})
+
+        if request.method == 'POST' and request.POST.get('action') == 'preview_documento':
+            origen = request.POST.get('origen')
+            motor = request.POST.get('motor')
+            plantilla = (request.POST.get('plantilla') or '').strip()
+            if origen not in (ConfigDocumento.ORIGEN_VENTA, ConfigDocumento.ORIGEN_MODULO):
+                return JsonResponse({'passed': False, 'msj': 'Origen invalido'}, status=400)
+            try:
+                result = generar_preview_documento(proyecto, origen, motor, plantilla)
+            except ConfigDocumentoInvalida as exc:
+                return JsonResponse({'passed': False, 'msj': str(exc)}, status=400)
+            except Exception as exc:
+                return JsonResponse({
+                    'passed': False,
+                    'msj': f'No se pudo generar la previsualizacion: {exc}',
+                }, status=400)
+            root = result.get('root')
+            filename = result.get('filename') or 'preview.pdf'
+            if not root:
+                return JsonResponse({
+                    'passed': False,
+                    'msj': 'El PDF se genero pero no se encontro el archivo',
+                }, status=400)
+            # Servir el PDF por la misma vista (evita depender de /media y de hosts localhost).
+            response = _file_response_from_pdf_root(root, filename=filename)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            response['X-Preview-Filename'] = filename
+            return response
+
     return render(request,'parametros.html',context)
 
 def asociar_cuentas(request,empresa):

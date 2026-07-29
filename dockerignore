@@ -42,3 +42,5 @@ Dockerfile*
 # Logs
 *.log
 logs
+
+.codex

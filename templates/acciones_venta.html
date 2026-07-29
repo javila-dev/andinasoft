@@ -48,17 +48,8 @@
             <form id='form-documentos' method='post' action=''>{%csrf_token%}
                 <div class='btn-toolbar' role='toolbar'>
                     <div class="btn-group" role="group" aria-label="Basic example">
-                        <div class="btn-group" role='group'>
-                            <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                Contrato
-                            </button>
-                            <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                                <input type='submit' class="dropdown-item disabled" value='Opcion de Promesa' name='impContrato'>
-                                <button type="button" class="dropdown-item" data-toggle='modal'
-                                    data-target='#ModalPromesas'>Promesa</button>
-                            </div>
-                        </div>
+                        <button type="button" class="btn btn-secondary" data-toggle='modal'
+                            data-target='#ModalDocumento'>Contrato</button>
                         <input type='submit' class='btn btn-secondary' value='Pagaré' name='impPagare'>
                         <input type='submit' class='btn btn-secondary' value='Verificacion' name='impVerificacion'>
                         <button type='button' class='btn btn-secondary' data-toggle="modal"
@@ -264,12 +255,12 @@
             </div>
         </form>
     </div>
-    <div class='modal fade' id='ModalPromesas' tabindex="-1" data-backdrop="static" role="dialog" aria-hidden="true">
+    <div class='modal fade' id='ModalDocumento' tabindex="-1" data-backdrop="static" role="dialog" aria-hidden="true">
         <form id='formOpcion' method='POST' action=''>{%csrf_token%}
             <div class="modal-dialog" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="titulopciones">Datos Promesa</h5>
+                        <h5 class="modal-title" id="titulopciones">Datos del contrato</h5>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                             <span aria-hidden="true">&times;</span>
                         </button>
@@ -322,7 +313,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-                        <input class='btn btn-primary' type="submit" name="impPromesa" value='Imprimir'>
+                        <input class='btn btn-primary' type="submit" name="impDocumento" value='Imprimir'>
                     </div>
                 </div>
             </div>
@@ -1195,14 +1186,16 @@
     cargarParametros()
 
     function cargarParametros() {
+        var formaPagoManualVenta = '{{forma_pago_manual_venta|yesno:"true,false"}}' === 'true'
+        if (formaPagoManualVenta) {
+            $('#ModalformaManual').modal('show')
+            return
+        }
         var parametros = JSON.parse('{{parameters|escapejs}}')
         for (i = 0; i < parametros.length; i++) {
             var parametro = parametros[i]['fields']['descripcion']
             var status = parametros[i]['fields']['estado']
-            if (parametro == 'formasOpcionManual' && status) {
-                $('#ModalformaManual').modal('show')
-                return
-            } else if (parametro == 'formasVerificacionManual' && status) {
+            if (parametro == 'formasVerificacionManual' && status) {
                 $('#ModalformaManual').modal('show')
                 return
             }
