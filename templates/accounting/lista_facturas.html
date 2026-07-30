@@ -32,9 +32,11 @@
                 </div>
                 <select id='oficina' class='custom-select'>
                     <option value=''>Seleccionar...</option>
-                    <option value='MEDELLIN'>MEDELLIN</option>
-                    <option value='MONTERIA'>MONTERIA</option>
-                    <option value='TODAS'>TODAS</option>
+                    {% for codigo, etiqueta in oficinas_permitidas %}
+                    <option value='{{ codigo }}'>{{ etiqueta }}</option>
+                    {% empty %}
+                    <option value='' disabled>Sin oficinas autorizadas</option>
+                    {% endfor %}
                 </select>
             </div>
         </div>

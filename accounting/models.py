@@ -144,6 +144,43 @@ class GastoTesoreriaNotificacion(models.Model):
         return f'{self.user} (tesorería Alegra)'
 
 
+class UsuarioAccountingAlcance(models.Model):
+    """
+    Alcance de empresas/oficinas para el flujo contable de radicación → pago.
+
+    - Sin fila (o activo=False): denegar acceso al flujo.
+    - Fila con M2M vacíos: acceso total (comodín explícito).
+    - M2M poblados: restringe esa dimensión; vacío en una dimensión = comodín en esa dimensión.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='accounting_alcance',
+        db_constraint=False,
+    )
+    empresas = models.ManyToManyField(
+        empresas,
+        blank=True,
+        related_name='accounting_alcances',
+        db_constraint=False,
+        help_text='Vacío = todas las empresas.',
+    )
+    oficinas = models.ManyToManyField(
+        GastoNotificacionOficina,
+        blank=True,
+        related_name='accounting_alcances',
+        help_text='Vacío = todas las oficinas.',
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Alcance contable de usuario'
+        verbose_name_plural = 'Alcances contables de usuarios'
+
+    def __str__(self):
+        return f'{self.user} (alcance contable)'
+
+
 class Facturas(models.Model):
     nroradicado = models.AutoField(db_column='NroRadicado', primary_key=True)
     fecharadicado = models.DateField(db_column='FechaRadica',auto_now_add=True,blank=True) 

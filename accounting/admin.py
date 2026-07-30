@@ -63,6 +63,31 @@ class adminGastoTesoreriaNotificacion(admin.ModelAdmin):
     oficinas_list.short_description = 'Oficinas'
 
 
+@admin.register(models.UsuarioAccountingAlcance)
+class adminUsuarioAccountingAlcance(admin.ModelAdmin):
+    list_display = ['pk', 'user', 'activo', 'empresas_list', 'oficinas_list']
+    list_filter = ['activo']
+    search_fields = ['user__username', 'user__email']
+    autocomplete_fields = ['user']
+    filter_horizontal = ['empresas', 'oficinas']
+
+    def empresas_list(self, obj):
+        qs = list(obj.empresas.all()[:8])
+        if not qs:
+            return 'TODAS'
+        return ', '.join(str(e.pk) for e in qs)
+
+    empresas_list.short_description = 'Empresas'
+
+    def oficinas_list(self, obj):
+        qs = list(obj.oficinas.all())
+        if not qs:
+            return 'TODAS'
+        return ', '.join(o.codigo for o in qs)
+
+    oficinas_list.short_description = 'Oficinas'
+
+
 @admin.register(models.Facturas)
 class adminFacts(admin.ModelAdmin):
     list_display = [

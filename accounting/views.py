@@ -37,6 +37,21 @@ from andinasoft.utilities import get_text_from_file, pdf_gen, Utilidades
 from andinasoft.handlers_functions import envio_notificacion
 from accounting.models_alttum import Pagos_facturas, Anticipos_hotels as anticipos_hotels
 from accounting import forms
+from accounting.alcance import (
+    ALCANCE_DENY_DETAIL,
+    bind_form_alcance,
+    context_alcance,
+    deny_alcance_json,
+    filter_anticipos_qs,
+    filter_facturas_qs,
+    filter_info_facturas_qs,
+    filter_otros_ingresos_qs,
+    filter_pagos_qs,
+    filter_transf_qs,
+    get_alcance,
+    resolve_oficina_filter,
+    user_can_access,
+)
 from accounting.gasto_aprobacion import alegra_sin_aprobacion_q
 from accounting.gasto_aprobacion_views import (
     gastos_alegra_asignar,
@@ -1366,11 +1381,25 @@ def lista_conciliaciones(request):
 @login_required
 @group_perm_required(('accounting.add_facturas',),raise_exception=True)
 def radicar_factura(request):
+    if get_alcance(request.user) is None:
+        raise PermissionDenied(ALCANCE_DENY_DETAIL)
+    form = forms.form_nuevo_radicado()
+    bind_form_alcance(
+        form, request.user,
+        empresa_fields=['empresa'],
+        oficina_fields=['oficina'],
+    )
     context = {
-        'form':forms.form_nuevo_radicado
+        'form': form,
+        **context_alcance(request.user),
     }
     if request.method == 'POST':
         form = forms.form_nuevo_radicado(request.POST,request.FILES)
+        bind_form_alcance(
+            form, request.user,
+            empresa_fields=['empresa'],
+            oficina_fields=['oficina'],
+        )
         if form.is_valid():
             nro_factura = form.cleaned_data.get('nro_factura')
             empresa = form.cleaned_data.get('empresa')
@@ -1382,6 +1411,9 @@ def radicar_factura(request):
             valor = form.cleaned_data.get('valor')
             oficina = form.cleaned_data.get('oficina')
             soporte = request.FILES['soporte']
+
+            if not user_can_access(request.user, empresa_id=getattr(empresa, 'pk', empresa), oficina=oficina):
+                raise PermissionDenied(ALCANCE_DENY_DETAIL)
             
             radicado = Facturas.objects.create(
                 empresa=empresa,nrofactura=nro_factura,
@@ -1426,15 +1458,28 @@ def radicar_factura(request):
 @login_required
 @group_perm_required(('accounting.change_facturas',),raise_exception=True)
 def causar_factura(request):
+    if get_alcance(request.user) is None:
+        raise PermissionDenied(ALCANCE_DENY_DETAIL)
+    form_causar = forms.form_causar_rad()
+    form_rad_int = forms.form_rad_int()
+    bind_form_alcance(
+        form_rad_int, request.user,
+        empresa_fields=['empresa_rad_int', 'empresa_pago_rad'],
+        oficina_fields=['oficina_rad_int'],
+    )
     context = {
-        'form_causar':forms.form_causar_rad,
-        'form_rad_int':forms.form_rad_int,
+        'form_causar': form_causar,
+        'form_rad_int': form_rad_int,
+        **context_alcance(request.user),
     }
-    facts_nr_contabilidad = Facturas.objects.filter(nrocausa__isnull=True)
+    facts_nr_contabilidad = filter_facturas_qs(
+        Facturas.objects.filter(nrocausa__isnull=True), request.user
+    )
     sin_recibir_mtr = 0
     sin_recibir_mde = 0
     for fact in facts_nr_contabilidad:
-        ubicacion = history_facturas.objects.filter(factura=fact.pk).last().ubicacion
+        last_hist = history_facturas.objects.filter(factura=fact.pk).last()
+        ubicacion = last_hist.ubicacion if last_hist else ''
         if ubicacion == 'Recepcion':
             if fact.oficina == 'MONTERIA':
                 sin_recibir_mtr += 1
@@ -1467,6 +1512,9 @@ def causar_factura(request):
                 soporte_causacion = request.FILES.get('soporte_causacion')
                 proyecto_ascociado = request.POST.get('proyecto_ascociado')
                 centro_costo = request.POST.get('centro_costo')
+
+                if not user_can_access(request.user, empresa_id=empresa, oficina=oficina):
+                    raise PermissionDenied(ALCANCE_DENY_DETAIL)
                 
                 nrofact = f'INT-{empresa}-{causacion}'
                 obj_empresa = empresas.objects.get(pk=empresa)
@@ -1496,6 +1544,8 @@ def causar_factura(request):
                 
                 if check_pagado == 'on':
                     empresa_pago = request.POST.get('empresa_pago_rad')
+                    if not user_can_access(request.user, empresa_id=empresa_pago, oficina=oficina):
+                        raise PermissionDenied(ALCANCE_DENY_DETAIL)
                     empresa_obj = empresas.objects.get(pk=empresa_pago)
                     cuenta = request.POST.get('cuenta_pago_rad')
                     fecha_pago = request.POST.get('fecha_pago_rad')
@@ -1552,23 +1602,45 @@ def causar_factura(request):
 @login_required
 @group_perm_required(('accounting.add_pagos',),raise_exception=True)
 def pagar_factura(request):
+    if get_alcance(request.user) is None:
+        raise PermissionDenied(ALCANCE_DENY_DETAIL)
+    form_facturas = forms.form_nuevo_pago()
+    form_anticipo = forms.form_anticipos_tesor()
+    form_transf = forms.form_transferencias()
+    formgtt = forms.form_asociar_gtt()
+    formcomis = forms.form_asociar_comision()
+    formnomina = forms.form_asociar_nomina()
+    formotrospag = forms.form_asociar_otros_pagos()
+    form_buscar_mvto = forms.form_buscar_mvto_pago()
+    bind_form_alcance(form_facturas, request.user, empresa_fields=['empresa'])
+    bind_form_alcance(form_anticipo, request.user, empresa_fields=['empresa_ant'])
+    bind_form_alcance(
+        form_transf, request.user,
+        empresa_fields=['empresa_sale', 'empresa_entra'],
+    )
+    bind_form_alcance(formgtt, request.user, empresa_fields=['empresa_gtt'])
+    bind_form_alcance(formcomis, request.user, empresa_fields=['empresa_comis'])
+    bind_form_alcance(formnomina, request.user, empresa_fields=['empresa_nomina', 'empresa_pago_nomina'])
+    bind_form_alcance(formotrospag, request.user, empresa_fields=['empresa_otros'])
+    bind_form_alcance(form_buscar_mvto, request.user, empresa_fields=['empresa_mvtos'])
     context = {
-        'empresas':empresas.objects.all(),
-        'form_facturas':forms.form_nuevo_pago,
-        'form_anticipo':forms.form_anticipos_tesor,
-        'form_transf':forms.form_transferencias,
-        'formgtt':forms.form_asociar_gtt,
-        'formcomis':forms.form_asociar_comision,
-        'formnomina':forms.form_asociar_nomina,
-        'formotrospag':forms.form_asociar_otros_pagos,
-        'form_buscar_mvto': forms.form_buscar_mvto_pago,
+        **context_alcance(request.user),
+        'form_facturas': form_facturas,
+        'form_anticipo': form_anticipo,
+        'form_transf': form_transf,
+        'formgtt': formgtt,
+        'formcomis': formcomis,
+        'formnomina': formnomina,
+        'formotrospag': formotrospag,
+        'form_buscar_mvto': form_buscar_mvto,
     }
     sin_recibir_mde = 0
     sin_recibir_mtr = 0
 
     bloqueados_alegra = Facturas.objects.filter(alegra_sin_aprobacion_q()).values_list('pk', flat=True)
-    pendientes_qs = info_facturas.objects.filter(
-        ubicacion='Contabilidad'
+    pendientes_qs = filter_info_facturas_qs(
+        info_facturas.objects.filter(ubicacion='Contabilidad'),
+        request.user,
     ).exclude(
         Q(causacion__isnull=True) | Q(causacion__exact='')
     ).exclude(radicado__in=bloqueados_alegra)
@@ -1596,7 +1668,10 @@ def pagar_factura(request):
 @login_required
 @group_perm_required(('accounting.view_facturas',),raise_exception=True)
 def lista_facturas(request):
+    if get_alcance(request.user) is None:
+        raise PermissionDenied(ALCANCE_DENY_DETAIL)
     context = {
+        **context_alcance(request.user, include_todas=True),
     }
     
     return render(request,'accounting/lista_facturas.html',context)
@@ -1604,8 +1679,10 @@ def lista_facturas(request):
 @login_required
 @group_perm_required(('accounting.view_pagos',),raise_exception=True)
 def lista_pagos(request):
+    if get_alcance(request.user) is None:
+        raise PermissionDenied(ALCANCE_DENY_DETAIL)
     context = {
-        'empresas' : empresas.objects.all()    
+        **context_alcance(request.user, include_todas=True),
     }
     
     return render(request,'accounting/lista_pagos.html',context)
@@ -1613,14 +1690,19 @@ def lista_pagos(request):
 @login_required
 @group_perm_required(('accounting.view_otros_ingresos',),raise_exception=True)
 def view_otros_ingresos(request):
+    if get_alcance(request.user) is None:
+        raise PermissionDenied(ALCANCE_DENY_DETAIL)
+    form = forms.form_otros_ingresos()
+    bind_form_alcance(form, request.user, empresa_fields=['empresa'], oficina_fields=['oficina'])
     context = {
-        'form':forms.form_otros_ingresos
-        
+        'form': form,
+        **context_alcance(request.user),
     }
     if request.method == 'POST':
         check_perms(request,('accounting.add_otros_ingresos',))
         if request.is_ajax():
             form = forms.form_otros_ingresos(request.POST)
+            bind_form_alcance(form, request.user, empresa_fields=['empresa'], oficina_fields=['oficina'])
             if form.is_valid():
                 fecha = form.cleaned_data.get('fecha')
                 id_tercero = form.cleaned_data.get('id_tercero')
@@ -1630,6 +1712,9 @@ def view_otros_ingresos(request):
                 cuenta = form.cleaned_data.get('cuenta')
                 oficina = form.cleaned_data.get('oficina')
                 valor = form.cleaned_data.get('valor').replace(',','')
+
+                if not user_can_access(request.user, empresa_id=getattr(empresa, 'pk', empresa), oficina=oficina):
+                    return deny_alcance_json()
                 
                 obj_empresa = empresa
                 obj_cuenta = cuenta
@@ -2933,20 +3018,30 @@ def ajax_coincidir_tercero(request):
 def ajax_info_facturas(request):
     if request.method == 'GET':
         if request.is_ajax():
+            if get_alcance(request.user) is None:
+                return deny_alcance_json()
             list_mvto=[]
             oficina = request.GET.get('oficina')
             ubicacion = request.GET.get('ubicacion')
             causado = request.GET.get('causado')
             tesoreria = request.GET.get('tesoreria')
-            
-            
+
+            ok, oficina_res = resolve_oficina_filter(request.user, oficina or '')
+            if not ok:
+                return deny_alcance_json()
             
             if oficina:
                 bloqueados_alegra = Facturas.objects.filter(alegra_sin_aprobacion_q()).values_list('pk', flat=True)
-                obj_facturas = info_facturas.objects.filter(
-                    oficina=oficina,
-                    ubicacion=ubicacion
-                ).exclude(radicado__in=bloqueados_alegra)
+                if oficina_res == 'TODAS':
+                    obj_facturas = info_facturas.objects.filter(ubicacion=ubicacion)
+                else:
+                    obj_facturas = info_facturas.objects.filter(
+                        oficina=oficina_res,
+                        ubicacion=ubicacion
+                    )
+                obj_facturas = filter_info_facturas_qs(obj_facturas, request.user).exclude(
+                    radicado__in=bloqueados_alegra
+                )
                 if causado:
                     obj_facturas = obj_facturas.exclude(Q(causacion__isnull=True) | Q(causacion__exact=''))
                 if tesoreria:
@@ -3010,6 +3105,8 @@ def ajax_recibir_factura(request):
                 recibe = request.POST.get('recibe')
                 
                 obj_rad = Facturas.objects.get(pk=radicado)
+                if not user_can_access(request.user, empresa_id=obj_rad.empresa_id, oficina=obj_rad.oficina):
+                    return deny_alcance_json()
                 accion = f'Recibio la factura {obj_rad.nrofactura}'
                 obj_history = history_facturas.objects.create(
                     factura=obj_rad,usuario=request.user,
@@ -3037,6 +3134,8 @@ def ajax_data_factura(request):
     obj_factura = Facturas.objects.filter(pk=factura).first()
     if not obj_factura:
         return JsonResponse({'detail': 'Factura no encontrada'}, status=404)
+    if not user_can_access(request.user, empresa_id=obj_factura.empresa_id, oficina=obj_factura.oficina):
+        return deny_alcance_json()
 
     ensure_soporte = str(request.GET.get('ensure_soporte') or '').strip() in ('1', 'true', 'True')
     status = 'missing'
@@ -3111,6 +3210,8 @@ def ajax_registrar_causacion(request):
             centro_costo = request.POST.get('centro_costo')
             
             obj_radicado = Facturas.objects.get(pk=radicado)
+            if not user_can_access(request.user, empresa_id=obj_radicado.empresa_id, oficina=obj_radicado.oficina):
+                return deny_alcance_json()
             if obj_radicado.origen == 'Alegra' and not obj_radicado.gasto_aprobado:
                 return JsonResponse({
                     'title': 'No permitido',
@@ -3193,6 +3294,10 @@ def ajax_asociar_pago_radicado(request):
             empresa = request.POST.get('empresa')
             cuenta = request.POST.get('cuenta')
             obj_fact = Facturas.objects.get(pk=radicado)
+            if not user_can_access(request.user, empresa_id=obj_fact.empresa_id, oficina=obj_fact.oficina):
+                return deny_alcance_json()
+            if not user_can_access(request.user, empresa_id=empresa, oficina=obj_fact.oficina):
+                return deny_alcance_json()
             if obj_fact.origen == 'Alegra' and not obj_fact.gasto_aprobado:
                 return JsonResponse({
                     'detail': 'El gasto Alegra debe ser aprobado antes de registrar el pago.',
@@ -3258,6 +3363,8 @@ def ajax_pagos_por_factura(request):
 def ajax_lista_facturas(request):
     if request.method == 'GET':
         if request.is_ajax():
+            if get_alcance(request.user) is None:
+                return deny_alcance_json()
             oficina = request.GET.get('oficina')
             draw = int(request.GET.get('draw', 1))
             start = int(request.GET.get('start', 0))
@@ -3274,10 +3381,15 @@ def ajax_lista_facturas(request):
                     "data": []
                 })
 
-            if oficina == 'TODAS':
+            ok, oficina_res = resolve_oficina_filter(request.user, oficina)
+            if not ok:
+                return deny_alcance_json()
+
+            if oficina_res == 'TODAS':
                 base_qs = Facturas.objects.filter(Facturas.filtro_alegra_operable())
             else:
-                base_qs = Facturas.objects.filter(oficina=oficina).filter(Facturas.filtro_alegra_operable())
+                base_qs = Facturas.objects.filter(oficina=oficina_res).filter(Facturas.filtro_alegra_operable())
+            base_qs = filter_facturas_qs(base_qs, request.user)
             filtered_qs = base_qs
 
             if search_val:
@@ -3812,12 +3924,17 @@ def ajax_print_planilla(request):
 def ajax_lista_pagos(request):
     if request.method == 'GET':
         if request.is_ajax():
+            if get_alcance(request.user) is None:
+                return deny_alcance_json()
             oficina = request.GET.get('oficina')
-            if oficina == 'TODAS':
+            ok, oficina_res = resolve_oficina_filter(request.user, oficina or 'TODAS')
+            if not ok:
+                return deny_alcance_json()
+            if oficina_res == 'TODAS':
                 obj_pagos = Pagos.objects.all().order_by('-fecha_pago')
             else:
-                obj_pagos = Pagos.objects.filter(nroradicado__oficina=oficina).order_by('-fecha_pago')
-            
+                obj_pagos = Pagos.objects.filter(nroradicado__oficina=oficina_res).order_by('-fecha_pago')
+            obj_pagos = filter_pagos_qs(obj_pagos, request.user)
             draw = request.GET.get('draw')
             start = request.GET.get('start')
             length = request.GET.get('length')
@@ -3916,6 +4033,9 @@ def ajax_registrar_anticipo(request):
             descripcion = request.POST.get('descripcion_ant')
             oficina = request.POST.get('oficina')
             soporte = request.FILES['soporte_pago']
+
+            if not user_can_access(request.user, empresa_id=empresa, oficina=oficina):
+                return deny_alcance_json()
             
             
             anticipo = Anticipos.objects.create(
@@ -4002,7 +4122,9 @@ def ajax_print_egreso(request):
 def ajax_lista_otros_ingresos(request):
     if request.method == 'GET':
         if request.is_ajax():
-            obj_otros_ingresos = otros_ingresos.objects.all()
+            if get_alcance(request.user) is None:
+                return deny_alcance_json()
+            obj_otros_ingresos = filter_otros_ingresos_qs(otros_ingresos.objects.all(), request.user)
             list_ingresos = []
             i = 0
             for ingreso in obj_otros_ingresos:
@@ -4071,6 +4193,12 @@ def ajax_transferencia(request):
             
             if id_reemb is not None:
                 oficina = cuenta_entra.oficina
+
+            if not (
+                user_can_access(request.user, empresa_id=empresa_sale, oficina=oficina)
+                and user_can_access(request.user, empresa_id=empresa_entra, oficina=oficina)
+            ):
+                return deny_alcance_json()
             
             
             transferencia = transferencias_companias.objects.create(valor=valor,fecha=fecha,
@@ -4106,17 +4234,23 @@ def ajax_transferencia(request):
 def ajax_lista_transf(request):
     if request.method == 'GET':
         if request.is_ajax():
+            if get_alcance(request.user) is None:
+                return deny_alcance_json()
             oficina = request.GET.get('oficina')
             draw = request.GET.get('draw')
             start = request.GET.get('start')
             length = request.GET.get('length')
             search_val = request.GET.get('search[value]')
+
+            ok, oficina_res = resolve_oficina_filter(request.user, oficina or 'TODAS')
+            if not ok:
+                return deny_alcance_json()
             
-            if oficina == 'TODAS':
+            if oficina_res == 'TODAS':
                 obj_transf = transferencias_companias.objects.all().order_by('-fecha')
             else:
-                obj_transf = transferencias_companias.objects.filter(oficina=oficina).order_by('-fecha')
-                
+                obj_transf = transferencias_companias.objects.filter(oficina=oficina_res).order_by('-fecha')
+            obj_transf = filter_transf_qs(obj_transf, request.user)
             if search_val != "":
                 obj_transf = obj_transf.filter(
                     Q(cuenta_entra__cuentabanco__icontains = search_val)|
@@ -4155,16 +4289,21 @@ def ajax_lista_transf(request):
 def ajax_lista_ant(request):
     if request.method == 'GET':
         if request.is_ajax():
+            if get_alcance(request.user) is None:
+                return deny_alcance_json()
             oficina = request.GET.get('oficina')
             draw = request.GET.get('draw')
             start = request.GET.get('start')
             length = request.GET.get('length')
             search_val = request.GET.get('search[value]')
-            if oficina == 'TODAS':
+            ok, oficina_res = resolve_oficina_filter(request.user, oficina or 'TODAS')
+            if not ok:
+                return deny_alcance_json()
+            if oficina_res == 'TODAS':
                 obj_ant = Anticipos.objects.all().order_by('-fecha_pago')
             else:
-                obj_ant = Anticipos.objects.filter(oficina=oficina).order_by('-fecha_pago')
-            
+                obj_ant = Anticipos.objects.filter(oficina=oficina_res).order_by('-fecha_pago')
+            obj_ant = filter_anticipos_qs(obj_ant, request.user)
             if search_val != "":
                 obj_ant = obj_ant.filter(
                     Q(cuenta__cuentabanco__icontains = search_val)|
