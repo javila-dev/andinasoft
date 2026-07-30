@@ -243,7 +243,14 @@
                         <a href="/projectselector/graph_cartera_year">Cartera</a>
                     </li>
                 </ul>
-            </li> 
+            </li>
+            {% if user.is_superuser %}
+            <li>
+                <a href="{% url 'usuarios_lista' %}">
+                    <i class="fas fa-users-cog"></i>&nbsp;Usuarios
+                </a>
+            </li>
+            {% endif %}
         </ul>
     </div>
 </nav>

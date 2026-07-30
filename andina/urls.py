@@ -20,6 +20,7 @@ from django.conf.urls.static import static
 from django.conf.urls import url
 from django.views.generic.base import TemplateView
 from andinasoft import views, ajax_request
+from andinasoft import views_usuarios
 from buildingcontrol import views as building_views, pdf as building_pdf
 from crm import views as crm_views
 from accounting import views as account_views
@@ -47,6 +48,7 @@ urlpatterns = [
     path('crm/',include(crm_views.urls)),
     path('ajax_request/',include(ajax_request.urls)),
     path('reports/',include(building_pdf.urls)),
+    *views_usuarios.usuarios_urls,
     path('reg_asesor/success',views.registro_exitoso, name='reg_asesor_exitoso'),
     path('comercial/lista_asesores/<proyecto>',views.lista_asesores,name='lista asesores'),
     path('comercial/lista_asesores_general/<proyecto>',views.lista_asesores_general,name='lista general asesores'),

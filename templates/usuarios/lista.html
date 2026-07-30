@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+{% block title %}Usuarios{% endblock %}
+{% block content %}
+<div class="principal-container bg-light shadow-lg rounded">
+  <h3 class="section-title text-white text-center mb-0">Gestion de usuarios</h3>
+  <div class="p-3">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+      <form method="get" class="form-inline mb-2 flex-wrap">
+        <label class="sr-only" for="filtroEstado">Estado</label>
+        <select name="estado" id="filtroEstado" class="custom-select custom-select-sm mr-2 mb-1" style="width:auto;min-width:8rem">
+          <option value="todos"{% if estado == 'todos' %} selected{% endif %}>Todos</option>
+          <option value="activos"{% if estado == 'activos' %} selected{% endif %}>Activos</option>
+          <option value="inactivos"{% if estado == 'inactivos' %} selected{% endif %}>Inactivos</option>
+        </select>
+        <label class="sr-only" for="filtroNombre">Buscar</label>
+        <input type="text" name="q" id="filtroNombre" value="{{ q }}" class="form-control form-control-sm mr-2 mb-1" placeholder="Buscar por nombre o usuario..." style="min-width:14rem">
+        <button class="btn btn-sm btn-primary mb-1" type="submit">Filtrar</button>
+        {% if q or estado != 'activos' %}
+        <a class="btn btn-sm btn-outline-secondary mb-1 ml-1" href="{% url 'usuarios_lista' %}">Limpiar</a>
+        {% endif %}
+      </form>
+      <button class="btn btn-sm btn-success mb-2" type="button" data-toggle="collapse" data-target="#panelNuevo">
+        Nuevo usuario
+      </button>
+    </div>
+
+    <div class="collapse mb-3" id="panelNuevo">
+      <div class="bg-white rounded shadow-sm p-3">
+        <p class="lead border-bottom mb-3">Crear usuario</p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="crear">
+          <div class="row">
+            {% for field in form_nuevo %}
+              <div class="form-group col-md-4">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field.errors }}
+                {% if field.field.widget.input_type == 'checkbox' %}
+                  <div class="custom-control custom-switch">
+                    {{ field }}
+                    <label class="custom-control-label" for="{{ field.id_for_label }}"></label>
+                  </div>
+                {% else %}
+                  {{ field }}
+                {% endif %}
+                {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Crear</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="table-responsive bg-white rounded shadow-sm">
+      <table class="table table-sm table-hover mb-0" id="tablaUsuarios">
+        <thead class="thead-light">
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Activo</th>
+            <th>Staff</th>
+            <th>Proyectos</th>
+            <th>Alcance contable</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.user.username }}</td>
+            <td>{{ row.user.get_full_name|default:"—" }}</td>
+            <td>{{ row.user.email|default:"—" }}</td>
+            <td>{% if row.user.is_active %}<span class="badge badge-success">Si</span>{% else %}<span class="badge badge-secondary">No</span>{% endif %}</td>
+            <td>{% if row.user.is_staff %}<span class="badge badge-info">Si</span>{% else %}—{% endif %}</td>
+            <td>{{ row.n_proyectos }}</td>
+            <td>{{ row.alcance_label }}</td>
+            <td><a class="btn btn-outline-primary btn-sm" href="{% url 'usuarios_detalle' row.user.pk %}">Editar</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted">Sin usuarios</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+  $(function () {
+    $('#tablaUsuarios').DataTable({
+      pageLength: 25,
+      order: [[0, 'asc']],
+      searching: false,
+      language: { url: '//cdn.datatables.net/plug-ins/1.10.21/i18n/Spanish.json' }
+    });
+    $('#filtroEstado').on('change', function () {
+      $(this).closest('form').submit();
+    });
+    $('input[type=checkbox]').addClass('custom-control-input');
+    $('input[type=text],input[type=password],input[type=email]').addClass('form-control form-control-sm');
+  });
+</script>
+{% endblock %}

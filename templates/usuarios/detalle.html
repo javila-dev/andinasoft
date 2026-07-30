@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% block title %}Usuario {{ target.username }}{% endblock %}
+{% block content %}
+<div class="principal-container bg-light shadow-lg rounded">
+  <h3 class="section-title text-white text-center mb-0">
+    {{ target.username }}
+    <small class="d-block" style="font-size:0.7em;opacity:.85">{{ target.get_full_name }}</small>
+  </h3>
+  <div class="p-3">
+    <a href="{% url 'usuarios_lista' %}" class="btn btn-sm btn-outline-secondary mb-3">&larr; Volver al listado</a>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'cuenta' %}active{% endif %}" href="?tab=cuenta">Cuenta</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'grupos' %}active{% endif %}" href="?tab=grupos">Grupos</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'perfil' %}active{% endif %}" href="?tab=perfil">Perfil</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'proyectos' %}active{% endif %}" href="?tab=proyectos">Proyectos</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'alcance' %}active{% endif %}" href="?tab=alcance">Alcance contable</a>
+      </li>
+    </ul>
+
+    <div class="bg-white rounded-bottom shadow-sm p-3 border border-top-0">
+      {% if tab == 'cuenta' %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="cuenta">
+          <input type="hidden" name="tab" value="cuenta">
+          <div class="row">
+            {% for field in form_cuenta %}
+              <div class="form-group col-md-4">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field.errors }}
+                {% if field.field.widget.input_type == 'checkbox' %}
+                  <div class="custom-control custom-switch mt-1">
+                    {{ field }}
+                    <label class="custom-control-label" for="{{ field.id_for_label }}"></label>
+                  </div>
+                {% else %}
+                  {{ field }}
+                {% endif %}
+                {% if field.help_text %}<small class="form-text text-muted">{{ field.help_text }}</small>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar cuenta</button>
+        </form>
+
+      {% elif tab == 'grupos' %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="grupos">
+          <input type="hidden" name="tab" value="grupos">
+          <p class="text-muted small">Los grupos controlan permisos operativos (Contabilidad, Tesoreria, etc.).</p>
+          {{ form_grupos.groups.errors }}
+          <div class="row">
+            {% for checkbox in form_grupos.groups %}
+              <div class="col-md-4 mb-2">
+                <div class="custom-control custom-checkbox">
+                  {{ checkbox.tag }}
+                  <label class="custom-control-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm mt-2">Guardar grupos</button>
+        </form>
+
+      {% elif tab == 'perfil' %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="perfil">
+          <input type="hidden" name="tab" value="perfil">
+          <div class="row">
+            {% for field in form_perfil %}
+              <div class="form-group col-md-4">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field.errors }}
+                {{ field }}
+              </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar perfil</button>
+        </form>
+
+      {% elif tab == 'proyectos' %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="proyectos">
+          <input type="hidden" name="tab" value="proyectos">
+          <p class="text-muted small">Proyectos a los que el usuario puede entrar. Total en sistema: {{ total_proyectos }}.</p>
+          {{ form_proyectos.proyectos.errors }}
+          <div class="row">
+            {% for checkbox in form_proyectos.proyectos %}
+              <div class="col-md-4 mb-2">
+                <div class="custom-control custom-checkbox">
+                  {{ checkbox.tag }}
+                  <label class="custom-control-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm mt-2">Guardar proyectos</button>
+        </form>
+
+      {% elif tab == 'alcance' %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="alcance">
+          <input type="hidden" name="tab" value="alcance">
+          <div class="alert alert-light border small">
+            <strong>Como funciona:</strong>
+            <ul class="mb-0 pl-3">
+              <li>Apagado = no puede operar radicacion / pagos / listados contables.</li>
+              <li>Encendido sin empresas ni oficinas = acceso total.</li>
+              <li>Encendido con seleccion = solo esas empresas y/o oficinas.</li>
+            </ul>
+          </div>
+          <div class="form-group">
+            <div class="custom-control custom-switch">
+              {{ form_alcance.habilitado }}
+              <label class="custom-control-label" for="{{ form_alcance.habilitado.id_for_label }}">{{ form_alcance.habilitado.label }}</label>
+            </div>
+            <small class="form-text text-muted">{{ form_alcance.habilitado.help_text }}</small>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <p class="font-weight-bold">{{ form_alcance.empresas.label }}</p>
+              {{ form_alcance.empresas.errors }}
+              <div style="max-height:280px;overflow:auto" class="border rounded p-2">
+                {% for checkbox in form_alcance.empresas %}
+                  <div class="custom-control custom-checkbox mb-1">
+                    {{ checkbox.tag }}
+                    <label class="custom-control-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <p class="font-weight-bold">{{ form_alcance.oficinas.label }}</p>
+              {{ form_alcance.oficinas.errors }}
+              <div class="border rounded p-2">
+                {% for checkbox in form_alcance.oficinas %}
+                  <div class="custom-control custom-checkbox mb-1">
+                    {{ checkbox.tag }}
+                    <label class="custom-control-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm mt-3">Guardar alcance</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+  $(function () {
+    $('input[type=text],input[type=password],input[type=email],input[type=date],select').addClass('form-control form-control-sm');
+    $('input[type=checkbox]').addClass('custom-control-input');
+  });
+</script>
+{% endblock %}
