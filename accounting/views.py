@@ -52,6 +52,7 @@ from accounting.alcance import (
     resolve_oficina_filter,
     user_can_access,
 )
+from accounting.cash_accounts import cuenta_es_caja_efectivo
 from accounting.gasto_aprobacion import alegra_sin_aprobacion_q
 from accounting.gasto_aprobacion_views import (
     gastos_alegra_asignar,
@@ -3317,11 +3318,13 @@ def ajax_asociar_pago_radicado(request):
                 ubicacion='Tesoreria'
             )
             
-            if cuenta != "9" and cuenta != "16" and cuenta != "25":
+            if not cuenta_es_caja_efectivo(obj_cuenta):
             
                 lineas_banco = request.POST.get('lineas_banco')
                 
                 for i in lineas_banco.split(','):
+                    if not i:
+                        continue
                     obj_linea = egresos_banco.objects.get(pk=i)
                     obj_linea.pago_asociado = pago
                     obj_linea.save()
@@ -4016,7 +4019,13 @@ def ajax_registrar_anticipo(request):
                 anticipo = request.POST.get('anticipo')
                 lineas_banco = request.POST.get('lineas_banco[]')
                 obj_anticipo = Anticipos.objects.get(pk=anticipo)
-                for i in lineas_banco.split(','):
+                if cuenta_es_caja_efectivo(obj_anticipo.cuenta):
+                    return JsonResponse({
+                        'detail': 'Este pago fue realizado en efectivo, no se puede asociar a un movimiento bancario',
+                    }, status=400)
+                for i in (lineas_banco or '').split(','):
+                    if not i:
+                        continue
                     obj_linea = egresos_banco.objects.get(pk=i)
                     obj_linea.anticipo_asociado = obj_anticipo
                     obj_linea.save()
@@ -4047,11 +4056,13 @@ def ajax_registrar_anticipo(request):
                 soporte_pago=soporte,oficina=oficina
             )
             
-            if cuenta != "9" and cuenta != "16" and cuenta != "25":
+            if not cuenta_es_caja_efectivo(anticipo.cuenta):
             
                 lineas_banco = request.POST.get('lineas_banco')
                     
-                for i in lineas_banco.split(','):
+                for i in (lineas_banco or '').split(','):
+                    if not i:
+                        continue
                     obj_linea = egresos_banco.objects.get(pk=i)
                     obj_linea.anticipo_asociado = anticipo
                     obj_linea.save()
@@ -4209,10 +4220,12 @@ def ajax_transferencia(request):
                     oficina = oficina,usuario=request.user, soporte_pago = soporte
                 )
             
-            if not "Efectivo" in cuenta_sale.cuentabanco:
+            if not cuenta_es_caja_efectivo(cuenta_sale):
                 lineas_banco = request.POST.get('lineas_banco')
                     
-                for i in lineas_banco.split(','):
+                for i in (lineas_banco or '').split(','):
+                    if not i:
+                        continue
                     obj_linea = egresos_banco.objects.get(pk=i)
                     obj_linea.transferencia_asociada = transferencia
                     obj_linea.save()

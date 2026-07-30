@@ -278,6 +278,11 @@
         return '{% get_media_prefix %}' + normalized.replace(/^\/+/, '');
     }
 
+    function textoEsCajaEfectivo(texto) {
+        var t = (texto || '').toString().toLowerCase();
+        return t.indexOf('efectivo') !== -1 || t.indexOf('caja') !== -1;
+    }
+
     $(document).ready(function () {
         var params = `status=no,location=no,toolbar=no,menubar=no,
                 width=650,height=450,left=100,top=100`
@@ -573,7 +578,7 @@
         $('#tablaPagos tbody').on('contextmenu', 'tr', function (e) {
             tablaPagos.$('tr.selected').removeClass('selected');
             let line = tablaPagos.row(this).data()
-            if (line.cuenta.includes('Efectivo')) {
+            if (textoEsCajaEfectivo(line.cuenta)) {
                 $('#impr_egreso').removeClass('disabled')
             } else {
                 $('#impr_egreso').addClass('disabled')
@@ -770,20 +775,17 @@
 
         $('#btnasociarMvtoant').click(function(){
             let line = tablaAnt.row($('tr.selected')).data()
-            let cuenta = line.cuentapk
             let valor = line.valor.replace(/[\$,]/g,'') * 1
             let valor_conciliado = totalizarMovimiento()
-            if (cuenta != "9" && cuenta != "16" && cuenta != "25"){
-                if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
-                    $('#alert-title').text('Oh Oh!')
-                    $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
-                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-                    return
-                }
-            }
-            else{
+            if (textoEsCajaEfectivo(line.cuenta)){
                 $('#alert-title').text('Oh Oh!')
                 $('#alert-data').text('Este pago fué realizado en efectivo, no se puede asociar a un movimiento bancario')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+                return
+            }
+            if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
+                $('#alert-title').text('Oh Oh!')
+                $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
                 $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
                 return
             }

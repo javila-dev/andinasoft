@@ -401,6 +401,14 @@ class cuentas_pagos(models.Model):
     def __str__(self):
         return self.cuentabanco
 
+    def es_cuenta_caja_efectivo(self):
+        """True si es caja/efectivo (flag o descripcion). No exige asociar movimientos banco."""
+        if self.es_caja:
+            return True
+        texto = (self.cuentabanco or '').strip().lower()
+        return ('efectivo' in texto) or ('caja' in texto)
+
+    
 class Facturas(models.Model):
     nroradicado = models.AutoField(db_column='NroRadicado', primary_key=True)  # Field name made lowercase.
     fecharadicado = models.DateField(db_column='FechaRadica', blank=True, null=True)  # Field name made lowercase.

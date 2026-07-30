@@ -509,6 +509,29 @@
 <script type="text/javascript" language="javascript" src="{%static 'js/get_csrf.js'%}"></script>
 <script src='https://cdn.jsdelivr.net/npm/bs-custom-file-input/dist/bs-custom-file-input.min.js'></script>
 <script>
+
+  function textoEsCajaEfectivo(texto) {
+    var t = (texto || '').toString().toLowerCase();
+    return t.indexOf('efectivo') !== -1 || t.indexOf('caja') !== -1;
+  }
+  function cuentaSelectEsCajaEfectivo(selector) {
+    var $opt = $(selector).find('option:selected');
+    if (!$opt.length || !$opt.val()) return false;
+    var flag = $opt.attr('data-es-caja');
+    if (flag === '1' || flag === 'true') return true;
+    return textoEsCajaEfectivo($opt.text());
+  }
+  function appendCuentaOption($select, pk, nombre, esCaja) {
+    var isCaja = (esCaja === true || esCaja === 'True' || esCaja === 1 || esCaja === '1');
+    if (!isCaja) isCaja = textoEsCajaEfectivo(nombre);
+    $select.append(
+      $('<option></option>')
+        .val(pk)
+        .text(nombre)
+        .attr('data-es-caja', isCaja ? '1' : '0')
+    );
+  }
+
   function resolveMediaUrl(pathOrUrl) {
     if (!pathOrUrl) return '';
     if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
@@ -1571,9 +1594,7 @@
         let valor = $('#id_valor_transf').val()
         valor = valor.replace(/[\$,]/g, '')*1
         valor_conciliado = totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
-        let cuenta = $('#id_cuenta_ant').text()
-
-        if (cuenta_sale != "9" && cuenta_sale != "16" && cuenta_sale != "25"){
+        if (!cuentaSelectEsCajaEfectivo('#id_cuenta_sale')){
             if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
                 $('#alert-title').text('Oh Oh!')
                 $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
@@ -1921,11 +1942,7 @@
             success:function(response){
                 var data = JSON.parse(response['cuentas'])
                 for (let i in data){
-                    var pk_cuenta = data[i]['pk']
-                    var cuenta = data[i]['fields']['cuentabanco']
-                    var option = '<option value='+pk_cuenta+'>'+
-                                cuenta+'</option>'
-                    $('#id_cuenta_sale').append(option)
+                    appendCuentaOption($('#id_cuenta_sale'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                 }
             }
         })
@@ -1944,11 +1961,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_entra').append(option)
+                        appendCuentaOption($('#id_cuenta_entra'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })

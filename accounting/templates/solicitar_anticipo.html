@@ -344,7 +344,28 @@
       return '{% get_media_prefix %}' + pathOrUrl.replace(/^\/+/, '');
     }
 
-    $(document).ready(function(){
+    function textoEsCajaEfectivo(texto) {
+        var t = (texto || '').toString().toLowerCase();
+        return t.indexOf('efectivo') !== -1 || t.indexOf('caja') !== -1;
+      }
+      function cuentaSelectEsCajaEfectivo(selector) {
+        var $opt = $(selector).find('option:selected');
+        if (!$opt.length || !$opt.val()) return false;
+        var flag = $opt.attr('data-es-caja');
+        if (flag === '1' || flag === 'true') return true;
+        return textoEsCajaEfectivo($opt.text());
+      }
+      function appendCuentaOption($select, pk, nombre, esCaja) {
+        var isCaja = (esCaja === true || esCaja === 'True' || esCaja === 1 || esCaja === '1');
+        if (!isCaja) isCaja = textoEsCajaEfectivo(nombre);
+        $select.append(
+          $('<option></option>')
+            .val(pk)
+            .text(nombre)
+            .attr('data-es-caja', isCaja ? '1' : '0')
+        );
+      }
+      $(document).ready(function(){
       bsCustomFileInput.init();
       $('#modalchangeconcept').find('.modal-body').append(
           $('#id_concepto').parent('div').clone()
@@ -428,9 +449,7 @@
         }
     })
       $('#id_cuenta_ant').on('change',function(){
-        let val = $(this).text()
-        
-        if (val.includes('Efectivo')){
+        if (cuentaSelectEsCajaEfectivo('#id_cuenta_ant')){
           $('#id_soporte_pago').prop('required',false)
         }
         else {
@@ -558,11 +577,7 @@
               success:function(response){
                   var data = JSON.parse(response['cuentas'])
                   for (let i in data){
-                      var pk_cuenta = data[i]['pk']
-                      var cuenta = data[i]['fields']['cuentabanco']
-                      var option = '<option value='+pk_cuenta+'>'+
-                                  cuenta+'</option>'
-                      $('#id_cuenta_ant_reint').append(option)
+                      appendCuentaOption($('#id_cuenta_ant_reint'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                   }
                   $('#modalConfirmTesor').modal('show')
               }
@@ -615,11 +630,7 @@
               success:function(response){
                   var data = JSON.parse(response['cuentas'])
                   for (let i in data){
-                      var pk_cuenta = data[i]['pk']
-                      var cuenta = data[i]['fields']['cuentabanco']
-                      var option = '<option value='+pk_cuenta+'>'+
-                                  cuenta+'</option>'
-                      $('#id_cuenta_ant').append(option)
+                      appendCuentaOption($('#id_cuenta_ant'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                   }
               }
           })

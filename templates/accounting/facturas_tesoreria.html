@@ -390,6 +390,28 @@
         return '{% get_media_prefix %}' + normalized.replace(/^\/+/, '');
     }
 
+    function textoEsCajaEfectivo(texto) {
+        var t = (texto || '').toString().toLowerCase();
+        return t.indexOf('efectivo') !== -1 || t.indexOf('caja') !== -1;
+    }
+    function cuentaSelectEsCajaEfectivo(selector) {
+        var $opt = $(selector).find('option:selected');
+        if (!$opt.length || !$opt.val()) return false;
+        var flag = $opt.attr('data-es-caja');
+        if (flag === '1' || flag === 'true') return true;
+        return textoEsCajaEfectivo($opt.text());
+    }
+    function appendCuentaOption($select, pk, nombre, esCaja) {
+        var isCaja = (esCaja === true || esCaja === 'True' || esCaja === 1 || esCaja === '1');
+        if (!isCaja) isCaja = textoEsCajaEfectivo(nombre);
+        $select.append(
+            $('<option></option>')
+                .val(pk)
+                .text(nombre)
+                .attr('data-es-caja', isCaja ? '1' : '0')
+        );
+    }
+
     $(document).ready(function(){
         var csrf_token = $('input[name="csrfmiddlewaretoken"]').val()
         var groupColumn_SR = 6;
@@ -803,8 +825,7 @@
             }
         });
         $('#cuenta_cont').on('change',function(){
-            let cuenta = $(this).val()
-            if (cuenta == '9'|| cuenta == '16'){
+            if (cuentaSelectEsCajaEfectivo('#cuenta_cont')){
                 $('#id_soporte').prop('required',false)
             }
             else{
@@ -824,11 +845,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#cuenta_cont').append(option)
+                        appendCuentaOption($('#cuenta_cont'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -846,11 +863,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_sale').append(option)
+                        appendCuentaOption($('#id_cuenta_sale'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -868,11 +881,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_entra').append(option)
+                        appendCuentaOption($('#id_cuenta_entra'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -890,11 +899,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_ant').append(option)
+                        appendCuentaOption($('#id_cuenta_ant'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -948,11 +953,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_gtt').append(option)
+                        appendCuentaOption($('#id_cuenta_gtt'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -970,11 +971,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_comis').append(option)
+                        appendCuentaOption($('#id_cuenta_comis'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -992,11 +989,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_otros').append(option)
+                        appendCuentaOption($('#id_cuenta_otros'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -1014,11 +1007,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_nomina').append(option)
+                        appendCuentaOption($('#id_cuenta_nomina'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -1036,11 +1025,7 @@
                 success:function(response){
                     var data = JSON.parse(response['cuentas'])
                     for (let i in data){
-                        var pk_cuenta = data[i]['pk']
-                        var cuenta = data[i]['fields']['cuentabanco']
-                        var option = '<option value='+pk_cuenta+'>'+
-                                    cuenta+'</option>'
-                        $('#id_cuenta_mvtos').append(option)
+                        appendCuentaOption($('#id_cuenta_mvtos'), data[i]['pk'], data[i]['fields']['cuentabanco'], data[i]['fields']['es_caja'])
                     }
                 }
             })
@@ -1054,9 +1039,7 @@
             let valor = $('#id_valor_anticip').val()
             valor = valor.replace(/[\$,]/g, '')*1
             valor_conciliado = totalizarMovimiento('#tablaCONBanco_ant tr.selected','#total-anticipo-banco')
-            let cuenta = $('#id_cuenta_ant').val()
-
-            if (cuenta != "9" && cuenta != "16" && cuenta != "25"){
+            if (!cuentaSelectEsCajaEfectivo('#id_cuenta_ant')){
                 if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
                     $('#alert-title').text('Oh Oh!')
                     $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
@@ -1106,9 +1089,7 @@
             let valor = $('#id_valor_transf').val()
             valor = valor.replace(/[\$,]/g, '')*1
             valor_conciliado = totalizarMovimiento('#tablaCONBanco_tr tr.selected','#total-tr-banco')
-            let cuenta = $('#id_cuenta_ant').text()
-
-            if (cuenta_sale != "9" && cuenta_sale != "16" && cuenta_sale != "25"){
+            if (!cuentaSelectEsCajaEfectivo('#id_cuenta_sale')){
                 if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
                     $('#alert-title').text('Oh Oh!')
                     $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
@@ -1151,9 +1132,7 @@
             saldo = saldo.replace(/[\$,]/g, '')*1
 
             valor_conciliado = totalizarMovimiento()
-            let cuenta = $('#cuenta_cont').val()
-
-            if (cuenta != "9" && cuenta != "16" && cuenta != "25"){
+            if (!cuentaSelectEsCajaEfectivo('#cuenta_cont')){
                 if (valor+valor_conciliado > 1 || valor+valor_conciliado <-1){
                     $('#alert-title').text('Oh Oh!')
                     $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
@@ -1367,9 +1346,7 @@
 
             valor_conciliado = totalizarMovimiento()
             
-            let cuenta = $('#id_cuenta_nomina').val()
-            // Solo validar si la cuenta no es efectivo (9, 16, 25)
-            if (cuenta != "9" && cuenta != "16" && cuenta != "25") {
+            if (!cuentaSelectEsCajaEfectivo('#id_cuenta_nomina')) {
                 if (total+valor_conciliado > 1 || total+valor_conciliado < -1){
                     $('#alert-title').text('Oh Oh!')
                     $('#alert-data').text('El valor de los movimientos seleccionados es diferente al valor del pago.')
