@@ -301,6 +301,10 @@
   <a class="dropdown-item disabled" data-action="soporte_transf" id="soporte_transf" href="#"><i class="fas fa-file-pdf fa-fw"></i>Transfer.</a>
   <div class="dropdown-divider"></div>
   <a class="dropdown-item" data-action="interf_reemb" href="#"><i class="fas fa-file-arrow-down fa-fw"></i>Interfaz</a>
+  {% if user.is_superuser %}
+  <div class="dropdown-divider"></div>
+  <a class="dropdown-item disabled text-danger" data-action="eliminar_reemb" id="eliminar_reemb" href="#"><i class="fas fa-trash fa-fw"></i>Eliminar</a>
+  {% endif %}
 </div>
 <div class="modal fade" id="modalNuevaLegalizacion" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
   <div class="modal-dialog">
@@ -1007,25 +1011,26 @@
     $('#tabla_reembolsos tbody').on('contextmenu','tr',function(e){
       
       let line = tabla_reembolsos.row(this).data()
-      if (line.usuario_aprueba.id == null) return;
+      const aprobado = line.usuario_aprueba && line.usuario_aprueba.id != null
+      const legalizado = line.doc_legalizacion != null && line.doc_legalizacion !== ''
+      const pagado = line.transferencia_asociada && line.transferencia_asociada.valor != null
 
-      if (line.doc_legalizacion == null){
+      $('#reg_legal, #soporte_reemb, #pagar_reemb, #soporte_transf, #eliminar_reemb').addClass('disabled')
+
+      if (aprobado && !legalizado){
         $('#reg_legal').removeClass('disabled')
-        $('#soporte_reemb').addClass('disabled')
-        $('#pagar_reemb').addClass('disabled')
-        $('#soporte_transf').addClass('disabled')
       }
-      else if (line.transferencia_asociada.valor == null){
-        $('#reg_legal').addClass('disabled')
+      else if (aprobado && legalizado && !pagado){
         $('#soporte_reemb').removeClass('disabled')
         $('#pagar_reemb').removeClass('disabled')
-        $('#soporte_transf').addClass('disabled')
       }
-      else{
-        $('#reg_legal').addClass('disabled')
+      else if (aprobado && legalizado && pagado){
         $('#soporte_reemb').removeClass('disabled')
-        $('#pagar_reemb').addClass('disabled')
         $('#soporte_transf').removeClass('disabled')
+      }
+
+      if ($('#eliminar_reemb').length && !legalizado && !pagado){
+        $('#eliminar_reemb').removeClass('disabled')
       }
 
       tabla_reembolsos.$('tr.selected').removeClass('selected');
@@ -1368,6 +1373,32 @@
                 $('#alert-data').text('')
                 $('#alert-title').text('Andinasoft dice:')
                 $('#alert-data').html('Ocurrió un error')
+                $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+              }
+            })
+            break;
+          case "eliminar_reemb":
+            if (!confirm('¿Eliminar este reembolso? Los gastos volverán a estado Revisado.')) break;
+            $.ajax({
+              type:'POST',
+              url:'/accounting/cajasefectivo',
+              data:{
+                csrfmiddlewaretoken: getCookie('csrftoken'),
+                to_do: 'eliminar_reembolso',
+                id_reemb: line.id,
+              },
+              success: (xhr) => {
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text(xhr.msj)
+                $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+                if (xhr.class === 'alert-success') {
+                  tabla_reembolsos.ajax.reload()
+                  if (typeof tabla_movimientos !== 'undefined') tabla_movimientos.ajax.reload()
+                }
+              },
+              error: () => {
+                $('#alert-title').text('Andinasoft dice:')
+                $('#alert-data').text('Ocurrió un error al eliminar el reembolso')
                 $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
               }
             })

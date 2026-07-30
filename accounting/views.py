@@ -6536,11 +6536,46 @@ def cajas_efectivo(request):
                     
                 else:
                     data = {
-                            'msj':'No hay gastos pendientes por legalizar.',
+                            'msj':'No hay gastos en estado Revisado pendientes de reembolso.',
                             'class':'alert-danger'
                         }
                 
                 return JsonResponse(data)
+
+            elif todo == 'eliminar_reembolso':
+                if not request.user.is_superuser:
+                    return JsonResponse({
+                        'msj': 'Solo un superusuario puede eliminar reembolsos.',
+                        'class': 'alert-danger',
+                    })
+                id_reemb = request.POST.get('id_reemb')
+                try:
+                    reembolso = reembolsos_caja.objects.get(pk=id_reemb)
+                except reembolsos_caja.DoesNotExist:
+                    return JsonResponse({
+                        'msj': 'No se encontró el reembolso.',
+                        'class': 'alert-danger',
+                    })
+                if reembolso.doc_legalizacion:
+                    return JsonResponse({
+                        'msj': 'No se puede eliminar un reembolso ya legalizado.',
+                        'class': 'alert-danger',
+                    })
+                if reembolso.transferencia_asociada_id:
+                    return JsonResponse({
+                        'msj': 'No se puede eliminar un reembolso con transferencia asociada.',
+                        'class': 'alert-danger',
+                    })
+                with transaction.atomic():
+                    gastos_caja.objects.filter(reembolso=reembolso).update(
+                        reembolso=None,
+                        estado=gastos_caja.ESTADO_REVISADO,
+                    )
+                    reembolso.delete()
+                return JsonResponse({
+                    'msj': 'Se eliminó el reembolso y los gastos volvieron a estado Revisado.',
+                    'class': 'alert-success',
+                })
                 
             elif todo == 'approve_leg':
                 line = request.POST.get('id_reemb')

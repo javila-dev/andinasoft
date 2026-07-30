@@ -925,7 +925,7 @@ Fuente: `gastos_caja` filtrados por **`forma_pago`** (caja seleccionada en el da
 - **`Reembolso`** — el gasto ya fue incluido en una solicitud de reembolso. Alegra envía **`POST /bills`** igual que en `Revisado`.
 - **`Legalizado`** — tras registrar legalización del reembolso. Alegra envía **`POST /journals`** por reembolso (bills ya enviados o pendientes en `Legalizado`).
 
-Para solicitar reembolso, **`Revisado`** se trata igual que **`Aprobado`**.
+Para solicitar reembolso solo se incluyen gastos en estado **`Revisado`** (ya no basta con `Aprobado`).
 
 **Preview / envío:** body JSON incluye `caja_id` (pk de `cuentas_pagos` con `es_caja=true` de la empresa). Se guarda en `batch.summary.caja_id`.
 
