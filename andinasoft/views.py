@@ -6091,7 +6091,7 @@ def comisiones(request,proyecto):
                     if cargo_existe:
                         continue
                     AsignacionComisiones.objects.using(proyecto).create(
-                        id_comision=f'{idcargo}-{adj}',
+                        id_comision=f'{idcargo}{adj}',
                         idadjudicacion=adj,
                         fecha=datetime.date.today(),
                         idgestor=idgestor,
