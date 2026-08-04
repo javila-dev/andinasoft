@@ -143,15 +143,31 @@
           </button>
         </div>
         <div class="modal-body">
+            <div class="d-flex flex-wrap align-items-end mb-3">
+                <div class="input-group mr-2 mb-2" style="max-width: 360px;">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="cargo-nuevo-escala">Cargo</label>
+                    </div>
+                    <select class="custom-select" id="cargo-nuevo-escala">
+                        <option value="">Selecciona...</option>
+                        {% for cargo in cargos_comisiones %}
+                        <option value="{{ cargo.pk }}" data-nombre="{{ cargo.nombrecargo }}">{{ cargo.nombrecargo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="button" class="btn btn-primary mb-2" id="btn-agregar-asesor-escala">
+                    <i class="fas fa-plus"></i> Agregar asesor
+                </button>
+            </div>
             <div class='table-responsive'>
                 <table id='tabla-asignacioncomisiones' class='table table-striped table-sm'>
                     <thead class='thead thead-light'>
                         <tr>
-                            <th class='text-center' style='width: 20%;'>Id Cargo</th>
-                            <th class='text-center' style='width: 20%;'>Id Gestor</th>
-                            <th class='text-center' style='width: 35%;'>Gestor</th>
-                            <th class='text-center' style='width: 10%;'>Comision</th>
-                            <th class='text-center' style='width: 15%;'>Estado</th>
+                            <th class='text-center' style='width: 22%;'>Cargo</th>
+                            <th class='text-center' style='width: 18%;'>Id Gestor</th>
+                            <th class='text-center' style='width: 32%;'>Gestor</th>
+                            <th class='text-center' style='width: 12%;'>Comision</th>
+                            <th class='text-center' style='width: 16%;'>Estado</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -164,6 +180,46 @@
         </div>
       </div>
       </form>   
+    </div>
+  </div>
+  <div class="modal fade" id="modal-asesores-escala" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-user-tie mr-2"></i>Asesores</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table id="tabla-asesores-escala" class="table table-sm table-hover" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>Cedula</th>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                </tr>
+              </thead>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="alerta-escala" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="titulo-alerta-escala">Aviso</h5>
+        </div>
+        <div class="modal-body">
+          <p class="lead mb-0" id="mensaje-alerta-escala"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Entendido</button>
+        </div>
+      </div>
     </div>
   </div>
   <div class="modal fade" id="modal-cargando" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog" aria-labelledby="staticBackdropLabel" aria-hidden="true">
@@ -181,6 +237,92 @@
            "autoWidth": false,
            'order':[[8,"desc"],[1,"asc"]]
            });
+        var tablaAsesoresEscala = null;
+        var filaAsesorActiva = null;
+
+        function mostrarAlertaEscala(titulo, mensaje) {
+            $('#titulo-alerta-escala').text(titulo);
+            $('#mensaje-alerta-escala').text(mensaje);
+            $('#alerta-escala').modal('show');
+        }
+
+        function opcionesEstado(estadoSeleccionado) {
+            var estados = ['Activo', 'Retirado', 'Retenido'];
+            var html = '<select class="custom-select" name="estado">';
+            if (!estadoSeleccionado) {
+                html += '<option selected></option>';
+            }
+            for (var i = 0; i < estados.length; i++) {
+                var selected = estados[i] === estadoSeleccionado ? ' selected' : '';
+                html += '<option value="' + estados[i] + '"' + selected + '>' + estados[i] + '</option>';
+            }
+            html += '</select>';
+            return html;
+        }
+
+        function cargosAsignadosEnTabla() {
+            var cargos = [];
+            $('#tabla-asignacioncomisiones input[name="idcargo"]').each(function () {
+                var valor = String($(this).val() || '').trim();
+                if (valor) {
+                    cargos.push(valor);
+                }
+            });
+            return cargos;
+        }
+
+        function actualizarOpcionesCargo() {
+            var usados = cargosAsignadosEnTabla();
+            $('#cargo-nuevo-escala option').each(function () {
+                var valor = $(this).val();
+                if (!valor) {
+                    return;
+                }
+                $(this).prop('disabled', usados.indexOf(String(valor)) !== -1);
+            });
+            var actual = $('#cargo-nuevo-escala').val();
+            if (actual && usados.indexOf(String(actual)) !== -1) {
+                $('#cargo-nuevo-escala').val('');
+            }
+        }
+
+        function filaAsignacion(line, esNueva) {
+            var idComision = line.id_comision || '';
+            var idCargo = String(line.idcargo || '');
+            var nombreCargo = line.nombrecargo || '';
+            var etiquetaCargo = nombreCargo ? (idCargo + ' - ' + nombreCargo) : idCargo;
+            var comision = line.comision !== undefined && line.comision !== null && line.comision !== ''
+                ? parseFloat(line.comision)
+                : 0;
+            var quitarBtn = esNueva
+                ? '<button type="button" class="btn btn-outline-danger btn-sm btn-quitar-asesor-escala" title="Quitar">' +
+                  '<i class="fas fa-minus"></i></button>'
+                : '';
+            return '<tr data-idcargo="' + idCargo + '"' + (esNueva ? ' class="fila-nueva-escala"' : '') + '>' +
+                '<td class="text-center">' +
+                    '<input type="hidden" name="id_comision" value="' + idComision + '">' +
+                    '<input type="hidden" name="idcargo" value="' + idCargo + '">' +
+                    '<div class="input-group input-group-sm">' +
+                        '<input type="text" class="form-control text-center" value="' + etiquetaCargo + '" readonly>' +
+                        (quitarBtn ? '<div class="input-group-append">' + quitarBtn + '</div>' : '') +
+                    '</div>' +
+                '</td>' +
+                '<td class="text-center">' +
+                    '<div class="input-group input-group-sm">' +
+                        '<input type="text" class="form-control" name="idgestor" value="' + (line.idgestor || '') + '" required>' +
+                        '<div class="input-group-append">' +
+                            '<button type="button" class="btn btn-outline-primary btn-buscar-asesor-escala" title="Buscar asesor">' +
+                                '<i class="fas fa-search"></i>' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</td>' +
+                '<td class="text-center"><input type="text" class="form-control form-control-sm" name="gestor" value="' + (line.gestor || '') + '" readonly></td>' +
+                '<td class="text-center"><input type="number" max="100" min="0" step="0.01" class="form-control form-control-sm text-center" name="comision" value="' + comision + '"></td>' +
+                '<td class="text-center">' + opcionesEstado(line.estado || (esNueva ? 'Activo' : '')) + '</td>' +
+            '</tr>';
+        }
+
         $('#modal-cargoscomis').on('show.bs.modal', function (event) {
             var button = $(event.relatedTarget) // Button that triggered the modal
             var adj = button.data('adj')
@@ -243,6 +385,7 @@
             var button = $(event.relatedTarget) // Button that triggered the modal
             var adj = button.data('adj')
             $('#adj-asignacion').val(adj)
+            $('#cargo-nuevo-escala').val('')
             var modal = $(this)
             modal.find('.modal-title').text('Escala comision '+adj)
             $.ajax({
@@ -250,34 +393,116 @@
                 url:'/operaciones/comisiones/{{proyecto}}',
                 data:{'adj_buscar':adj,'form':'form-asignacion'},
                 success: function(response){
-                    var instance =Array(response['data'])[0]
-                    $('#tabla-asignacioncomisiones tbody tr').remove();
-                    for (i=0;i<instance.length;i++){
-                        var line = instance[i]
-                        var tr = '<tr>'+
-                        '<td class="text-center"><input type="text" class="form-control text-center" name="idcargo" value="'+line['idcargo']+'"readonly></td>'+
-                        '<td class="text-center"><input type="text" class="form-control" name="idgestor" value="'+line['idgestor']+'"></td>'+
-                        '<td class="text-center"><input type="text" class="form-control" name="gestor" value="'+line['gestor']+'"readonly></td>'+
-                        '<td class="text-center"><input type="number" max="100" min="0" step="0.01" class="form-control text-center" name="comision" value="'+ parseFloat(line['comision'])+'"></td>'+
-                        '<td class="text-center"><select class="custom-select" name="estado">'
-                        if(line['estado']=='Activo'){
-                            tr+='<option value="Activo" selected>Activo</option><option value="Retirado">Retirado</option><option value="Retenido">Retenido</option></select></td></tr>'
-                        }
-                        else if (line['estado']=='Retirado'){
-                            tr+='<option value="Activo">Activo</option><option value="Retirado" selected>Retirado</option><option value="Retenido">Retenido</option></select></td></tr>'
-                        }
-                        else if (line['estado']=='Retenido'){
-                            tr+='<option value="Activo">Activo</option><option value="Retirado">Retirado</option><option value="Retenido" selected>Retenido</option></select></td></tr>'
-                        }
-                        else {
-                            tr+='<option selected></option><option value="Activo">Activo</option><option value="Retirado">Retirado</option><option value="Retenido">Retenido</option></select></td></tr>'
-                        }
-                        $('#tabla-asignacioncomisiones tbody').append(tr);
+                    var instance = response['data'] || []
+                    $('#tabla-asignacioncomisiones tbody').empty();
+                    for (var i = 0; i < instance.length; i++) {
+                        $('#tabla-asignacioncomisiones tbody').append(filaAsignacion(instance[i], false));
                     }
-
+                    actualizarOpcionesCargo();
                 } 
             })
         } );
+
+        $('#btn-agregar-asesor-escala').on('click', function () {
+            var select = $('#cargo-nuevo-escala');
+            var idCargo = select.val();
+            if (!idCargo) {
+                mostrarAlertaEscala('Falta el cargo', 'Selecciona un cargo para agregar el asesor.');
+                return;
+            }
+            if (cargosAsignadosEnTabla().indexOf(String(idCargo)) !== -1) {
+                mostrarAlertaEscala('Cargo ya asignado', 'Este cargo ya esta registrado en la escala del negocio.');
+                return;
+            }
+            var nombreCargo = select.find('option:selected').data('nombre') || select.find('option:selected').text();
+            $('#tabla-asignacioncomisiones tbody').append(filaAsignacion({
+                id_comision: '',
+                idcargo: idCargo,
+                nombrecargo: nombreCargo,
+                idgestor: '',
+                gestor: '',
+                comision: 0,
+                estado: 'Activo'
+            }, true));
+            select.val('');
+            actualizarOpcionesCargo();
+        });
+
+        $(document).on('click', '.btn-quitar-asesor-escala', function () {
+            $(this).closest('tr').remove();
+            actualizarOpcionesCargo();
+        });
+
+        $(document).on('click', '.btn-buscar-asesor-escala', function () {
+            filaAsesorActiva = $(this).closest('tr');
+            $('#modal-asesores-escala').modal('show');
+        });
+
+        function apilarModal(modalEl) {
+            var zIndex = 1050 + (10 * $('.modal:visible').length);
+            $(modalEl).css('z-index', zIndex);
+            setTimeout(function () {
+                $('.modal-backdrop').not('.modal-stack').last()
+                    .css('z-index', zIndex - 1)
+                    .addClass('modal-stack');
+            }, 0);
+        }
+
+        $('#modal-asesores-escala, #alerta-escala').on('show.bs.modal', function () {
+            apilarModal(this);
+        });
+
+        $('#modal-asesores-escala').on('shown.bs.modal', function () {
+            if (!tablaAsesoresEscala) {
+                tablaAsesoresEscala = $('#tabla-asesores-escala').DataTable({
+                    language: { url: '/ajax_request/datatable_spanish' },
+                    ajax: {
+                        url: '/ajax_request/salesmen',
+                        dataSrc: 'data'
+                    },
+                    columns: [
+                        { data: 'cedula' },
+                        { data: 'nombre' },
+                        { data: 'tipo_asesor' }
+                    ],
+                    pageLength: 10
+                });
+            } else {
+                tablaAsesoresEscala.columns.adjust();
+            }
+        });
+
+        $('#modal-asesores-escala, #alerta-escala').on('hidden.bs.modal', function () {
+            if ($('.modal:visible').length) {
+                $('body').addClass('modal-open');
+            }
+        });
+
+        $('#tabla-asesores-escala tbody').on('click', 'tr', function () {
+            if (!tablaAsesoresEscala || !filaAsesorActiva) {
+                return;
+            }
+            var line = tablaAsesoresEscala.row(this).data();
+            if (!line) {
+                return;
+            }
+            filaAsesorActiva.find('input[name="idgestor"]').val(line.cedula);
+            filaAsesorActiva.find('input[name="gestor"]').val((line.nombre || '').toUpperCase());
+            $('#modal-asesores-escala').modal('hide');
+        });
+
+        $('#form-escala').on('submit', function () {
+            var filasSinAsesor = false;
+            $('#tabla-asignacioncomisiones tbody tr').each(function () {
+                if (!$.trim($(this).find('input[name="idgestor"]').val())) {
+                    filasSinAsesor = true;
+                }
+            });
+            if (filasSinAsesor) {
+                mostrarAlertaEscala('Falta el asesor', 'Todas las filas deben tener un asesor asignado antes de guardar.');
+                return false;
+            }
+        });
         
     });
 </script>

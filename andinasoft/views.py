@@ -5911,6 +5911,7 @@ def comisiones(request,proyecto):
     context={
         'adjudicaciones':obj_comisiones,
         'proyecto':proyecto,
+        'cargos_comisiones':Cargos_comisiones.objects.using(proyecto).all().order_by('nombrecargo'),
     }
     if request.method == 'GET':
         if request.is_ajax():
@@ -5966,12 +5967,24 @@ def comisiones(request,proyecto):
                 obj_asignacion = AsignacionComisiones.objects.using(proyecto).filter(idadjudicacion=adj)
                 asignaciones = []
                 for asignacion in obj_asignacion:
+                    try:
+                        nombrecargo = Cargos_comisiones.objects.using(proyecto).get(
+                            pk=asignacion.idcargo
+                        ).nombrecargo
+                    except Cargos_comisiones.DoesNotExist:
+                        nombrecargo = ''
+                    try:
+                        nombre_gestor = asesores.objects.get(pk=asignacion.idgestor).nombre.upper()
+                    except asesores.DoesNotExist:
+                        nombre_gestor = ''
                     cargo = {
-                        'idcargo':asignacion.id_comision,
-                        'idgestor':asignacion.idgestor,
-                        'gestor':asesores.objects.get(pk=asignacion.idgestor).nombre.upper(),
-                        'comision':asignacion.comision,
-                        'estado':asignacion.usuario
+                        'id_comision': asignacion.id_comision,
+                        'idcargo': str(asignacion.idcargo),
+                        'nombrecargo': nombrecargo or '',
+                        'idgestor': asignacion.idgestor,
+                        'gestor': nombre_gestor,
+                        'comision': asignacion.comision,
+                        'estado': asignacion.usuario,
                     }
                     asignaciones.append(cargo)
                 return JsonResponse({'data':asignaciones})
@@ -6038,18 +6051,54 @@ def comisiones(request,proyecto):
                     
                     
         if request.POST.get('btn-asignarescala'):
-            adj = request.POST.getlist('adj-asignacion')
+            adj = request.POST.get('adj-asignacion')
+            ids_comision = request.POST.getlist('id_comision')
             cargos = request.POST.getlist('idcargo')
             gestores = request.POST.getlist('idgestor')
             comision = request.POST.getlist('comision')
             estado = request.POST.getlist('estado')
-            
-            for i in range(0,len(cargos)):
-                asignacion=AsignacionComisiones.objects.using(proyecto).get(id_comision=cargos[i])
-                asignacion.idgestor = gestores[i]
-                asignacion.comision = Decimal(comision[i])
-                asignacion.usuario = estado[i]
-                asignacion.save()
+
+            # Compatibilidad con el formulario anterior (solo enviaba idcargo = PK)
+            if not ids_comision and cargos:
+                ids_comision = cargos
+                cargos = [c.split('-')[0] if c else '' for c in cargos]
+
+            for i in range(0, len(cargos)):
+                id_comision = (ids_comision[i] if i < len(ids_comision) else '').strip()
+                idcargo = str(cargos[i]).strip()
+                idgestor = gestores[i].strip() if i < len(gestores) else ''
+                tasa = Decimal(comision[i]) if i < len(comision) and comision[i] not in (None, '') else Decimal(0)
+                estado_cargo = estado[i] if i < len(estado) else 'Activo'
+
+                if not idgestor:
+                    continue
+
+                if id_comision:
+                    try:
+                        asignacion = AsignacionComisiones.objects.using(proyecto).get(id_comision=id_comision)
+                    except AsignacionComisiones.DoesNotExist:
+                        continue
+                    asignacion.idgestor = idgestor
+                    asignacion.comision = tasa
+                    asignacion.usuario = estado_cargo
+                    asignacion.save()
+                else:
+                    if not idcargo or not adj:
+                        continue
+                    cargo_existe = AsignacionComisiones.objects.using(proyecto).filter(
+                        idadjudicacion=adj, idcargo=idcargo
+                    ).exists()
+                    if cargo_existe:
+                        continue
+                    AsignacionComisiones.objects.using(proyecto).create(
+                        id_comision=f'{idcargo}-{adj}',
+                        idadjudicacion=adj,
+                        fecha=datetime.date.today(),
+                        idgestor=idgestor,
+                        idcargo=idcargo,
+                        comision=tasa,
+                        usuario=estado_cargo or 'Activo',
+                    )
                 
     
     return render(request,'comisiones.html',context)
