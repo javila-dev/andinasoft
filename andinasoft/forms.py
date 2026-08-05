@@ -233,6 +233,11 @@ class form_nuevo_cliente(forms.Form):
     nombres=forms.CharField(max_length=255,label='Nombres')
     apellidos=forms.CharField(max_length=255,label='Apellidos')
     idTercero=forms.CharField(max_length=255, label='Numero Documento')
+    idTercero.widget.attrs.update({
+        'inputmode': 'numeric',
+        'pattern': '[0-9]*',
+        'autocomplete': 'off',
+    })
     tipo_doc_id = forms.ChoiceField(choices=[
         ('',  'Selecciona...'),
         ('13',  'Cédula de ciudadanía'),
@@ -517,6 +522,8 @@ class form_nuevo_cliente(forms.Form):
     
     def clean_idTercero(self):
         field = self.cleaned_data.get('idTercero')
+        if field and not field.isdigit():
+            raise forms.ValidationError('El numero de documento solo puede contener digitos')
         control = clientes.objects.filter(pk=field)
         if control.exists():
             self.add_error('idTercero','Ya existe un tercero registrado con este numero de cedula')
@@ -524,7 +531,12 @@ class form_nuevo_cliente(forms.Form):
 
 class form_nuevo_cliente_PJ(forms.Form):
     idTercero=forms.CharField(max_length=255, label='Nit')
-    idTercero.widget.attrs.update(id='cc_titular')
+    idTercero.widget.attrs.update({
+        'id': 'cc_titular',
+        'inputmode': 'numeric',
+        'pattern': '[0-9]*',
+        'autocomplete': 'off',
+    })
     nombrecompleto=forms.CharField(max_length=255,label='Razon social',required=False)
     nombres=forms.CharField(max_length=255,label='Razon social')
     nombres.widget.attrs.update(id='nombres_titular')
@@ -587,6 +599,8 @@ class form_nuevo_cliente_PJ(forms.Form):
     
     def clean_idTercero(self):
         field = self.cleaned_data.get('idTercero')
+        if field and not field.isdigit():
+            raise forms.ValidationError('El numero de documento solo puede contener digitos')
         control = clientes.objects.filter(pk=field)
         if control.exists():
             self.add_error('idTercero','Ya existe un tercero registrado con este numero de cedula')

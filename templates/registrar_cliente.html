@@ -194,6 +194,10 @@
                 });
 
         });
+
+        $('#id_idTercero, #cc_titular').on('input', function () {
+            this.value = this.value.replace(/\D/g, '');
+        });
     })
 </script>
 <script>
