@@ -47,3 +47,26 @@ class recibos_internos(models.Model):
         clientes.objects.filter(pk=obj_adj.idtercero1).values()
         
         return list(clientes.objects.filter(pk=obj_adj.idtercero1).values())[0]
+
+
+class SaldoFavorCliente(models.Model):
+    """Ledger interno de saldo a favor al liquidar un credito con sobrante."""
+
+    # Sin FKs: evita errno 150 por collation/engine entre tablas legacy.
+    proyecto = models.CharField(max_length=255, db_index=True)
+    adjudicacion = models.CharField(max_length=255, db_index=True)
+    recibo = models.CharField(max_length=255, db_index=True)
+    valor = models.IntegerField(help_text='Positivo = genera saldo a favor')
+    fecha = models.DateField(auto_now_add=True)
+    usuario = models.CharField(max_length=150, blank=True, null=True)
+    nota = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Saldo a favor cliente'
+        verbose_name_plural = 'Saldos a favor clientes'
+        indexes = [
+            models.Index(fields=['proyecto', 'adjudicacion']),
+        ]
+
+    def __str__(self):
+        return f'{self.proyecto} {self.adjudicacion} RC {self.recibo}: {self.valor}'

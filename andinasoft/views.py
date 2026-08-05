@@ -61,6 +61,11 @@ from andinasoft.certificado_tributario_service import (
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
+from andinasoft.saldo_favor import (
+    plan_tiene_deuda_pendiente,
+    registrar_saldo_favor,
+    remanente_recibo,
+)
 from andinasoft.create_pdf import GenerarPDF
 from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, file_response_from_pdf_root
 from andinasoft.passes_test import perms_test
@@ -1236,6 +1241,10 @@ def _validar_recaudo_context(request, proyecto, adj, titulares, saldos_cuotas, c
     for cuota in saldos_cuotas:
         if valor_pagado == 0:
             break
+        elif str(getattr(cuota, 'idcta', '') or '').startswith('SF'):
+            pass
+        elif getattr(cuota, 'tipocta', None) == 'SF':
+            pass
         elif cuota.pendiente().get('total') <= 0:
             pass
         else:
@@ -1276,9 +1285,26 @@ def _validar_recaudo_context(request, proyecto, adj, titulares, saldos_cuotas, c
                 recaudo.append((cuota.fecha, cuota.idcta, capital_pagado, intcte_pagado, datos_mora.get('dias'), mora_pagada, total_rcdo_cta))
 
     totales_recaudo = (total_cap, total_intcte, total_intmora, total_cap + total_intcte + total_intmora)
+    aplicado = total_cap + total_intcte + total_intmora
+    exceso = int(valor_recibo) - int(aplicado)
     verif_pago = True
-    if valor_recibo > (total_cap + total_intcte + total_intmora):
-        verif_pago = False
+    alerts = []
+
+    if exceso > 0 and not abonocapital:
+        # Sobró plata tras aplicar a todas las cuotas con pendiente => credito liquidado.
+        # Se permite guardar; al confirmar se registra SF (saldo a favor interno).
+        verif_pago = True
+        alerts.append({
+            'code': 'SALDO_FAVOR_PENDING',
+            'message': (
+                f'El pago supera el pendiente en ${exceso:,.0f}. '
+                f'Al guardar se registrara como saldo a favor interno (no aparece en el PDF).'
+            ),
+            'severity': 'warning',
+        })
+    elif exceso > 0 and abonocapital:
+        # En validacion el exceso ya se muestra como linea ABONO; permitir continuar.
+        verif_pago = True
 
     context = {
         'form': form_nuevo_recibo(proyecto=proyecto, initial={
@@ -1306,13 +1332,6 @@ def _validar_recaudo_context(request, proyecto, adj, titulares, saldos_cuotas, c
         'bloquear_formulario': False
     }
 
-    alerts = []
-    if not verif_pago:
-        alerts.append({
-            'code': 'AMOUNT_EXCEEDS_PLAN',
-            'message': 'El valor a pagar no puede ser mayor al plan de pagos pendientes.',
-            'severity': 'error'
-        })
     if count_cuota > 2:
         alerts.append({
             'code': 'MANY_FUTURE_INSTALLMENTS',
@@ -1341,14 +1360,15 @@ def _validar_integridad_post_abono(proyecto, adj):
     errores = []
     tolerancia = 1  # 1 peso de tolerancia por redondeos
 
+    # Excluir SF (saldo a favor interno) de validaciones de capital del contrato
     # 1. Validar coherencia: Capital total del plan
     cap_plan = PlanPagos.objects.using(proyecto).filter(
         adj=adj
-    ).aggregate(Sum('capital'))['capital__sum'] or 0
+    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
 
     cap_saldos = saldos_adj.objects.using(proyecto).filter(
         adj=adj
-    ).aggregate(Sum('capital'))['capital__sum'] or 0
+    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
 
     if abs(cap_plan - cap_saldos) > tolerancia:
         errores.append({
@@ -1362,11 +1382,11 @@ def _validar_integridad_post_abono(proyecto, adj):
     cap_recaudado = Recaudos.objects.using(proyecto).filter(
         idadjudicacion=adj,
         estado='Aprobado'
-    ).aggregate(Sum('capital'))['capital__sum'] or 0
+    ).exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
 
     cap_rcdo_saldos = saldos_adj.objects.using(proyecto).filter(
         adj=adj
-    ).aggregate(Sum('rcdocapital'))['rcdocapital__sum'] or 0
+    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('rcdocapital'))['rcdocapital__sum'] or 0
 
     if abs(cap_recaudado - cap_rcdo_saldos) > tolerancia:
         errores.append({
@@ -1380,7 +1400,7 @@ def _validar_integridad_post_abono(proyecto, adj):
     cap_pdte_calculado = cap_plan - cap_recaudado
     cap_pdte_saldos = saldos_adj.objects.using(proyecto).filter(
         adj=adj
-    ).aggregate(Sum('saldocapital'))['saldocapital__sum'] or 0
+    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('saldocapital'))['saldocapital__sum'] or 0
 
     if abs(cap_pdte_calculado - cap_pdte_saldos) > tolerancia:
         errores.append({
@@ -1391,7 +1411,9 @@ def _validar_integridad_post_abono(proyecto, adj):
         })
 
     # 4. Validar que cada cuota esté cuadrada: capital + intcte = cuota
-    cuotas_plan = PlanPagos.objects.using(proyecto).filter(adj=adj)
+    cuotas_plan = PlanPagos.objects.using(proyecto).filter(adj=adj).exclude(
+        tipocta='SF'
+    ).exclude(idcta__startswith='SF')
     cuotas_descuadradas = []
 
     for cuota in cuotas_plan:
@@ -1417,7 +1439,7 @@ def _validar_integridad_post_abono(proyecto, adj):
     cuotas_negativas = saldos_adj.objects.using(proyecto).filter(
         adj=adj,
         saldocapital__lt=0
-    )
+    ).exclude(tipocta='SF').exclude(idcta__startswith='SF')
 
     if cuotas_negativas.exists():
         lista_negativas = list(cuotas_negativas.values('idcta', 'saldocapital')[:5])
@@ -1642,7 +1664,7 @@ def _guardar_recaudo(
                     cap_pagado = Recaudos.objects.using(proyecto).filter(
                         idadjudicacion=adj,
                         estado='Aprobado'
-                    ).aggregate(Sum('capital'))['capital__sum'] or 0
+                    ).exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
 
                     # Este es el monto EXACTO que debe sumar el nuevo plan de pagos
                     saldo_por_distribuir = cap_total - cap_pagado
@@ -1659,6 +1681,8 @@ def _guardar_recaudo(
                     ids_cuotas_vivas = saldos_adj.objects.using(proyecto).filter(
                         adj=adj,
                         saldocapital__gt=0
+                    ).exclude(tipocta='SF').exclude(
+                        idcta__startswith='SF'
                     ).values_list('idcta', flat=True)
                     
                     # Traemos los objetos reales ordenados por fecha
@@ -1825,7 +1849,31 @@ def _guardar_recaudo(
                                                             fechaoperacion=datetime.datetime.today(),
                                                             usuario=request.user,
                                                             estado='Aprobado')
-        
+
+    # Saldo a favor interno: solo si liquido el credito y sobra valor vs detalle
+    remanente = remanente_recibo(proyecto, nro_recibo, valor_recibo)
+    sf_msg = ''
+    if remanente > 0 and not plan_tiene_deuda_pendiente(proyecto, adj):
+        sf_info = registrar_saldo_favor(
+            proyecto=proyecto,
+            adj=adj,
+            nro_recibo=nro_recibo,
+            fecha=fecha,
+            remanente=remanente,
+            usuario=request.user,
+            ledger_user=request.user if getattr(request.user, 'pk', None) else None,
+        )
+        if sf_info:
+            sf_msg = (
+                f' Se registro saldo a favor interno por ${int(sf_info["valor"]):,.0f} '
+                f'(no aparece en el PDF).'
+            )
+            alerts.append({
+                'code': 'SALDO_FAVOR_CREATED',
+                'message': sf_msg.strip(),
+                'severity': 'info',
+            })
+
     if es_ci:
         operacion = 'Cuota Inicial'
     elif es_fn:
@@ -1848,10 +1896,12 @@ def _guardar_recaudo(
                                                     usuario=request.user)
     consecutivo.consecutivo = consecutivo.consecutivo + 1
     consecutivo.save()
-    obj_saldos = saldos_adj.objects.using(proyecto).filter(adj=adj)
+    obj_saldos = saldos_adj.objects.using(proyecto).filter(adj=adj).exclude(
+        tipocta='SF'
+    ).exclude(idcta__startswith='SF')
     saldos = obj_saldos.aggregate(Sum('saldocuota'))
     saldos = saldos['saldocuota__sum']
-    if saldos <= 0:
+    if saldos is None or saldos <= 0:
         obj_adj = Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
         obj_adj.estado = 'Pagado'
         obj_adj.save()
@@ -1909,7 +1959,7 @@ def _guardar_recaudo(
     context_updates['grabado'] = True
     context_updates['alerta'] = True
     context_updates['titulo'] = '¡Listo!'
-    context_updates['mensaje'] = 'Descarga el recibo aquí'
+    context_updates['mensaje'] = f'Descarga el recibo aquí.{sf_msg}'
     context_updates['link'] = True
     context_updates['ruta_link'] = _tmp_download_url(filename)
     context_updates['redireccion'] = True

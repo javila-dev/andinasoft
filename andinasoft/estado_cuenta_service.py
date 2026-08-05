@@ -67,6 +67,7 @@ def _load_recaudos_index(proyecto: str, adj: str) -> dict:
     rows = (
         Recaudos.objects.using(proyecto)
         .filter(idadjudicacion=adj)
+        .exclude(idcta__startswith='SF')
         .values('idcta', 'capital', 'interescte', 'interesmora', 'fecha')
     )
     for row in rows:
@@ -279,7 +280,12 @@ def _tiempos_pagos_snapshot(plan: list, fechacontrato) -> SimpleNamespace:
 
 def _wrap_adj_for_template(adj: Adjudicacion, proyecto: str) -> SimpleNamespace:
     """Objeto adj con propiedades precalculadas que usa statement_of_account.html."""
-    plan = list(PlanPagos.objects.using(proyecto).filter(adj=adj.pk))
+    plan = list(
+        PlanPagos.objects.using(proyecto)
+        .filter(adj=adj.pk)
+        .exclude(tipocta='SF')
+        .exclude(idcta__startswith='SF')
+    )
     try:
         extra_info = Vista_Adjudicacion.objects.using(proyecto).get(IdAdjudicacion=adj.pk)
     except Vista_Adjudicacion.DoesNotExist:
@@ -333,11 +339,17 @@ def build_estado_cuenta_context(
     }
 
     cuotas_historicas = list(
-        PlanPagos.objects.using(proyecto).filter(adj=adj_id, fecha__lte=today).order_by('fecha')
+        PlanPagos.objects.using(proyecto)
+        .filter(adj=adj_id, fecha__lte=today)
+        .exclude(tipocta='SF')
+        .exclude(idcta__startswith='SF')
+        .order_by('fecha')
     )
     cuotas_futuras_qs = list(
         PlanPagos.objects.using(proyecto)
         .filter(adj=adj_id, fecha__gt=today, fecha__lte=next_30_days)
+        .exclude(tipocta='SF')
+        .exclude(idcta__startswith='SF')
         .order_by('fecha')
     )
 

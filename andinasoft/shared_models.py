@@ -655,11 +655,13 @@ class Recaudos_general(models.Model):
         """
         Agregados de capital e intereses del recibo (tabla recaudos).
         Usado por pdf/Oasis/recibo.html para el desglose del pago.
+        Excluye lineas SF (saldo a favor interno).
         """
         db_name = self._state.db
         rec_det = (
             Recaudos.objects.using(db_name)
             .filter(recibo=self.numrecibo)
+            .exclude(idcta__startswith='SF')
             .aggregate(
                 cap=Sum('capital'),
                 intcte=Sum('interescte'),
@@ -689,16 +691,19 @@ class Recaudos_general(models.Model):
         c = consecutivos.objects.using(db_name).get(documento='RC')
         lista_titulares = []
         
-        rec_det = Recaudos.objects.using(db_name
-                                         ).filter(recibo=self.numrecibo
-                                                         ).aggregate(
-                                                             cap = Sum('capital'),
-                                                             intcte = Sum('interescte'),
-                                                             intmora = Sum('interesmora')
-                                                         )
-        capital = float(rec_det.get('cap'))
-        intcte = float(rec_det.get('intcte'))
-        intmora = float(rec_det.get('intmora'))
+        rec_qs = Recaudos.objects.using(db_name).filter(recibo=self.numrecibo)
+        rec_det = rec_qs.exclude(idcta__startswith='SF').aggregate(
+            cap=Sum('capital'),
+            intcte=Sum('interescte'),
+            intmora=Sum('interesmora'),
+        )
+        rec_sf = rec_qs.filter(idcta__startswith='SF').aggregate(cap=Sum('capital'))
+        capital = float(rec_det.get('cap') or 0)
+        intcte = float(rec_det.get('intcte') or 0)
+        intmora = float(rec_det.get('intmora') or 0)
+        capital_sf = float(rec_sf.get('cap') or 0)
+        # Anticipos / mayor valor: aux1 si existe; si no, misma cuenta capital con etiqueta distinta
+        cuenta_sf = (c.cuenta_aux1 or '').strip() or c.cuenta_capital
         
         fp = formas_pago.objects.using(db_name).filter(descripcion=self.formapago)
         if fp.exists():fp = fp[0].cuenta_contable
@@ -747,6 +752,20 @@ class Recaudos_general(models.Model):
                         'dia':self.fecha.day,
                         'nit':t.pk,
                         'descripcion':t.nombrecompleto.upper() + ' - INTERES MORA',
+                    })
+                if capital_sf > 0:
+                    lista_titulares.append({
+                        'tipocomprobante':"R",
+                        'codigocomprobante':c.comprobante_contable,
+                        'numerocomprobante':self.numrecibo,
+                        'cuenta':cuenta_sf,
+                        'naturaleza':'C',
+                        'valor':round(capital_sf * porcentaje,2),
+                        'año':self.fecha.year,
+                        'mes':self.fecha.month,
+                        'dia':self.fecha.day,
+                        'nit':t.pk,
+                        'descripcion':t.nombrecompleto.upper() + ' - SALDO A FAVOR',
                     })
                     
         lista_titulares.append({

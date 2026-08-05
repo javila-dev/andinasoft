@@ -113,6 +113,24 @@ def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo
                                                     fechaoperacion=datetime.datetime.today(),
                                                     usuario=request.user,
                                                     estado='Aprobado')
+
+    from andinasoft.saldo_favor import (
+        plan_tiene_deuda_pendiente,
+        registrar_saldo_favor,
+        remanente_recibo,
+    )
+    remanente = remanente_recibo(proyecto, nro_recibo, valor_recibo)
+    if remanente > 0 and not plan_tiene_deuda_pendiente(proyecto, adj):
+        registrar_saldo_favor(
+            proyecto=proyecto,
+            adj=adj,
+            nro_recibo=nro_recibo,
+            fecha=fecha,
+            remanente=remanente,
+            usuario=request.user,
+            ledger_user=request.user if getattr(request.user, 'pk', None) else None,
+        )
+
     if es_ci:
         operacion='Cuota Inicial'
     elif es_fn:
@@ -132,10 +150,12 @@ def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo
                                                         valor=valor_recibo,
                                                         formapago=str(forma_pago))
 
-    obj_saldos=sm.saldos_adj.objects.using(proyecto).filter(adj=adj)
+    obj_saldos=sm.saldos_adj.objects.using(proyecto).filter(adj=adj).exclude(
+        tipocta='SF'
+    ).exclude(idcta__startswith='SF')
     saldos=obj_saldos.aggregate(Sum('saldocuota'))
     saldos=saldos['saldocuota__sum']
-    if saldos<=0:
+    if saldos is None or saldos<=0:
         obj_adj=sm.Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
         obj_adj.estado='Pagado'
         obj_adj.save()
