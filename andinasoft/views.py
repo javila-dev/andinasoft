@@ -1939,20 +1939,27 @@ def _guardar_recaudo(
             'motivo_revision',
         ])
 
-    # Marcar movimiento bancario como usado si se proporcionó
+    # Marcar movimiento(s) bancario(s) como usado(s) si se proporcionaron
+    # Acepta un ID o varios separados por coma (un recibo = suma de varios pagos).
     movimiento_banco_id = form_recibo.cleaned_data.get('movimiento_banco_id')
     if movimiento_banco_id and movimiento_banco_id.strip():
-        try:
-            from accounting.models import egresos_banco
-            from django.utils import timezone
-            movimiento = egresos_banco.objects.using('default').get(pk=int(movimiento_banco_id))
-            movimiento.usado_agente = True
-            movimiento.fecha_uso_agente = timezone.now()
-            movimiento.recibo_asociado_agente = nro_recibo
-            movimiento.proyecto_asociado_agente = proyecto
-            movimiento.save()
-        except (egresos_banco.DoesNotExist, ValueError):
-            pass  # Si no se encuentra el movimiento, continuar sin error
+        from accounting.models import egresos_banco
+        from django.utils import timezone
+        ids_raw = [part.strip() for part in movimiento_banco_id.split(',') if part.strip()]
+        ids_validos = []
+        for raw_id in ids_raw:
+            try:
+                ids_validos.append(int(raw_id))
+            except (TypeError, ValueError):
+                continue
+        if ids_validos:
+            ahora = timezone.now()
+            for movimiento in egresos_banco.objects.using('default').filter(pk__in=ids_validos):
+                movimiento.usado_agente = True
+                movimiento.fecha_uso_agente = ahora
+                movimiento.recibo_asociado_agente = nro_recibo
+                movimiento.proyecto_asociado_agente = proyecto
+                movimiento.save()
 
     context_updates['ruta_recibo'] = _tmp_download_url(filename)
     context_updates['nro_recibo'] = nro_recibo

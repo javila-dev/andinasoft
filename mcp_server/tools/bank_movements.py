@@ -476,7 +476,9 @@ def bank_movements_mark_used(
 def bank_movements_for_receipt(
     proyecto: str,
     fecha_pago: str,
-    recibo_asociado: str = None
+    recibo_asociado: str = None,
+    fecha_desde: str = None,
+    fecha_hasta: str = None,
 ) -> dict:
     """
     Obtiene movimientos bancarios relacionados con una solicitud de recibo.
@@ -485,9 +487,11 @@ def bank_movements_for_receipt(
         proyecto: Nombre del proyecto (requerido)
         fecha_pago: Fecha de pago (YYYY-MM-DD) (requerido)
         recibo_asociado: Número de recibo para buscar movimiento existente (opcional)
+        fecha_desde: Inicio de rango (opcional; default fecha_pago - 2 días)
+        fecha_hasta: Fin de rango (opcional; default fecha_pago + 2 días)
 
     Returns:
-        dict con cuenta, movimiento_asociado_id, fechas y lista de movimientos
+        dict con cuenta, movimientos_asociados_ids, fechas y lista de movimientos
     """
     from andinasoft.models import cuentas_pagos
     from accounting.models import egresos_banco
@@ -499,32 +503,33 @@ def bank_movements_for_receipt(
     if not fecha_pago_dt:
         return {'error': 'Formato de fecha inválido, usa YYYY-MM-DD'}
 
-    fecha_desde = fecha_pago_dt - timedelta(days=1)
-    fecha_hasta = fecha_pago_dt + timedelta(days=1)
+    if fecha_desde or fecha_hasta:
+        fecha_desde_dt = parse_date(fecha_desde) if fecha_desde else None
+        fecha_hasta_dt = parse_date(fecha_hasta) if fecha_hasta else None
+        if not fecha_desde_dt or not fecha_hasta_dt:
+            return {'error': 'Si envías rango, usa fecha_desde y fecha_hasta (YYYY-MM-DD)'}
+        if fecha_desde_dt > fecha_hasta_dt:
+            return {'error': '"fecha_desde" no puede ser mayor que "fecha_hasta"'}
+    else:
+        fecha_desde_dt = fecha_pago_dt - timedelta(days=2)
+        fecha_hasta_dt = fecha_pago_dt + timedelta(days=2)
 
     cuenta_obj = None
-    movimiento_asociado_id = None
+    movimientos_asociados_ids = []
 
-    # Si tiene recibo asociado, buscar el movimiento
     if recibo_asociado and recibo_asociado.strip():
-        try:
-            movimiento = egresos_banco.objects.filter(
-                recibo_asociado_agente=recibo_asociado,
-                proyecto_asociado_agente=proyecto
-            ).first()
+        asociados_qs = egresos_banco.objects.filter(
+            recibo_asociado_agente=recibo_asociado,
+            proyecto_asociado_agente=proyecto
+        ).select_related('empresa', 'cuenta')
+        if not asociados_qs.exists():
+            asociados_qs = egresos_banco.objects.filter(
+                recibo_asociado_agente=recibo_asociado
+            ).select_related('empresa', 'cuenta')
+        movimientos_asociados_ids = list(asociados_qs.values_list('id_mvto', flat=True))
+        if asociados_qs.exists():
+            cuenta_obj = asociados_qs.first().cuenta
 
-            if not movimiento:
-                movimiento = egresos_banco.objects.filter(
-                    recibo_asociado_agente=recibo_asociado
-                ).first()
-
-            if movimiento:
-                cuenta_obj = movimiento.cuenta
-                movimiento_asociado_id = movimiento.id_mvto
-        except Exception:
-            pass
-
-    # Si no se encontró cuenta, buscar la más común del proyecto
     if not cuenta_obj:
         movimientos_proyecto = egresos_banco.objects.filter(
             proyecto_asociado_agente=proyecto
@@ -543,14 +548,19 @@ def bank_movements_for_receipt(
             'detail': 'No se encontró una cuenta bancaria asociada al proyecto',
             'movimientos': [],
             'cuenta': None,
-            'movimiento_asociado_id': None
+            'movimiento_asociado_id': None,
+            'movimientos_asociados_ids': [],
         }
 
-    # Buscar movimientos en la cuenta con valor positivo
     queryset = egresos_banco.objects.filter(
         cuenta=cuenta_obj,
-        fecha__range=(fecha_desde, fecha_hasta),
+        fecha__range=(fecha_desde_dt, fecha_hasta_dt),
         valor__gt=0
+    )
+    ids_rango = list(queryset.values_list('pk', flat=True))
+    ids_union = list(set(ids_rango) | set(movimientos_asociados_ids))
+    queryset = egresos_banco.objects.filter(
+        pk__in=ids_union
     ).select_related('empresa', 'cuenta').order_by('fecha', 'pk')
 
     movimientos = []
@@ -571,15 +581,17 @@ def bank_movements_for_receipt(
             'usado_agente': mvto.usado_agente,
             'fecha_uso_agente': mvto.fecha_uso_agente.isoformat() if mvto.fecha_uso_agente else None,
             'recibo_asociado_agente': mvto.recibo_asociado_agente,
-            'proyecto_asociado_agente': mvto.proyecto_asociado_agente
+            'proyecto_asociado_agente': mvto.proyecto_asociado_agente,
+            'asociado_a_este_recibo': mvto.id_mvto in movimientos_asociados_ids,
         })
 
     return {
         'cuenta': cuenta_obj.pk,
         'cuenta_numero': cuenta_obj.cuentabanco,
-        'movimiento_asociado_id': movimiento_asociado_id,
-        'fecha_desde': fecha_desde.isoformat(),
-        'fecha_hasta': fecha_hasta.isoformat(),
+        'movimiento_asociado_id': movimientos_asociados_ids[0] if movimientos_asociados_ids else None,
+        'movimientos_asociados_ids': movimientos_asociados_ids,
+        'fecha_desde': fecha_desde_dt.isoformat(),
+        'fecha_hasta': fecha_hasta_dt.isoformat(),
         'total_movimientos': len(movimientos),
         'movimientos': movimientos
     }
@@ -655,13 +667,15 @@ BANK_MOVEMENTS_TOOLS = [
     },
     {
         'name': 'bank_movements_for_receipt',
-        'description': 'Busca movimientos para recibo (±1 día de fecha_pago).',
+        'description': 'Busca movimientos para recibo (default ±2 días de fecha_pago).',
         'inputSchema': {
             'type': 'object',
             'properties': {
                 'proyecto': {'type': 'string'},
                 'fecha_pago': {'type': 'string', 'description': 'YYYY-MM-DD'},
-                'recibo_asociado': {'type': 'string', 'description': 'Nro recibo'}
+                'recibo_asociado': {'type': 'string', 'description': 'Nro recibo'},
+                'fecha_desde': {'type': 'string', 'description': 'YYYY-MM-DD opcional'},
+                'fecha_hasta': {'type': 'string', 'description': 'YYYY-MM-DD opcional'}
             },
             'required': ['proyecto', 'fecha_pago']
         }

@@ -61,8 +61,11 @@
         opacity: 1;
     }
     /* Modal movimientos bancarios */
+    #modalMovimientosBanco .modal-dialog {
+        max-width: 1100px;
+    }
     #modalMovimientosBanco .table-responsive {
-        max-height: 400px;
+        max-height: 380px;
         overflow-y: auto;
     }
     #modalMovimientosBanco table {
@@ -74,12 +77,43 @@
         background-color: #f8f9fa;
         z-index: 10;
     }
-    .movimiento-asociado {
-        background-color: #d4edda !important;
-        border-left: 4px solid #28a745 !important;
+    #modalMovimientosBanco .mvto-de-este-recibo {
+        background-color: #e8f5e9 !important;
+        border-left: 4px solid #2e7d32 !important;
     }
-    .movimiento-asociado td {
-        font-weight: 600;
+    #modalMovimientosBanco .mvto-de-otro-recibo {
+        background-color: #eceff1 !important;
+        color: #607d8b;
+        border-left: 4px solid #90a4ae !important;
+    }
+    #modalMovimientosBanco .mvto-disponible.mvto-coincide-valor {
+        background-color: #fff8e1;
+    }
+    #modalMovimientosBanco .mvto-seleccionado {
+        background-color: #e3f2fd !important;
+    }
+    #modalMovimientosBanco .leyenda-asoc span {
+        display: inline-block;
+        margin-right: 12px;
+        font-size: 0.8rem;
+    }
+    #modalMovimientosBanco .leyenda-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        margin-right: 4px;
+        vertical-align: middle;
+    }
+    #resumen-asoc-mvto.suma-ok { color: #2e7d32; font-weight: 600; }
+    #resumen-asoc-mvto.suma-diff { color: #e65100; font-weight: 600; }
+    #asoc-toast {
+        position: absolute;
+        top: 12px;
+        right: 16px;
+        z-index: 20;
+        min-width: 220px;
+        display: none;
     }
     /* Cards de estadísticas */
     .stats-card {
@@ -767,96 +801,570 @@
             }
         });
 
-        // Función para abrir modal de movimientos bancarios
-        const abrirModalMovimientosBancarios = (line) => {
-            // Mostrar información de la solicitud
-            $('#info-solicitud-id').text(line.id);
-            $('#info-cliente').text(`${line.cliente} - ${line.titular.nombrecompleto}`);
-            $('#info-valor').text(formatMoneyValue(line.valor));
-            $('#info-fecha-pago').text(line.fecha_pago);
-            $('#info-recibo-asociado').text(line.recibo_asociado || 'Sin recibo asociado');
+        // --- Asociación bancaria (ver / liberar / reasignar) ---
+        let asocContext = null; // { line, proyecto, recibo, valor, fechaPago }
+        const asocSeleccion = new Map(); // id -> valor
 
-            // Resetear estados
-            $('#movimientos-loading').removeClass('d-none');
-            $('#movimientos-error').addClass('d-none');
-            $('#movimientos-content').addClass('d-none');
-            $('#tbody-movimientos').empty();
+        const parseFechaLocal = (isoDate) => {
+            if (!isoDate) return null;
+            const parts = String(isoDate).split('-').map(Number);
+            if (parts.length < 3 || parts.some(isNaN)) return null;
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+        };
 
-            // Abrir modal
-            $('#modalMovimientosBanco').modal('show');
+        const formatFechaLocal = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
 
-            // Cargar movimientos del API usando el nuevo endpoint
-            const requestData = {
-                'proyecto': line.proyecto.proyecto,
-                'fecha_pago': line.fecha_pago
+        const rangoFechasPago = (fechaPago, dias = 2) => {
+            const base = parseFechaLocal(fechaPago);
+            if (!base) return { desde: '', hasta: '' };
+            const desde = new Date(base);
+            desde.setDate(desde.getDate() - dias);
+            const hasta = new Date(base);
+            hasta.setDate(hasta.getDate() + dias);
+            return { desde: formatFechaLocal(desde), hasta: formatFechaLocal(hasta) };
+        };
+
+        const mostrarAsocToast = (mensaje, tipo) => {
+            const $toast = $('#asoc-toast');
+            $toast
+                .removeClass('alert-success alert-danger alert-warning alert-info')
+                .addClass('alert-' + (tipo || 'info'))
+                .text(mensaje)
+                .fadeIn(150);
+            clearTimeout(mostrarAsocToast._t);
+            mostrarAsocToast._t = setTimeout(() => $toast.fadeOut(300), 2800);
+        };
+
+        const authHeadersJson = () => {
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
             };
-
-            // Si hay recibo asociado, agregarlo a la petición
-            if (line.recibo_asociado) {
-                requestData.recibo_asociado = line.recibo_asociado;
+            if (userAuthToken) {
+                headers.Authorization = `Token ${userAuthToken}`;
             }
+            return headers;
+        };
 
-            $.ajax({
+        const limpiarSeleccionAsoc = () => {
+            asocSeleccion.clear();
+            actualizarResumenAsoc();
+        };
+
+        const actualizarResumenAsoc = () => {
+            let suma = 0;
+            asocSeleccion.forEach((valor) => { suma += Number(valor) || 0; });
+            const cantidad = asocSeleccion.size;
+            const valorRecibo = asocContext ? Number(asocContext.valor) || 0 : 0;
+            const $resumen = $('#resumen-asoc-mvto');
+            $resumen
+                .text(`Seleccionados: ${cantidad} | Suma: $${formatMoneyValue(suma)} | Recibo: $${formatMoneyValue(valorRecibo)}`)
+                .removeClass('suma-ok suma-diff');
+            if (cantidad > 0) {
+                const diff = Math.abs(suma - valorRecibo);
+                const tolerancia = Math.max(valorRecibo * 0.1, 1);
+                $resumen.addClass(diff <= tolerancia ? 'suma-ok' : 'suma-diff');
+            }
+            const puedeAsociar = !!asocContext && !!asocContext.recibo && cantidad > 0;
+            $('#btn-asociar-seleccionados').prop('disabled', !puedeAsociar);
+        };
+
+        const markUsedMovimiento = (movementId, payload) => {
+            return $.ajax({
+                type: 'PATCH',
+                url: `/accounting/api/bank-movements/${movementId}/mark-used`,
+                headers: authHeadersJson(),
+                data: JSON.stringify(payload)
+            });
+        };
+
+        const cargarEmpresasAsoc = () => {
+            const $select = $('#filtro-asoc-empresa');
+            return $.ajax({
                 type: 'GET',
-                url: '/accounting/api/bank-movements/for-receipt',
-                headers: {
-                    'Authorization': 'Token {{request.user.auth_token.key}}'
-                },
-                data: requestData,
+                url: '/ajax_request/empresas',
                 success: function(response) {
-                    $('#movimientos-loading').addClass('d-none');
-
-                    if (response.movimientos && response.movimientos.length > 0) {
-                        $('#movimientos-content').removeClass('d-none');
-                        renderMovimientos(response.movimientos, response.movimiento_asociado_id);
-                        $('#movimientos-count').text(`Total: ${response.movimientos.length} movimiento(s) encontrado(s) en cuenta ${response.cuenta_numero || response.cuenta}`);
-                    } else {
-                        $('#movimientos-error').removeClass('d-none');
-                        const msg = response.detail || 'No se encontraron movimientos bancarios en el rango de fechas especificado.';
-                        $('#movimientos-error-msg').text(msg);
-                    }
-                },
-                error: function(xhr) {
-                    $('#movimientos-loading').addClass('d-none');
-                    $('#movimientos-error').removeClass('d-none');
-                    let errorMsg = 'Error al cargar los movimientos bancarios. Por favor intente nuevamente.';
-                    if (xhr.responseJSON && xhr.responseJSON.detail) {
-                        errorMsg = xhr.responseJSON.detail;
-                    }
-                    $('#movimientos-error-msg').text(errorMsg);
-                    console.error('Error:', xhr);
+                    $select.empty().append('<option value="">Seleccione…</option>');
+                    (response.data || []).forEach((empresa) => {
+                        $select.append(`<option value="${empresa.Nit}">${empresa.nombre}</option>`);
+                    });
                 }
             });
         };
 
-        // Función para renderizar movimientos en la tabla
-        const renderMovimientos = (movimientos, movimientoAsociadoId) => {
-            const $tbody = $('#tbody-movimientos');
-            $tbody.empty();
-
-            movimientos.forEach(mvto => {
-                const isAsociado = movimientoAsociadoId && mvto.id_mvto === movimientoAsociadoId;
-                const rowClass = isAsociado ? 'movimiento-asociado' : '';
-
-                const usadoBadge = mvto.usado_agente
-                    ? '<span class="badge badge-warning">Sí</span>'
-                    : '<span class="badge badge-success">No</span>';
-
-                const row = `
-                    <tr class="${rowClass}">
-                        <td>${mvto.id_mvto}</td>
-                        <td>${mvto.fecha}</td>
-                        <td class="text-right">$${formatMoneyValue(mvto.valor)}</td>
-                        <td class="text-left small">${mvto.referencia || '-'}</td>
-                        <td class="text-left small">${mvto.descripcion || '-'}</td>
-                        <td>${usadoBadge}</td>
-                        <td>${mvto.recibo_asociado_agente || '-'}</td>
-                        <td>${mvto.proyecto_asociado_agente || '-'}</td>
-                    </tr>
-                `;
-                $tbody.append(row);
+        const cargarCuentasAsoc = (empresaNit, cuentaPreseleccionada) => {
+            const $select = $('#filtro-asoc-cuenta');
+            if (!empresaNit) {
+                $select.empty().append('<option value="">Seleccione empresa primero…</option>');
+                return $.Deferred().resolve().promise();
+            }
+            $select.empty().append('<option value="">Cargando…</option>');
+            return $.ajax({
+                type: 'GET',
+                url: '/ajax_request/cuentas_bancarias',
+                data: { empresa: empresaNit },
+                success: function(response) {
+                    $select.empty().append('<option value="">Todas las cuentas de la empresa</option>');
+                    (response.data || []).forEach((cuenta) => {
+                        $select.append(
+                            `<option value="${cuenta.idcuenta}">${cuenta.cuentabanco} — ${cuenta.empresa}</option>`
+                        );
+                    });
+                    if (cuentaPreseleccionada) {
+                        $select.val(String(cuentaPreseleccionada));
+                    }
+                },
+                error: function() {
+                    $select.empty().append('<option value="">Error al cargar cuentas</option>');
+                }
             });
         };
+
+        const fetchAsociadosEsteRecibo = () => {
+            if (!asocContext || !asocContext.recibo) {
+                return $.Deferred().resolve({
+                    movimientos: [],
+                    movimientos_asociados_ids: []
+                }).promise();
+            }
+            const desde = $('#filtro-asoc-desde').val();
+            const hasta = $('#filtro-asoc-hasta').val();
+            return $.ajax({
+                type: 'GET',
+                url: '/accounting/api/bank-movements/for-receipt',
+                headers: { Authorization: `Token ${userAuthToken}` },
+                data: {
+                    proyecto: asocContext.proyecto,
+                    fecha_pago: asocContext.fechaPago,
+                    recibo_asociado: asocContext.recibo,
+                    fecha_desde: desde,
+                    fecha_hasta: hasta
+                }
+            });
+        };
+
+        const sugerirCuentaDesdeRecibo = (autoBuscar) => {
+            if (!asocContext) return;
+            const desde = $('#filtro-asoc-desde').val();
+            const hasta = $('#filtro-asoc-hasta').val();
+            return $.ajax({
+                type: 'GET',
+                url: '/accounting/api/bank-movements/for-receipt',
+                headers: { Authorization: `Token ${userAuthToken}` },
+                data: {
+                    proyecto: asocContext.proyecto,
+                    fecha_pago: asocContext.fechaPago,
+                    recibo_asociado: asocContext.recibo || undefined,
+                    fecha_desde: desde,
+                    fecha_hasta: hasta
+                }
+            }).done(function(response) {
+                asocContext.cuentaSugerida = response.cuenta || null;
+                asocContext.empresaSugerida = response.empresa || null;
+                asocContext.cuentaSugeridaNumero = response.cuenta_numero || null;
+                $('#info-cuenta-banco').text(
+                    response.cuenta_numero
+                        ? `${response.cuenta_numero} (sugerida)`
+                        : 'Sin sugerencia'
+                );
+                const aplicarYBuscar = () => {
+                    if (autoBuscar && (response.empresa || response.cuenta)) {
+                        cargarMovimientosAsociacion();
+                    } else if (autoBuscar) {
+                        $('#movimientos-loading').addClass('d-none');
+                    }
+                };
+                if (response.empresa) {
+                    $('#filtro-asoc-empresa').val(String(response.empresa));
+                    cargarCuentasAsoc(response.empresa, response.cuenta).always(aplicarYBuscar);
+                } else if (response.cuenta) {
+                    // Sin empresa en respuesta: intentar localizarla en cuentas
+                    $.ajax({
+                        type: 'GET',
+                        url: '/ajax_request/cuentas_bancarias',
+                        success: function(cuentasResp) {
+                            const found = (cuentasResp.data || []).find(
+                                (c) => String(c.idcuenta) === String(response.cuenta)
+                            );
+                            if (found && found.nit_empresa) {
+                                asocContext.empresaSugerida = found.nit_empresa;
+                                $('#filtro-asoc-empresa').val(String(found.nit_empresa));
+                                cargarCuentasAsoc(found.nit_empresa, response.cuenta).always(aplicarYBuscar);
+                            } else {
+                                aplicarYBuscar();
+                            }
+                        },
+                        error: aplicarYBuscar
+                    });
+                } else {
+                    aplicarYBuscar();
+                }
+            }).fail(function() {
+                $('#movimientos-loading').addClass('d-none');
+                $('#info-cuenta-banco').text('Sin sugerencia — elige empresa/cuenta');
+            });
+        };
+
+        const cargarMovimientosAsociacion = () => {
+            if (!asocContext) return;
+
+            const fechaDesde = $('#filtro-asoc-desde').val();
+            const fechaHasta = $('#filtro-asoc-hasta').val();
+            const empresa = $('#filtro-asoc-empresa').val();
+            const cuenta = $('#filtro-asoc-cuenta').val();
+
+            if (!fechaDesde || !fechaHasta) {
+                $('#movimientos-error').removeClass('d-none');
+                $('#movimientos-error-msg').text('Indica fecha desde y hasta.');
+                return;
+            }
+            if (fechaDesde > fechaHasta) {
+                $('#movimientos-error').removeClass('d-none');
+                $('#movimientos-error-msg').text('La fecha desde no puede ser mayor que la fecha hasta.');
+                return;
+            }
+            if (!empresa && !cuenta) {
+                $('#movimientos-error').removeClass('d-none');
+                $('#movimientos-error-msg').text('Selecciona una empresa o una cuenta bancaria para buscar.');
+                $('#movimientos-loading').addClass('d-none');
+                $('#movimientos-content').addClass('d-none');
+                return;
+            }
+
+            $('#movimientos-loading').removeClass('d-none');
+            $('#movimientos-error').addClass('d-none');
+            $('#movimientos-content').addClass('d-none');
+            $('#movimientos-empty').addClass('d-none');
+            limpiarSeleccionAsoc();
+
+            const listData = {
+                fecha_desde: fechaDesde,
+                fecha_hasta: fechaHasta,
+                valor_positivo: 'true',
+                page_size: 200
+            };
+            if (cuenta) {
+                listData.cuenta = cuenta;
+            } else {
+                listData.empresa = empresa;
+            }
+
+            const listReq = $.ajax({
+                type: 'GET',
+                url: '/accounting/api/bank-movements/list',
+                headers: { Authorization: `Token ${userAuthToken}` },
+                data: listData
+            });
+            const asocReq = fetchAsociadosEsteRecibo();
+
+            $.when(listReq, asocReq).done(function(listResult, asocResult) {
+                $('#movimientos-loading').addClass('d-none');
+                const listResp = listResult[0] || listResult;
+                const asocResp = asocResult[0] || asocResult;
+
+                const idsAsoc = new Set(
+                    (asocResp.movimientos_asociados_ids || []).map(Number)
+                );
+                (asocResp.movimientos || []).forEach((m) => {
+                    if (m.asociado_a_este_recibo) idsAsoc.add(Number(m.id_mvto));
+                });
+                // También marcar por nro de recibo en la lista
+                if (asocContext.recibo) {
+                    (listResp.movimientos || []).forEach((m) => {
+                        if (String(m.recibo_asociado_agente || '') === String(asocContext.recibo)) {
+                            idsAsoc.add(Number(m.id_mvto));
+                        }
+                    });
+                }
+
+                const byId = new Map();
+                // Primero asociados (aunque estén en otra cuenta/fecha)
+                (asocResp.movimientos || []).forEach((m) => {
+                    if (idsAsoc.has(Number(m.id_mvto))) {
+                        byId.set(Number(m.id_mvto), m);
+                    }
+                });
+                (listResp.movimientos || []).forEach((m) => {
+                    byId.set(Number(m.id_mvto), m);
+                });
+
+                const merged = Array.from(byId.values());
+                const cuentaLabel = cuenta
+                    ? ($('#filtro-asoc-cuenta option:selected').text() || cuenta)
+                    : ($('#filtro-asoc-empresa option:selected').text() || empresa);
+                $('#info-cuenta-banco').text(cuentaLabel);
+
+                if (merged.length > 0) {
+                    $('#movimientos-content').removeClass('d-none');
+                    renderMovimientosAsociacion(merged, Array.from(idsAsoc));
+                    $('#movimientos-count').text(
+                        `${merged.length} movimiento(s) · ${cuentaLabel}`
+                    );
+                } else {
+                    $('#movimientos-empty').removeClass('d-none');
+                    $('#movimientos-empty-msg').text(
+                        listResp.detail || 'No hay movimientos con estos filtros.'
+                    );
+                }
+            }).fail(function(xhr) {
+                $('#movimientos-loading').addClass('d-none');
+                $('#movimientos-error').removeClass('d-none');
+                let errorMsg = 'No se pudieron cargar los movimientos. Intenta de nuevo.';
+                if (xhr.responseJSON && xhr.responseJSON.detail) {
+                    errorMsg = xhr.responseJSON.detail;
+                }
+                $('#movimientos-error-msg').text(errorMsg);
+            });
+        };
+
+        const abrirModalMovimientosBancarios = (line) => {
+            const proyectoNombre = (line.proyecto && line.proyecto.proyecto) || line.proyecto || '';
+            const recibo = line.recibo_asociado || '';
+            asocContext = {
+                line,
+                proyecto: proyectoNombre,
+                recibo,
+                valor: line.valor,
+                fechaPago: line.fecha_pago,
+                cuentaSugerida: null,
+                empresaSugerida: null
+            };
+
+            $('#info-solicitud-id').text(line.id);
+            $('#info-cliente').text(`${line.cliente} - ${(line.titular && line.titular.nombrecompleto) || ''}`);
+            $('#info-valor').text(formatMoneyValue(line.valor));
+            $('#info-fecha-pago').text(line.fecha_pago);
+            $('#info-recibo-asociado').text(recibo || 'Sin recibo (solo consulta)');
+            $('#info-cuenta-banco').text('…');
+
+            if (recibo) {
+                $('#asoc-sin-recibo-alert').addClass('d-none');
+                $('#btn-asociar-seleccionados').removeClass('d-none');
+            } else {
+                $('#asoc-sin-recibo-alert').removeClass('d-none');
+                $('#btn-asociar-seleccionados').addClass('d-none');
+            }
+
+            const rango = rangoFechasPago(line.fecha_pago, 2);
+            $('#filtro-asoc-desde').val(rango.desde);
+            $('#filtro-asoc-hasta').val(rango.hasta);
+            $('#filtro-asoc-empresa').val('');
+            $('#filtro-asoc-cuenta').empty().append('<option value="">Seleccione empresa primero…</option>');
+            $('#movimientos-content').addClass('d-none');
+            $('#movimientos-error').addClass('d-none');
+            $('#movimientos-empty').addClass('d-none');
+            $('#movimientos-loading').removeClass('d-none');
+
+            $('#modalMovimientosBanco').modal('show');
+
+            cargarEmpresasAsoc().always(function() {
+                sugerirCuentaDesdeRecibo(true);
+            });
+        };
+
+        const renderMovimientosAsociacion = (movimientos, idsDeEsteRecibo) => {
+            const $tbody = $('#tbody-movimientos');
+            $tbody.empty();
+            const idsSet = new Set((idsDeEsteRecibo || []).map(Number));
+            const valorRecibo = asocContext ? Number(asocContext.valor) || 0 : 0;
+            const margen = valorRecibo * 0.05;
+            const puedeEditar = !!(asocContext && asocContext.recibo);
+
+            const ordenados = movimientos.slice().sort((a, b) => {
+                const aEste = idsSet.has(Number(a.id_mvto)) || a.asociado_a_este_recibo ? 0 : 1;
+                const bEste = idsSet.has(Number(b.id_mvto)) || b.asociado_a_este_recibo ? 0 : 1;
+                if (aEste !== bEste) return aEste - bEste;
+                const aUsado = a.usado_agente ? 1 : 0;
+                const bUsado = b.usado_agente ? 1 : 0;
+                if (aUsado !== bUsado) return aUsado - bUsado;
+                return String(a.fecha).localeCompare(String(b.fecha));
+            });
+
+            ordenados.forEach((mvto) => {
+                const id = Number(mvto.id_mvto);
+                const deEste = idsSet.has(id) || !!mvto.asociado_a_este_recibo;
+                const deOtro = !!mvto.usado_agente && !deEste;
+                const disponible = !mvto.usado_agente;
+                const coincide = disponible && Math.abs(Number(mvto.valor) - valorRecibo) <= margen;
+
+                let rowClass = 'mvto-disponible';
+                let estadoHtml = '<span class="badge badge-success">Disponible</span>';
+                let accionHtml = '—';
+
+                if (deEste) {
+                    rowClass = 'mvto-de-este-recibo';
+                    estadoHtml = '<span class="badge badge-success">De este recibo</span>';
+                    accionHtml = puedeEditar
+                        ? `<button type="button" class="btn btn-sm btn-outline-danger btn-liberar-mvto" data-id="${id}">
+                             <i class="fas fa-unlink"></i> Liberar
+                           </button>`
+                        : '—';
+                } else if (deOtro) {
+                    rowClass = 'mvto-de-otro-recibo';
+                    const reciboOtro = mvto.recibo_asociado_agente || '?';
+                    estadoHtml = `<span class="badge badge-secondary">Otro: ${reciboOtro}</span>`;
+                    accionHtml = `<button type="button" class="btn btn-sm btn-outline-secondary btn-liberar-mvto" data-id="${id}" data-otro="1" title="Quitar asociación de otro recibo">
+                                    <i class="fas fa-unlock"></i> Liberar
+                                  </button>`;
+                } else if (puedeEditar) {
+                    if (coincide) rowClass += ' mvto-coincide-valor';
+                    accionHtml = `<input type="checkbox" class="chk-asoc-mvto" data-id="${id}" data-valor="${mvto.valor}">`;
+                }
+
+                const reciboTxt = mvto.recibo_asociado_agente
+                    ? `${mvto.recibo_asociado_agente}${mvto.proyecto_asociado_agente ? ' · ' + mvto.proyecto_asociado_agente : ''}`
+                    : '—';
+
+                $tbody.append(`
+                    <tr class="${rowClass}" data-movimiento-id="${id}">
+                        <td class="text-center">${accionHtml}</td>
+                        <td>${id}</td>
+                        <td>${mvto.fecha}</td>
+                        <td class="text-right font-weight-bold">$${formatMoneyValue(mvto.valor)}</td>
+                        <td class="text-left small">${mvto.referencia || '—'}</td>
+                        <td class="text-left small">${mvto.descripcion || '—'}</td>
+                        <td class="text-center">${estadoHtml}</td>
+                        <td class="small">${reciboTxt}</td>
+                    </tr>
+                `);
+            });
+
+            actualizarResumenAsoc();
+        };
+
+        $('#btn-filtrar-asoc').on('click', function() {
+            cargarMovimientosAsociacion();
+        });
+
+        $('#btn-reset-fechas-asoc').on('click', function() {
+            if (!asocContext) return;
+            const rango = rangoFechasPago(asocContext.fechaPago, 2);
+            $('#filtro-asoc-desde').val(rango.desde);
+            $('#filtro-asoc-hasta').val(rango.hasta);
+            cargarMovimientosAsociacion();
+        });
+
+        $('#btn-sugerir-cuenta-asoc').on('click', function() {
+            $('#movimientos-loading').removeClass('d-none');
+            sugerirCuentaDesdeRecibo(true);
+        });
+
+        $('#filtro-asoc-empresa').on('change', function() {
+            cargarCuentasAsoc($(this).val(), null);
+        });
+
+        $(document).on('change', '.chk-asoc-mvto', function() {
+            const $chk = $(this);
+            const id = String($chk.data('id'));
+            const valor = Number($chk.data('valor')) || 0;
+            const $row = $chk.closest('tr');
+            if ($chk.is(':checked')) {
+                asocSeleccion.set(id, valor);
+                $row.addClass('mvto-seleccionado');
+            } else {
+                asocSeleccion.delete(id);
+                $row.removeClass('mvto-seleccionado');
+            }
+            actualizarResumenAsoc();
+        });
+
+        $(document).on('click', '.btn-liberar-mvto', function() {
+            const $btn = $(this);
+            const id = $btn.data('id');
+            const esOtro = $btn.data('otro') == 1;
+            const msg = esOtro
+                ? 'Este movimiento está asociado a otro recibo. ¿Quieres liberarlo para poder usarlo aquí?'
+                : '¿Liberar este movimiento de la asociación con el recibo actual?';
+            if (!confirm(msg)) return;
+
+            $btn.prop('disabled', true);
+            markUsedMovimiento(id, { usado_agente: false })
+                .done(function() {
+                    mostrarAsocToast('Movimiento liberado.', 'success');
+                    cargarMovimientosAsociacion();
+                })
+                .fail(function(xhr) {
+                    $btn.prop('disabled', false);
+                    let msgErr = 'No se pudo liberar el movimiento.';
+                    if (xhr.status === 403) {
+                        msgErr = 'No tienes permiso para cambiar asociaciones bancarias.';
+                    } else if (xhr.responseJSON && xhr.responseJSON.detail) {
+                        msgErr = xhr.responseJSON.detail;
+                    }
+                    mostrarAsocToast(msgErr, 'danger');
+                });
+        });
+
+        $('#btn-asociar-seleccionados').on('click', function() {
+            if (!asocContext || !asocContext.recibo) {
+                alert('La solicitud aún no tiene recibo. No se puede asociar.');
+                return;
+            }
+            if (asocSeleccion.size === 0) {
+                alert('Selecciona al menos un movimiento disponible.');
+                return;
+            }
+
+            let suma = 0;
+            const ids = [];
+            asocSeleccion.forEach((valor, id) => {
+                suma += Number(valor) || 0;
+                ids.push(id);
+            });
+            const valorRecibo = Number(asocContext.valor) || 0;
+            const diff = Math.abs(suma - valorRecibo);
+            const tolerancia = Math.max(valorRecibo * 0.1, 1);
+            if (diff > tolerancia) {
+                if (!confirm(
+                    `La suma ($${formatMoneyValue(suma)}) difiere del valor del recibo ($${formatMoneyValue(valorRecibo)}).\n\n¿Continuar?`
+                )) {
+                    return;
+                }
+            }
+
+            const $btn = $(this);
+            $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Asociando…');
+
+            const requests = ids.map((id) => markUsedMovimiento(id, {
+                usado_agente: true,
+                recibo_asociado_agente: asocContext.recibo,
+                proyecto_asociado_agente: asocContext.proyecto
+            }));
+
+            $.when.apply($, requests)
+                .done(function() {
+                    mostrarAsocToast(
+                        ids.length === 1 ? 'Movimiento asociado.' : `${ids.length} movimientos asociados.`,
+                        'success'
+                    );
+                    cargarMovimientosAsociacion();
+                })
+                .fail(function(xhr) {
+                    let msgErr = 'No se pudo completar la asociación.';
+                    if (xhr && xhr.status === 403) {
+                        msgErr = 'No tienes permiso para cambiar asociaciones bancarias.';
+                    } else if (xhr && xhr.responseJSON && xhr.responseJSON.detail) {
+                        msgErr = xhr.responseJSON.detail;
+                    }
+                    mostrarAsocToast(msgErr, 'danger');
+                })
+                .always(function() {
+                    $btn.html('<i class="fas fa-link"></i> Asociar seleccionados');
+                    actualizarResumenAsoc();
+                });
+        });
+
+        $('#modalMovimientosBanco').on('hidden.bs.modal', function() {
+            asocContext = null;
+            limpiarSeleccionAsoc();
+            $('#tbody-movimientos').empty();
+            $('#asoc-toast').hide();
+        });
 
         // Click en cards de estadísticas para filtrar
         $('.stats-card').on('click', function() {
@@ -995,7 +1503,7 @@
     <a class="dropdown-item disabled" id='editar' href="#"><i class="far fa-edit"></i>&nbsp;Editar</a>
     <a class="dropdown-item disabled" id='descargar' href="#"><i class="far fa-save"></i>&nbsp;Descargar</a>
     <a class="dropdown-item" id='soporte' href="#"><i class="far fa-file-pdf"></i>&nbsp;Ver soporte</a>
-    <a class="dropdown-item" id='ver-movimientos' href="#"><i class="fas fa-money-bill-wave"></i>&nbsp;Banco Asoc.</a>
+    <a class="dropdown-item" id='ver-movimientos' href="#"><i class="fas fa-exchange-alt"></i>&nbsp;Asoc. bancaria</a>
     <a class="dropdown-item disabled" id='quitar-revision' href="#"><i class="fas fa-flag-checkered"></i>&nbsp;Quitar rev. manual</a>
     {%if request.user.is_superuser%}<a class="dropdown-item" id='eliminar' href="#"><i class="fas fa-trash-alt"></i>&nbsp;Eliminar</a>{%endif%}
 </div>   
@@ -1020,28 +1528,83 @@
     </div>
   </div>
 
-<!-- Modal Movimientos Bancarios -->
+<!-- Modal Movimientos Bancarios / Asociación -->
 <div class="modal fade" id="modalMovimientosBanco" tabindex="-1" aria-labelledby="modalMovimientosBancoLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl">
-        <div class="modal-content">
+        <div class="modal-content position-relative">
+            <div id="asoc-toast" class="alert alert-info py-2 px-3 shadow-sm mb-0" role="alert"></div>
             <div class="modal-header">
-                <h5 class="modal-title" id="modalMovimientosBancoLabel">Movimientos Bancarios</h5>
+                <h5 class="modal-title" id="modalMovimientosBancoLabel">
+                    <i class="fas fa-exchange-alt mr-1"></i> Asociación bancaria
+                </h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                <div class="alert alert-info mb-3">
-                    <strong>Solicitud:</strong> <span id="info-solicitud-id"></span><br>
-                    <strong>Cliente:</strong> <span id="info-cliente"></span><br>
-                    <strong>Valor:</strong> $<span id="info-valor"></span><br>
-                    <strong>Fecha de pago:</strong> <span id="info-fecha-pago"></span><br>
-                    <strong>Recibo asociado:</strong> <span id="info-recibo-asociado"></span>
+                <div class="alert alert-light border mb-3 py-2">
+                    <div class="row small">
+                        <div class="col-md-3"><strong>Solicitud:</strong> <span id="info-solicitud-id"></span></div>
+                        <div class="col-md-5"><strong>Cliente:</strong> <span id="info-cliente"></span></div>
+                        <div class="col-md-4"><strong>Valor:</strong> $<span id="info-valor"></span></div>
+                    </div>
+                    <div class="row small mt-1">
+                        <div class="col-md-3"><strong>Fecha pago:</strong> <span id="info-fecha-pago"></span></div>
+                        <div class="col-md-5"><strong>Recibo:</strong> <span id="info-recibo-asociado"></span></div>
+                        <div class="col-md-4"><strong>Cuenta:</strong> <span id="info-cuenta-banco">—</span></div>
+                    </div>
+                </div>
+
+                <div id="asoc-sin-recibo-alert" class="alert alert-warning d-none py-2 small">
+                    Esta solicitud aún no tiene recibo. Puedes consultar movimientos, pero no asociar ni liberar los de este recibo.
+                </div>
+
+                <div class="form-row mb-2">
+                    <div class="col-md-3">
+                        <label class="small mb-0">Empresa</label>
+                        <select id="filtro-asoc-empresa" class="form-control form-control-sm">
+                            <option value="">Seleccione…</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="small mb-0">Cuenta bancaria</label>
+                        <select id="filtro-asoc-cuenta" class="form-control form-control-sm">
+                            <option value="">Seleccione empresa primero…</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="small mb-0">Desde</label>
+                        <input type="date" id="filtro-asoc-desde" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="small mb-0">Hasta</label>
+                        <input type="date" id="filtro-asoc-hasta" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end">
+                        <button type="button" id="btn-filtrar-asoc" class="btn btn-sm btn-primary btn-block" title="Buscar">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <button type="button" id="btn-reset-fechas-asoc" class="btn btn-sm btn-outline-secondary">
+                        ±2 días (fecha de pago)
+                    </button>
+                    <button type="button" id="btn-sugerir-cuenta-asoc" class="btn btn-sm btn-outline-info ml-1">
+                        Usar cuenta sugerida
+                    </button>
+                    <span class="text-muted small ml-2">Puedes buscar en otra empresa, cuenta o rango de fechas.</span>
+                </div>
+
+                <div class="leyenda-asoc mb-2 text-muted">
+                    <span><i class="leyenda-dot" style="background:#2e7d32"></i> De este recibo</span>
+                    <span><i class="leyenda-dot" style="background:#90a4ae"></i> De otro recibo</span>
+                    <span><i class="leyenda-dot" style="background:#fff8e1;border:1px solid #ccc"></i> Disponible (valor cercano)</span>
                 </div>
 
                 <div id="movimientos-loading" class="text-center py-4">
                     <i class="fas fa-spinner fa-spin fa-2x"></i>
-                    <p class="mt-2">Cargando movimientos bancarios...</p>
+                    <p class="mt-2 mb-0">Cargando movimientos…</p>
                 </div>
 
                 <div id="movimientos-error" class="alert alert-danger d-none" role="alert">
@@ -1049,35 +1612,44 @@
                     <span id="movimientos-error-msg"></span>
                 </div>
 
+                <div id="movimientos-empty" class="alert alert-secondary d-none" role="alert">
+                    <span id="movimientos-empty-msg"></span>
+                </div>
+
                 <div id="movimientos-content" class="d-none">
-                    <p class="text-muted small">
-                        <i class="fas fa-info-circle"></i>
-                        Mostrando movimientos con valores positivos en rango de ±1 día de la fecha de pago.
-                        El movimiento asociado (si existe) aparece resaltado en verde.
+                    <p class="text-muted small mb-2">
+                        Verde = ya ligados a este recibo (puedes <strong>Liberar</strong>).
+                        Marca disponibles con el check y pulsa <strong>Asociar seleccionados</strong> para corregir o completar.
                     </p>
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered table-hover" id="tabla-movimientos-banco">
+                        <table class="table table-sm table-bordered table-hover mb-1" id="tabla-movimientos-banco">
                             <thead class="thead-light">
                                 <tr>
+                                    <th style="width:110px">Acción</th>
                                     <th>ID</th>
                                     <th>Fecha</th>
                                     <th>Valor</th>
                                     <th>Referencia</th>
                                     <th>Descripción</th>
-                                    <th>Usado</th>
-                                    <th>Recibo</th>
-                                    <th>Proyecto</th>
+                                    <th>Estado</th>
+                                    <th>Recibo / proyecto</th>
                                 </tr>
                             </thead>
                             <tbody id="tbody-movimientos">
                             </tbody>
                         </table>
                     </div>
-                    <p class="text-muted small text-center mt-2" id="movimientos-count"></p>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <p class="text-muted small mb-0" id="movimientos-count"></p>
+                        <p class="small mb-0" id="resumen-asoc-mvto">Seleccionados: 0 | Suma: $0 | Recibo: $0</p>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                <button type="button" id="btn-asociar-seleccionados" class="btn btn-success" disabled>
+                    <i class="fas fa-link"></i> Asociar seleccionados
+                </button>
             </div>
         </div>
     </div>

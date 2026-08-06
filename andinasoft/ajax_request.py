@@ -869,7 +869,8 @@ def ajax_cuentas_bancarias(request):
         data.append({
             'idcuenta': cuenta.idcuenta,
             'cuentabanco': cuenta.cuentabanco,
-            'empresa': cuenta.empresa
+            'empresa': cuenta.empresa,
+            'nit_empresa': cuenta.nit_empresa_id,
         })
     return JsonResponse({'data': data})
 

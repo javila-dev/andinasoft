@@ -423,7 +423,9 @@ def _handle_call_tool(params: dict, user) -> dict:
         'bank_movements_for_receipt': lambda args: bank_movements_for_receipt(
             proyecto=args.get('proyecto'),
             fecha_pago=args.get('fecha_pago'),
-            recibo_asociado=args.get('recibo_asociado')
+            recibo_asociado=args.get('recibo_asociado'),
+            fecha_desde=args.get('fecha_desde'),
+            fecha_hasta=args.get('fecha_hasta'),
         ),
         'comisiones_list': lambda args: comisiones_list(
             proyecto=args.get('proyecto'),

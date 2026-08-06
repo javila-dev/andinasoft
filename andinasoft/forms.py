@@ -789,7 +789,7 @@ class form_nuevo_recibo(forms.Form):
     """ fecha.widget.attrs.update(id='fecha_recibo') """
     numsolicitud=forms.CharField(max_length=255,label='Numero Solicitud',required=False)
     numsolicitud.widget.attrs.update(readonly=True)
-    movimiento_banco_id=forms.CharField(max_length=255,label='ID Movimiento Banco',required=False)
+    movimiento_banco_id=forms.CharField(max_length=1000,label='ID Movimiento Banco',required=False)
     movimiento_banco_id.widget.attrs.update(style='display:none;')
     numrecibo=forms.CharField(max_length=255,label='Numero Recibo')
     numrecibo.widget.attrs.update(readonly=True,id='numrecibo')

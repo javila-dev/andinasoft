@@ -45,6 +45,28 @@
         color: white;
         z-index: 10;
     }
+    #modalMovimientosBanco tr.mvto-ya-asociado {
+        background-color: #eceff1;
+        color: #607d8b;
+    }
+    #modalMovimientosBanco tr.mvto-ya-asociado td {
+        font-style: italic;
+    }
+    #modalMovimientosBanco tr.mvto-seleccionado {
+        background-color: #e8f5e9;
+    }
+    #modalMovimientosBanco tr.mvto-coincide-valor:not(.mvto-ya-asociado) {
+        background-color: #fff8e1;
+    }
+    #resumen-seleccion-mvto {
+        font-size: 0.9rem;
+    }
+    #resumen-seleccion-mvto.suma-ok {
+        color: #2e7d32;
+    }
+    #resumen-seleccion-mvto.suma-diff {
+        color: #e65100;
+    }
 </style>
 {%endblock%}
 {%block content%}
@@ -335,7 +357,7 @@
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title" id="modalMovimientosBancoLabel">
-                        <i class="fas fa-university mr-2"></i>Seleccionar Movimiento Bancario
+                        <i class="fas fa-university mr-2"></i>Asociar movimientos bancarios
                     </h5>
                     <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
@@ -346,8 +368,13 @@
                         <i class="fas fa-info-circle mr-2"></i>
                         <strong>Recibo:</strong> #<span id="modal-num-recibo"></span> |
                         <strong>Cliente:</strong> <span id="modal-cliente"></span> |
-                        <strong>Valor:</strong> $<span id="modal-valor"></span>
+                        <strong>Valor:</strong> $<span id="modal-valor"></span> |
+                        <strong>Fecha pago:</strong> <span id="modal-fecha-pago"></span>
                     </div>
+                    <p class="text-muted small mb-3">
+                        Puedes marcar uno o varios movimientos (por si el recibo es la suma de varios pagos).
+                        Los ya asociados aparecen en gris solo como referencia y no se pueden elegir.
+                    </p>
 
                     <div class="form-row mb-3">
                         <div class="col-md-3">
@@ -393,22 +420,29 @@
                     </div>
 
                     <div id="movimientos-table-wrapper" style="display: none;">
-                        <table id="tablaMovimientosBanco" class="table table-sm table-hover table-bordered">
-                            <thead class="thead-dark">
-                                <tr>
-                                    <th>Fecha</th>
-                                    <th>Descripción</th>
-                                    <th>Referencia</th>
-                                    <th>Valor</th>
-                                    <th>Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="movimientos-tbody">
-                            </tbody>
-                        </table>
+                        <div class="table-responsive">
+                            <table id="tablaMovimientosBanco" class="table table-sm table-hover table-bordered">
+                                <thead class="thead-dark">
+                                    <tr>
+                                        <th style="width:40px;"></th>
+                                        <th>Fecha</th>
+                                        <th>Descripción</th>
+                                        <th>Referencia</th>
+                                        <th>Valor</th>
+                                        <th>Estado</th>
+                                        <th>Recibo asociado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="movimientos-tbody">
+                                </tbody>
+                            </table>
+                        </div>
                         <div id="no-movimientos" class="alert alert-warning" style="display: none;">
                             <i class="fas fa-info-circle mr-2"></i>
                             No se encontraron movimientos bancarios para los filtros seleccionados.
+                        </div>
+                        <div id="resumen-seleccion-mvto" class="mt-2 font-weight-bold">
+                            Seleccionados: 0 | Suma: $0 | Recibo: $0
                         </div>
                     </div>
                 </div>
@@ -419,6 +453,9 @@
                     <button type="button" id="btn-guardar-sin-movimiento" class="btn btn-warning">
                         <i class="fas fa-forward mr-1"></i>Guardar sin asociar movimiento
                     </button>
+                    <button type="button" id="btn-confirmar-asociacion" class="btn btn-success" disabled>
+                        <i class="fas fa-link mr-1"></i>Confirmar asociación
+                    </button>
                 </div>
             </div>
         </div>
@@ -428,6 +465,69 @@
     // Variables globales
     let valorRecibo = null;
     let fechaPagoRecibo = null;
+    const movimientosSeleccionados = new Map(); // id -> valor
+
+    function parseFechaLocal(isoDate) {
+        if (!isoDate) return null;
+        const parts = String(isoDate).split('-').map(Number);
+        if (parts.length < 3 || parts.some(isNaN)) return null;
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function formatFechaLocal(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+    }
+
+    function rangoFechasPago(fechaPago, dias) {
+        const base = parseFechaLocal(fechaPago);
+        if (!base) return { desde: '', hasta: '' };
+        const desde = new Date(base);
+        desde.setDate(desde.getDate() - dias);
+        const hasta = new Date(base);
+        hasta.setDate(hasta.getDate() + dias);
+        return { desde: formatFechaLocal(desde), hasta: formatFechaLocal(hasta) };
+    }
+
+    function aplicarRangoFechasPorDefecto() {
+        const rango = rangoFechasPago(fechaPagoRecibo, 2);
+        $('#filtro-fecha-desde-mvto').val(rango.desde);
+        $('#filtro-fecha-hasta-mvto').val(rango.hasta);
+    }
+
+    function formatMoneyCO(valor) {
+        return Number(valor || 0).toLocaleString('es-CO', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    }
+
+    function actualizarResumenSeleccion() {
+        let suma = 0;
+        movimientosSeleccionados.forEach(function(valor) {
+            suma += Number(valor) || 0;
+        });
+        const cantidad = movimientosSeleccionados.size;
+        const $resumen = $('#resumen-seleccion-mvto');
+        $resumen
+            .text('Seleccionados: ' + cantidad + ' | Suma: $' + formatMoneyCO(suma) + ' | Recibo: $' + formatMoneyCO(valorRecibo))
+            .removeClass('suma-ok suma-diff');
+
+        if (cantidad > 0) {
+            const diff = Math.abs(suma - valorRecibo);
+            const tolerancia = Math.max(valorRecibo * 0.1, 1);
+            $resumen.addClass(diff <= tolerancia ? 'suma-ok' : 'suma-diff');
+        }
+
+        $('#btn-confirmar-asociacion').prop('disabled', cantidad === 0);
+    }
+
+    function limpiarSeleccionMovimientos() {
+        movimientosSeleccionados.clear();
+        actualizarResumenSeleccion();
+    }
 
     // Función para cargar empresas
     function cargarEmpresas() {
@@ -484,37 +584,24 @@
 
     // Función para abrir el modal de movimientos bancarios
     function abrirModalMovimientos() {
-        // Obtener datos del formulario
         const numRecibo = $('#numrecibo').val();
         const cliente = $('#nombre_cliente').val();
         const valor = $('#valor_recibo').val().replace(/\./g, '').replace(/,/g, '');
         const fechaPago = $('#fecha_de_pago').val();
 
-        valorRecibo = parseInt(valor);
+        valorRecibo = parseInt(valor, 10);
         fechaPagoRecibo = fechaPago;
+        limpiarSeleccionMovimientos();
 
-        // Actualizar información en el modal
         $('#modal-num-recibo').text(numRecibo);
         $('#modal-cliente').text(cliente);
-        $('#modal-valor').text(parseInt(valor).toLocaleString('es-CO'));
+        $('#modal-valor').text(formatMoneyCO(valorRecibo));
+        $('#modal-fecha-pago').text(fechaPago || '-');
 
-        // Configurar fechas por defecto (15 días antes y después de la fecha de pago)
-        const fechaPagoDate = new Date(fechaPago);
-        const fechaDesde = new Date(fechaPagoDate);
-        fechaDesde.setDate(fechaDesde.getDate() - 15);
-        const fechaHasta = new Date(fechaPagoDate);
-        fechaHasta.setDate(fechaHasta.getDate() + 15);
-
-        $('#filtro-fecha-desde-mvto').val(fechaDesde.toISOString().split('T')[0]);
-        $('#filtro-fecha-hasta-mvto').val(fechaHasta.toISOString().split('T')[0]);
-
-        // Cargar empresas
+        aplicarRangoFechasPorDefecto();
         cargarEmpresas();
 
-        // Abrir modal
         $('#modalMovimientosBanco').modal('show');
-
-        // No cargar movimientos automáticamente, esperar a que el usuario seleccione filtros
     }
 
     // Función para cargar movimientos bancarios
@@ -534,21 +621,19 @@
             return;
         }
 
-        // Mostrar loading
         $('#movimientos-loading').show();
         $('#movimientos-error').hide();
         $('#movimientos-table-wrapper').hide();
+        limpiarSeleccionMovimientos();
 
-        // Construir parámetros de la petición
+        // Incluye usados (informativos) y disponibles; solo positivos (ingresos).
         const requestData = {
             'fecha_desde': fechaDesde,
             'fecha_hasta': fechaHasta,
-            'usado_agente': 'false',
             'valor_positivo': 'true',
-            'page_size': 100
+            'page_size': 200
         };
 
-        // Agregar empresa o cuenta según lo seleccionado
         if (cuenta) {
             requestData.cuenta = cuenta;
         } else if (empresa) {
@@ -568,7 +653,7 @@
             },
             error: function(xhr) {
                 $('#movimientos-loading').hide();
-                const errorMsg = xhr.responseJSON?.detail || 'Error al cargar movimientos bancarios';
+                const errorMsg = (xhr.responseJSON && xhr.responseJSON.detail) || 'Error al cargar movimientos bancarios';
                 mostrarError(errorMsg);
             }
         });
@@ -583,6 +668,7 @@
             $('#no-movimientos').show();
             $('#tablaMovimientosBanco').hide();
             $('#movimientos-table-wrapper').show();
+            actualizarResumenSeleccion();
             return;
         }
 
@@ -590,31 +676,56 @@
         $('#tablaMovimientosBanco').show();
         $('#movimientos-table-wrapper').show();
 
-        // Filtrar movimientos que coincidan aproximadamente con el valor
-        const margen = valorRecibo * 0.05; // 5% de margen
+        const margen = valorRecibo * 0.05;
 
-        movimientos.forEach(function(mvto) {
+        // Disponibles primero, luego ya asociados
+        const ordenados = movimientos.slice().sort(function(a, b) {
+            const aUsado = a.usado_agente ? 1 : 0;
+            const bUsado = b.usado_agente ? 1 : 0;
+            if (aUsado !== bUsado) return aUsado - bUsado;
+            return String(a.fecha).localeCompare(String(b.fecha));
+        });
+
+        ordenados.forEach(function(mvto) {
+            const yaAsociado = !!mvto.usado_agente;
             const diferencia = Math.abs(mvto.valor - valorRecibo);
-            const esCoincidente = diferencia <= margen;
-            const rowClass = esCoincidente ? 'table-success' : '';
+            const esCoincidente = !yaAsociado && diferencia <= margen;
+            const clases = [];
+            if (yaAsociado) clases.push('mvto-ya-asociado');
+            if (esCoincidente) clases.push('mvto-coincide-valor');
+
+            let celdaAccion;
+            let estadoHtml;
+            let reciboHtml;
+
+            if (yaAsociado) {
+                celdaAccion = '<span class="text-muted" title="Ya asociado">—</span>';
+                estadoHtml = '<span class="badge badge-secondary">Ya asociado</span>';
+                const recibo = mvto.recibo_asociado_agente || '-';
+                const proyecto = mvto.proyecto_asociado_agente ? (' (' + mvto.proyecto_asociado_agente + ')') : '';
+                reciboHtml = recibo + proyecto;
+            } else {
+                celdaAccion = `<input type="checkbox" class="chk-seleccionar-mvto"
+                    data-id="${mvto.id_mvto}" data-valor="${mvto.valor}">`;
+                estadoHtml = '<span class="badge badge-success">Disponible</span>';
+                reciboHtml = '-';
+            }
 
             const row = `
-                <tr class="${rowClass}" data-movimiento-id="${mvto.id_mvto}">
+                <tr class="${clases.join(' ')}" data-movimiento-id="${mvto.id_mvto}">
+                    <td class="text-center">${celdaAccion}</td>
                     <td>${mvto.fecha}</td>
                     <td>${mvto.descripcion || '-'}</td>
                     <td>${mvto.referencia || '-'}</td>
-                    <td class="text-right font-weight-bold">$${mvto.valor.toLocaleString('es-CO', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-primary btn-seleccionar-mvto"
-                                data-id="${mvto.id_mvto}"
-                                data-valor="${mvto.valor}">
-                            <i class="fas fa-check mr-1"></i>Seleccionar
-                        </button>
-                    </td>
+                    <td class="text-right font-weight-bold">$${formatMoneyCO(mvto.valor)}</td>
+                    <td class="text-center">${estadoHtml}</td>
+                    <td class="small">${reciboHtml}</td>
                 </tr>
             `;
             $tbody.append(row);
         });
+
+        actualizarResumenSeleccion();
     }
 
     // Función para mostrar errores
@@ -624,12 +735,14 @@
         $('#movimientos-table-wrapper').hide();
     }
 
-    // Función para guardar el recibo con movimiento
-    function guardarReciboConMovimiento(movimientoId = null) {
-        $('#movimiento_banco_id_hidden').val(movimientoId || '');
+    // Función para guardar el recibo con movimiento(s)
+    function guardarReciboConMovimiento(movimientoIds) {
+        const valorCampo = Array.isArray(movimientoIds) && movimientoIds.length
+            ? movimientoIds.join(',')
+            : '';
+        $('#movimiento_banco_id_hidden').val(valorCampo);
         $('#modalMovimientosBanco').modal('hide');
 
-        // Crear y enviar el formulario con el botón de guardar-recaudo
         const form = $('#form-recibo');
         $('<input>').attr({
             type: 'hidden',
@@ -644,7 +757,6 @@
         abrirModalMovimientos();
     });
 
-    // Cuando cambia la empresa, cargar las cuentas bancarias
     $('#filtro-empresa-mvto').change(function() {
         const empresaNit = $(this).val();
         cargarCuentasBancarias(empresaNit);
@@ -655,18 +767,10 @@
     });
 
     $('#btn-limpiar-filtros').click(function() {
-        const fechaPagoDate = new Date(fechaPagoRecibo);
-        const fechaDesde = new Date(fechaPagoDate);
-        fechaDesde.setDate(fechaDesde.getDate() - 15);
-        const fechaHasta = new Date(fechaPagoDate);
-        fechaHasta.setDate(fechaHasta.getDate() + 15);
-
-        $('#filtro-fecha-desde-mvto').val(fechaDesde.toISOString().split('T')[0]);
-        $('#filtro-fecha-hasta-mvto').val(fechaHasta.toISOString().split('T')[0]);
+        aplicarRangoFechasPorDefecto();
         $('#filtro-empresa-mvto').val('');
         $('#filtro-cuenta-mvto').empty().append('<option value="">Seleccione empresa primero...</option>');
-
-        // Limpiar tabla y mensajes
+        limpiarSeleccionMovimientos();
         $('#movimientos-tbody').empty();
         $('#movimientos-table-wrapper').hide();
         $('#movimientos-error').hide();
@@ -674,30 +778,58 @@
 
     $('#btn-guardar-sin-movimiento').click(function() {
         if (confirm('¿Estás seguro de guardar este recibo sin asociar un movimiento bancario?')) {
-            guardarReciboConMovimiento(null);
+            guardarReciboConMovimiento([]);
         }
     });
 
-    $(document).on('click', '.btn-seleccionar-mvto', function() {
-        const movimientoId = $(this).data('id');
-        const valor = $(this).data('valor');
+    $('#btn-confirmar-asociacion').click(function() {
+        if (movimientosSeleccionados.size === 0) {
+            alert('Selecciona al menos un movimiento bancario.');
+            return;
+        }
 
-        if (Math.abs(valor - valorRecibo) > valorRecibo * 0.1) {
-            if (!confirm(`El valor del movimiento ($${valor.toLocaleString()}) difiere del valor del recibo ($${valorRecibo.toLocaleString()}).\n\n¿Deseas continuar?`)) {
+        let suma = 0;
+        const ids = [];
+        movimientosSeleccionados.forEach(function(valor, id) {
+            suma += Number(valor) || 0;
+            ids.push(id);
+        });
+
+        const diff = Math.abs(suma - valorRecibo);
+        const tolerancia = Math.max(valorRecibo * 0.1, 1);
+        if (diff > tolerancia) {
+            const msg = 'La suma de los movimientos ($' + formatMoneyCO(suma) +
+                ') difiere del valor del recibo ($' + formatMoneyCO(valorRecibo) +
+                ').\n\n¿Deseas continuar?';
+            if (!confirm(msg)) {
                 return;
             }
         }
 
-        guardarReciboConMovimiento(movimientoId);
+        guardarReciboConMovimiento(ids);
     });
 
-    // Limpiar al cerrar el modal
+    $(document).on('change', '.chk-seleccionar-mvto', function() {
+        const $chk = $(this);
+        const id = String($chk.data('id'));
+        const valor = Number($chk.data('valor')) || 0;
+        const $row = $chk.closest('tr');
+
+        if ($chk.is(':checked')) {
+            movimientosSeleccionados.set(id, valor);
+            $row.addClass('mvto-seleccionado');
+        } else {
+            movimientosSeleccionados.delete(id);
+            $row.removeClass('mvto-seleccionado');
+        }
+        actualizarResumenSeleccion();
+    });
+
     $('#modalMovimientosBanco').on('hidden.bs.modal', function() {
         $('#movimientos-tbody').empty();
         $('#movimientos-error').hide();
         $('#movimientos-table-wrapper').hide();
+        limpiarSeleccionMovimientos();
     });
     </script>
 {%endblock%}
-
-  

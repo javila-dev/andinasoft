@@ -919,9 +919,10 @@ def api_bank_movement_mark_used(request, movement_id):
 def api_bank_movements_for_receipt(request):
     """
     Endpoint para obtener movimientos bancarios relacionados con una solicitud de recibo.
-    Si la solicitud tiene recibo asociado, busca el movimiento por recibo+proyecto y usa esa cuenta.
+    Si la solicitud tiene recibo asociado, busca movimientos por recibo+proyecto y usa esa cuenta.
     Si no tiene recibo, usa el proyecto para buscar la cuenta más común.
-    Luego retorna movimientos con valor positivo en rango ±1 día de la fecha de pago.
+    Retorna movimientos con valor positivo en rango de fechas (default ±2 días)
+    e incluye siempre los ya asociados al recibo aunque queden fuera del rango.
     """
     if not request.user.is_authenticated or request.user.is_anonymous:
         return JsonResponse({'detail': 'Token inválido o no autenticado'}, status=401)
@@ -929,6 +930,8 @@ def api_bank_movements_for_receipt(request):
     proyecto = request.GET.get('proyecto')
     fecha_pago = request.GET.get('fecha_pago')
     recibo_asociado = request.GET.get('recibo_asociado')
+    fecha_desde_param = request.GET.get('fecha_desde')
+    fecha_hasta_param = request.GET.get('fecha_hasta')
 
     if not proyecto or not fecha_pago:
         return JsonResponse({'detail':'Debes enviar "proyecto" y "fecha_pago" (YYYY-MM-DD)'}, status=400)
@@ -937,39 +940,41 @@ def api_bank_movements_for_receipt(request):
     if not fecha_pago_dt:
         return JsonResponse({'detail':'Formato de fecha inválido, usa YYYY-MM-DD'}, status=400)
 
-    # Calcular rango de fechas ±1 día
     from datetime import timedelta
-    fecha_desde = fecha_pago_dt - timedelta(days=1)
-    fecha_hasta = fecha_pago_dt + timedelta(days=1)
+    if fecha_desde_param or fecha_hasta_param:
+        fecha_desde = parse_date(fecha_desde_param) if fecha_desde_param else None
+        fecha_hasta = parse_date(fecha_hasta_param) if fecha_hasta_param else None
+        if not fecha_desde or not fecha_hasta:
+            return JsonResponse({
+                'detail': 'Si envías rango, usa "fecha_desde" y "fecha_hasta" (YYYY-MM-DD)'
+            }, status=400)
+        if fecha_desde > fecha_hasta:
+            return JsonResponse({
+                'detail': '"fecha_desde" no puede ser mayor que "fecha_hasta"'
+            }, status=400)
+    else:
+        fecha_desde = fecha_pago_dt - timedelta(days=2)
+        fecha_hasta = fecha_pago_dt + timedelta(days=2)
 
     cuenta_obj = None
-    movimiento_asociado_id = None
+    movimientos_asociados_ids = []
+    asociados_qs = egresos_banco.objects.none()
 
-    # Si tiene recibo asociado, buscar el movimiento por recibo
-    # Primero intenta con recibo + proyecto, luego solo con recibo
     if recibo_asociado and recibo_asociado.strip():
-        try:
-            # Intentar primero con recibo + proyecto
-            movimiento = egresos_banco.objects.filter(
-                recibo_asociado_agente=recibo_asociado,
-                proyecto_asociado_agente=proyecto
-            ).first()
+        asociados_qs = egresos_banco.objects.filter(
+            recibo_asociado_agente=recibo_asociado,
+            proyecto_asociado_agente=proyecto
+        ).select_related('empresa', 'cuenta')
+        if not asociados_qs.exists():
+            asociados_qs = egresos_banco.objects.filter(
+                recibo_asociado_agente=recibo_asociado
+            ).select_related('empresa', 'cuenta')
 
-            # Si no encuentra, buscar solo por recibo
-            if not movimiento:
-                movimiento = egresos_banco.objects.filter(
-                    recibo_asociado_agente=recibo_asociado
-                ).first()
+        movimientos_asociados_ids = list(asociados_qs.values_list('id_mvto', flat=True))
+        if asociados_qs.exists():
+            cuenta_obj = asociados_qs.first().cuenta
 
-            if movimiento:
-                cuenta_obj = movimiento.cuenta
-                movimiento_asociado_id = movimiento.id_mvto
-        except Exception:
-            pass
-
-    # Si no se encontró cuenta por recibo, buscar la cuenta más común del proyecto
     if not cuenta_obj:
-        # Buscar movimientos recientes del proyecto para encontrar cuenta común
         movimientos_proyecto = egresos_banco.objects.filter(
             proyecto_asociado_agente=proyecto
         ).values('cuenta').annotate(
@@ -982,25 +987,30 @@ def api_bank_movements_for_receipt(request):
             except cuentas_pagos.DoesNotExist:
                 pass
 
-    # Si aún no hay cuenta, retornar error
     if not cuenta_obj:
         return JsonResponse({
             'detail': 'No se encontró una cuenta bancaria asociada al proyecto',
             'movimientos': [],
             'cuenta': None,
-            'movimiento_asociado_id': None
+            'movimiento_asociado_id': None,
+            'movimientos_asociados_ids': [],
         }, status=200)
 
-    # Buscar movimientos en la cuenta con valor positivo en el rango de fechas
     queryset = egresos_banco.objects.filter(
         cuenta=cuenta_obj,
         fecha__range=(fecha_desde, fecha_hasta),
         valor__gt=0
+    ).select_related('empresa', 'cuenta')
+
+    # Incluir asociados al recibo aunque estén fuera del rango de fechas
+    ids_rango = list(queryset.values_list('pk', flat=True))
+    ids_union = list(set(ids_rango) | set(movimientos_asociados_ids))
+    queryset = egresos_banco.objects.filter(
+        pk__in=ids_union
     ).select_related('empresa', 'cuenta').order_by('fecha', 'pk')
 
-    movimientos = []
-    for mvto in queryset:
-        movimientos.append({
+    def _serialize_mvto(mvto):
+        return {
             'id_mvto': mvto.id_mvto,
             'empresa': mvto.empresa.pk,
             'cuenta': mvto.cuenta.pk,
@@ -1016,13 +1026,18 @@ def api_bank_movements_for_receipt(request):
             'usado_agente': mvto.usado_agente,
             'fecha_uso_agente': mvto.fecha_uso_agente.isoformat(sep=' ') if mvto.fecha_uso_agente else None,
             'recibo_asociado_agente': mvto.recibo_asociado_agente,
-            'proyecto_asociado_agente': mvto.proyecto_asociado_agente
-        })
+            'proyecto_asociado_agente': mvto.proyecto_asociado_agente,
+            'asociado_a_este_recibo': mvto.id_mvto in movimientos_asociados_ids,
+        }
+
+    movimientos = [_serialize_mvto(mvto) for mvto in queryset]
 
     return JsonResponse({
         'cuenta': cuenta_obj.pk,
         'cuenta_numero': cuenta_obj.cuentabanco,
-        'movimiento_asociado_id': movimiento_asociado_id,
+        'empresa': cuenta_obj.nit_empresa_id,
+        'movimiento_asociado_id': movimientos_asociados_ids[0] if movimientos_asociados_ids else None,
+        'movimientos_asociados_ids': movimientos_asociados_ids,
         'fecha_desde': fecha_desde.isoformat(),
         'fecha_hasta': fecha_hasta.isoformat(),
         'total_movimientos': len(movimientos),
