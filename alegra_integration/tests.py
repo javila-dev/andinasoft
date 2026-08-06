@@ -1559,6 +1559,14 @@ class CajaBuilderTests(SimpleTestCase):
         gasto, _ = self._gasto(tipo='cuenta_cobro')
         built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
         self.assertEqual(built.payload['numberTemplate'], {'id': 'num-caja_cuenta_cobro'})
+        self.assertEqual(built.payload['paymentMethod'], 'CASH')
+        self.assertEqual(built.payload['paymentType'], 'CASH')
+
+    def test_caja_bill_fe_omits_payment_method_and_type(self):
+        gasto, _ = self._gasto(tipo='fe')
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        self.assertNotIn('paymentMethod', built.payload)
+        self.assertNotIn('paymentType', built.payload)
 
     def test_caja_bill_with_iva_uses_tax_on_base_line(self):
         gasto, _ = self._gasto(valor=119000, subtotal_val=100000, valor_iva=19000.0)

@@ -256,6 +256,7 @@
       </div>
 </div>
 <div class="dropdown-menu dropdown-menu-right contextmenu ctx-menu-compact" id='contextMenuLegal'>
+  <a class="dropdown-item" data-action="ver_detalle" href="#"><i class="fas fa-eye fa-fw"></i>Ver detalle</a>
   <a class="dropdown-item" data-action="ver_soporte" href="#"><i class="fas fa-file-pdf fa-fw"></i>Soporte</a>
   <a class="dropdown-item" data-action="ver_soporte_prov" href="#"><i class="fas fa-id-card fa-fw"></i>Proveedor</a>
   <div class="dropdown-divider"></div>
@@ -278,6 +279,7 @@
   <a class="dropdown-item disabled" data-action="eliminar_leg" id="eliminar_leg" href="#"><i class="fas fa-trash fa-fw"></i>Eliminar</a>
 </div>
 <div class="dropdown-menu dropdown-menu-right contextmenu ctx-menu-compact" id='contextMenureemb'>
+  <a class="dropdown-item" data-action="ver_detalle_r" href="#"><i class="fas fa-eye fa-fw"></i>Ver detalle</a>
   <a class="dropdown-item" data-action="ver_soporte_r" href="#"><i class="fas fa-file-pdf fa-fw"></i>Soporte</a>
   {% if es_contabilidad %}
   <a class="dropdown-item" data-action="devolver_r" href="#"><i class="fas fa-rotate-left fa-fw"></i>Devolver</a>
@@ -438,6 +440,25 @@
         {%crispy form_taxes%}
       </div>
       </div>
+  </div>
+</div>
+<div class="modal fade" id="modalDetalleGasto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Detalle del gasto</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <dl class="row mb-0 small" id="detalle-gasto-body"></dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-detalle-soporte">Ver soporte</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
   </div>
 </div> 
 <div class="modal fade" id="modalRegLegal" style="z-index:1070" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
@@ -636,6 +657,47 @@
     } else if (line.estado === 'Legalizado') {
       enable('#change_tipo_doc');
     }
+  }
+
+  function selectLabel(selector, id) {
+    if (id == null || id === '') return '—';
+    const $opt = $(selector).find('option[value="' + id + '"]');
+    const text = ($opt.text() || '').trim();
+    return text || String(id);
+  }
+
+  function fmtMoney(val) {
+    if (val == null || val === '') return '—';
+    return '$' + new Intl.NumberFormat('en-EN').format(val);
+  }
+
+  function showGastoDetalle(line) {
+    if (!line || line.tipo !== 'gasto') return;
+    const ivaId = line.cuenta_iva && line.cuenta_iva.id;
+    const rteId = line.cuenta_rte && line.cuenta_rte.id;
+    const rows = [
+      ['Fecha', line.fecha || '—'],
+      ['Tercero', line.tercero || '—'],
+      ['NIT / CC', line.nit_tercero || '—'],
+      ['Descripción', line.descripcion || '—'],
+      ['Concepto', line.concepto || '—'],
+      ['Tipo doc. soporte', labelTipoSoporte(line.tipo_documento_soporte)],
+      ['Subtotal', fmtMoney(line.subtotal)],
+      ['IVA', fmtMoney(line.iva) + (ivaId ? ' · ' + selectLabel('#id_tipo_iva', ivaId) : '')],
+      ['Retención', fmtMoney(line.rte) + (rteId ? ' · ' + selectLabel('#id_tipo_rte', rteId) : '')],
+      ['Rte asumida', line.rte_asumida ? 'Sí' : 'No'],
+      ['Total', fmtMoney(line.valor != null ? Math.abs(line.valor) : null)],
+      ['Estado', line.estado || '—'],
+      ['Aprobado por', line.usuario_aprueba || '—'],
+      ['En reembolso', line.legalizado || '—'],
+    ];
+    const html = rows.map(([k, v]) => (
+      '<dt class="col-sm-4 text-muted">' + k + '</dt>' +
+      '<dd class="col-sm-8">' + $('<div>').text(String(v)).html() + '</dd>'
+    )).join('');
+    $('#detalle-gasto-body').html(html);
+    $('#btn-detalle-soporte').data('soporte', line.soporte || '');
+    $('#modalDetalleGasto').modal('show');
   }
 
   $(document).ready(function(){
@@ -990,6 +1052,18 @@
       positionContextMenu($('#contextMenuLegal'), e);
       return false;
     })
+    $('#tabla_movimientos tbody').on('dblclick', 'tr', function() {
+      const line = tabla_movimientos.row(this).data();
+      if (!line || line.tipo !== 'gasto') return;
+      tabla_movimientos.$('tr.selected').removeClass('selected');
+      $(this).addClass('selected');
+      showGastoDetalle(line);
+    })
+    $('#btn-detalle-soporte').on('click', function() {
+      const ruta = resolveMediaUrl($(this).data('soporte'));
+      if (!ruta) return;
+      window.open(ruta, 'Soporte gasto', params);
+    })
     $('#tabla_movimientos_reembolso tbody').on('contextmenu','tr',function(e){
       
       let line = tabla_movimientos_reemb.row(this).data()
@@ -1007,6 +1081,13 @@
       $(this).addClass('selected')
       positionContextMenu($('#contextMenureemb'), e);
       return false;
+    })
+    $('#tabla_movimientos_reembolso tbody').on('dblclick', 'tr', function() {
+      const line = tabla_movimientos_reemb.row(this).data();
+      if (!line || line.tipo !== 'gasto') return;
+      tabla_movimientos_reemb.$('tr.selected').removeClass('selected');
+      $(this).addClass('selected');
+      showGastoDetalle(line);
     })
     $('#tabla_reembolsos tbody').on('contextmenu','tr',function(e){
       
@@ -1046,6 +1127,10 @@
       const action = $item.data('action');
       var line = tabla_movimientos.row('.selected').data()
       switch(action){
+          case "ver_detalle":
+            showGastoDetalle(line);
+            break;
+
           case "ver_soporte":
             var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte legalizacion anticipo',params)
@@ -1252,6 +1337,9 @@
       const action = $item.data('action');
       var line = tabla_movimientos_reemb.row('.selected').data()
       switch(action){
+          case "ver_detalle_r":
+            showGastoDetalle(line);
+            break;
           case "ver_soporte_r":
             var ruta = resolveMediaUrl(line.soporte)
             window.open(ruta,'Soporte legalizacion anticipo',params)

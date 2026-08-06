@@ -1599,6 +1599,10 @@ class CajaGastoBillBuilder:
         if tipo == gastos_caja.TIPO_DOC_CUENTA_COBRO:
             numeration_id = self.resolver.numeration('caja_cuenta_cobro')
             payload['numberTemplate'] = {'id': numeration_id}
+            # Colombia DSE: forma de pago Contado + medio de pago Efectivo
+            # https://developer.alegra.com/reference/colombia
+            payload['paymentMethod'] = 'CASH'
+            payload['paymentType'] = 'CASH'
 
         if vr_rte and not gasto.rte_asumida:
             if not gasto.cuenta_rte_id:
