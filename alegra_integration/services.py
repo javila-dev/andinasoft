@@ -826,11 +826,24 @@ class AlegraIntegrationService:
             return {'number_templates'}
         return None
 
-    def reference_sync(self, *, empresa_id, ref_type=None):
+    def reference_sync(
+        self,
+        *,
+        empresa_id,
+        ref_type=None,
+        number_template_types=None,
+        journal_max_pages=None,
+        journal_stop_after_pages_without_new=None,
+    ):
         empresa = empresas.objects.get(pk=empresa_id)
         client = AlegraMCPClient(empresa)
         sections = self._reference_sections_for_type(ref_type)
-        return client.get_reference_data(sections=sections)
+        return client.get_reference_data(
+            sections=sections,
+            number_template_types=number_template_types,
+            journal_max_pages=journal_max_pages,
+            journal_stop_after_pages_without_new=journal_stop_after_pages_without_new,
+        )
 
     def contact_sync(self, *, empresa_id):
         empresa = empresas.objects.get(pk=empresa_id)

@@ -1514,8 +1514,10 @@ function buildSupportNumerationOptions(templates) {
 function loadSupportNumerationTemplates() {
   const empresa = $('#selEmpresa').val();
   if (!empresa) return $.Deferred().reject().promise();
-  return $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`)
-    .then(data => mergeSupportBillNumerationTemplates((data || {}).number_templates || {}));
+  return $.get(
+    `${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`
+    + `&document_types=${encodeURIComponent('supportDocument,bill')}`
+  ).then(data => mergeSupportBillNumerationTemplates((data || {}).number_templates || {}));
 }
 
 function pickScopedMapping(mappings, proyecto) {
@@ -2469,40 +2471,54 @@ function ensureCommissionConfigLoaded() {
   $('#selCommissionRetefuente').html('<option value="">Cargando…</option>');
   resetCommissionCostCenterUi();
 
-  const journalReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=journal_numerations`);
-  const retentionsReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`);
-  const supportReq = $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`);
-
-  $.when(journalReq, retentionsReq, supportReq).done((jRes, rRes, sRes) => {
-    const jData = (jRes && jRes[0]) || jRes || {};
-    const rData = (rRes && rRes[0]) || rRes || {};
-    const sData = (sRes && sRes[0]) || sRes || {};
-    remoteCommissionJournalTemplates = (jData.journal_numerations || []).slice();
-    $('#selCommissionJournalNumeration').html(buildCommissionJournalNumerationOptions());
-    const nt = sData.number_templates || {};
-    const pools = [...(nt.supportDocument || []), ...(nt.bill || [])];
-    const seen = {};
-    const uniq = [];
-    pools.forEach(t => {
-      const id = t && t.id;
-      if (!id || seen[id]) return;
-      seen[id] = true;
-      uniq.push(t);
-    });
-    $('#selCommissionSupportNumeration').html(buildSupportNumerationOptions(uniq));
-    $('#selCommissionRetefuente').html(buildRetentionOptions(rData.retentions || []));
-    loadCommissionMappingsCurrent().always(() => {
-      if (($('#selCommissionProject').val() || '').trim()) {
-        loadCommissionCostCenterCatalog();
-      }
-    });
-  }).fail(xhr => {
-    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
-    showAlert('error', `No se pudieron cargar catálogos: <strong>${escHtml(msg)}</strong>`);
-    $('#selCommissionSupportNumeration').html('<option value="">— seleccionar —</option>');
-    $('#selCommissionJournalNumeration').html('<option value="">— seleccionar —</option>');
-    loadCommissionMappingsCurrent();
+  // Mapeos locales primero (rápido); catálogos Alegra en paralelo e independientes
+  // para que un 504 de journals no bloquee soporte/retenciones.
+  loadCommissionMappingsCurrent().always(() => {
+    if (($('#selCommissionProject').val() || '').trim()) {
+      loadCommissionCostCenterCatalog();
+    }
   });
+
+  const catalogFail = (sel, label) => (xhr) => {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'timeout';
+    showAlert('error', `No se pudo cargar ${label}: <strong>${escHtml(msg)}</strong>`);
+    $(sel).html('<option value="">— seleccionar —</option>');
+  };
+
+  $.get(
+    `${API.refs}?empresa=${encodeURIComponent(empresa)}&type=number_templates`
+    + `&document_types=${encodeURIComponent('supportDocument,bill')}`
+  )
+    .done(sData => {
+      const nt = (sData && sData.number_templates) || {};
+      const pools = [...(nt.supportDocument || []), ...(nt.bill || [])];
+      const seen = {};
+      const uniq = [];
+      pools.forEach(t => {
+        const id = t && t.id;
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        uniq.push(t);
+      });
+      $('#selCommissionSupportNumeration').html(buildSupportNumerationOptions(uniq));
+    })
+    .fail(catalogFail('#selCommissionSupportNumeration', 'numeraciones de documento soporte'));
+
+  $.get(
+    `${API.refs}?empresa=${encodeURIComponent(empresa)}&type=journal_numerations`
+    + '&journal_max_pages=8&journal_stop_after=3'
+  )
+    .done(jData => {
+      remoteCommissionJournalTemplates = ((jData && jData.journal_numerations) || []).slice();
+      $('#selCommissionJournalNumeration').html(buildCommissionJournalNumerationOptions());
+    })
+    .fail(catalogFail('#selCommissionJournalNumeration', 'numeraciones de asiento (journals)'));
+
+  $.get(`${API.refs}?empresa=${encodeURIComponent(empresa)}&type=retentions`)
+    .done(rData => {
+      $('#selCommissionRetefuente').html(buildRetentionOptions((rData && rData.retentions) || []));
+    })
+    .fail(catalogFail('#selCommissionRetefuente', 'retenciones'));
 }
 
 function searchCommissionCategoryInline(query, menuSel, hiddenSel, pickSel, timerRef) {

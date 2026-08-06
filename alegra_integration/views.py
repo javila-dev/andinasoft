@@ -371,7 +371,36 @@ def references_data(request):
         if not empresa_id:
             return JsonResponse({'detail': 'Empresa requerida'}, status=400)
 
-        cache_key = f'alegra:refs:{empresa_id}:{ref_type or "all"}'
+        document_types_raw = (request.GET.get('document_types') or '').strip()
+        number_template_types = None
+        if document_types_raw:
+            number_template_types = [
+                part.strip() for part in document_types_raw.split(',') if part.strip()
+            ]
+
+        journal_max_pages = None
+        journal_stop = None
+        raw_max = (request.GET.get('journal_max_pages') or '').strip()
+        raw_stop = (request.GET.get('journal_stop_after') or '').strip()
+        if raw_max:
+            try:
+                journal_max_pages = max(1, min(int(raw_max), 40))
+            except (TypeError, ValueError):
+                return JsonResponse({'detail': 'journal_max_pages inválido'}, status=400)
+        if raw_stop:
+            try:
+                journal_stop = max(1, min(int(raw_stop), 20))
+            except (TypeError, ValueError):
+                return JsonResponse({'detail': 'journal_stop_after inválido'}, status=400)
+
+        cache_suffix = ref_type or 'all'
+        if number_template_types:
+            cache_suffix += ':nt:' + ','.join(number_template_types)
+        if journal_max_pages is not None:
+            cache_suffix += f':jmp:{journal_max_pages}'
+        if journal_stop is not None:
+            cache_suffix += f':jsa:{journal_stop}'
+        cache_key = f'alegra:refs:{empresa_id}:{cache_suffix}'
         cached = cache.get(cache_key)
         if cached is not None:
             return JsonResponse(cached)
@@ -379,6 +408,9 @@ def references_data(request):
         data = AlegraIntegrationService(user=request.user).reference_sync(
             empresa_id=empresa_id,
             ref_type=ref_type or None,
+            number_template_types=number_template_types,
+            journal_max_pages=journal_max_pages,
+            journal_stop_after_pages_without_new=journal_stop,
         )
 
         if ref_type in ('banks', 'categories', 'cost_centers'):

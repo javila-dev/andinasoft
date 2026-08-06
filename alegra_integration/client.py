@@ -507,12 +507,21 @@ class AlegraMCPClient:
         """GET /taxes — listado plano [{ id, name, percentage, type, ... }]."""
         return self._rest_list_all('/taxes')
 
-    def get_reference_data(self, *, sections=None):
+    def get_reference_data(
+        self,
+        *,
+        sections=None,
+        number_template_types=None,
+        journal_max_pages=None,
+        journal_stop_after_pages_without_new=None,
+    ):
         """
         Catálogos Alegra para Referencias.
         sections: iterable opcional con claves a consultar
         (banks, categories, cost_centers, journal_numerations, number_templates, retentions, taxes).
         Si es None, consulta todo (puede tardar por journal_numerations).
+        number_template_types: opcional, limita documentType de /number-templates.
+        journal_max_pages: opcional, limita el barrido de journals para numeraciones.
         """
         want = set(sections) if sections is not None else None
 
@@ -532,26 +541,54 @@ class AlegraMCPClient:
         if _include('cost_centers'):
             data['cost_centers'] = self._rest_list_all('/cost-centers')
         if _include('journal_numerations'):
-            data['journal_numerations'] = self._rest_journal_numerations()
+            jkwargs = {}
+            if journal_max_pages is not None:
+                jkwargs['max_pages'] = journal_max_pages
+            if journal_stop_after_pages_without_new is not None:
+                jkwargs['stop_after_pages_without_new'] = journal_stop_after_pages_without_new
+            data['journal_numerations'] = self._rest_journal_numerations(**jkwargs)
         if _include('number_templates'):
-            data['number_templates'] = self._rest_number_templates()
+            data['number_templates'] = self._rest_number_templates(
+                document_types=number_template_types,
+            )
         if _include('retentions'):
             data['retentions'] = self._rest_list_all('/retentions')
         if _include('taxes'):
             data['taxes'] = self._rest_taxes()
         return data
 
-    def _rest_number_templates(self):
+    def _rest_number_templates(self, document_types=None):
+        """
+        Lista plantillas de numeración por documentType.
+        document_types: iterable opcional (invoice, bill, supportDocument, …).
+        Si es None, consulta todos (más lento).
+        """
+        all_types = (
+            'invoice',
+            'estimate',
+            'transactionIn',
+            'transactionOut',
+            'creditNote',
+            'debitNote',
+            'incomeDebitNote',
+            'supportDocument',
+            'bill',
+        )
+        if document_types:
+            wanted = []
+            seen = set()
+            for raw in document_types:
+                key = str(raw or '').strip()
+                if not key or key in seen or key not in all_types:
+                    continue
+                seen.add(key)
+                wanted.append(key)
+        else:
+            wanted = list(all_types)
+
         return {
-            'invoice': self._rest_list_all('/number-templates', extra_params={'documentType': 'invoice'}),
-            'estimate': self._rest_list_all('/number-templates', extra_params={'documentType': 'estimate'}),
-            'transactionIn': self._rest_list_all('/number-templates', extra_params={'documentType': 'transactionIn'}),
-            'transactionOut': self._rest_list_all('/number-templates', extra_params={'documentType': 'transactionOut'}),
-            'creditNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'creditNote'}),
-            'debitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'debitNote'}),
-            'incomeDebitNote': self._rest_list_all('/number-templates', extra_params={'documentType': 'incomeDebitNote'}),
-            'supportDocument': self._rest_list_all('/number-templates', extra_params={'documentType': 'supportDocument'}),
-            'bill': self._rest_list_all('/number-templates', extra_params={'documentType': 'bill'}),
+            key: self._rest_list_all('/number-templates', extra_params={'documentType': key})
+            for key in wanted
         }
 
     def _rest_journal_numerations(self, *, max_pages=40, stop_after_pages_without_new=8):
@@ -564,7 +601,9 @@ class AlegraMCPClient:
         limit = 30  # Alegra journals GET max is 30
         pages = 0
         no_new_pages = 0
-        while pages < int(max_pages or 0):
+        max_pages = max(1, min(int(max_pages or 40), 40))
+        stop_after = max(1, min(int(stop_after_pages_without_new or 8), 20))
+        while pages < max_pages:
             page = self.rest('GET', f'/journals?start={start}&limit={limit}&order_direction=DESC&fields=numberTemplate,type')
             if isinstance(page, dict) and 'data' in page:
                 page = page['data']
@@ -591,7 +630,7 @@ class AlegraMCPClient:
                 no_new_pages += 1
             else:
                 no_new_pages = 0
-            if no_new_pages >= int(stop_after_pages_without_new or 0):
+            if no_new_pages >= stop_after:
                 break
             if len(page) < limit:
                 break
