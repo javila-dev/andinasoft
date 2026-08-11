@@ -478,7 +478,7 @@
               <th style="width:130px">Clave</th>
               <th style="width:90px">ID Alegra</th>
               <th>Error / Info</th>
-              <th style="width:88px" class="text-center">Acciones</th>
+              <th style="width:110px" class="text-center">Acciones</th>
             </tr>
           </thead>
           <tbody id="docsBody">
@@ -780,6 +780,50 @@
   </div>
 </div>
 
+<!-- ─────────── Revisar gasto caja (duplicados Alegra) ─────────── -->
+<div class="modal fade" id="cajaDupModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#2d4a42;color:white;border:none">
+        <h6 class="modal-title mb-0">
+          <i class="fas fa-clone mr-2"></i>Revisar gasto en Alegra
+        </h6>
+        <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-2" id="cajaDupMsg">—</p>
+        <div class="table-responsive" style="max-height:360px;overflow-y:auto">
+          <table class="table table-sm table-hover mb-0">
+            <thead class="thead-light">
+              <tr>
+                <th style="width:40px"></th>
+                <th>Id Alegra</th>
+                <th>Fecha</th>
+                <th class="text-right">Valor</th>
+                <th>Nro</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="cajaDupBody"></tbody>
+          </table>
+        </div>
+        <div id="cajaDupConfirmBox" class="alert alert-danger py-2 mt-3 mb-0" style="display:none;font-size:.875rem">
+          <div id="cajaDupConfirmText"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-outline-danger" id="cajaDupBtnPrepare" onclick="cajaDupPrepareDelete()" disabled>
+          Eliminar seleccionados
+        </button>
+        <button type="button" class="btn btn-danger" id="cajaDupBtnConfirm" style="display:none" onclick="cajaDupConfirmDelete()">
+          Sí, eliminar en Alegra
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block jsbottom %}
@@ -800,6 +844,8 @@ const API = {
   bulkCreateContacts: '/accounting/alegra/contacts/bulk-create-from-batch',
   missingInAlegra: '/accounting/alegra/contacts/missing-in-alegra-from-batch',
   refSync:      '/accounting/alegra/reference-sync',
+  cajaDupReview: '/accounting/alegra/caja-bills/duplicates/review',
+  cajaDupDelete: '/accounting/alegra/caja-bills/duplicates/delete',
 };
 
 // ── State ──────────────────────────────────────
@@ -1328,16 +1374,143 @@ function buildDocActionButtons(doc, globalIdx) {
     onclick="event.stopPropagation(); showDocDetail(${globalIdx})" title="Ver detalle">
     <i class="fas fa-search"></i>
   </button>`;
-  if (!canSendDoc(doc)) {
-    return `<div class="d-flex justify-content-center" style="gap:4px">${viewBtn}</div>`;
-  }
-  return `<div class="d-flex justify-content-center" style="gap:4px">
-    ${viewBtn}
-    <button type="button" class="btn btn-xs btn-outline-success doc-send-btn" style="padding:1px 8px;font-size:11px"
+  const reviewBtn = (doc.document_type === 'caja_bill' && doc.status === 'sent' && doc.id)
+    ? `<button type="button" class="btn btn-xs btn-outline-warning" style="padding:1px 8px;font-size:11px"
+        onclick="event.stopPropagation(); reviewCajaBillDuplicates(${doc.id})"
+        title="Revisar gasto en Alegra (duplicados)">
+        <i class="fas fa-clone"></i>
+      </button>`
+    : '';
+  const parts = [viewBtn, reviewBtn];
+  if (canSendDoc(doc)) {
+    parts.push(`<button type="button" class="btn btn-xs btn-outline-success doc-send-btn" style="padding:1px 8px;font-size:11px"
       onclick="event.stopPropagation(); sendSingleDoc(${doc.id}, ${globalIdx})" title="Enviar solo este documento a Alegra">
       <i class="fas fa-paper-plane"></i>
-    </button>
-  </div>`;
+    </button>`);
+  }
+  return `<div class="d-flex justify-content-center" style="gap:4px">${parts.filter(Boolean).join('')}</div>`;
+}
+
+let cajaDupState = null;
+
+function reviewCajaBillDuplicates(documentId) {
+  cajaDupState = null;
+  $('#cajaDupBody').html('<tr><td colspan="6" class="text-center text-muted py-3">Consultando Alegra…</td></tr>');
+  $('#cajaDupMsg').text('Buscando documentos del mismo gasto en Alegra…');
+  $('#cajaDupConfirmBox').hide();
+  $('#cajaDupBtnPrepare').prop('disabled', true).show();
+  $('#cajaDupBtnConfirm').hide();
+  $('#cajaDupModal').modal('show');
+
+  $.ajax({
+    url: API.cajaDupReview,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({ document_id: documentId }),
+  }).done(function(data) {
+    cajaDupState = data;
+    renderCajaDupModal(data);
+  }).fail(function(xhr) {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    $('#cajaDupMsg').text(msg || 'No se pudo revisar el gasto.');
+    $('#cajaDupBody').html(`<tr><td colspan="6" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`);
+  });
+}
+
+function renderCajaDupModal(data) {
+  $('#cajaDupMsg').text(data.message || '');
+  const tbody = $('#cajaDupBody').empty();
+  const bills = data.bills || [];
+  if (!bills.length) {
+    tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">Sin resultados en Alegra</td></tr>');
+    $('#cajaDupBtnPrepare').prop('disabled', true);
+    return;
+  }
+  bills.forEach(b => {
+    const badges = [];
+    if (b.is_keep) badges.push('<span class="badge badge-success">Conservar</span>');
+    if (b.journal_locked) badges.push('<span class="badge badge-secondary">En asiento</span>');
+    if (b.amount_mismatch) badges.push('<span class="badge badge-warning">Valor distinto</span>');
+    if (b.date_mismatch) badges.push('<span class="badge badge-warning">Fecha distinta</span>');
+    const canDel = !!b.can_delete;
+    const cb = canDel
+      ? `<input type="checkbox" class="caja-dup-cb" value="${escHtml(b.id)}" onchange="cajaDupUpdatePrepare()">`
+      : '<span class="text-muted">—</span>';
+    const rowCls = b.is_keep ? 'table-success' : (b.journal_locked ? 'table-secondary' : '');
+    tbody.append(`
+      <tr class="${rowCls}">
+        <td>${cb}</td>
+        <td><code style="font-size:11px">${escHtml(b.id || '—')}</code></td>
+        <td><small>${escHtml(b.date || '—')}</small></td>
+        <td class="text-right"><small>${formatMoneyCop(b.total)}</small></td>
+        <td><small>${escHtml(b.number || '—')}</small></td>
+        <td><small>${badges.join(' ') || '—'}</small></td>
+      </tr>`);
+  });
+  $('#cajaDupConfirmBox').hide();
+  $('#cajaDupBtnConfirm').hide();
+  $('#cajaDupBtnPrepare').show();
+  cajaDupUpdatePrepare();
+}
+
+function cajaDupSelectedIds() {
+  const ids = [];
+  $('.caja-dup-cb:checked').each(function() { ids.push(String($(this).val())); });
+  return ids;
+}
+
+function cajaDupUpdatePrepare() {
+  const n = cajaDupSelectedIds().length;
+  $('#cajaDupBtnPrepare').prop('disabled', n === 0);
+  $('#cajaDupConfirmBox').hide();
+  $('#cajaDupBtnConfirm').hide();
+  $('#cajaDupBtnPrepare').show();
+}
+
+function cajaDupPrepareDelete() {
+  const ids = cajaDupSelectedIds();
+  if (!ids.length) return;
+  $('#cajaDupConfirmText').html(
+    `Se eliminarán <strong>${ids.length}</strong> factura(s) de compra en Alegra `
+    + `(ids: <code>${ids.map(escHtml).join(', ')}</code>). Esta acción no se puede deshacer.`
+  );
+  $('#cajaDupConfirmBox').show();
+  $('#cajaDupBtnPrepare').hide();
+  $('#cajaDupBtnConfirm').show();
+}
+
+function cajaDupConfirmDelete() {
+  if (!cajaDupState || !cajaDupState.document_id) return;
+  const ids = cajaDupSelectedIds();
+  if (!ids.length) return;
+  const $btn = $('#cajaDupBtnConfirm').prop('disabled', true);
+  $.ajax({
+    url: API.cajaDupDelete,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      document_id: cajaDupState.document_id,
+      keep_alegra_id: cajaDupState.keep_alegra_id || '',
+      delete_ids: ids,
+      confirm: true,
+    }),
+  }).done(function(data) {
+    const ok = data.deleted || 0;
+    const fail = (data.results || []).filter(r => !r.ok);
+    log(ok ? 'success' : 'warning',
+      `Limpieza Alegra gasto ${escHtml(data.gasto_id || '')}: eliminados ${ok}`
+      + (fail.length ? `; ${fail.length} con error` : '')
+    );
+    fail.forEach(r => log('error', `No se eliminó ${escHtml(r.id)}: ${escHtml(r.error || '')}`));
+    reviewCajaBillDuplicates(cajaDupState.document_id);
+  }).fail(function(xhr) {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    log('error', `Error al eliminar duplicados: ${escHtml(msg)}`);
+  }).always(function() {
+    $btn.prop('disabled', false);
+  });
 }
 
 function onSingleDocSendSuccess(data) {

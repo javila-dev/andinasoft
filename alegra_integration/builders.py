@@ -1589,9 +1589,10 @@ class CajaGastoBillBuilder:
         categories = [base_line]
 
         marker = f'[caja-gasto:{gasto.pk}]'
+        # Marker al inicio: no se pierde si Alegra o Facturas.descripcion truncan a 255.
         obs = (gasto.descripcion or '').strip()
         if marker not in obs:
-            obs = f'{obs} {marker}'.strip() if obs else marker
+            obs = f'{marker} {obs}'.strip() if obs else marker
 
         payload = {
             'date': _date(gasto.fecha_gasto),

@@ -33,6 +33,7 @@ SKIP_REASON_LABELS = {
     'unknown_subject': 'Evento no soportado',
     'not_processed': 'No procesado',
     'radicado_not_created': 'No creado',
+    'caja_gasto_bill': 'Bill de caja (sin radicado)',
 }
 
 def resolve_empresa_nit_for_log(log, empresa_filter='', bill_id=''):
@@ -144,15 +145,22 @@ def infer_inbound_process_result(empresa_nit, payload):
         return {'processed': False, 'skip_reason': 'missing_bill_id'}
 
     from andinasoft.models import empresas
+    from alegra_integration.bill_reconcile import skip_factura_for_caja_bill
+
     try:
-        empresas.objects.get(pk=empresa_nit)
+        empresa_obj = empresas.objects.get(pk=empresa_nit)
     except empresas.DoesNotExist:
         return {'processed': False, 'skip_reason': 'empresa_not_found'}
 
     composite = composite_alegra_bill_id(empresa_nit, bill_id)
     fac = Facturas.objects.filter(alegra_bill_id=composite).first()
+    skip = skip_factura_for_caja_bill(bill, empresa=empresa_obj)
 
     if subject == 'new-bill':
+        if skip and not fac:
+            out = dict(skip)
+            out['alegra_bill_id'] = composite
+            return out
         if fac:
             return {
                 'processed': True,
@@ -165,6 +173,10 @@ def infer_inbound_process_result(empresa_nit, payload):
     if subject == 'edit-bill':
         if fac:
             return {'processed': True, 'updated': True, 'factura_pk': fac.pk, 'alegra_bill_id': composite}
+        if skip:
+            out = dict(skip)
+            out['alegra_bill_id'] = composite
+            return out
         return {'processed': False, 'skip_reason': 'factura_not_found_for_edit', 'alegra_bill_id': composite}
 
     if subject == 'delete-bill':

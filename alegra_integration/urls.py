@@ -47,5 +47,7 @@ urlpatterns = [
     path('contacts/bulk-create-from-batch', views.contacts_bulk_create_from_batch, name='alegra-contacts-bulk-create-from-batch'),
     path('contacts/missing-in-alegra-from-batch', views.contacts_missing_in_alegra_from_batch, name='alegra-contacts-missing-in-alegra-from-batch'),
     path('reference-sync', views.reference_sync, name='alegra-reference-sync'),
+    path('caja-bills/duplicates/review', views.caja_bills_duplicates_review, name='alegra-caja-bills-duplicates-review'),
+    path('caja-bills/duplicates/delete', views.caja_bills_duplicates_delete, name='alegra-caja-bills-duplicates-delete'),
     path('debug/mapping-check', views.debug_mapping_check, name='alegra-debug-mapping-check'),
 ]

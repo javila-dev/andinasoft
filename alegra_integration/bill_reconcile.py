@@ -83,6 +83,95 @@ def caja_bill_marker(gasto_pk):
     return f'[caja-gasto:{gasto_pk}]'
 
 
+def caja_gasto_pk_from_text(text):
+    """PK del gasto si el texto incluye `[caja-gasto:{pk}]`; vacío si no."""
+    match = CAJA_GASTO_MARKER_RE.search(str(text or ''))
+    return match.group(1) if match else ''
+
+
+def caja_gasto_pk_from_bill(bill):
+    """
+    Extrae el pk del gasto desde un bill Alegra (webhook o GET).
+    Busca el marker en observations y, por si el payload lo trae aparte, en
+    lines de purchases.
+    """
+    if not isinstance(bill, dict):
+        return ''
+
+    for key in ('observations', 'termsConditions', 'anotation', 'annotation'):
+        gasto_pk = caja_gasto_pk_from_text(bill.get(key))
+        if gasto_pk:
+            return gasto_pk
+
+    purchases = bill.get('purchases')
+    categories = []
+    if isinstance(purchases, dict):
+        raw = purchases.get('categories') or purchases.get('items') or []
+        if isinstance(raw, list):
+            categories = raw
+    elif isinstance(purchases, list):
+        categories = purchases
+    for row in categories:
+        if not isinstance(row, dict):
+            continue
+        gasto_pk = caja_gasto_pk_from_text(row.get('observations') or row.get('name'))
+        if gasto_pk:
+            return gasto_pk
+    return ''
+
+
+def caja_bill_sent_document(empresa, alegra_numeric_id):
+    """
+    AlegraDocument caja_bill con este alegra_id, o None.
+
+    Prefiere status=sent; si no hay, acepta cualquier doc con ese id
+    (cubre carreras webhook vs save local).
+    """
+    alegra_id = str(alegra_numeric_id or '').strip()
+    if not empresa or not alegra_id:
+        return None
+    qs = AlegraDocument.objects.filter(
+        empresa=empresa,
+        document_type='caja_bill',
+        alegra_id=alegra_id,
+    )
+    sent = qs.filter(status=AlegraDocument.STATUS_SENT).order_by('-pk').first()
+    if sent:
+        return sent
+    return qs.order_by('-pk').first()
+
+
+def skip_factura_for_caja_bill(bill, *, empresa=None):
+    """
+    Si el bill es de caja efectivo, no debe crear radicado Facturas.
+
+    Primario: marker `[caja-gasto:{pk}]` en el payload.
+    Respaldo: AlegraDocument caja_bill sent con el mismo alegra_id.
+
+    Retorna dict de skip (processed/skipped/skip_reason/gasto_id) o None.
+    """
+    gasto_pk = caja_gasto_pk_from_bill(bill)
+    if gasto_pk:
+        return {
+            'processed': True,
+            'skipped': True,
+            'skip_reason': 'caja_gasto_bill',
+            'gasto_id': gasto_pk,
+        }
+
+    alegra_id = _nested_id((bill or {}).get('id')) if isinstance(bill, dict) else ''
+    doc = caja_bill_sent_document(empresa, alegra_id) if empresa else None
+    if doc:
+        return {
+            'processed': True,
+            'skipped': True,
+            'skip_reason': 'caja_gasto_bill',
+            'gasto_id': caja_gasto_pk_from_doc(doc) or '',
+            'skip_via': 'alegra_document',
+        }
+    return None
+
+
 def expected_amount_from_payload(payload):
     payload = payload if isinstance(payload, dict) else {}
     local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
@@ -201,11 +290,105 @@ def list_bills_filtered(client, *, date=None, client_id=None, observations=None,
     return items
 
 
+def list_caja_bills_for_gasto(client, gasto_pk, *, max_pages=3):
+    """
+    Todos los bills en Alegra con marker exacto [caja-gasto:{pk}].
+    Sin filtrar por fecha/proveedor (evita ocultar duplicados).
+    """
+    gasto_pk = str(gasto_pk or '').strip()
+    if not gasto_pk.isdigit():
+        return []
+    marker = caja_bill_marker(gasto_pk)
+    candidates = list_bills_filtered(
+        client,
+        observations=marker,
+        max_pages=max_pages,
+    )
+    # Post-filtro: regex exacta del pk (Alegra observations es contains).
+    return [
+        bill for bill in candidates
+        if caja_gasto_pk_from_text(_bill_observations(bill)) == gasto_pk
+    ]
+
+
+def summarize_caja_bill_for_review(bill, *, criteria=None, keep_alegra_id='', locked_ids=None):
+    """Resumen liviano para UI Revisar gasto."""
+    criteria = criteria or {}
+    locked_ids = {str(x).strip() for x in (locked_ids or set()) if str(x).strip()}
+    bill_id = _nested_id((bill or {}).get('id'))
+    total = bill_total_amount(bill)
+    date = _bill_date(bill)
+    provider_id = _bill_provider_id(bill)
+    nt = (bill or {}).get('numberTemplate') if isinstance(bill, dict) else None
+    number = ''
+    if isinstance(nt, dict) and nt.get('number') is not None:
+        number = str(nt.get('number')).strip()
+
+    amount_mismatch = False
+    date_mismatch = False
+    provider_mismatch = False
+    if criteria.get('amount') is not None and total is not None:
+        amount_mismatch = not _money_equal(total, criteria['amount'])
+    if criteria.get('date') and date:
+        date_mismatch = date != criteria['date']
+    if criteria.get('provider_id') and provider_id:
+        provider_mismatch = provider_id != criteria['provider_id']
+
+    is_keep = bool(keep_alegra_id) and bill_id == str(keep_alegra_id).strip()
+    journal_locked = bill_id in locked_ids
+    return {
+        'id': bill_id,
+        'date': date,
+        'total': float(total) if total is not None else None,
+        'observations': _bill_observations(bill)[:200],
+        'number': number,
+        'provider_id': provider_id,
+        'is_keep': is_keep,
+        'journal_locked': journal_locked,
+        'amount_mismatch': amount_mismatch,
+        'date_mismatch': date_mismatch,
+        'provider_mismatch': provider_mismatch,
+        'can_delete': bool(bill_id) and not is_keep and not journal_locked,
+    }
+
+
+def journal_locked_caja_bill_ids(empresa):
+    """Bill ids referenciados por caja_journal sent (no borrar)."""
+    locked = set()
+    qs = AlegraDocument.objects.filter(
+        empresa=empresa,
+        document_type='caja_journal',
+        status=AlegraDocument.STATUS_SENT,
+    ).only('payload')
+    for doc in qs:
+        payload = doc.payload if isinstance(doc.payload, dict) else {}
+        local = payload.get('__local') if isinstance(payload.get('__local'), dict) else {}
+        for row in local.get('pending_bills') or []:
+            if not isinstance(row, dict):
+                continue
+            bid = row.get('alegra_bill_id')
+            if bid not in (None, ''):
+                locked.add(str(bid).strip())
+        for entry in payload.get('entries') or []:
+            if not isinstance(entry, dict):
+                continue
+            assoc = entry.get('associatedDocument')
+            if not isinstance(assoc, dict):
+                continue
+            if str(assoc.get('resourceType') or '').lower() != 'bill':
+                continue
+            rid = assoc.get('idResource')
+            if rid in (None, '', 0, '0'):
+                continue
+            locked.add(str(rid).strip())
+    return locked
+
+
 def find_caja_bill_in_alegra(client, doc):
     """
     Busca un bill existente único para este documento de caja.
-    1) Por marker [caja-gasto:{pk}] en observations.
-    2) Fallback: provider + fecha + monto (+ observations exactas si hay).
+    1) Por marker [caja-gasto:{pk}] — solo si hay exactamente 1.
+    2) Fallback histórico: provider + fecha + monto (solo claim; no borrado).
     """
     if not should_attempt_caja_bill_reconcile(doc):
         return None
@@ -217,30 +400,13 @@ def find_caja_bill_in_alegra(client, doc):
 
     marker = caja_bill_marker(criteria['gasto_pk']) if criteria.get('gasto_pk') else ''
 
-    # 1) Búsqueda por marker (contains); luego exigir marker exacto en observations.
-    if marker:
-        candidates = list_bills_filtered(
-            client,
-            date=criteria.get('date') or None,
-            client_id=criteria.get('provider_id') or None,
-            observations=marker,
-        )
-        marked = [
-            bill for bill in candidates
-            if marker in _bill_observations(bill)
-        ]
+    # 1) Listado unificado por marker (sin date/provider).
+    if criteria.get('gasto_pk'):
+        marked = list_caja_bills_for_gasto(client, criteria['gasto_pk'])
         if len(marked) == 1:
             return marked[0]
-        if len(marked) > 1 and criteria.get('amount') is not None:
-            amount_matches = [
-                bill for bill in marked
-                if bill_total_amount(bill) is not None
-                and _money_equal(bill_total_amount(bill), criteria['amount'])
-            ]
-            if len(amount_matches) == 1:
-                return amount_matches[0]
-            return None
-        if marked:
+        if len(marked) > 1:
+            # Ambiguo: el usuario limpia con Revisar gasto (no auto-elegir por monto).
             return None
 
     # 2) Fallback sin marker (bills huérfanos previos al cambio de observations).
@@ -263,9 +429,7 @@ def find_caja_bill_in_alegra(client, doc):
             continue
         obs = _bill_observations(bill)
         expected_obs = criteria.get('observations') or ''
-        # Si el payload ya trae marker, exigir que el bill lo tenga o que observations coincidan.
         if marker and marker not in obs and expected_obs and obs != expected_obs:
-            # Permitir match si observations del bill == descripción sin marker
             stripped = expected_obs.replace(marker, '').strip()
             if stripped and obs != stripped and obs != expected_obs:
                 continue

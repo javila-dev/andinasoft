@@ -1525,7 +1525,7 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertNotIn('numberTemplate', built.payload)
         self.assertEqual(built.local_key, 'caja:bill:99:501')
         self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-caja-expense-mapped')
-        self.assertIn('[caja-gasto:501]', built.payload['observations'])
+        self.assertTrue(built.payload['observations'].startswith('[caja-gasto:501]'))
         self.assertEqual(built.payload['__local']['gasto_id'], 501)
 
     def test_caja_bill_falls_back_to_puc_when_no_concept_mapping(self):
@@ -2644,6 +2644,88 @@ class CajaBillReconcileTests(SimpleTestCase):
         ]
         self.assertIsNone(bill_reconcile.find_caja_bill_in_alegra(client, self._doc()))
 
+    def test_list_caja_bills_for_gasto_returns_all_markers(self):
+        from alegra_integration import bill_reconcile
+
+        client = Mock()
+        client.list_bills.return_value = [
+            {'id': '901', 'observations': '[caja-gasto:501] A', 'total': 100},
+            {'id': '902', 'observations': '[caja-gasto:501] B', 'total': 200},
+            {'id': '903', 'observations': '[caja-gasto:5010] C', 'total': 100},
+        ]
+        bills = bill_reconcile.list_caja_bills_for_gasto(client, '501')
+        self.assertEqual([b['id'] for b in bills], ['901', '902'])
+
+    def test_find_with_two_markers_does_not_disambiguate_by_amount(self):
+        from alegra_integration import bill_reconcile
+
+        client = Mock()
+        client.list_bills.return_value = [
+            {'id': '901', 'observations': '[caja-gasto:501] A', 'total': 119000},
+            {'id': '902', 'observations': '[caja-gasto:501] B', 'total': 500},
+        ]
+        self.assertIsNone(bill_reconcile.find_caja_bill_in_alegra(client, self._doc()))
+
+    def test_delete_rejects_without_confirm(self):
+        from alegra_integration.exceptions import AlegraIntegrationError
+        from alegra_integration.services import AlegraIntegrationService
+
+        with self.assertRaises(AlegraIntegrationError):
+            AlegraIntegrationService().delete_caja_bill_duplicates(
+                document_id=1,
+                keep_alegra_id='10',
+                delete_ids=['11'],
+                confirm=False,
+            )
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.list_caja_bills_for_gasto')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_delete_refuses_keep_and_locked(
+        self, mock_doc_objects, mock_list, mock_locked, mock_client_cls,
+    ):
+        from alegra_integration.exceptions import AlegraIntegrationError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=1,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_SENT,
+            alegra_id='10',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={'observations': '[caja-gasto:501] x', '__local': {'gasto_id': 501}},
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+
+        with self.assertRaises(AlegraIntegrationError):
+            AlegraIntegrationService().delete_caja_bill_duplicates(
+                document_id=1,
+                keep_alegra_id='10',
+                delete_ids=['10'],
+                confirm=True,
+            )
+
+        mock_list.return_value = [
+            {'id': '10', 'observations': '[caja-gasto:501]'},
+            {'id': '11', 'observations': '[caja-gasto:501]'},
+        ]
+        mock_locked.return_value = {'11'}
+        mock_client_cls.return_value = Mock()
+        result = AlegraIntegrationService().delete_caja_bill_duplicates(
+            document_id=1,
+            keep_alegra_id='10',
+            delete_ids=['11'],
+            confirm=True,
+        )
+        self.assertEqual(result['deleted'], 0)
+        self.assertFalse(result['results'][0]['ok'])
+        self.assertIn('asiento', result['results'][0]['error'].lower())
+
     @patch('alegra_integration.bill_reconcile.sync_pago_from_alegra_document')
     def test_claim_existing_marks_sent(self, mock_sync):
         from alegra_integration.models import AlegraDocument
@@ -2712,6 +2794,171 @@ class CajaBillReconcileTests(SimpleTestCase):
         mock_cxp.assert_called_once()
 
 
+class WebhookCajaBillSkipTests(SimpleTestCase):
+    def test_caja_gasto_pk_from_bill_exact_regex(self):
+        from alegra_integration.bill_reconcile import caja_gasto_pk_from_bill
+
+        self.assertEqual(
+            caja_gasto_pk_from_bill({'observations': 'x [caja-gasto:501] y'}),
+            '501',
+        )
+        self.assertEqual(
+            caja_gasto_pk_from_bill({'observations': 'x [caja-gasto:5010] y'}),
+            '5010',
+        )
+        self.assertEqual(
+            caja_gasto_pk_from_bill({'observations': 'sin marker'}),
+            '',
+        )
+
+    def test_skip_factura_for_caja_bill_by_marker(self):
+        from alegra_integration.bill_reconcile import skip_factura_for_caja_bill
+
+        skip = skip_factura_for_caja_bill({
+            'id': '90',
+            'observations': 'COMPRA [caja-gasto:501]',
+        })
+        self.assertTrue(skip['skipped'])
+        self.assertEqual(skip['skip_reason'], 'caja_gasto_bill')
+        self.assertEqual(skip['gasto_id'], '501')
+
+    def test_skip_factura_none_for_normal_bill(self):
+        from alegra_integration.bill_reconcile import skip_factura_for_caja_bill
+
+        self.assertIsNone(skip_factura_for_caja_bill({
+            'id': '91',
+            'observations': 'Factura proveedor normal',
+        }))
+
+    @patch('alegra_integration.bill_reconcile.caja_bill_sent_document')
+    def test_skip_factura_via_alegra_document(self, mock_doc):
+        from alegra_integration.bill_reconcile import skip_factura_for_caja_bill
+
+        mock_doc.return_value = SimpleNamespace(
+            source_pk='777',
+            local_key='caja:bill:1:777',
+            payload={},
+        )
+        skip = skip_factura_for_caja_bill(
+            {'id': '55', 'observations': 'sin marker'},
+            empresa=SimpleNamespace(pk='901018375'),
+        )
+        self.assertEqual(skip['skip_reason'], 'caja_gasto_bill')
+        self.assertEqual(skip['gasto_id'], '777')
+        self.assertEqual(skip['skip_via'], 'alegra_document')
+
+    def _noop_atomic(self):
+        return patch.multiple(
+            'django.db.transaction.Atomic',
+            __enter__=Mock(return_value=None),
+            __exit__=Mock(return_value=False),
+        )
+
+    @patch('alegra_integration.webhook_bills.Facturas.objects')
+    def test_handle_new_bill_skips_marker(self, mock_fac_qs):
+        from alegra_integration.webhook_bills import _handle_new_bill
+
+        empresa = SimpleNamespace(pk='901018375')
+        bill = {
+            'id': '120',
+            'observations': 'PAPEL [caja-gasto:501]',
+            'client': {'identification': '1', 'name': 'X'},
+            'total': 1000,
+            'date': '2026-05-05',
+        }
+        with self._noop_atomic():
+            result = _handle_new_bill(empresa, '901018375:120', bill)
+        self.assertTrue(result.get('skipped'))
+        self.assertEqual(result['skip_reason'], 'caja_gasto_bill')
+        self.assertEqual(result['gasto_id'], '501')
+        mock_fac_qs.filter.assert_not_called()
+        mock_fac_qs.create.assert_not_called()
+
+    @patch('alegra_integration.bill_reconcile.caja_bill_sent_document', return_value=None)
+    @patch('alegra_integration.webhook_bills.notify_gasto_pendiente_asignacion')
+    @patch('alegra_integration.webhook_bills.link_alegra_document')
+    @patch('alegra_integration.webhook_bills._schedule_bill_pdf_download')
+    @patch('alegra_integration.webhook_bills._history_user', return_value=None)
+    @patch('alegra_integration.webhook_bills.Facturas.objects')
+    def test_handle_new_bill_creates_normal(
+        self, mock_fac_qs, _hist, _pdf, _link, _notify, _caja_doc,
+    ):
+        from alegra_integration.webhook_bills import _handle_new_bill
+
+        mock_fac_qs.filter.return_value.exists.return_value = False
+        created = SimpleNamespace(pk=999, save=Mock())
+        mock_fac_qs.create.return_value = created
+
+        empresa = SimpleNamespace(pk='901018375')
+        bill = {
+            'id': '121',
+            'observations': 'Servicio de aseo',
+            'client': {'identification': '8001', 'name': 'PROVEEDOR'},
+            'total': 50000,
+            'balance': 50000,
+            'date': '2026-05-05',
+            'numberTemplate': {'number': 10},
+        }
+        with self._noop_atomic():
+            result = _handle_new_bill(empresa, '901018375:121', bill)
+        self.assertTrue(result.get('created'))
+        self.assertEqual(result['factura_pk'], 999)
+        mock_fac_qs.create.assert_called_once()
+
+    @patch('alegra_integration.webhook_bills.empresas.objects')
+    @patch('alegra_integration.webhook_bills.Facturas.objects')
+    def test_handle_edit_bill_skips_caja_without_factura(self, mock_fac_qs, mock_emp_qs):
+        from alegra_integration.webhook_bills import _handle_edit_bill
+
+        mock_fac_qs.filter.return_value.first.return_value = None
+        mock_emp_qs.filter.return_value.first.return_value = SimpleNamespace(pk='901018375')
+
+        with self._noop_atomic():
+            result = _handle_edit_bill(
+                '901018375:122',
+                {'id': '122', 'observations': 'x [caja-gasto:88]'},
+            )
+        self.assertTrue(result.get('skipped'))
+        self.assertEqual(result['skip_reason'], 'caja_gasto_bill')
+
+    @patch('alegra_integration.webhook_bills._fetch_bill_from_alegra')
+    @patch('alegra_integration.webhook_bills.Facturas.objects')
+    def test_import_blocks_caja_bill(self, mock_fac_qs, mock_fetch):
+        from alegra_integration.webhook_bills import import_factura_from_alegra_bill
+
+        mock_fetch.return_value = (
+            {'id': '130', 'observations': 'caja [caja-gasto:9]', 'total': 1},
+            'auth',
+            'fields',
+        )
+        mock_fac_qs.filter.return_value.first.return_value = None
+        empresa = SimpleNamespace(pk='901018375')
+
+        with self._noop_atomic():
+            with self.assertRaises(ValueError) as ctx:
+                import_factura_from_alegra_bill(empresa, '130', sync_pdf=False)
+        self.assertIn('caja', str(ctx.exception).lower())
+        mock_fac_qs.create.assert_not_called()
+
+    @patch('alegra_integration.management.commands.cleanup_caja_webhook_facturas._handle_delete_bill')
+    @patch('alegra_integration.management.commands.cleanup_caja_webhook_facturas.queryset_caja_phantom_facturas')
+    def test_cleanup_command_dry_run(self, mock_qs, mock_delete):
+        from django.core.management import call_command
+        from io import StringIO
+
+        fac = SimpleNamespace(
+            pk=1,
+            empresa_id='901018375',
+            alegra_bill_id='901018375:9',
+            descripcion='PAPEL [caja-gasto:1]',
+        )
+        mock_qs.return_value.order_by.return_value = [fac]
+        out = StringIO()
+        call_command('cleanup_caja_webhook_facturas', '--dry-run', stdout=out)
+        self.assertIn('Candidatos: 1', out.getvalue())
+        mock_delete.assert_not_called()
+
+
 class _JournalReconcileSendContinuationTests(SimpleTestCase):
     """Keep journal send-path tests that lived after caja bill block insertion point."""
 
@@ -2735,6 +2982,8 @@ class _JournalReconcileSendContinuationTests(SimpleTestCase):
             response={},
             sent_at=None,
             save=Mock(),
+            source_model='x',
+            source_pk='30',
         )
         mock_client_cls.return_value = Mock()
         mock_claim.return_value = True

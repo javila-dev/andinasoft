@@ -313,6 +313,13 @@ class AlegraMCPClient:
             path = f'{path}?fields={fields}'
         return self.rest('GET', path)
 
+    def delete_bill(self, bill_id):
+        """DELETE /bills/{id} — elimina factura de compra en Alegra."""
+        bid = str(bill_id or '').strip()
+        if not bid:
+            raise AlegraConfigurationError('bill_id es requerido para delete_bill.')
+        return self.rest('DELETE', f'/bills/{bid}')
+
     def list_bills(
         self,
         *,

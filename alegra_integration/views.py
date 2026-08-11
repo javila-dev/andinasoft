@@ -1837,3 +1837,40 @@ def reference_sync(request):
         return _error_response(exc)
     except Exception as exc:
         return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def caja_bills_duplicates_review(request):
+    try:
+        payload = _payload(request)
+        data = AlegraIntegrationService(user=request.user).review_caja_bill_duplicates(
+            document_id=payload.get('document_id'),
+        )
+        return JsonResponse(data)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def caja_bills_duplicates_delete(request):
+    try:
+        payload = _payload(request)
+        data = AlegraIntegrationService(user=request.user).delete_caja_bill_duplicates(
+            document_id=payload.get('document_id'),
+            keep_alegra_id=payload.get('keep_alegra_id'),
+            delete_ids=payload.get('delete_ids') or [],
+            confirm=bool(payload.get('confirm')),
+        )
+        return JsonResponse(data)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return _error_response(exc, status=500)

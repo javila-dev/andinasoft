@@ -29,12 +29,44 @@ from alegra_integration.bill_pdf import (
     _fetch_bill_from_alegra,
     sync_factura_from_alegra_bill,
 )
+from alegra_integration.bill_reconcile import skip_factura_for_caja_bill
 
 logger = logging.getLogger(__name__)
 
 
 def composite_alegra_bill_id(empresa_nit, alegra_numeric_id):
     return f'{empresa_nit}:{alegra_numeric_id}'
+
+
+def queryset_caja_phantom_facturas(*, empresa_id=None):
+    """
+    Radicados Alegra creados por webhook a partir de bills de caja.
+    Criterio: descripción con marker [caja-gasto:N] o alegra_bill_id de un caja_bill sent.
+    """
+    from alegra_integration.models import AlegraDocument
+
+    qs = Facturas.objects.filter(origen='Alegra').exclude(alegra_bill_id='')
+    if empresa_id:
+        qs = qs.filter(empresa_id=str(empresa_id).strip())
+
+    composites = []
+    doc_qs = AlegraDocument.objects.filter(
+        document_type='caja_bill',
+        status=AlegraDocument.STATUS_SENT,
+    ).exclude(alegra_id__isnull=True).exclude(alegra_id='')
+    if empresa_id:
+        doc_qs = doc_qs.filter(empresa_id=str(empresa_id).strip())
+    for doc in doc_qs.only('empresa_id', 'alegra_id'):
+        aid = str(doc.alegra_id or '').strip()
+        if aid:
+            composites.append(composite_alegra_bill_id(doc.empresa_id, aid))
+
+    from django.db.models import Q
+
+    marker_q = Q(descripcion__contains='[caja-gasto:')
+    if composites:
+        return qs.filter(marker_q | Q(alegra_bill_id__in=composites)).distinct()
+    return qs.filter(marker_q)
 
 
 @transaction.atomic
@@ -55,6 +87,15 @@ def import_factura_from_alegra_bill(empresa, alegra_numeric_id, *, sync_pdf=True
     composite = composite_alegra_bill_id(empresa.pk, alegra_numeric)
 
     existing = Facturas.objects.filter(alegra_bill_id=composite).first()
+    if not existing:
+        skip = skip_factura_for_caja_bill(bill_data, empresa=empresa)
+        if skip:
+            gasto = skip.get('gasto_id') or '?'
+            raise ValueError(
+                f'El bill {alegra_numeric} es de caja efectivo (gasto {gasto}); '
+                'no se importa como radicado.'
+            )
+
     if existing:
         enriched = enrich_factura_from_bill_data(existing, bill_data)
         pdf_saved = False
@@ -232,6 +273,19 @@ def process_inbound_post(empresa_nit, payload):
 @transaction.atomic
 def _handle_new_bill(empresa, composite_alegra_id, bill):
     alegra_numeric = str(bill.get('id') or '').strip()
+    skip = skip_factura_for_caja_bill(bill, empresa=empresa)
+    if skip:
+        # No crear radicado: el bill nació en Andinasoft (caja) y ya vive en AlegraDocument.
+        out = dict(skip)
+        out['alegra_bill_id'] = composite_alegra_id
+        logger.info(
+            'Alegra webhook new-bill omitido (caja): bill=%s gasto_id=%s via=%s',
+            alegra_numeric,
+            skip.get('gasto_id'),
+            skip.get('skip_via') or 'marker',
+        )
+        return out
+
     if Facturas.objects.filter(alegra_bill_id=composite_alegra_id).exists():
         fac = Facturas.objects.get(alegra_bill_id=composite_alegra_id)
         entered_asignacion = False
@@ -297,6 +351,16 @@ def _handle_new_bill(empresa, composite_alegra_id, bill):
 def _handle_edit_bill(composite_alegra_id, bill):
     fac = Facturas.objects.filter(alegra_bill_id=composite_alegra_id).first()
     if not fac:
+        # Sin radicado: si es bill de caja, ack limpio (no es un edit “perdido” de proveedor).
+        empresa = None
+        nit = str(composite_alegra_id or '').split(':', 1)[0].strip()
+        if nit:
+            empresa = empresas.objects.filter(pk=nit).first()
+        skip = skip_factura_for_caja_bill(bill, empresa=empresa)
+        if skip:
+            out = dict(skip)
+            out['alegra_bill_id'] = composite_alegra_id
+            return out
         return {'processed': False, 'skip_reason': 'factura_not_found_for_edit', 'alegra_bill_id': composite_alegra_id}
 
     fields = map_bill_to_factura_fields(bill)
