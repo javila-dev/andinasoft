@@ -1071,14 +1071,17 @@ class ventas_nuevas(models.Model):
         db_name = self._state.db
         obj_inmueble = Inmuebles.objects.using(db_name).get(pk=self.inmueble)
         fps = self.fp()
+        # Overrides opcionales al imprimir con forma_pago_manual (solo en memoria).
+        fp_ci = getattr(self, '_fp_ci_override', None)
+        fp_saldo = getattr(self, '_fp_saldo_override', None)
         info = {
             'valor':self.valor_venta,
             'inmueble':obj_inmueble,
             'valor_en_letras':Utilidades().numeros_letras(self.valor_venta),
             'ci':self.cuota_inicial,
             'saldo':self.valor_venta - self.cuota_inicial,
-            'fp_ci':fps[0],
-            'fp_saldo':fps[1]
+            'fp_ci': fps[0] if fp_ci is None else fp_ci,
+            'fp_saldo': fps[1] if fp_saldo is None else fp_saldo,
         }
         
         return info

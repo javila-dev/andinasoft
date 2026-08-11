@@ -4614,8 +4614,11 @@ def acciones_venta(request,proyecto,contrato):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_contrato_{contrato}.pdf'
 
                     if forma_pago_es_manual(proyecto, ORIGEN_VENTA):
-                        formaCI = request.POST.get('formaci')
-                        formaFN = request.POST.get('formasaldo')
+                        formaCI = request.POST.get('formaci') or ''
+                        formaFN = request.POST.get('formasaldo') or ''
+                        # Plantillas HTML (xhtml2pdf/weasyprint) leen ctr.general_info.fp_*.
+                        obj_ctr._fp_ci_override = formaCI
+                        obj_ctr._fp_saldo_override = formaFN
 
                     try:
                         cfg = get_config_documento(proyecto, ORIGEN_VENTA)
@@ -4660,6 +4663,8 @@ def acciones_venta(request,proyecto,contrato):
                             'fecha_escritura': fecha_escritura,
                             'meses_entrega': meses_entrega,
                             'oficina': oficina,
+                            'formaCI': formaCI,
+                            'formaFN': formaFN,
                         }
                         filename = f'Contrato_bien_futuro_{contrato}_{proyecto}.pdf'
 
