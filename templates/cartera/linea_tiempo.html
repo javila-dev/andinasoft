@@ -8,6 +8,23 @@
 {%block style%}
 <style>
   .lt-header { margin-bottom: 1.25rem; }
+  .lt-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+    padding-bottom: .75rem;
+    margin-bottom: .75rem;
+    border-bottom: 1px solid #e5e8eb;
+  }
+  .lt-page-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #2c3e50;
+    margin: 0;
+  }
+  .lt-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
   .lt-track {
     display: flex;
     align-items: stretch;
@@ -55,22 +72,47 @@
   .lt-node.activo .lt-label { color: #c0392b; font-weight: 700; }
   .lt-label { font-size: .8rem; }
   .lt-monto { font-size: .75rem; color: #6c757d; white-space: nowrap; }
+  .lt-cartas h5 { font-size: 1rem; margin-bottom: .35rem; }
+  .lt-cartas > .small { font-size: .72rem; margin-bottom: .5rem; }
   .lt-cartas .card-ck {
     border: 1px solid #e5e8eb;
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: .75rem;
+    border-radius: 6px;
+    padding: .55rem .65rem;
+    margin-bottom: .45rem;
     background: #fff;
+    font-size: .78rem;
   }
-  .lt-cartas .card-ck.locked { opacity: .55; background: #f8f9fa; }
-  .lt-cartas .card-ck.ready { border-color: #c0392b; }
-  .lt-cartas .card-ck.ready.enviada { border-color: #27ae60; background: #f6fff8; }
-  .lt-cartas .card-ck.ready.generada:not(.enviada) { border-color: #e67e22; background: #fffaf5; }
-  .lt-status { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
-  .lt-status .badge { font-weight: 600; }
-  .lt-status .badge-ok { background: #27ae60; color: #fff; }
-  .lt-status .badge-warn { background: #e67e22; color: #fff; }
-  .lt-status .badge-miss { background: #ecf0f1; color: #7f8c8d; border: 1px solid #d5dbdb; }
+  .lt-cartas .card-ck strong { font-size: .82rem; }
+  .lt-cartas .card-ck .small { font-size: .7rem; }
+  .lt-cartas .card-ck .btn-sm {
+    padding: .12rem .4rem;
+    font-size: .7rem;
+    line-height: 1.3;
+  }
+  .lt-cartas .card-ck.locked { opacity: .55; }
+  .lt-status { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
+  .lt-status .badge {
+    font-weight: 600;
+    font-size: .65rem;
+    padding: .15em .45em;
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .lt-status .badge-ok {
+    color: #1e8449;
+    border-color: #a9dfbf;
+    background: transparent;
+  }
+  .lt-status .badge-warn {
+    color: #b9770e;
+    border-color: #f5cba7;
+    background: transparent;
+  }
+  .lt-status .badge-miss {
+    color: #7f8c8d;
+    border-color: #d5dbdb;
+    background: transparent;
+  }
 </style>
 {%endblock%}
 
@@ -79,72 +121,81 @@
 {%if alerta%}{%include 'alert.html'%}{%endif%}
 
 <div class="principal-container bg-white rounded shadow-lg p-3">
-  <div class="lt-header d-flex flex-wrap justify-content-between align-items-start">
-    <div>
-      <h3 class="section-title text-white mb-1">Línea de tiempo — {{adj}}</h3>
-      <div>
-        <strong>{{row.cliente|upper}}</strong>
-        · {{row.cartera}} · Gestor: {{row.gestor}}
-        <br>
-        <small class="text-muted">
-          Consulta {{periodo}} · {{dias_mora}} días de mora
-          {% if deuda %}
-          ·
-          <a href="#" data-toggle="modal" data-target="#modalDeuda" class="font-weight-bold text-danger">
-            Adeudado ${{deuda.total_adeudado|floatformat:0|intcomma}}
-            <i class="fas fa-search-dollar"></i>
-          </a>
-          {% else %}
-          · Pendiente ${{row.total_pendiente|floatformat:0|intcomma}}
-          {% endif %}
-        </small>
-        {% if titular %}
-        <div class="mt-2 small">
-          {% if titular.celular1 %}<a href="tel:{{titular.celular1}}"><i class="fas fa-mobile-alt"></i> {{titular.celular1}}</a>{% endif %}
-          {% if titular.celular2 %} · <a href="tel:{{titular.celular2}}"><i class="fas fa-mobile-alt"></i> {{titular.celular2}}</a>{% endif %}
-          {% if titular.telefono1 %} · <a href="tel:{{titular.telefono1}}"><i class="fas fa-phone"></i> {{titular.telefono1}}</a>{% endif %}
-          {% if titular.telefono2 %} · <a href="tel:{{titular.telefono2}}"><i class="fas fa-phone"></i> {{titular.telefono2}}</a>{% endif %}
-          {% if titular.email %} · <a href="mailto:{{titular.email}}"><i class="fas fa-envelope"></i> {{titular.email}}</a>{% endif %}
-          {% if not titular.celular1 and not titular.telefono1 and not titular.email %}
-          <span class="text-muted">Sin telefonos/email registrados</span>
-          {% endif %}
-          {% if otros_titulares %}
-          <a class="ml-2" data-toggle="collapse" href="#otrosTitulares" role="button" aria-expanded="false">
-            Otros titulares ({{otros_titulares|length}}) <i class="fas fa-chevron-down"></i>
-          </a>
-          {% endif %}
-        </div>
-        {% if otros_titulares %}
-        <div class="collapse mt-2" id="otrosTitulares">
-          <div class="border rounded p-2 bg-light">
-            {% for t in otros_titulares %}
-            <div class="mb-2 {% if not forloop.last %}border-bottom pb-2{% endif %}">
-              <strong>{{t.rol}}:</strong> {{t.nombre|upper}}
-              <span class="text-muted">({{t.id}})</span><br>
-              <span class="small">
-                {% if t.celular1 %}<a href="tel:{{t.celular1}}">{{t.celular1}}</a>{% endif %}
-                {% if t.celular2 %} · <a href="tel:{{t.celular2}}">{{t.celular2}}</a>{% endif %}
-                {% if t.telefono1 %} · <a href="tel:{{t.telefono1}}">{{t.telefono1}}</a>{% endif %}
-                {% if t.email %} · <a href="mailto:{{t.email}}">{{t.email}}</a>{% endif %}
-                {% if not t.celular1 and not t.telefono1 and not t.email %}<span class="text-muted">Sin contacto</span>{% endif %}
-              </span>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
+  <div class="lt-header">
+    <div class="lt-title-row">
+      <h3 class="lt-page-title">Línea de tiempo — {{proyecto}} · {{adj}}</h3>
+      <div class="lt-actions">
+        <a class="btn btn-sm btn-outline-secondary" href="/cartera/dashboard" title="Volver a dashboard" aria-label="Volver a dashboard"><i class="fas fa-tachometer-alt"></i></a>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-toggle="modal" data-target="#modalDeuda" title="Deuda" aria-label="Deuda">
+          <i class="fas fa-file-invoice-dollar"></i>
+        </button>
+        <a class="btn btn-sm btn-outline-dark" href="/cartera/estado_cuenta/{{proyecto}}/{{adj}}" target="_blank" rel="noopener" title="Estado de cuenta" aria-label="Estado de cuenta">
+          <i class="fas fa-file-pdf"></i>
+        </a>
+        <a class="btn btn-sm btn-outline-primary" href="/adjudicaciones/{{proyecto}}/{{adj}}/" title="Detalle ADJ" aria-label="Detalle ADJ"><i class="fas fa-folder-open"></i></a>
+        {% if es_supervisor %}
+        <button type="button" class="btn btn-sm btn-outline-warning" data-toggle="modal" data-target="#modalReasignar" title="Reasignar gestor" aria-label="Reasignar gestor">
+          <i class="fas fa-user-tag"></i>
+        </button>
+        {% else %}
+        <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Solo supervisor puede reasignar" aria-label="Reasignar gestor (solo supervisor)">
+          <i class="fas fa-user-tag"></i>
+        </button>
         {% endif %}
       </div>
     </div>
     <div>
-      <a class="btn btn-sm btn-outline-secondary" href="/cartera/dashboard"><i class="fas fa-tachometer-alt"></i> Volver a dashboard</a>
-      <button type="button" class="btn btn-sm btn-outline-danger" data-toggle="modal" data-target="#modalDeuda">
-        <i class="fas fa-file-invoice-dollar"></i> Deuda
-      </button>
-      <a class="btn btn-sm btn-outline-dark" href="/cartera/estado_cuenta/{{proyecto}}/{{adj}}" target="_blank" rel="noopener">
-        <i class="fas fa-file-pdf"></i> Estado de cuenta
-      </a>
-      <a class="btn btn-sm btn-outline-primary" href="/adjudicaciones/{{proyecto}}/{{adj}}/"><i class="fas fa-folder-open"></i> Detalle ADJ</a>
+      <strong>{{row.cliente|upper}}</strong>
+      · {{proyecto}} · {{row.cartera}} · Gestor: {{row.gestor}}
+      <br>
+      <small class="text-muted">
+        Consulta {{periodo}} · {{dias_mora}} días de mora
+        {% if deuda %}
+        ·
+        <a href="#" data-toggle="modal" data-target="#modalDeuda" class="font-weight-bold text-danger">
+          Adeudado ${{deuda.total_adeudado|floatformat:0|intcomma}}
+          <i class="fas fa-search-dollar"></i>
+        </a>
+        {% else %}
+        · Pendiente ${{row.total_pendiente|floatformat:0|intcomma}}
+        {% endif %}
+      </small>
+      {% if titular %}
+      <div class="mt-2 small">
+        {% if titular.celular1 %}<a href="tel:{{titular.celular1}}"><i class="fas fa-mobile-alt"></i> {{titular.celular1}}</a>{% endif %}
+        {% if titular.celular2 %} · <a href="tel:{{titular.celular2}}"><i class="fas fa-mobile-alt"></i> {{titular.celular2}}</a>{% endif %}
+        {% if titular.telefono1 %} · <a href="tel:{{titular.telefono1}}"><i class="fas fa-phone"></i> {{titular.telefono1}}</a>{% endif %}
+        {% if titular.telefono2 %} · <a href="tel:{{titular.telefono2}}"><i class="fas fa-phone"></i> {{titular.telefono2}}</a>{% endif %}
+        {% if titular.email %} · <a href="mailto:{{titular.email}}"><i class="fas fa-envelope"></i> {{titular.email}}</a>{% endif %}
+        {% if not titular.celular1 and not titular.telefono1 and not titular.email %}
+        <span class="text-muted">Sin telefonos/email registrados</span>
+        {% endif %}
+        {% if otros_titulares %}
+        <a class="ml-2" data-toggle="collapse" href="#otrosTitulares" role="button" aria-expanded="false">
+          Otros titulares ({{otros_titulares|length}}) <i class="fas fa-chevron-down"></i>
+        </a>
+        {% endif %}
+      </div>
+      {% if otros_titulares %}
+      <div class="collapse mt-2" id="otrosTitulares">
+        <div class="border rounded p-2 bg-light">
+          {% for t in otros_titulares %}
+          <div class="mb-2 {% if not forloop.last %}border-bottom pb-2{% endif %}">
+            <strong>{{t.rol}}:</strong> {{t.nombre|upper}}
+            <span class="text-muted">({{t.id}})</span><br>
+            <span class="small">
+              {% if t.celular1 %}<a href="tel:{{t.celular1}}">{{t.celular1}}</a>{% endif %}
+              {% if t.celular2 %} · <a href="tel:{{t.celular2}}">{{t.celular2}}</a>{% endif %}
+              {% if t.telefono1 %} · <a href="tel:{{t.telefono1}}">{{t.telefono1}}</a>{% endif %}
+              {% if t.email %} · <a href="mailto:{{t.email}}">{{t.email}}</a>{% endif %}
+              {% if not t.celular1 and not t.telefono1 and not t.email %}<span class="text-muted">Sin contacto</span>{% endif %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
     </div>
   </div>
 
@@ -267,23 +318,43 @@
   {% endif %}
 
   {% if es_supervisor %}
-  <div class="alert alert-light border mb-3">
-    <form method="post" action="/cartera/reasignar/{{proyecto}}/{{adj}}" class="form-inline flex-wrap">
-      {% csrf_token %}
-      <strong class="mr-2">Gestor actual:</strong>
-      <span class="mr-3">{% if row.gestor == gestor_juridico %}<span class="badge badge-danger">{{row.gestor}}</span>{% else %}{{row.gestor}}{% endif %}</span>
-      <select name="nuevo_gestor" class="custom-select custom-select-sm mr-2" style="min-width:200px;">
-        <option value="">Cambiar a...</option>
-        {% for val, label in gestores_opciones %}
-        <option value="{{val}}" {% if val == row.gestor %}selected{% endif %}>{{label}}</option>
-        {% endfor %}
-      </select>
-      <button type="submit" class="btn btn-sm btn-primary mr-2">Reasignar</button>
-      <button type="submit" name="pasar_juridico" value="1" class="btn btn-sm btn-danger"
-              onclick="return confirm('Pasar esta adjudicacion a cartera juridica?')">
-        Pasar a juridico
-      </button>
-    </form>
+  <div class="modal fade" id="modalReasignar" tabindex="-1" role="dialog" aria-labelledby="modalReasignarLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <form method="post" action="/cartera/reasignar/{{proyecto}}/{{adj}}">
+          {% csrf_token %}
+          <div class="modal-header py-2">
+            <h5 class="modal-title" id="modalReasignarLabel">Reasignar gestor</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2">
+              <strong>Gestor actual:</strong>
+              {% if row.gestor == gestor_juridico %}
+              <span class="badge badge-danger">{{row.gestor}}</span>
+              {% else %}
+              {{row.gestor|default:"—"}}
+              {% endif %}
+            </p>
+            <label class="small text-muted mb-1" for="nuevo_gestor">Cambiar a</label>
+            <select name="nuevo_gestor" id="nuevo_gestor" class="custom-select custom-select-sm">
+              <option value="">Seleccionar gestor...</option>
+              {% for val, label in gestores_opciones %}
+              <option value="{{val}}" {% if val == row.gestor %}selected{% endif %}>{{label}}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="modal-footer py-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+            <button type="submit" name="pasar_juridico" value="1" class="btn btn-sm btn-danger"
+                    onclick="return confirm('Pasar esta adjudicacion a cartera juridica?')">
+              Pasar a juridico
+            </button>
+            <button type="submit" class="btn btn-sm btn-primary">Reasignar</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
   {% endif %}
 

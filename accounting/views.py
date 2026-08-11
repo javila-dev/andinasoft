@@ -5829,6 +5829,29 @@ def _append_movimientos_recaudos_caja(movements, caja_pk, fecha_desde, fecha_has
             })
 
 
+def _rango_fechas_gasto_caja():
+    """Ventana de fechas permitidas para registrar/editar gastos de caja."""
+    today = datetime.date.today()
+    if today.day <= 5:
+        month = 12 if today.month == 1 else today.month - 1
+        year = today.year - 1 if today.month == 1 else today.year
+        fecha_min = datetime.date(year, month, 16)
+    else:
+        fecha_min = datetime.date(today.year, today.month, 1)
+
+    try:
+        abrir_mes_anterior = parametros.objects.get(descripcion='abrir_mes_anterior')
+        activo = str(getattr(abrir_mes_anterior, 'activo', '')).lower() == 'true'
+        if activo:
+            mes_abrir = int(getattr(abrir_mes_anterior, 'valor', today.month))
+            year_for_open = today.year - 1 if mes_abrir > today.month else today.year
+            fecha_min = datetime.date(year_for_open, mes_abrir, 1)
+    except Exception:
+        pass
+
+    return fecha_min, today
+
+
 #Cajas efectivo
 @login_required
 @group_perm_required(('accounting.view_gastos_caja',),raise_exception=True)
@@ -5880,6 +5903,7 @@ def cajas_efectivo(request):
                         movements.append({
                             'pk':i.pk,
                             'fecha': datetime.datetime.strftime(i.fecha_gasto,"%d/%m/%Y"),
+                            'fecha_iso': i.fecha_gasto.strftime('%Y-%m-%d'),
                             'tercero': i.tercero.nombre_completo(),
                             'nit_tercero':i.tercero.idTercero,
                             'descripcion': i.descripcion.capitalize(),
@@ -5903,6 +5927,7 @@ def cajas_efectivo(request):
                             'rte': vr_rte,
                             'subtotal':subtotal,
                             'concepto':i.concepto.descripcion,
+                            'concepto_id': i.concepto_id,
                             'tipo_documento_soporte': i.tipo_documento_soporte or '',
                             'soporte_doc_prov': _media_url(i.tercero.soporte_identificacion),
                         })
@@ -6263,33 +6288,19 @@ def cajas_efectivo(request):
                         'class': 'alert-danger'
                     })
 
-                today = datetime.date.today()
-                if today.day <= 5:
-                    # Día 16 del mes anterior
-                    month = 12 if today.month == 1 else today.month - 1
-                    year = today.year - 1 if today.month == 1 else today.year
-                    fecha_min = datetime.date(year, month, 16)
-                else:
-                    # Día 1 del mes actual
-                    fecha_min = datetime.date(today.year, today.month, 1)
-
-                try:
-                    abrir_mes_anterior = parametros.objects.get(descripcion='abrir_mes_anterior')
-                    activo = str(getattr(abrir_mes_anterior, 'activo', '')).lower() == 'true'
-                    if activo:
-                        mes_abrir = int(getattr(abrir_mes_anterior, 'valor', today.month))
-                        year_for_open = today.year - 1 if mes_abrir > today.month else today.year
-                        fecha_min = datetime.date(year_for_open, mes_abrir, 1)
-                except Exception:
-                    pass
-
-                fecha_max = today
+                fecha_min, fecha_max = _rango_fechas_gasto_caja()
                 if not (fecha_min <= fecha_gasto <= fecha_max):
                     return JsonResponse({
                         'msj': f'La fecha del gasto debe estar entre {fecha_min} y {fecha_max}.',
                         'class': 'alert-danger'
                     })
-                
+
+                if not soporte:
+                    return JsonResponse({
+                        'msj': 'Debes adjuntar el soporte del gasto en PDF.',
+                        'class': 'alert-danger'
+                    })
+
                 if not soporte.name.endswith('.pdf'):
                     
                     data = {
@@ -6348,10 +6359,6 @@ def cajas_efectivo(request):
                 
                 
                 obj_gasto.concepto = obj_concept
-                
-                if obj_gasto.estado == 'Devuelto':
-                    obj_gasto.estado = 'Reembolso'
-                
                 obj_gasto.save()
                 
                 data = {
@@ -6379,9 +6386,7 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
                 obj_gasto.tipo_documento_soporte = tipo
-                if obj_gasto.estado == 'Devuelto':
-                    obj_gasto.estado = 'Reembolso'
-                obj_gasto.save(update_fields=['tipo_documento_soporte', 'estado'])
+                obj_gasto.save(update_fields=['tipo_documento_soporte'])
                 return JsonResponse({
                     'msj': 'Se actualizo el tipo de soporte del gasto.',
                     'class': 'alert-success',
@@ -6412,11 +6417,6 @@ def cajas_efectivo(request):
                     return JsonResponse(data)
                 
                 obj_gasto.soporte = file
-                
-                
-                if obj_gasto.estado == 'Devuelto':
-                    obj_gasto.estado = 'Reembolso'
-                
                 obj_gasto.save()
                 
                 data = {
@@ -6461,9 +6461,6 @@ def cajas_efectivo(request):
                     rte_asumida = True if rte_asumida == 'on' else False
                 
                     obj_gastos.rte_asumida = rte_asumida
-                
-                if obj_gastos.estado == 'Devuelto':
-                    obj_gastos.estado = 'Reembolso'
                 
                 obj_gastos.save()
                 
@@ -6761,13 +6758,21 @@ def cajas_efectivo(request):
                     })
                 gasto = request.POST.get('gasto')
                 obj_gasto = gastos_caja.objects.get(pk=gasto)
-                if obj_gasto.estado in ('Pendiente', 'Legalizado', 'Devuelto'):
+                if obj_gasto.estado in (
+                    gastos_caja.ESTADO_PENDIENTE,
+                    gastos_caja.ESTADO_LEGALIZADO,
+                    gastos_caja.ESTADO_DEVUELTO,
+                    'Pendiente',
+                    'Legalizado',
+                    'Devuelto',
+                ):
                     return JsonResponse({
                         'msj': f'No se puede devolver un gasto en estado {obj_gasto.estado}.',
                         'class': 'alert-danger',
                     })
-                obj_gasto.estado = 'Devuelto'
-                obj_gasto.save(update_fields=['estado'])
+                obj_gasto.estado_antes_devolver = obj_gasto.estado or ''
+                obj_gasto.estado = gastos_caja.ESTADO_DEVUELTO
+                obj_gasto.save(update_fields=['estado', 'estado_antes_devolver'])
                 
                 data = {
                         'msj':'Se regresó el gasto seleccionado al usuario responsable',
@@ -6775,6 +6780,159 @@ def cajas_efectivo(request):
                     }
                 
                 return JsonResponse(data)
+
+            elif todo == 'editar_gasto_devuelto':
+                gasto_id = request.POST.get('id_gasto')
+                try:
+                    obj_gasto = gastos_caja.objects.select_related(
+                        'forma_pago', 'reembolso'
+                    ).get(pk=gasto_id)
+                except (gastos_caja.DoesNotExist, TypeError, ValueError):
+                    return JsonResponse({
+                        'msj': 'Gasto no encontrado.',
+                        'class': 'alert-danger',
+                    })
+
+                if obj_gasto.estado != gastos_caja.ESTADO_DEVUELTO:
+                    return JsonResponse({
+                        'msj': f'Solo se pueden editar gastos en estado Devuelto (actual: {obj_gasto.estado}).',
+                        'class': 'alert-danger',
+                    })
+
+                owner = (
+                    obj_gasto.forma_pago.usuario_responsable
+                    and obj_gasto.forma_pago.usuario_responsable.pk == request.user.pk
+                )
+                is_cont = check_groups(request, ('Contabilidad',), raise_exception=False)
+                if not owner and not is_cont and not request.user.is_superuser:
+                    return JsonResponse({
+                        'msj': 'No tienes permiso de realizar cambios sobre un gasto.',
+                        'class': 'alert-danger',
+                    })
+
+                fecha = request.POST.get('fecha')
+                descripcion = request.POST.get('descripcion')
+                nit_tercero = request.POST.get('nit_tercero')
+                valor = (request.POST.get('valor') or '').replace(',', '')
+                concepto = request.POST.get('concepto')
+                tipo_documento_soporte = (request.POST.get('tipo_documento_soporte') or '').strip()
+                soporte = request.FILES.get('soporte')
+
+                try:
+                    fecha_gasto = datetime.datetime.strptime(fecha, '%Y-%m-%d').date()
+                except (TypeError, ValueError):
+                    return JsonResponse({
+                        'msj': 'La fecha del gasto es inválida.',
+                        'class': 'alert-danger',
+                    })
+
+                fecha_min, fecha_max = _rango_fechas_gasto_caja()
+                if not (fecha_min <= fecha_gasto <= fecha_max):
+                    return JsonResponse({
+                        'msj': f'La fecha del gasto debe estar entre {fecha_min} y {fecha_max}.',
+                        'class': 'alert-danger',
+                    })
+
+                valid_tipos = {c[0] for c in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES}
+                if tipo_documento_soporte not in valid_tipos:
+                    return JsonResponse({
+                        'msj': 'Tipo de soporte invalido.',
+                        'class': 'alert-danger',
+                    })
+
+                try:
+                    obj_concepto = conceptos_legalizacion.objects.get(pk=concepto)
+                    partner = Partners.objects.get(pk=nit_tercero)
+                    valor_int = int(valor)
+                except (conceptos_legalizacion.DoesNotExist, Partners.DoesNotExist, TypeError, ValueError):
+                    return JsonResponse({
+                        'msj': 'Datos del gasto incompletos o inválidos.',
+                        'class': 'alert-danger',
+                    })
+
+                if soporte:
+                    soporte.name = soporte.name.translate(trans)
+                    if not soporte.name.endswith('.pdf'):
+                        return JsonResponse({
+                            'msj': 'El soporte debe ser un archivo en formato PDF.',
+                            'class': 'alert-danger',
+                        })
+                    obj_gasto.soporte = soporte
+
+                tipo_iva = request.POST.get('tipo_iva')
+                tipo_rte = request.POST.get('tipo_rte')
+                valor_iva_raw = (request.POST.get('valor_iva') or '0').replace(',', '')
+                valor_rte_raw = (request.POST.get('valor_rte') or '0').replace(',', '')
+                rte_asumida = request.POST.get('rte_asumida')
+
+                try:
+                    valor_iva = float(valor_iva_raw or 0)
+                    valor_rte = float(valor_rte_raw or 0)
+                except (TypeError, ValueError):
+                    return JsonResponse({
+                        'msj': 'Valores de IVA/Rte inválidos.',
+                        'class': 'alert-danger',
+                    })
+
+                cuenta_iva = None
+                if tipo_iva:
+                    try:
+                        cuenta_iva = impuestos_legalizacion.objects.get(pk=tipo_iva)
+                    except impuestos_legalizacion.DoesNotExist:
+                        return JsonResponse({
+                            'msj': 'Tipo de IVA inválido.',
+                            'class': 'alert-danger',
+                        })
+                cuenta_rte = None
+                if tipo_rte:
+                    try:
+                        cuenta_rte = impuestos_legalizacion.objects.get(pk=tipo_rte)
+                    except impuestos_legalizacion.DoesNotExist:
+                        return JsonResponse({
+                            'msj': 'Tipo de retención inválido.',
+                            'class': 'alert-danger',
+                        })
+
+                valor_esperado = valor_int
+                subtotal = valor_int - valor_iva + valor_rte
+                if rte_asumida == 'on':
+                    subtotal -= valor_rte
+                total_calc = subtotal + valor_iva - (0 if rte_asumida == 'on' else valor_rte)
+                if abs(total_calc - valor_esperado) > 0.5:
+                    return JsonResponse({
+                        'msj': 'El total calculado (subtotal + IVA - Rte) no coincide con el valor del gasto.',
+                        'class': 'alert-danger',
+                    })
+
+                estado_previo = (obj_gasto.estado_antes_devolver or '').strip() or gastos_caja.ESTADO_PENDIENTE
+                reembolso = obj_gasto.reembolso
+
+                obj_gasto.fecha_gasto = fecha_gasto
+                obj_gasto.descripcion = (descripcion or '').upper()
+                obj_gasto.tercero = partner
+                obj_gasto.valor = valor_int
+                obj_gasto.concepto = obj_concepto
+                obj_gasto.tipo_documento_soporte = tipo_documento_soporte
+                obj_gasto.cuenta_iva = cuenta_iva
+                obj_gasto.valor_iva = valor_iva
+                obj_gasto.cuenta_rte = cuenta_rte
+                obj_gasto.valor_rte = valor_rte
+                obj_gasto.rte_asumida = True if rte_asumida == 'on' else False
+                obj_gasto.estado = estado_previo
+                obj_gasto.estado_antes_devolver = ''
+                obj_gasto.save()
+
+                if reembolso is not None:
+                    total_reemb = gastos_caja.objects.filter(reembolso=reembolso).aggregate(
+                        total=Sum('valor')
+                    ).get('total') or 0
+                    reembolso.valor = int(total_reemb)
+                    reembolso.save(update_fields=['valor'])
+
+                return JsonResponse({
+                    'msj': f'Se actualizó el gasto y volvió a estado {estado_previo}.',
+                    'class': 'alert-success',
+                })
             
     superuser = request.user.is_superuser
     contabilidad = check_groups(request,['Contabilidad',],raise_exception=False)

@@ -922,14 +922,22 @@ class gastos_caja(models.Model):
     valor_rte = models.FloatField(null=True, blank=True)
     rte_asumida = models.BooleanField(null=True, blank=True)
     estado = models.CharField(max_length=255, default='Pendiente')
+    ESTADO_PENDIENTE = 'Pendiente'
     ESTADO_REVISADO = 'Revisado'
     ESTADO_APROBADO = 'Aprobado'
     ESTADO_REEMBOLSO = 'Reembolso'
     ESTADO_LEGALIZADO = 'Legalizado'
+    ESTADO_DEVUELTO = 'Devuelto'
     ESTADOS_ELEGIBLES_REEMBOLSO = (ESTADO_REVISADO,)
     ESTADOS_ELEGIBLES_ALEGRA_BILL = (ESTADO_REVISADO, ESTADO_REEMBOLSO, ESTADO_LEGALIZADO)
     forma_pago = models.ForeignKey(cuentas_pagos, on_delete = models.PROTECT)
     reembolso = models.ForeignKey(reembolsos_caja, on_delete = models.PROTECT, null=True, blank=True)
+    estado_antes_devolver = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Estado del gasto antes de ser marcado como Devuelto.',
+    )
     TIPO_DOC_FE = 'fe'
     TIPO_DOC_CUENTA_COBRO = 'cuenta_cobro'
     TIPO_DOCUMENTO_SOPORTE_CHOICES = (

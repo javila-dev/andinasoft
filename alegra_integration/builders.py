@@ -1588,11 +1588,16 @@ class CajaGastoBillBuilder:
 
         categories = [base_line]
 
+        marker = f'[caja-gasto:{gasto.pk}]'
+        obs = (gasto.descripcion or '').strip()
+        if marker not in obs:
+            obs = f'{obs} {marker}'.strip() if obs else marker
+
         payload = {
             'date': _date(gasto.fecha_gasto),
             'dueDate': _date(gasto.fecha_gasto),
             'provider': {'id': provider_id},
-            'observations': (gasto.descripcion or '')[:500],
+            'observations': obs[:500],
             'purchases': {'categories': categories},
         }
 
@@ -1623,6 +1628,7 @@ class CajaGastoBillBuilder:
         payload['__local'] = {
             'tipo_documento_soporte': gasto.tipo_documento_soporte,
             'reembolso_id': gasto.reembolso_id,
+            'gasto_id': gasto.pk,
             'subtotal': subtotal,
             'valor_iva': vr_iva,
             'valor_rte': vr_rte,

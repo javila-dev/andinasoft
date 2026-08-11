@@ -313,6 +313,38 @@ class AlegraMCPClient:
             path = f'{path}?fields={fields}'
         return self.rest('GET', path)
 
+    def list_bills(
+        self,
+        *,
+        start=0,
+        limit=30,
+        date=None,
+        client_id=None,
+        observations=None,
+        order_field=None,
+        order_direction=None,
+        fields=None,
+    ):
+        """
+        GET /bills — lista/filtra facturas de compra.
+        Nota: filtros tipo observations suelen ser contains; el caller valida match exacto/único.
+        """
+        params = {'start': int(start), 'limit': min(int(limit), 30)}
+        if date:
+            params['date'] = str(date)[:10]
+        if client_id:
+            params['client_id'] = str(client_id)
+        if observations:
+            params['observations'] = str(observations)
+        if order_field:
+            params['order_field'] = str(order_field)
+        if order_direction:
+            params['order_direction'] = str(order_direction)
+        if fields:
+            params['fields'] = str(fields)
+        qs = '&'.join(f'{k}={requests.utils.quote(str(v))}' for k, v in params.items())
+        return self.rest('GET', f'/bills?{qs}')
+
     def get_contact(self, contact_id, *, fields=None):
         """GET /contacts/{id} — p. ej. fields=accounting para debtToPay del proveedor."""
         cid = str(contact_id or '').strip()

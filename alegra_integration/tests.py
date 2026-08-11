@@ -1525,6 +1525,8 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertNotIn('numberTemplate', built.payload)
         self.assertEqual(built.local_key, 'caja:bill:99:501')
         self.assertEqual(built.payload['purchases']['categories'][0]['id'], 'cat-caja-expense-mapped')
+        self.assertIn('[caja-gasto:501]', built.payload['observations'])
+        self.assertEqual(built.payload['__local']['gasto_id'], 501)
 
     def test_caja_bill_falls_back_to_puc_when_no_concept_mapping(self):
         resolver = ResolverStub()
@@ -2584,6 +2586,134 @@ class ReceiptReconcileTests(SimpleTestCase):
             payload={'observations': 'GTT#1'},
         )
         self.assertFalse(should_attempt_journal_reconcile(doc))
+
+
+class CajaBillReconcileTests(SimpleTestCase):
+    def _doc(self, **overrides):
+        base = dict(
+            pk=77,
+            empresa=SimpleNamespace(pk='901018375'),
+            document_type='caja_bill',
+            alegra_operation='POST /bills',
+            local_key='caja:bill:99:501',
+            source_pk='501',
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'observations': 'COMPRA PAPELERIA [caja-gasto:501]',
+                'purchases': {'categories': [{'id': 'cat-1', 'quantity': 1, 'price': 119000}]},
+                '__local': {'valor_esperado': 119000, 'gasto_id': 501},
+            },
+            status='valid',
+            alegra_id='',
+            error='',
+            response={},
+            sent_at=None,
+            save=Mock(),
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_should_attempt_only_caja_bill(self):
+        from alegra_integration.bill_reconcile import should_attempt_caja_bill_reconcile
+
+        self.assertTrue(should_attempt_caja_bill_reconcile(self._doc()))
+        self.assertFalse(should_attempt_caja_bill_reconcile(self._doc(
+            document_type='gtt_support', local_key='gtt:1',
+        )))
+
+    def test_find_by_marker(self):
+        from alegra_integration import bill_reconcile
+
+        client = Mock()
+        client.list_bills.return_value = [
+            {'id': '900', 'observations': 'OTRO [caja-gasto:999]', 'total': 119000},
+            {'id': '901', 'observations': 'COMPRA PAPELERIA [caja-gasto:501]', 'total': 119000,
+             'provider': {'id': 'provider-1'}, 'date': '2026-05-05'},
+        ]
+        bill = bill_reconcile.find_caja_bill_in_alegra(client, self._doc())
+        self.assertEqual(bill['id'], '901')
+
+    def test_find_rejects_ambiguous_markers(self):
+        from alegra_integration import bill_reconcile
+
+        client = Mock()
+        client.list_bills.return_value = [
+            {'id': '901', 'observations': 'A [caja-gasto:501]', 'total': 119000},
+            {'id': '902', 'observations': 'B [caja-gasto:501]', 'total': 119000},
+        ]
+        self.assertIsNone(bill_reconcile.find_caja_bill_in_alegra(client, self._doc()))
+
+    @patch('alegra_integration.bill_reconcile.sync_pago_from_alegra_document')
+    def test_claim_existing_marks_sent(self, mock_sync):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration import bill_reconcile
+
+        doc = self._doc()
+        client = Mock()
+        client.list_bills.return_value = [
+            {'id': '777', 'observations': 'COMPRA PAPELERIA [caja-gasto:501]', 'total': 119000},
+        ]
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter:
+            mock_filter.return_value.exclude.return_value.exists.return_value = False
+            self.assertTrue(bill_reconcile.claim_existing_caja_bill(doc, client))
+
+        self.assertEqual(doc.status, AlegraDocument.STATUS_SENT)
+        self.assertEqual(doc.alegra_id, '777')
+        self.assertEqual(doc.response.get('reconciled_reason'), 'caja_bill_already_exists')
+        mock_sync.assert_called_once_with(doc)
+
+    @patch('alegra_integration.services.claim_existing_caja_bill')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_precheck_skips_post_for_caja_bill(self, mock_client_cls, mock_claim):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = self._doc(status=AlegraDocument.STATUS_VALID, empresa_id='901018375')
+        mock_client = Mock()
+        mock_client_cls.return_value = mock_client
+        mock_claim.return_value = True
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter, \
+             patch.object(AlegraIntegrationService, '_capture_caja_bill_cxp') as mock_cxp:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        mock_claim.assert_called_once()
+        mock_cxp.assert_called_once()
+        mock_client.create_bill.assert_not_called()
+
+    @patch('alegra_integration.services.reconcile_caja_bill_document')
+    @patch('alegra_integration.services.claim_existing_caja_bill', return_value=False)
+    @patch('alegra_integration.services.AlegraMCPClient')
+    def test_try_send_reconciles_caja_bill_after_error(self, mock_client_cls, mock_claim, mock_reconcile):
+        from alegra_integration.exceptions import AlegraIntegrationError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = self._doc(status=AlegraDocument.STATUS_VALID, empresa_id='901018375')
+        mock_client = Mock()
+        mock_client_cls.return_value = mock_client
+        mock_reconcile.return_value = True
+
+        with patch.object(AlegraDocument.objects, 'filter') as mock_filter, \
+             patch.object(AlegraIntegrationService, '_send_document', side_effect=AlegraIntegrationError('timeout')), \
+             patch.object(AlegraIntegrationService, '_capture_caja_bill_cxp') as mock_cxp:
+            mock_filter.return_value.exclude.return_value.first.return_value = None
+            outcome = AlegraIntegrationService()._try_send_batch_document(
+                SimpleNamespace(), doc, {}, retry_failed=True,
+            )
+
+        self.assertEqual(outcome, 'sent')
+        mock_reconcile.assert_called_once()
+        mock_cxp.assert_called_once()
+
+
+class _JournalReconcileSendContinuationTests(SimpleTestCase):
+    """Keep journal send-path tests that lived after caja bill block insertion point."""
 
     @patch('alegra_integration.services.claim_existing_journal')
     @patch('alegra_integration.services.AlegraMCPClient')

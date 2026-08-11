@@ -263,6 +263,7 @@
   <div class="dropdown-submenu">
     <a class="dropdown-item dropdown-toggle" href="#" tabindex="-1"><i class="fas fa-pen fa-fw"></i>Editar</a>
     <div class="dropdown-menu ctx-menu-compact">
+      <a class="dropdown-item disabled" data-action="editar_gasto" id="editar_gasto" href="#">Gasto completo</a>
       <a class="dropdown-item disabled" data-action="change_support" id="change_support" href="#">Soporte</a>
       <a class="dropdown-item disabled" data-action="change_concept" id="change_concept" href="#">Concepto</a>
       <a class="dropdown-item disabled" data-action="change_tipo_doc" id="change_tipo_doc" href="#">Tipo doc.</a>
@@ -636,7 +637,7 @@
     const allEdit = '#change_support, #change_concept, #change_tipo_doc, #include_taxes';
     const contab = '#marcar_revisado, #devolver_gasto';
 
-    disable('#approve_gasto, #eliminar_leg');
+    disable('#approve_gasto, #eliminar_leg, #editar_gasto');
     disable(allEdit);
     disable(contab);
 
@@ -650,7 +651,7 @@
       enable('#change_tipo_doc');
       enable('#devolver_gasto');
     } else if (line.estado === 'Devuelto') {
-      enable('#change_support, #change_concept, #change_tipo_doc, #include_taxes');
+      enable('#editar_gasto');
     } else if (line.estado === 'Reembolso') {
       enable('#change_tipo_doc');
       enable('#devolver_gasto');
@@ -700,6 +701,92 @@
     $('#modalDetalleGasto').modal('show');
   }
 
+  function syncEditTaxSelectOptions() {
+    const copyOptions = (fromSel, toSel) => {
+      const $from = $(fromSel);
+      const $to = $(toSel);
+      if (!$from.length || !$to.length) return;
+      $to.empty();
+      $from.find('option').each(function() {
+        $to.append($(this).clone());
+      });
+    };
+    copyOptions('#id_tipo_iva', '#id_edit_tipo_iva');
+    copyOptions('#id_tipo_rte', '#id_edit_tipo_rte');
+  }
+
+  function totalizarEditTaxes() {
+    let subtotal = ($('#id_edit_subtotal').val() || '0').replace(/[$,]/g, '') * 1;
+    let iva = ($('#id_edit_valor_iva').val() || '0').replace(/[$,]/g, '') * 1;
+    let rte = ($('#id_edit_valor_rte').val() || '0').replace(/[$,]/g, '') * 1;
+    if ($('#id_edit_rte_asumida').prop('checked')) rte = 0;
+    $('#id_edit_total_calculado').val(new Intl.NumberFormat('en-EN').format(subtotal + iva - rte));
+  }
+
+  function recalcEditSubtotalFromValor() {
+    let valor = ($('#id_valor').val() || '0').replace(/[$,]/g, '') * 1;
+    let iva = ($('#id_edit_valor_iva').val() || '0').replace(/[$,]/g, '') * 1;
+    let rte = ($('#id_edit_valor_rte').val() || '0').replace(/[$,]/g, '') * 1;
+    let rteFactor = $('#id_edit_rte_asumida').prop('checked') ? 0 : 1;
+    let subtotal = valor - iva + (rte * rteFactor);
+    $('#id_edit_subtotal').val(new Intl.NumberFormat('en-EN').format(subtotal));
+    totalizarEditTaxes();
+  }
+
+  function resetGastoModalCreateMode() {
+    $('#id_gasto_edit').val('');
+    $('#modalAnticip').text('Registrar gasto');
+    $('#submit-id-registrar-leg').val('Registrar').removeClass('disabled');
+    $('#edit-gasto-taxes-block').addClass('d-none');
+    $('#id_soporte').prop('required', true);
+    $('#form-legalizar-anticipo').trigger('reset');
+    $('#id_edit_valor_iva, #id_edit_valor_rte').val('0');
+    $('#id_edit_rte_asumida').prop('checked', false);
+    $('#id_edit_subtotal, #id_edit_total_calculado').val('');
+    if (document.querySelector('#id_nit_tercero') && document.querySelector('#id_nit_tercero').fstdropdown) {
+      document.querySelector('#id_nit_tercero').fstdropdown.rebind();
+    }
+    if (window.bsCustomFileInput && typeof window.bsCustomFileInput.init === 'function') {
+      window.bsCustomFileInput.init();
+    }
+  }
+
+  function openEditarGastoDevuelto(line) {
+    syncEditTaxSelectOptions();
+    $('#id_gasto_edit').val(line.pk);
+    $('#modalAnticip').text('Editar gasto');
+    $('#submit-id-registrar-leg').val('Guardar');
+    $('#edit-gasto-taxes-block').removeClass('d-none');
+    $('#id_soporte').prop('required', false);
+
+    $('#id_fecha').val(line.fecha_iso || '');
+    $('#id_valor').val(new Intl.NumberFormat('en-EN').format(Math.abs(line.valor || 0)));
+    $('#id_nit_tercero').val(line.nit_tercero || '');
+    if (document.querySelector('#id_nit_tercero') && document.querySelector('#id_nit_tercero').fstdropdown) {
+      document.querySelector('#id_nit_tercero').fstdropdown.rebind();
+    }
+    $('#id_concepto').val(line.concepto_id || '');
+    $('#id_tipo_documento_soporte').val(line.tipo_documento_soporte || '');
+    $('#id_descripcion').val(line.descripcion || '');
+
+    const ivaId = line.cuenta_iva && line.cuenta_iva.id;
+    const rteId = line.cuenta_rte && line.cuenta_rte.id;
+    $('#id_edit_tipo_iva').val(ivaId == null ? '' : ivaId);
+    $('#id_edit_tipo_rte').val(rteId == null ? '' : rteId);
+    $('#id_edit_valor_iva').val(new Intl.NumberFormat('en-EN').format(line.valor_iva || 0));
+    $('#id_edit_valor_rte').val(new Intl.NumberFormat('en-EN').format(line.valor_rte || 0));
+    $('#id_edit_rte_asumida').prop('checked', !!line.rte_asumida);
+
+    let rteFactor = line.rte_asumida ? 0 : 1;
+    let subtotal = Math.abs(line.valor || 0) - (line.valor_iva || 0) + ((line.valor_rte || 0) * rteFactor);
+    $('#id_edit_subtotal').val(new Intl.NumberFormat('en-EN').format(subtotal));
+    totalizarEditTaxes();
+    if (window.bsCustomFileInput && typeof window.bsCustomFileInput.init === 'function') {
+      window.bsCustomFileInput.init();
+    }
+    $('#modalNuevaLegalizacion').modal('show');
+  }
+
   $(document).ready(function(){
     const params = `status=no,location=no,toolbar=no,menubar=no,
                 width=650,height=450,left=100,top=100`
@@ -713,6 +800,7 @@
     }
 
     safeInitCustomFileInput();
+    syncEditTaxSelectOptions();
     $('.rowpagos').hide()
     $('#id_check_pagado').parent('.form-check').hide()
 
@@ -1328,6 +1416,10 @@
           case "devolver_gasto":
             devolverGastoCaja(line.pk, $('#tabla_movimientos tbody'), tabla_movimientos);
             break;
+
+          case "editar_gasto":
+            openEditarGastoDevuelto(line);
+            break;
       }
     })
     $("#contextMenureemb").click(function(e){
@@ -1574,7 +1666,9 @@
       let data = new FormData(this);
       let caja = $('#id_caja').val()
       let fechaGasto = $('#id_fecha').val()
-      if (caja==""){
+      let gastoEditId = $('#id_gasto_edit').val()
+      let isEdit = !!gastoEditId
+      if (!isEdit && caja==""){
         $('#alert-title').text('Andinasoft dice:')
         $('#alert-data').text('Debes escoger una caja para registrar el gasto')
         $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
@@ -1586,9 +1680,24 @@
         $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
         return;
       }
+      if (isEdit) {
+        let valorGasto = ($('#id_valor').val() || '0').replace(/[$,]/g, '') * 1
+        let totalCalc = ($('#id_edit_total_calculado').val() || '0').replace(/[$,]/g, '') * 1
+        if (Math.abs(valorGasto - totalCalc) > 0.5) {
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text('El total calculado (IVA/Rte) es diferente al valor del gasto.')
+          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+          return;
+        }
+      }
       $('#submit-id-registrar-leg').addClass('disabled').val('Cargando...')
-      data.append('to_do','nuevogasto')
-      data.append('id_caja',caja)
+      if (isEdit) {
+        data.set('to_do', 'editar_gasto_devuelto')
+        data.set('id_gasto', gastoEditId)
+      } else {
+        data.append('to_do','nuevogasto')
+        data.append('id_caja',caja)
+      }
       $.ajax({
         type:'POST',
         url:'/accounting/cajasefectivo',
@@ -1597,8 +1706,7 @@
         processData: false,
         success: (xhr) => {
           tabla_movimientos.ajax.reload()
-          $('#form-legalizar-anticipo').trigger('reset')
-          safeInitCustomFileInput()
+          resetGastoModalCreateMode()
           $("#modalNuevaLegalizacion").modal('hide')
           $('#alert-title').text('Andinasoft dice:')
           $('#alert-data').text(xhr.msj)
@@ -1611,9 +1719,20 @@
           $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
         },
         complete: (xhr) => {
-          $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+          if ($('#id_gasto_edit').val()) {
+            $('#submit-id-registrar-leg').removeClass('disabled').val('Guardar')
+          } else {
+            $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+          }
         }
       })
+    })
+    $('#modalNuevaLegalizacion').on('hidden.bs.modal', function(){
+      resetGastoModalCreateMode()
+    })
+    $(document).on('input change', '.calculate-edit-tax, #id_valor', function(){
+      if ($('#edit-gasto-taxes-block').hasClass('d-none')) return;
+      recalcEditSubtotalFromValor();
     })
     $('#form-partners').submit(function(e){
       e.preventDefault();

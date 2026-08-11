@@ -6440,7 +6440,11 @@ def edades_cartera(request,proyecto):
         
         return render(request,'adjudicados_fractal.html',context)
     
-    check_groups(request,('Supervisor Cartera',))
+    if not (
+        check_groups(request, ('Supervisor Cartera',), raise_exception=False)
+        or check_groups(request, ('Gestor Cartera',), raise_exception=False)
+    ):
+        raise PermissionDenied
 
     adjudicaciones, fecha_consulta = edades_cartera_snapshot(proyecto)
     context = {

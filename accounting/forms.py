@@ -926,7 +926,8 @@ class form_legalizar_anticipo(forms.Form):
     descripcion = forms.CharField(max_length=255, widget=forms.Textarea({'rows':3}))
     nit_tercero = forms.ModelChoiceField(Partners.objects.all().order_by('nombres'), empty_label="Selecciona...")
     valor = forms.CharField(max_length=255)
-    soporte = forms.FileField()
+    # Required enforced in view for create; optional when editing Devuelto.
+    soporte = forms.FileField(required=False)
     concepto = forms.ModelChoiceField(conceptos_legalizacion.objects.filter(activo=True),
                                       empty_label="Seleciona...")
     tipo_documento_soporte = forms.ChoiceField(
@@ -940,6 +941,7 @@ class form_legalizar_anticipo(forms.Form):
         self.helper = FormHelper() 
         self.helper.form_id = 'form-legalizar-anticipo'
         self.helper.layout = Layout(
+            HTML('<input type="hidden" name="id_gasto" id="id_gasto_edit" value="">'),
             HTML('<div class="card" id="leg_block"><div class="card-body">'),
             Row(
                 Column(Field('fecha'),
@@ -957,7 +959,48 @@ class form_legalizar_anticipo(forms.Form):
             Field('tipo_documento_soporte'),
             Field('descripcion'),
             customfields.filepicker('soporte'),
-            HTML('</div></div>'),            
+            HTML('</div></div>'),
+            HTML(
+                '<div class="card mt-2 d-none" id="edit-gasto-taxes-block">'
+                '<div class="card-header py-2"><strong>IVA / Retenciones</strong></div>'
+                '<div class="card-body">'
+                '<div class="input-group mb-2">'
+                '<div class="input-group-prepend"><span class="input-group-text">Subtotal</span></div>'
+                '<input type="text" class="form-control text-center money" id="id_edit_subtotal" readonly>'
+                '</div>'
+                '<div class="form-group">'
+                '<label for="id_edit_tipo_iva">Tipo IVA</label>'
+                '<select class="form-control" id="id_edit_tipo_iva" name="tipo_iva">'
+                '<option value="">Sin IVA</option></select>'
+                '</div>'
+                '<div class="input-group mb-2">'
+                '<div class="input-group-prepend"><span class="input-group-text">Valor IVA</span></div>'
+                '<input type="text" class="form-control text-center money calculate-edit-tax" '
+                'id="id_edit_valor_iva" name="valor_iva" value="0">'
+                '</div>'
+                '<div class="form-group">'
+                '<label for="id_edit_tipo_rte">Tipo retención</label>'
+                '<select class="form-control" id="id_edit_tipo_rte" name="tipo_rte">'
+                '<option value="">Sin Retención</option></select>'
+                '</div>'
+                '<div class="input-group mb-2">'
+                '<div class="input-group-prepend"><span class="input-group-text">Retención</span></div>'
+                '<input type="text" class="form-control text-center money calculate-edit-tax" '
+                'id="id_edit_valor_rte" name="valor_rte" value="0">'
+                '</div>'
+                '<div class="form-check mb-2">'
+                '<input type="checkbox" class="form-check-input calculate-edit-tax" '
+                'id="id_edit_rte_asumida" name="rte_asumida">'
+                '<label class="form-check-label" for="id_edit_rte_asumida">'
+                'La retención es asumida</label>'
+                '</div>'
+                '<div class="input-group">'
+                '<div class="input-group-prepend"><span class="input-group-text">Total</span></div>'
+                '<input type="text" class="form-control text-center money" '
+                'id="id_edit_total_calculado" readonly>'
+                '</div>'
+                '</div></div>'
+            ),
             Submit('registrar-leg','Registrar',css_class='float-right mt-2 btn-success'),
         )
 

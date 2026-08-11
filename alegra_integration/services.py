@@ -29,6 +29,11 @@ from alegra_integration.journal_reconcile import (
     reconcile_journal_document,
     should_attempt_journal_reconcile,
 )
+from alegra_integration.bill_reconcile import (
+    claim_existing_caja_bill,
+    reconcile_caja_bill_document,
+    should_attempt_caja_bill_reconcile,
+)
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError, AlegraIntegrationError
 
 logger = logging.getLogger(__name__)
@@ -694,6 +699,27 @@ class AlegraIntegrationService:
                     })
                     # #endregion
                     return 'sent'
+            if should_attempt_caja_bill_reconcile(doc):
+                try:
+                    claimed = claim_existing_caja_bill(doc, client)
+                except Exception as precheck_exc:
+                    logger.warning(
+                        'Alegra caja bill pre-check failed doc=%s local_key=%s: %s',
+                        doc.pk,
+                        doc.local_key,
+                        precheck_exc,
+                    )
+                    claimed = False
+                if claimed:
+                    try:
+                        self._capture_caja_bill_cxp(client, doc)
+                    except Exception as capture_exc:
+                        logger.warning(
+                            'Alegra caja bill CxP capture after claim failed doc=%s: %s',
+                            doc.pk,
+                            capture_exc,
+                        )
+                    return 'sent'
             # #region agent log
             _agent_dbg('A', 'services.py:_try_send_batch_document:before_post', 'about to POST to Alegra', {
                 'document_id': doc.pk,
@@ -720,7 +746,16 @@ class AlegraIntegrationService:
             # #endregion
             sync_pago_from_alegra_document(doc)
             if doc.document_type == 'caja_bill':
-                self._capture_caja_bill_cxp(client, doc)
+                try:
+                    self._capture_caja_bill_cxp(client, doc)
+                except Exception as capture_exc:
+                    # No revertir SENT: el bill ya existe en Alegra.
+                    logger.warning(
+                        'Alegra caja bill CxP capture failed doc=%s alegra_id=%s: %s',
+                        doc.pk,
+                        doc.alegra_id,
+                        capture_exc,
+                    )
             return 'sent'
         except AlegraIntegrationError as exc:
             # #region agent log
@@ -748,6 +783,24 @@ class AlegraIntegrationService:
                 except Exception as reconcile_exc:
                     doc.status = AlegraDocument.STATUS_FAILED
                     doc.error = f'{exc} · Reconciliación journal falló: {reconcile_exc}'
+                    doc.save(update_fields=['status', 'error', 'updated_at'])
+                    return 'failed'
+            if should_attempt_caja_bill_reconcile(doc):
+                try:
+                    reconcile_client = client or AlegraMCPClient(doc.empresa)
+                    if reconcile_caja_bill_document(doc, reconcile_client, exc):
+                        try:
+                            self._capture_caja_bill_cxp(reconcile_client, doc)
+                        except Exception as capture_exc:
+                            logger.warning(
+                                'Alegra caja bill CxP capture after reconcile failed doc=%s: %s',
+                                doc.pk,
+                                capture_exc,
+                            )
+                        return 'sent'
+                except Exception as reconcile_exc:
+                    doc.status = AlegraDocument.STATUS_FAILED
+                    doc.error = f'{exc} · Reconciliación caja bill falló: {reconcile_exc}'
                     doc.save(update_fields=['status', 'error', 'updated_at'])
                     return 'failed'
             if (
