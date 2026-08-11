@@ -49,5 +49,6 @@ urlpatterns = [
     path('reference-sync', views.reference_sync, name='alegra-reference-sync'),
     path('caja-bills/duplicates/review', views.caja_bills_duplicates_review, name='alegra-caja-bills-duplicates-review'),
     path('caja-bills/duplicates/delete', views.caja_bills_duplicates_delete, name='alegra-caja-bills-duplicates-delete'),
+    path('caja-bills/duplicates/associate', views.caja_bills_duplicates_associate, name='alegra-caja-bills-duplicates-associate'),
     path('debug/mapping-check', views.debug_mapping_check, name='alegra-debug-mapping-check'),
 ]

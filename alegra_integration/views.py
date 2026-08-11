@@ -1874,3 +1874,21 @@ def caja_bills_duplicates_delete(request):
         return _error_response(exc)
     except Exception as exc:
         return _error_response(exc, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def caja_bills_duplicates_associate(request):
+    try:
+        payload = _payload(request)
+        data = AlegraIntegrationService(user=request.user).associate_caja_bill_from_review(
+            document_id=payload.get('document_id'),
+            alegra_id=payload.get('alegra_id'),
+        )
+        return JsonResponse(data)
+    except json.JSONDecodeError:
+        return JsonResponse({'detail': 'JSON invalido'}, status=400)
+    except AlegraIntegrationError as exc:
+        return _error_response(exc)
+    except Exception as exc:
+        return _error_response(exc, status=500)

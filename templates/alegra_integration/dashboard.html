@@ -791,7 +791,8 @@
         <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
       </div>
       <div class="modal-body">
-        <p class="small text-muted mb-2" id="cajaDupMsg">—</p>
+        <p class="small text-muted mb-1" id="cajaDupMsg">—</p>
+        <p class="small text-muted mb-2" id="cajaDupCriteria" style="display:none"></p>
         <div class="table-responsive" style="max-height:360px;overflow-y:auto">
           <table class="table table-sm table-hover mb-0">
             <thead class="thead-light">
@@ -801,7 +802,7 @@
                 <th>Fecha</th>
                 <th class="text-right">Valor</th>
                 <th>Nro</th>
-                <th>Estado</th>
+                <th>Coincidencia</th>
               </tr>
             </thead>
             <tbody id="cajaDupBody"></tbody>
@@ -813,6 +814,10 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-outline-success" id="cajaDupBtnAssociate" style="display:none"
+          onclick="cajaDupAssociateSelected()" disabled>
+          Asociar seleccionado
+        </button>
         <button type="button" class="btn btn-outline-danger" id="cajaDupBtnPrepare" onclick="cajaDupPrepareDelete()" disabled>
           Eliminar seleccionados
         </button>
@@ -846,6 +851,7 @@ const API = {
   refSync:      '/accounting/alegra/reference-sync',
   cajaDupReview: '/accounting/alegra/caja-bills/duplicates/review',
   cajaDupDelete: '/accounting/alegra/caja-bills/duplicates/delete',
+  cajaDupAssociate: '/accounting/alegra/caja-bills/duplicates/associate',
 };
 
 // ── State ──────────────────────────────────────
@@ -1374,10 +1380,10 @@ function buildDocActionButtons(doc, globalIdx) {
     onclick="event.stopPropagation(); showDocDetail(${globalIdx})" title="Ver detalle">
     <i class="fas fa-search"></i>
   </button>`;
-  const reviewBtn = (doc.document_type === 'caja_bill' && doc.status === 'sent' && doc.id)
+  const reviewBtn = (doc.document_type === 'caja_bill' && doc.id)
     ? `<button type="button" class="btn btn-xs btn-outline-warning" style="padding:1px 8px;font-size:11px"
         onclick="event.stopPropagation(); reviewCajaBillDuplicates(${doc.id})"
-        title="Revisar gasto en Alegra (duplicados)">
+        title="Revisar gasto en Alegra (duplicados / asociar)">
         <i class="fas fa-clone"></i>
       </button>`
     : '';
@@ -1396,10 +1402,12 @@ let cajaDupState = null;
 function reviewCajaBillDuplicates(documentId) {
   cajaDupState = null;
   $('#cajaDupBody').html('<tr><td colspan="6" class="text-center text-muted py-3">Consultando Alegra…</td></tr>');
-  $('#cajaDupMsg').text('Buscando documentos del mismo gasto en Alegra…');
+  $('#cajaDupMsg').text('Buscando por marca del gasto y por misma fecha, tercero y valor…');
+  $('#cajaDupCriteria').hide().text('');
   $('#cajaDupConfirmBox').hide();
   $('#cajaDupBtnPrepare').prop('disabled', true).show();
   $('#cajaDupBtnConfirm').hide();
+  $('#cajaDupBtnAssociate').prop('disabled', true).hide();
   $('#cajaDupModal').modal('show');
 
   $.ajax({
@@ -1414,33 +1422,81 @@ function reviewCajaBillDuplicates(documentId) {
   }).fail(function(xhr) {
     const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
     $('#cajaDupMsg').text(msg || 'No se pudo revisar el gasto.');
+    $('#cajaDupCriteria').hide();
     $('#cajaDupBody').html(`<tr><td colspan="6" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`);
   });
 }
 
 function renderCajaDupModal(data) {
   $('#cajaDupMsg').text(data.message || '');
+  const canAssociateMode = !!data.can_associate;
+  const crit = data.criteria || {};
+  if (crit.date || crit.provider_id || crit.amount != null) {
+    const parts = [];
+    if (crit.date) parts.push(`fecha ${escHtml(crit.date)}`);
+    if (crit.provider_id) parts.push(`tercero ${escHtml(crit.provider_id)}`);
+    if (crit.amount != null) parts.push(`valor ${formatMoneyCop(crit.amount)}`);
+    let hint = 'Criterio: ' + parts.join(' · ') + '. ';
+    if (canAssociateMode) {
+      hint += 'Elige un radio para asociar este gasto, o marca checkboxes para eliminar duplicados libres.';
+    } else {
+      hint += 'Marca los que quieras eliminar; el enviado desde Andinasoft se conserva.';
+    }
+    $('#cajaDupCriteria').html(hint).show();
+  } else {
+    $('#cajaDupCriteria').hide().text('');
+  }
   const tbody = $('#cajaDupBody').empty();
   const bills = data.bills || [];
   if (!bills.length) {
     tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">Sin resultados en Alegra</td></tr>');
     $('#cajaDupBtnPrepare').prop('disabled', true);
+    $('#cajaDupBtnAssociate').prop('disabled', true).toggle(canAssociateMode);
     return;
   }
   bills.forEach(b => {
     const badges = [];
     if (b.is_keep) badges.push('<span class="badge badge-success">Conservar</span>');
+    if (b.match_kind === 'marker') {
+      badges.push('<span class="badge badge-info">Marca gasto</span>');
+    } else if (b.match_kind === 'soft') {
+      badges.push('<span class="badge badge-warning">Misma fecha/tercero/valor</span>');
+    } else if (b.match_kind === 'keep' && !b.is_keep) {
+      badges.push('<span class="badge badge-light">Enviado local</span>');
+    }
     if (b.journal_locked) badges.push('<span class="badge badge-secondary">En asiento</span>');
+    if (b.linked_other) {
+      badges.push(
+        `<span class="badge badge-danger">Otro gasto ${escHtml(b.linked_gasto_id || '')}</span>`
+      );
+    } else if (b.already_linked) {
+      badges.push('<span class="badge badge-secondary">Ya asociado</span>');
+    }
     if (b.amount_mismatch) badges.push('<span class="badge badge-warning">Valor distinto</span>');
     if (b.date_mismatch) badges.push('<span class="badge badge-warning">Fecha distinta</span>');
-    const canDel = !!b.can_delete;
-    const cb = canDel
-      ? `<input type="checkbox" class="caja-dup-cb" value="${escHtml(b.id)}" onchange="cajaDupUpdatePrepare()">`
+    if (b.provider_mismatch) badges.push('<span class="badge badge-warning">Tercero distinto</span>');
+
+    const controls = [];
+    if (canAssociateMode && b.can_associate) {
+      controls.push(
+        `<input type="radio" name="caja-dup-assoc" class="caja-dup-radio" value="${escHtml(b.id)}" `
+        + `onchange="cajaDupUpdatePrepare()" title="Asociar este id">`
+      );
+    }
+    if (b.can_delete) {
+      controls.push(
+        `<input type="checkbox" class="caja-dup-cb" value="${escHtml(b.id)}" `
+        + `onchange="cajaDupUpdatePrepare()" title="Eliminar">`
+      );
+    }
+    const ctrlHtml = controls.length
+      ? `<div class="d-flex" style="gap:6px;align-items:center">${controls.join('')}</div>`
       : '<span class="text-muted">—</span>';
-    const rowCls = b.is_keep ? 'table-success' : (b.journal_locked ? 'table-secondary' : '');
+    const rowCls = b.is_keep ? 'table-success'
+      : (b.linked_other || b.journal_locked ? 'table-secondary' : '');
     tbody.append(`
       <tr class="${rowCls}">
-        <td>${cb}</td>
+        <td>${ctrlHtml}</td>
         <td><code style="font-size:11px">${escHtml(b.id || '—')}</code></td>
         <td><small>${escHtml(b.date || '—')}</small></td>
         <td class="text-right"><small>${formatMoneyCop(b.total)}</small></td>
@@ -1451,6 +1507,7 @@ function renderCajaDupModal(data) {
   $('#cajaDupConfirmBox').hide();
   $('#cajaDupBtnConfirm').hide();
   $('#cajaDupBtnPrepare').show();
+  $('#cajaDupBtnAssociate').toggle(canAssociateMode);
   cajaDupUpdatePrepare();
 }
 
@@ -1460,12 +1517,21 @@ function cajaDupSelectedIds() {
   return ids;
 }
 
+function cajaDupAssociateId() {
+  const $r = $('input.caja-dup-radio:checked');
+  return $r.length ? String($r.val()) : '';
+}
+
 function cajaDupUpdatePrepare() {
   const n = cajaDupSelectedIds().length;
-  $('#cajaDupBtnPrepare').prop('disabled', n === 0);
+  const assocId = cajaDupAssociateId();
+  const canAssociateMode = !!(cajaDupState && cajaDupState.can_associate);
+  $('#cajaDupBtnPrepare').prop('disabled', n === 0).show();
+  $('#cajaDupBtnAssociate')
+    .toggle(canAssociateMode)
+    .prop('disabled', !assocId);
   $('#cajaDupConfirmBox').hide();
   $('#cajaDupBtnConfirm').hide();
-  $('#cajaDupBtnPrepare').show();
 }
 
 function cajaDupPrepareDelete() {
@@ -1477,7 +1543,43 @@ function cajaDupPrepareDelete() {
   );
   $('#cajaDupConfirmBox').show();
   $('#cajaDupBtnPrepare').hide();
+  $('#cajaDupBtnAssociate').hide();
   $('#cajaDupBtnConfirm').show();
+}
+
+function cajaDupAssociateSelected() {
+  if (!cajaDupState || !cajaDupState.document_id || !cajaDupState.can_associate) return;
+  const alegraId = cajaDupAssociateId();
+  if (!alegraId) return;
+  if (!window.confirm(
+    `¿Asociar este gasto al documento Alegra ${alegraId}? No se creará uno nuevo.`
+  )) return;
+  const $btn = $('#cajaDupBtnAssociate').prop('disabled', true);
+  $.ajax({
+    url: API.cajaDupAssociate,
+    method: 'POST',
+    contentType: 'application/json',
+    headers: { 'X-CSRFToken': CSRF },
+    data: JSON.stringify({
+      document_id: cajaDupState.document_id,
+      alegra_id: alegraId,
+    }),
+  }).done(function(data) {
+    log('success', `Gasto ${escHtml(data.gasto_id || '')} asociado a Alegra id ${escHtml(data.alegra_id || '')}`);
+    const summary = data.document;
+    if (summary && summary.id) {
+      const idx = allDocs.findIndex(d => d.id === summary.id);
+      if (idx >= 0) {
+        allDocs[idx] = Object.assign({}, allDocs[idx], summary);
+        renderDocsPage();
+      }
+    }
+    $('#cajaDupModal').modal('hide');
+  }).fail(function(xhr) {
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    log('error', `No se pudo asociar: ${escHtml(msg)}`);
+    $btn.prop('disabled', false);
+  });
 }
 
 function cajaDupConfirmDelete() {

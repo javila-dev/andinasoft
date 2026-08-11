@@ -31,10 +31,13 @@ from alegra_integration.journal_reconcile import (
 )
 from alegra_integration.bill_reconcile import (
     bill_criteria_from_payload,
+    caja_bill_owners_by_alegra_ids,
     caja_gasto_pk_from_doc,
     claim_existing_caja_bill,
+    collect_caja_bills_for_review,
+    criteria_from_alegra_bill,
     journal_locked_caja_bill_ids,
-    list_caja_bills_for_gasto,
+    mark_document_from_bill,
     reconcile_caja_bill_document,
     should_attempt_caja_bill_reconcile,
     summarize_caja_bill_for_review,
@@ -2087,7 +2090,9 @@ class AlegraIntegrationService:
 
     def review_caja_bill_duplicates(self, *, document_id):
         """
-        Lista bills en Alegra con el mismo marker [caja-gasto:N] que el documento enviado.
+        Lista posibles duplicados en Alegra: marker [caja-gasto:N] y/o misma
+        fecha + tercero + valor. Aplica a enviados y no enviados.
+        Si el gasto no está enviado, el usuario puede asociar un candidato libre.
         """
         try:
             doc = AlegraDocument.objects.select_related('empresa').get(pk=int(document_id))
@@ -2096,54 +2101,209 @@ class AlegraIntegrationService:
 
         if doc.document_type != 'caja_bill':
             raise AlegraIntegrationError('Solo aplica a documentos de gasto de caja.')
-        if doc.status != AlegraDocument.STATUS_SENT:
-            raise AlegraIntegrationError('El gasto debe estar enviado a Alegra para revisarlo.')
 
         gasto_pk = caja_gasto_pk_from_doc(doc)
         if not gasto_pk:
             raise AlegraIntegrationError('No se pudo determinar el gasto de caja del documento.')
 
-        keep_alegra_id = str(doc.alegra_id or '').strip()
+        is_sent = doc.status == AlegraDocument.STATUS_SENT
+        keep_alegra_id = str(doc.alegra_id or '').strip() if is_sent else ''
+        can_associate = not is_sent
         criteria = bill_criteria_from_payload(doc.payload if isinstance(doc.payload, dict) else {})
         locked = journal_locked_caja_bill_ids(doc.empresa)
         client = AlegraMCPClient(doc.empresa)
-        remote = list_caja_bills_for_gasto(client, gasto_pk)
+
+        # Si el payload local no trae fecha/tercero/valor, usar el keep en Alegra (solo enviado).
+        if (
+            keep_alegra_id
+            and (
+                not criteria.get('provider_id')
+                or not criteria.get('date')
+                or criteria.get('amount') is None
+            )
+        ):
+            try:
+                keep_bill = client.get_bill(keep_alegra_id)
+            except Exception:
+                keep_bill = None
+            if isinstance(keep_bill, dict):
+                from_keep = criteria_from_alegra_bill(keep_bill)
+                for key in ('date', 'provider_id', 'amount'):
+                    if not criteria.get(key) and from_keep.get(key) not in (None, ''):
+                        criteria[key] = from_keep[key]
+
+        collected = collect_caja_bills_for_review(
+            client,
+            gasto_pk=gasto_pk,
+            criteria=criteria,
+            keep_alegra_id=keep_alegra_id,
+        )
+        owners = caja_bill_owners_by_alegra_ids(
+            doc.empresa,
+            collected.keys(),
+            exclude_doc_pk=doc.pk,
+        )
         bills = [
             summarize_caja_bill_for_review(
-                bill,
+                item['bill'],
                 criteria=criteria,
                 keep_alegra_id=keep_alegra_id,
                 locked_ids=locked,
+                match_kind=item.get('match_kind') or 'soft',
+                owner=owners.get(bid),
+                current_gasto_pk=gasto_pk,
             )
-            for bill in remote
+            for bid, item in collected.items()
         ]
+        # can_associate solo si el doc local aún no está enviado.
+        if not can_associate:
+            for row in bills:
+                row['can_associate'] = False
+        bills.sort(key=lambda b: (0 if b.get('is_keep') else 1, b.get('id') or ''))
+
         remote_ids = {b['id'] for b in bills if b.get('id')}
+        soft_count = sum(1 for b in bills if b.get('match_kind') == 'soft')
+        marker_count = sum(1 for b in bills if b.get('match_kind') == 'marker')
         has_duplicates = len(remote_ids) > 1 or bool(keep_alegra_id and remote_ids - {keep_alegra_id})
+        associable = [b for b in bills if b.get('can_associate')]
+
+        if can_associate:
+            if associable:
+                message = (
+                    f'Se encontraron {len(associable)} documento(s) en Alegra '
+                    'que puedes asociar a este gasto (misma fecha/tercero/valor o marca). '
+                    'También puedes eliminar posibles duplicados libres.'
+                )
+            elif remote_ids:
+                message = (
+                    'Hay documentos en Alegra, pero están están asociados a otro gasto '
+                    'o a un asiento; no se pueden asociar aquí.'
+                )
+            else:
+                message = (
+                    'No se encontraron documentos en Alegra por marca ni por '
+                    'fecha/tercero/valor. Revisa que el gasto tenga proveedor, fecha y valor.'
+                )
+        elif has_duplicates:
+            parts = []
+            if marker_count > 1:
+                parts.append(f'{marker_count} con marca del gasto')
+            if soft_count:
+                parts.append(f'{soft_count} por misma fecha, tercero y valor')
+            message = (
+                'Posibles duplicados en Alegra'
+                + (f' ({"; ".join(parts)})' if parts else '')
+                + '. Elige cuáles eliminar; se conserva el enviado desde Andinasoft.'
+            )
+        elif remote_ids:
+            message = 'Solo hay un documento en Alegra para este gasto.'
+        else:
+            message = (
+                'No se encontraron documentos en Alegra por marca ni por '
+                'fecha/tercero/valor. Revisa que el gasto tenga proveedor, fecha y valor.'
+            )
 
         return {
             'document_id': doc.pk,
             'gasto_id': gasto_pk,
             'local_key': doc.local_key,
+            'doc_status': doc.status,
+            'can_associate': can_associate,
             'keep_alegra_id': keep_alegra_id,
+            'criteria': {
+                'date': criteria.get('date') or '',
+                'provider_id': criteria.get('provider_id') or '',
+                'amount': float(criteria['amount']) if criteria.get('amount') is not None else None,
+            },
             'bills': bills,
             'journal_locked_ids': sorted(locked),
             'has_duplicates': has_duplicates,
-            'message': (
-                'Hay varios documentos en Alegra para este gasto.'
-                if has_duplicates
-                else (
-                    'Solo hay un documento en Alegra para este gasto.'
-                    if remote_ids
-                    else 'No se encontró el documento en Alegra con la marca del gasto.'
-                )
-            ),
+            'message': message,
+        }
+
+    def associate_caja_bill_from_review(self, *, document_id, alegra_id):
+        """
+        Asocia un bill Alegra libre a un gasto de caja aún no enviado.
+        Rechaza si el id ya está en un caja_bill sent de la misma empresa.
+        """
+        try:
+            doc = AlegraDocument.objects.select_related('empresa').get(pk=int(document_id))
+        except (TypeError, ValueError, AlegraDocument.DoesNotExist) as exc:
+            raise AlegraIntegrationError('Documento no encontrado.') from exc
+
+        if doc.document_type != 'caja_bill':
+            raise AlegraIntegrationError('Solo aplica a documentos de gasto de caja.')
+        if doc.status == AlegraDocument.STATUS_SENT and str(doc.alegra_id or '').strip():
+            raise AlegraIntegrationError('El gasto ya está enviado/asociado a Alegra.')
+
+        alegra_id = str(alegra_id or '').strip()
+        if not alegra_id:
+            raise AlegraIntegrationError('Debes indicar el id Alegra a asociar.')
+
+        gasto_pk = caja_gasto_pk_from_doc(doc)
+        if not gasto_pk:
+            raise AlegraIntegrationError('No se pudo determinar el gasto de caja del documento.')
+
+        owners = caja_bill_owners_by_alegra_ids(
+            doc.empresa, [alegra_id], exclude_doc_pk=doc.pk,
+        )
+        if alegra_id in owners:
+            other = owners[alegra_id]
+            raise AlegraIntegrationError(
+                f'El id {alegra_id} ya está asociado al gasto de caja '
+                f'{other.get("gasto_id") or "?"} (doc {other.get("document_id")}).'
+            )
+
+        locked = journal_locked_caja_bill_ids(doc.empresa)
+        if alegra_id in locked:
+            raise AlegraIntegrationError(
+                'Ese documento está vinculado a un asiento de caja ya enviado.'
+            )
+
+        client = AlegraMCPClient(doc.empresa)
+        criteria = bill_criteria_from_payload(doc.payload if isinstance(doc.payload, dict) else {})
+        collected = collect_caja_bills_for_review(
+            client,
+            gasto_pk=gasto_pk,
+            criteria=criteria,
+            keep_alegra_id='',
+        )
+        if alegra_id not in collected:
+            raise AlegraIntegrationError(
+                'El documento no coincide con este gasto (marca ni fecha/tercero/valor).'
+            )
+
+        bill = collected[alegra_id]['bill']
+        try:
+            full = client.get_bill(alegra_id)
+        except Exception:
+            full = None
+        if isinstance(full, dict):
+            bill = full
+
+        if not mark_document_from_bill(
+            doc, bill, reason='caja_bill_associated_from_review',
+        ):
+            raise AlegraIntegrationError(
+                'No se pudo asociar: el id ya está ligado a otro gasto de caja.'
+            )
+
+        self._capture_caja_bill_cxp(client, doc)
+        return {
+            'document_id': doc.pk,
+            'gasto_id': gasto_pk,
+            'alegra_id': str(doc.alegra_id or ''),
+            'status': doc.status,
+            'message': 'Gasto asociado al documento de Alegra.',
+            'document': self._document_summary(doc),
         }
 
     def delete_caja_bill_duplicates(
         self, *, document_id, keep_alegra_id, delete_ids, confirm=False,
     ):
         """
-        Elimina en Alegra bills duplicados del gasto (marker), nunca el keep local.
+        Elimina en Alegra bills elegidos por el usuario (marker o soft-match),
+        nunca el keep local, ids en journal sent, ni ids asociados a otro gasto.
         """
         if not confirm:
             raise AlegraIntegrationError('Debes confirmar la eliminación.')
@@ -2153,16 +2313,20 @@ class AlegraIntegrationService:
         except (TypeError, ValueError, AlegraDocument.DoesNotExist) as exc:
             raise AlegraIntegrationError('Documento no encontrado.') from exc
 
-        if doc.document_type != 'caja_bill' or doc.status != AlegraDocument.STATUS_SENT:
-            raise AlegraIntegrationError('El gasto debe ser un bill de caja enviado.')
+        if doc.document_type != 'caja_bill':
+            raise AlegraIntegrationError('Solo aplica a documentos de gasto de caja.')
 
         keep = str(keep_alegra_id or '').strip()
         local_keep = str(doc.alegra_id or '').strip()
-        if local_keep and keep != local_keep:
-            raise AlegraIntegrationError(
-                'El documento a conservar no coincide con el enviado desde Andinasoft.'
-            )
-        if not keep and local_keep:
+        is_sent = doc.status == AlegraDocument.STATUS_SENT
+        if is_sent:
+            if local_keep and keep and keep != local_keep:
+                raise AlegraIntegrationError(
+                    'El documento a conservar no coincide con el enviado desde Andinasoft.'
+                )
+            if not keep and local_keep:
+                keep = local_keep
+        elif not keep and local_keep:
             keep = local_keep
 
         raw_ids = delete_ids if isinstance(delete_ids, (list, tuple)) else []
@@ -2182,18 +2346,37 @@ class AlegraIntegrationService:
             raise AlegraIntegrationError('No se pudo determinar el gasto de caja del documento.')
 
         client = AlegraMCPClient(doc.empresa)
-        # Revalidar: solo ids que hoy tengan el marker del gasto.
-        allowed = set()
-        for bill in list_caja_bills_for_gasto(client, gasto_pk):
-            if not isinstance(bill, dict):
-                continue
-            raw_id = bill.get('id')
-            if isinstance(raw_id, dict):
-                raw_id = raw_id.get('id')
-            bid = str(raw_id or '').strip()
-            if bid:
-                allowed.add(bid)
+        criteria = bill_criteria_from_payload(doc.payload if isinstance(doc.payload, dict) else {})
+        if (
+            keep
+            and (
+                not criteria.get('provider_id')
+                or not criteria.get('date')
+                or criteria.get('amount') is None
+            )
+        ):
+            try:
+                keep_bill = client.get_bill(keep)
+            except Exception:
+                keep_bill = None
+            if isinstance(keep_bill, dict):
+                from_keep = criteria_from_alegra_bill(keep_bill)
+                for key in ('date', 'provider_id', 'amount'):
+                    if not criteria.get(key) and from_keep.get(key) not in (None, ''):
+                        criteria[key] = from_keep[key]
+
+        # Revalidar: marker O soft-match (fecha/tercero/valor).
+        collected = collect_caja_bills_for_review(
+            client,
+            gasto_pk=gasto_pk,
+            criteria=criteria,
+            keep_alegra_id=keep,
+        )
+        allowed = set(collected.keys())
         locked = journal_locked_caja_bill_ids(doc.empresa)
+        owners = caja_bill_owners_by_alegra_ids(
+            doc.empresa, to_delete, exclude_doc_pk=doc.pk,
+        )
 
         from alegra_integration.webhook_bills import _handle_delete_bill, composite_alegra_bill_id
 
@@ -2203,7 +2386,7 @@ class AlegraIntegrationService:
                 results.append({
                     'id': bid,
                     'ok': False,
-                    'error': 'No pertenece a este gasto (sin marca válida).',
+                    'error': 'No coincide con este gasto (marca ni fecha/tercero/valor).',
                 })
                 continue
             if bid in locked:
@@ -2216,6 +2399,20 @@ class AlegraIntegrationService:
             if keep and bid == keep:
                 results.append({'id': bid, 'ok': False, 'error': 'Es el documento a conservar.'})
                 continue
+            owner = owners.get(bid)
+            if owner:
+                other_gasto = str(owner.get('gasto_id') or '').strip()
+                # Cualquier dueño sent distinto (o sin gasto_id resoluble) bloquea borrado.
+                if other_gasto != str(gasto_pk):
+                    results.append({
+                        'id': bid,
+                        'ok': False,
+                        'error': (
+                            f'Ya está asociado a otro gasto de caja '
+                            f'({other_gasto or "?"}); no se elimina.'
+                        ),
+                    })
+                    continue
             try:
                 client.delete_bill(bid)
                 fac_result = _handle_delete_bill(

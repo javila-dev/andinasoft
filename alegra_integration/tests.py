@@ -2656,6 +2656,83 @@ class CajaBillReconcileTests(SimpleTestCase):
         bills = bill_reconcile.list_caja_bills_for_gasto(client, '501')
         self.assertEqual([b['id'] for b in bills], ['901', '902'])
 
+    def test_list_caja_bills_soft_match_same_date_provider_amount(self):
+        from decimal import Decimal
+
+        from alegra_integration import bill_reconcile
+
+        client = Mock()
+        client.list_bills.return_value = [
+            {
+                'id': '10', 'date': '2026-05-05', 'total': 119000,
+                'provider': {'id': 'provider-1'}, 'observations': 'sin marca',
+            },
+            {
+                'id': '11', 'date': '2026-05-05', 'total': 50000,
+                'provider': {'id': 'provider-1'},
+            },
+            {
+                'id': '12', 'date': '2026-05-06', 'total': 119000,
+                'provider': {'id': 'provider-1'},
+            },
+            {
+                'id': '13', 'date': '2026-05-05', 'total': 119000,
+                'provider': {'id': 'provider-2'},
+            },
+        ]
+        matches = bill_reconcile.list_caja_bills_soft_match(client, {
+            'date': '2026-05-05',
+            'provider_id': 'provider-1',
+            'amount': Decimal('119000'),
+        })
+        self.assertEqual([b['id'] for b in matches], ['10'])
+
+    def test_collect_merges_marker_and_soft(self):
+        from decimal import Decimal
+
+        from alegra_integration import bill_reconcile
+
+        client = Mock()
+
+        def list_bills(**kwargs):
+            obs = kwargs.get('observations') or ''
+            if 'caja-gasto:501' in obs:
+                return [
+                    {
+                        'id': '10', 'date': '2026-05-05', 'total': 119000,
+                        'provider': {'id': 'provider-1'},
+                        'observations': '[caja-gasto:501] local',
+                    },
+                ]
+            # soft list by date + client
+            return [
+                {
+                    'id': '10', 'date': '2026-05-05', 'total': 119000,
+                    'provider': {'id': 'provider-1'},
+                    'observations': '[caja-gasto:501] local',
+                },
+                {
+                    'id': '99', 'date': '2026-05-05', 'total': 119000,
+                    'provider': {'id': 'provider-1'},
+                    'observations': 'manual viejo sin marca',
+                },
+            ]
+
+        client.list_bills.side_effect = list_bills
+        collected = bill_reconcile.collect_caja_bills_for_review(
+            client,
+            gasto_pk='501',
+            criteria={
+                'date': '2026-05-05',
+                'provider_id': 'provider-1',
+                'amount': Decimal('119000'),
+            },
+            keep_alegra_id='10',
+        )
+        self.assertEqual(set(collected.keys()), {'10', '99'})
+        self.assertEqual(collected['10']['match_kind'], 'marker')
+        self.assertEqual(collected['99']['match_kind'], 'soft')
+
     def test_find_with_two_markers_does_not_disambiguate_by_amount(self):
         from alegra_integration import bill_reconcile
 
@@ -2679,11 +2756,12 @@ class CajaBillReconcileTests(SimpleTestCase):
             )
 
     @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids', return_value={})
     @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
-    @patch('alegra_integration.services.list_caja_bills_for_gasto')
+    @patch('alegra_integration.services.collect_caja_bills_for_review')
     @patch('alegra_integration.services.AlegraDocument.objects')
     def test_delete_refuses_keep_and_locked(
-        self, mock_doc_objects, mock_list, mock_locked, mock_client_cls,
+        self, mock_doc_objects, mock_collect, mock_locked, mock_owners, mock_client_cls,
     ):
         from alegra_integration.exceptions import AlegraIntegrationError
         from alegra_integration.models import AlegraDocument
@@ -2698,7 +2776,13 @@ class CajaBillReconcileTests(SimpleTestCase):
             empresa_id='901018375',
             local_key='caja:bill:1:501',
             source_pk='501',
-            payload={'observations': '[caja-gasto:501] x', '__local': {'gasto_id': 501}},
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'purchases': {'categories': [{'price': 119000, 'quantity': 1}]},
+                'observations': '[caja-gasto:501] x',
+                '__local': {'gasto_id': 501},
+            },
         )
         mock_doc_objects.select_related.return_value.get.return_value = doc
 
@@ -2710,10 +2794,10 @@ class CajaBillReconcileTests(SimpleTestCase):
                 confirm=True,
             )
 
-        mock_list.return_value = [
-            {'id': '10', 'observations': '[caja-gasto:501]'},
-            {'id': '11', 'observations': '[caja-gasto:501]'},
-        ]
+        mock_collect.return_value = {
+            '10': {'bill': {'id': '10'}, 'match_kind': 'marker'},
+            '11': {'bill': {'id': '11'}, 'match_kind': 'soft'},
+        }
         mock_locked.return_value = {'11'}
         mock_client_cls.return_value = Mock()
         result = AlegraIntegrationService().delete_caja_bill_duplicates(
@@ -2725,6 +2809,292 @@ class CajaBillReconcileTests(SimpleTestCase):
         self.assertEqual(result['deleted'], 0)
         self.assertFalse(result['results'][0]['ok'])
         self.assertIn('asiento', result['results'][0]['error'].lower())
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids', return_value={})
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.collect_caja_bills_for_review')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_delete_allows_soft_match_after_revalidate(
+        self, mock_doc_objects, mock_collect, mock_locked, mock_owners, mock_client_cls,
+    ):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=1,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_SENT,
+            alegra_id='10',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'purchases': {'categories': [{'price': 119000, 'quantity': 1}]},
+                'observations': '[caja-gasto:501] x',
+                '__local': {'gasto_id': 501},
+            },
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_collect.return_value = {
+            '10': {'bill': {'id': '10'}, 'match_kind': 'keep'},
+            '99': {'bill': {'id': '99'}, 'match_kind': 'soft'},
+        }
+        mock_client = Mock()
+        mock_client_cls.return_value = mock_client
+
+        with patch('alegra_integration.webhook_bills._handle_delete_bill', return_value={'ok': True}):
+            result = AlegraIntegrationService().delete_caja_bill_duplicates(
+                document_id=1,
+                keep_alegra_id='10',
+                delete_ids=['99'],
+                confirm=True,
+            )
+
+        self.assertEqual(result['deleted'], 1)
+        mock_client.delete_bill.assert_called_once_with('99')
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids')
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.collect_caja_bills_for_review')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_delete_refuses_id_owned_by_other_gasto(
+        self, mock_doc_objects, mock_collect, mock_locked, mock_owners, mock_client_cls,
+    ):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=1,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_SENT,
+            alegra_id='10',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'purchases': {'categories': [{'price': 119000, 'quantity': 1}]},
+                'observations': '[caja-gasto:501] x',
+                '__local': {'gasto_id': 501},
+            },
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_collect.return_value = {
+            '10': {'bill': {'id': '10'}, 'match_kind': 'keep'},
+            '99': {'bill': {'id': '99'}, 'match_kind': 'soft'},
+        }
+        mock_owners.return_value = {
+            '99': {'document_id': 55, 'gasto_id': '777', 'local_key': 'caja:bill:1:777'},
+        }
+        mock_client_cls.return_value = Mock()
+
+        result = AlegraIntegrationService().delete_caja_bill_duplicates(
+            document_id=1,
+            keep_alegra_id='10',
+            delete_ids=['99'],
+            confirm=True,
+        )
+        self.assertEqual(result['deleted'], 0)
+        self.assertIn('otro gasto', result['results'][0]['error'].lower())
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids', return_value={})
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.collect_caja_bills_for_review')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_review_includes_soft_candidates(
+        self, mock_doc_objects, mock_collect, mock_locked, mock_owners, mock_client_cls,
+    ):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=1,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_SENT,
+            alegra_id='10',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'purchases': {'categories': [{'price': 119000, 'quantity': 1}]},
+                'observations': '[caja-gasto:501] x',
+                '__local': {'gasto_id': 501},
+            },
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_collect.return_value = {
+            '10': {
+                'bill': {
+                    'id': '10', 'date': '2026-05-05', 'total': 119000,
+                    'provider': {'id': 'provider-1'},
+                    'observations': '[caja-gasto:501]',
+                },
+                'match_kind': 'marker',
+            },
+            '99': {
+                'bill': {
+                    'id': '99', 'date': '2026-05-05', 'total': 119000,
+                    'provider': {'id': 'provider-1'},
+                    'observations': 'viejo',
+                },
+                'match_kind': 'soft',
+            },
+        }
+        mock_client_cls.return_value = Mock()
+
+        result = AlegraIntegrationService().review_caja_bill_duplicates(document_id=1)
+        self.assertTrue(result['has_duplicates'])
+        self.assertFalse(result['can_associate'])
+        kinds = {b['id']: b['match_kind'] for b in result['bills']}
+        self.assertEqual(kinds['10'], 'marker')
+        self.assertEqual(kinds['99'], 'soft')
+        self.assertIn('fecha', result['message'].lower())
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids', return_value={})
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.collect_caja_bills_for_review')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_review_unsent_allows_associate(
+        self, mock_doc_objects, mock_collect, mock_locked, mock_owners, mock_client_cls,
+    ):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=2,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_VALID,
+            alegra_id='',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'purchases': {'categories': [{'price': 119000, 'quantity': 1}]},
+                'observations': '[caja-gasto:501] x',
+                '__local': {'gasto_id': 501},
+            },
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_collect.return_value = {
+            '99': {
+                'bill': {
+                    'id': '99', 'date': '2026-05-05', 'total': 119000,
+                    'provider': {'id': 'provider-1'},
+                    'observations': 'viejo',
+                },
+                'match_kind': 'soft',
+            },
+        }
+        mock_client_cls.return_value = Mock()
+
+        result = AlegraIntegrationService().review_caja_bill_duplicates(document_id=2)
+        self.assertTrue(result['can_associate'])
+        self.assertEqual(result['keep_alegra_id'], '')
+        self.assertTrue(result['bills'][0]['can_associate'])
+
+    @patch('alegra_integration.services.AlegraIntegrationService._capture_caja_bill_cxp')
+    @patch('alegra_integration.services.mark_document_from_bill', return_value=True)
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids', return_value={})
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.collect_caja_bills_for_review')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_associate_marks_unsent_doc(
+        self, mock_doc_objects, mock_collect, mock_locked, mock_owners,
+        mock_client_cls, mock_mark, mock_cxp,
+    ):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=2,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_VALID,
+            alegra_id='',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={
+                'date': '2026-05-05',
+                'provider': {'id': 'provider-1'},
+                'purchases': {'categories': [{'price': 119000, 'quantity': 1}]},
+                'observations': '[caja-gasto:501] x',
+                '__local': {'gasto_id': 501},
+            },
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_collect.return_value = {
+            '99': {'bill': {'id': '99', 'total': 119000}, 'match_kind': 'soft'},
+        }
+        mock_client = Mock()
+        mock_client.get_bill.return_value = {'id': '99', 'total': 119000}
+        mock_client_cls.return_value = mock_client
+
+        def _mark(d, bill, **kwargs):
+            d.status = AlegraDocument.STATUS_SENT
+            d.alegra_id = str(bill.get('id') or '')
+            return True
+
+        mock_mark.side_effect = _mark
+        with patch.object(AlegraIntegrationService, '_document_summary', return_value={'id': 2, 'status': 'sent'}):
+            result = AlegraIntegrationService().associate_caja_bill_from_review(
+                document_id=2, alegra_id='99',
+            )
+
+        mock_mark.assert_called_once()
+        mock_cxp.assert_called_once()
+        self.assertEqual(result['alegra_id'], '99')
+        self.assertEqual(result['status'], AlegraDocument.STATUS_SENT)
+        self.assertEqual(mock_mark.call_args.kwargs.get('reason'), 'caja_bill_associated_from_review')
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.caja_bill_owners_by_alegra_ids')
+    @patch('alegra_integration.services.journal_locked_caja_bill_ids', return_value=set())
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_associate_rejects_id_owned_by_other_gasto(
+        self, mock_doc_objects, mock_locked, mock_owners, mock_client_cls,
+    ):
+        from alegra_integration.exceptions import AlegraIntegrationError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = SimpleNamespace(
+            pk=2,
+            document_type='caja_bill',
+            status=AlegraDocument.STATUS_VALID,
+            alegra_id='',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            local_key='caja:bill:1:501',
+            source_pk='501',
+            payload={'__local': {'gasto_id': 501}, 'observations': '[caja-gasto:501]'},
+        )
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_owners.return_value = {
+            '99': {'document_id': 55, 'gasto_id': '777', 'local_key': 'caja:bill:1:777'},
+        }
+
+        with self.assertRaises(AlegraIntegrationError) as ctx:
+            AlegraIntegrationService().associate_caja_bill_from_review(
+                document_id=2, alegra_id='99',
+            )
+        self.assertIn('777', str(ctx.exception))
 
     @patch('alegra_integration.bill_reconcile.sync_pago_from_alegra_document')
     def test_claim_existing_marks_sent(self, mock_sync):

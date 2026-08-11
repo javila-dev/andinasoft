@@ -311,7 +311,83 @@ def list_caja_bills_for_gasto(client, gasto_pk, *, max_pages=3):
     ]
 
 
-def summarize_caja_bill_for_review(bill, *, criteria=None, keep_alegra_id='', locked_ids=None):
+def list_caja_bills_soft_match(client, criteria, *, max_pages=3):
+    """
+    Candidatos posibles sin marker: misma fecha + mismo proveedor + mismo monto.
+    El usuario decide en UI; no se usa para claim automático ambiguo.
+    """
+    criteria = criteria or {}
+    provider_id = str(criteria.get('provider_id') or '').strip()
+    date = _normalize_date(criteria.get('date'))
+    amount = criteria.get('amount')
+    if not provider_id or not date or amount is None:
+        return []
+
+    candidates = list_bills_filtered(
+        client,
+        date=date,
+        client_id=provider_id,
+        max_pages=max_pages,
+    )
+    matches = []
+    for bill in candidates:
+        if _bill_provider_id(bill) and _bill_provider_id(bill) != provider_id:
+            continue
+        if _bill_date(bill) and _bill_date(bill) != date:
+            continue
+        total = bill_total_amount(bill)
+        if total is None or not _money_equal(total, amount):
+            continue
+        matches.append(bill)
+    return matches
+
+
+def criteria_from_alegra_bill(bill):
+    """Criterios de soft-match a partir de un bill Alegra (p. ej. el keep local)."""
+    if not isinstance(bill, dict):
+        return {}
+    return {
+        'date': _bill_date(bill),
+        'provider_id': _bill_provider_id(bill),
+        'amount': bill_total_amount(bill),
+        'observations': _bill_observations(bill),
+        'gasto_pk': caja_gasto_pk_from_text(_bill_observations(bill)),
+    }
+
+
+def collect_caja_bills_for_review(client, *, gasto_pk, criteria, keep_alegra_id=''):
+    """
+    Une candidatos por marker y por soft-match (fecha/tercero/valor).
+    Incluye el bill keep vía GET si no apareció en listados.
+    Retorna dict id -> {'bill', 'match_kind'} (marker | soft | keep).
+    """
+    by_id = {}
+    for bill in list_caja_bills_for_gasto(client, gasto_pk):
+        bid = _nested_id((bill or {}).get('id'))
+        if bid:
+            by_id[bid] = {'bill': bill, 'match_kind': 'marker'}
+
+    for bill in list_caja_bills_soft_match(client, criteria):
+        bid = _nested_id((bill or {}).get('id'))
+        if not bid or bid in by_id:
+            continue
+        by_id[bid] = {'bill': bill, 'match_kind': 'soft'}
+
+    keep = str(keep_alegra_id or '').strip()
+    if keep and keep not in by_id:
+        try:
+            bill = client.get_bill(keep)
+        except Exception:
+            bill = None
+        if isinstance(bill, dict) and _nested_id(bill.get('id')):
+            by_id[keep] = {'bill': bill, 'match_kind': 'keep'}
+    return by_id
+
+
+def summarize_caja_bill_for_review(
+    bill, *, criteria=None, keep_alegra_id='', locked_ids=None, match_kind='marker',
+    owner=None, current_gasto_pk='',
+):
     """Resumen liviano para UI Revisar gasto."""
     criteria = criteria or {}
     locked_ids = {str(x).strip() for x in (locked_ids or set()) if str(x).strip()}
@@ -336,6 +412,17 @@ def summarize_caja_bill_for_review(bill, *, criteria=None, keep_alegra_id='', lo
 
     is_keep = bool(keep_alegra_id) and bill_id == str(keep_alegra_id).strip()
     journal_locked = bill_id in locked_ids
+    kind = str(match_kind or 'marker').strip() or 'marker'
+
+    owner = owner if isinstance(owner, dict) else None
+    linked_document_id = (owner or {}).get('document_id')
+    linked_gasto_id = str((owner or {}).get('gasto_id') or '').strip()
+    linked_local_key = str((owner or {}).get('local_key') or '').strip()
+    current_gasto = str(current_gasto_pk or '').strip()
+    linked_other = bool(owner) and linked_gasto_id != current_gasto
+    # Ya ligado a algún gasto de caja (aunque sea el mismo) → no re-asociar.
+    already_linked = bool(owner)
+
     return {
         'id': bill_id,
         'date': date,
@@ -343,13 +430,56 @@ def summarize_caja_bill_for_review(bill, *, criteria=None, keep_alegra_id='', lo
         'observations': _bill_observations(bill)[:200],
         'number': number,
         'provider_id': provider_id,
+        'match_kind': kind,
         'is_keep': is_keep,
         'journal_locked': journal_locked,
+        'linked_document_id': linked_document_id,
+        'linked_gasto_id': linked_gasto_id or None,
+        'linked_local_key': linked_local_key or None,
+        'linked_other': linked_other,
+        'already_linked': already_linked,
         'amount_mismatch': amount_mismatch,
         'date_mismatch': date_mismatch,
         'provider_mismatch': provider_mismatch,
-        'can_delete': bool(bill_id) and not is_keep and not journal_locked,
+        'can_delete': (
+            bool(bill_id) and not is_keep and not journal_locked and not linked_other
+        ),
+        'can_associate': (
+            bool(bill_id)
+            and not is_keep
+            and not journal_locked
+            and not already_linked
+        ),
     }
+
+
+def caja_bill_owners_by_alegra_ids(empresa, alegra_ids, *, exclude_doc_pk=None):
+    """
+    Mapa alegra_id → {document_id, gasto_id, local_key} para caja_bill sent
+    de esa empresa. Sirve para no asociar/borrar ids ya ligados a otro gasto.
+    """
+    ids = sorted({str(x).strip() for x in (alegra_ids or []) if str(x or '').strip()})
+    if not ids:
+        return {}
+    qs = AlegraDocument.objects.filter(
+        empresa=empresa,
+        document_type='caja_bill',
+        status=AlegraDocument.STATUS_SENT,
+        alegra_id__in=ids,
+    ).only('pk', 'alegra_id', 'local_key', 'source_pk', 'payload')
+    if exclude_doc_pk not in (None, ''):
+        qs = qs.exclude(pk=exclude_doc_pk)
+    out = {}
+    for doc in qs:
+        aid = str(doc.alegra_id or '').strip()
+        if not aid or aid in out:
+            continue
+        out[aid] = {
+            'document_id': doc.pk,
+            'gasto_id': caja_gasto_pk_from_doc(doc),
+            'local_key': doc.local_key,
+        }
+    return out
 
 
 def journal_locked_caja_bill_ids(empresa):
