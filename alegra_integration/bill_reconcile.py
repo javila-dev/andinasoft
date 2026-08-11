@@ -418,6 +418,14 @@ def summarize_caja_bill_for_review(
     linked_document_id = (owner or {}).get('document_id')
     linked_gasto_id = str((owner or {}).get('gasto_id') or '').strip()
     linked_local_key = str((owner or {}).get('local_key') or '').strip()
+    linked_batch_id = (owner or {}).get('batch_id')
+    if linked_batch_id not in (None, ''):
+        try:
+            linked_batch_id = int(linked_batch_id)
+        except (TypeError, ValueError):
+            linked_batch_id = None
+    else:
+        linked_batch_id = None
     current_gasto = str(current_gasto_pk or '').strip()
     linked_other = bool(owner) and linked_gasto_id != current_gasto
     # Ya ligado a algún gasto de caja (aunque sea el mismo) → no re-asociar.
@@ -436,6 +444,7 @@ def summarize_caja_bill_for_review(
         'linked_document_id': linked_document_id,
         'linked_gasto_id': linked_gasto_id or None,
         'linked_local_key': linked_local_key or None,
+        'linked_batch_id': linked_batch_id,
         'linked_other': linked_other,
         'already_linked': already_linked,
         'amount_mismatch': amount_mismatch,
@@ -455,8 +464,9 @@ def summarize_caja_bill_for_review(
 
 def caja_bill_owners_by_alegra_ids(empresa, alegra_ids, *, exclude_doc_pk=None):
     """
-    Mapa alegra_id → {document_id, gasto_id, local_key} para caja_bill sent
-    de esa empresa. Sirve para no asociar/borrar ids ya ligados a otro gasto.
+    Mapa alegra_id → {document_id, gasto_id, local_key, batch_id} para caja_bill sent
+    de esa empresa. Sirve para no asociar/borrar ids ya ligados a otro gasto
+    y para mostrar dónde buscarlo en la UI.
     """
     ids = sorted({str(x).strip() for x in (alegra_ids or []) if str(x or '').strip()})
     if not ids:
@@ -466,7 +476,7 @@ def caja_bill_owners_by_alegra_ids(empresa, alegra_ids, *, exclude_doc_pk=None):
         document_type='caja_bill',
         status=AlegraDocument.STATUS_SENT,
         alegra_id__in=ids,
-    ).only('pk', 'alegra_id', 'local_key', 'source_pk', 'payload')
+    ).only('pk', 'alegra_id', 'local_key', 'source_pk', 'payload', 'batch_id')
     if exclude_doc_pk not in (None, ''):
         qs = qs.exclude(pk=exclude_doc_pk)
     out = {}
@@ -474,10 +484,12 @@ def caja_bill_owners_by_alegra_ids(empresa, alegra_ids, *, exclude_doc_pk=None):
         aid = str(doc.alegra_id or '').strip()
         if not aid or aid in out:
             continue
+        batch_id = getattr(doc, 'batch_id', None)
         out[aid] = {
             'document_id': doc.pk,
             'gasto_id': caja_gasto_pk_from_doc(doc),
             'local_key': doc.local_key,
+            'batch_id': batch_id,
         }
     return out
 

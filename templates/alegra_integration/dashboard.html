@@ -1465,12 +1465,23 @@ function renderCajaDupModal(data) {
       badges.push('<span class="badge badge-light">Enviado local</span>');
     }
     if (b.journal_locked) badges.push('<span class="badge badge-secondary">En asiento</span>');
-    if (b.linked_other) {
-      badges.push(
-        `<span class="badge badge-danger">Otro gasto ${escHtml(b.linked_gasto_id || '')}</span>`
-      );
-    } else if (b.already_linked) {
-      badges.push('<span class="badge badge-secondary">Ya asociado</span>');
+    if (b.already_linked) {
+      const gLabel = b.linked_gasto_id ? `gasto ${escHtml(String(b.linked_gasto_id))}` : 'gasto ?';
+      if (b.linked_other) {
+        badges.push(`<span class="badge badge-danger" title="Asociado a otro gasto de caja">Otro ${gLabel}</span>`);
+      } else {
+        badges.push(`<span class="badge badge-secondary" title="Asociado al mismo gasto (otro documento)">Ya asociado (${gLabel})</span>`);
+      }
+      const where = [];
+      if (b.linked_document_id) where.push(`doc #${escHtml(String(b.linked_document_id))}`);
+      if (b.linked_batch_id) where.push(`lote #${escHtml(String(b.linked_batch_id))}`);
+      if (b.linked_local_key) where.push(`<code style="font-size:10px">${escHtml(b.linked_local_key)}</code>`);
+      if (where.length) {
+        badges.push(
+          `<div class="text-muted" style="font-size:10px;margin-top:2px;line-height:1.3">`
+          + `Buscar en: ${where.join(' · ')}</div>`
+        );
+      }
     }
     if (b.amount_mismatch) badges.push('<span class="badge badge-warning">Valor distinto</span>');
     if (b.date_mismatch) badges.push('<span class="badge badge-warning">Fecha distinta</span>');
@@ -1493,7 +1504,7 @@ function renderCajaDupModal(data) {
       ? `<div class="d-flex" style="gap:6px;align-items:center">${controls.join('')}</div>`
       : '<span class="text-muted">—</span>';
     const rowCls = b.is_keep ? 'table-success'
-      : (b.linked_other || b.journal_locked ? 'table-secondary' : '');
+      : (b.linked_other || b.already_linked || b.journal_locked ? 'table-secondary' : '');
     tbody.append(`
       <tr class="${rowCls}">
         <td>${ctrlHtml}</td>

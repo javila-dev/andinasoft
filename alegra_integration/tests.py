@@ -2733,6 +2733,31 @@ class CajaBillReconcileTests(SimpleTestCase):
         self.assertEqual(collected['10']['match_kind'], 'marker')
         self.assertEqual(collected['99']['match_kind'], 'soft')
 
+    def test_summarize_exposes_owner_search_fields(self):
+        from alegra_integration import bill_reconcile
+
+        summary = bill_reconcile.summarize_caja_bill_for_review(
+            {'id': '363', 'date': '2026-07-01', 'total': 29100, 'provider': {'id': '1'}},
+            criteria={'date': '2026-07-01', 'provider_id': '1', 'amount': 29100},
+            keep_alegra_id='401',
+            match_kind='soft',
+            owner={
+                'document_id': 88,
+                'gasto_id': '512',
+                'local_key': 'caja:bill:3:512',
+                'batch_id': 190,
+            },
+            current_gasto_pk='501',
+        )
+        self.assertTrue(summary['already_linked'])
+        self.assertTrue(summary['linked_other'])
+        self.assertEqual(summary['linked_gasto_id'], '512')
+        self.assertEqual(summary['linked_document_id'], 88)
+        self.assertEqual(summary['linked_batch_id'], 190)
+        self.assertEqual(summary['linked_local_key'], 'caja:bill:3:512')
+        self.assertFalse(summary['can_associate'])
+        self.assertFalse(summary['can_delete'])
+
     def test_find_with_two_markers_does_not_disambiguate_by_amount(self):
         from alegra_integration import bill_reconcile
 
