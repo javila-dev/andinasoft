@@ -60,6 +60,7 @@
                 Reaplicar pendientes
               </a>
               <a class="dropdown-item" href="#" id='btn-ajuste-al-peso'>Ajustar al peso</a>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalAjusteValorCapital">Ajustar valor a capital</a>
               <input class="dropdown-item btn" value='Verificar Pagado' type='submit' name='btnVerifPagado'>
             </div>
           </div>
@@ -185,6 +186,52 @@
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Ok</button>
         </div>
         {%endif%}
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalAjusteValorCapital" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="modalAjusteValorCapitalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalAjusteValorCapitalLabel">Ajustar valor a capital</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-3">
+            Se usara cuando el saldo pendiente sea un descuento y el contrato deba quedar pagado con lo ya recaudado.
+            No se genera recibo: se baja el valor del contrato y se eliminan las cuotas pendientes.
+          </p>
+          <div class="row text-center mb-2">
+            <div class="col-md-4 mb-2">
+              <div class="border rounded py-2 h-100">
+                <div class="text-muted small">Valor actual</div>
+                <div class="font-weight-bold">$ {{info_adj.Valor|floatformat:0|intcomma}}</div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-2">
+              <div class="border rounded py-2 h-100">
+                <div class="text-muted small">Capital pagado</div>
+                <div class="font-weight-bold">$ {{pagado|floatformat:0|intcomma}}</div>
+              </div>
+            </div>
+            <div class="col-md-4 mb-2">
+              <div class="border rounded py-2 h-100">
+                <div class="text-muted small">Descuento (saldo)</div>
+                <div class="font-weight-bold">$ {{saldo_capital|floatformat:0|intcomma}}</div>
+              </div>
+            </div>
+          </div>
+          <p class="mb-0 text-muted small">
+            El nuevo valor del contrato sera el capital pagado y el estado pasara a Pagado.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-ajuste-valor-capital">Confirmar ajuste</button>
+        </div>
       </div>
     </div>
   </div>
@@ -500,6 +547,44 @@
           if (xhr.class == 'alert-success'){
             window.location.reload()
           }
+        }
+      })
+    })
+
+    $('#btn-confirm-ajuste-valor-capital').click(function () {
+      const $btn = $(this)
+      $btn.prop('disabled', true).html('<i class="fas fa-circle-notch fa-spin"></i> Ajustando...')
+      $('#modalAjusteValorCapital').modal('hide')
+      $('#alert-title').text('Andinasoft dice:')
+      $('#alert-data').html('Estamos ajustando el valor del contrato <i class="fas fa-circle-notch fa-spin"></i>')
+      $('#general-right-alert').removeClass('alert-danger alert-success').addClass('show alert-info')
+      $.ajax({
+        type: 'POST',
+        url: '/andinasoftajx/ajustevaloracapital',
+        data: {
+          'csrfmiddlewaretoken': getCookie('csrftoken'),
+          'proyecto': '{{proyecto}}',
+          'adj': '{{adj}}'
+        },
+        success: function (xhr) {
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text(xhr.msj)
+          $('#general-right-alert').removeClass('alert-info alert-danger alert-success').addClass('show ' + xhr.class)
+          if (xhr.class === 'alert-success') {
+            window.location.reload()
+          } else {
+            $btn.prop('disabled', false).text('Confirmar ajuste')
+          }
+        },
+        error: function (xhr) {
+          let msj = 'No se pudo ajustar el valor del contrato.'
+          if (xhr.responseJSON && xhr.responseJSON.msj) {
+            msj = xhr.responseJSON.msj
+          }
+          $('#alert-title').text('Andinasoft dice:')
+          $('#alert-data').text(msj)
+          $('#general-right-alert').removeClass('alert-info alert-success').addClass('show alert-danger')
+          $btn.prop('disabled', false).text('Confirmar ajuste')
         }
       })
     })

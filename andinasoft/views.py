@@ -54,6 +54,10 @@ from andinasoft.informe_cartera_orm import informe_cartera_rows
 from andinasoft.edades_cartera_service import edades_cartera_snapshot
 from andinasoft.cartera_gestor_service import asignar_gestor, listar_gestores_opciones
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
+from andinasoft.ajuste_capital_service import (
+    aplicar_ajuste_valor_a_capital,
+    recortar_plan_a_capital_pagado,
+)
 from andinasoft.certificado_tributario_service import (
     anios_disponibles_certificado,
     build_certificado_tributario_context,
@@ -5549,27 +5553,7 @@ def reestructuraciones(request,proyecto,adj):
             todo = request.POST.get('todo')
             if todo == 'reestruc_pagado':
                 valor_ajuste = request.POST.get('vr_ajuste')
-                obj_planpagos=PlanPagos.objects.using(proyecto).filter(adj=adj)
-                tipos_saldo=('CI','FN','CE','CO')
-                for tipo in tipos_saldo:
-                    ctas_vigentes = saldos.filter(tipocta=tipo,saldocuota__gt=0).order_by('nrocta')
-                    if ctas_vigentes.exists():
-                        cta_modificar = ctas_vigentes.first()
-                        nrocta_ajustar = cta_modificar.nrocta
-                        if cta_modificar.saldocuota != cta_modificar.cuota:
-                            capcta=cta_modificar.rcdocapital
-                            intcta=cta_modificar.rcdointcte
-                            cta_ajustar=PlanPagos.objects.using(proyecto).get(idcta = cta_modificar.idcta)
-                                
-                            cta_ajustar.capital=capcta
-                            cta_ajustar.intcte=intcta
-                            cta_ajustar.cuota=capcta+intcta
-                            cta_ajustar.save()
-                            
-                        for cuota in obj_planpagos.filter(tipocta=tipo):
-                            if int(cuota.nrocta) > nrocta_ajustar:
-                                cuota.delete()
-                                
+                recortar_plan_a_capital_pagado(proyecto, adj)
                 datos_venta.valor+=Decimal(valor_ajuste)
                 datos_venta.estado = 'Pagado'
                 datos_venta.save()
@@ -9625,6 +9609,54 @@ def ajustar_al_peso(request):
             }
             
             return JsonResponse(data)
+
+
+@login_required
+def ajustar_valor_a_capital(request):
+    """Baja el valor del contrato al capital pagado (descuento) y deja el ADJ Pagado."""
+    if request.method != 'POST':
+        return JsonResponse({'class': 'alert-danger', 'msj': 'Solicitud no valida.'}, status=400)
+
+    check_perms(request, ('andinasoft.change_adjudicacion',), raise_exception=True)
+    proyecto = request.POST.get('proyecto')
+    adj = request.POST.get('adj')
+    if not proyecto or not adj:
+        return JsonResponse({
+            'class': 'alert-danger',
+            'msj': 'Faltan proyecto o adjudicacion.',
+        })
+
+    check_project(request, proyecto)
+
+    try:
+        with transaction.atomic(using=proyecto):
+            resultado = aplicar_ajuste_valor_a_capital(proyecto, adj, request.user)
+            timeline.objects.using(proyecto).create(
+                adj=adj,
+                fecha=datetime.date.today(),
+                usuario=request.user,
+                accion=(
+                    f'Ajusto valor del contrato a capital pagado '
+                    f'(descuento ${resultado["descuento"]:,.0f})'
+                ),
+            )
+    except ValueError as exc:
+        return JsonResponse({'class': 'alert-danger', 'msj': str(exc)})
+    except Exception:
+        traceback.print_exc()
+        return JsonResponse({
+            'class': 'alert-danger',
+            'msj': 'No se pudo ajustar el valor del contrato. Intenta de nuevo.',
+        })
+
+    valor_fmt = f'{resultado["valor_nuevo"]:,.0f}'
+    return JsonResponse({
+        'class': 'alert-success',
+        'msj': (
+            f'El valor del contrato se ajusto a ${valor_fmt} '
+            f'(capital pagado). El estado quedo en Pagado.'
+        ),
+    })
             
 def imprimir_recibos(request):
     if request.GET and request.method == 'GET':
@@ -9658,6 +9690,7 @@ Ajax_URL = [
     path('informecartera',cartera_month_results),
     path('printincome',imprimir_recibos),
     path('ajustealpeso',ajustar_al_peso),
+    path('ajustevaloracapital',ajustar_valor_a_capital),
     path('estadodecuenta', ajax_print_estado_cuenta),
     path('ventafraccion',nueva_venta_fractal),
     path('detallesventa',acciones_venta_fractal),
