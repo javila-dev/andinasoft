@@ -7,6 +7,7 @@ from accounting.models import Anticipos, Facturas, Pagos, Partners, cuentas_inte
 from alegra_integration.exceptions import AlegraBuildError, AlegraConfigurationError
 from alegra_integration.mapping import MappingResolver
 from alegra_integration.models import AlegraDocument, AlegraMapping
+from alegra_integration.bill_reconcile import caja_bill_local_key
 from andinasoft.models import Detalle_gtt, Gtt, Profiles, asesores, clientes, cuentas_pagos, empresas
 from andinasoft.shared_models import Recaudos, consecutivos, formas_pago
 
@@ -1652,7 +1653,7 @@ class CajaGastoBillBuilder:
             transport=AlegraDocument.ALEGRA_REST,
             source_model='accounting.gastos_caja',
             source_pk=gasto.pk,
-            local_key=f'caja:bill:{gasto.reembolso_id}:{gasto.pk}',
+            local_key=caja_bill_local_key(gasto.pk),
             payload=payload,
             empresa_id=self.empresa.pk,
         )
@@ -1746,7 +1747,7 @@ class CajaLegalizationJournalBuilder:
                 orphan_total += int(gasto.valor or 0)
             amount = _money(gasto.valor)
             provider_id = _contact_for_partner(self.resolver, gasto.tercero)
-            local_key = f'caja:bill:{gasto.reembolso_id}:{gasto.pk}'
+            local_key = caja_bill_local_key(gasto.pk)
             pending_bills.append({
                 'gasto_id': gasto.pk,
                 'reembolso_id': reembolso.pk if reembolso else None,

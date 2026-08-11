@@ -31,12 +31,16 @@ from alegra_integration.journal_reconcile import (
 )
 from alegra_integration.bill_reconcile import (
     bill_criteria_from_payload,
+    caja_bill_key_kind,
+    caja_bill_local_key,
     caja_bill_owners_by_alegra_ids,
     caja_gasto_pk_from_doc,
     claim_existing_caja_bill,
     collect_caja_bills_for_review,
     criteria_from_alegra_bill,
+    find_sent_caja_bill_for_gasto,
     journal_locked_caja_bill_ids,
+    list_sent_caja_bill_docs_for_gasto,
     mark_document_from_bill,
     reconcile_caja_bill_document,
     should_attempt_caja_bill_reconcile,
@@ -647,6 +651,14 @@ class AlegraIntegrationService:
             local_key=doc.local_key,
             status=AlegraDocument.STATUS_SENT,
         ).exclude(pk=doc.pk).first()
+        if (
+            not existing_sent
+            and doc.document_type == 'caja_bill'
+            and str(getattr(doc, 'source_model', '') or '') == 'accounting.gastos_caja'
+        ):
+            existing_sent = find_sent_caja_bill_for_gasto(doc.empresa, doc.source_pk)
+            if existing_sent and existing_sent.pk == doc.pk:
+                existing_sent = None
         if existing_sent:
             # #region agent log
             _agent_dbg('B', 'services.py:_try_send_batch_document:already_sent', 'skipped local already_sent', {
@@ -657,7 +669,11 @@ class AlegraIntegrationService:
             })
             # #endregion
             doc.status = AlegraDocument.STATUS_SKIPPED
-            doc.response = {'skipped_reason': 'already_sent', 'existing_document_id': existing_sent.pk}
+            doc.response = {
+                'skipped_reason': 'already_sent',
+                'existing_document_id': existing_sent.pk,
+                'existing_local_key': existing_sent.local_key,
+            }
             doc.alegra_id = existing_sent.alegra_id
             doc.save(update_fields=['status', 'response', 'alegra_id', 'updated_at'])
             sync_pago_from_alegra_document(doc)
@@ -1855,6 +1871,10 @@ class AlegraIntegrationService:
             if legacy_sent:
                 return [{'existing_sent': doc} for doc in legacy_sent]
 
+        # Gasto de caja: si ya hay bill sent (cualquier local_key legacy/actual), no recrear.
+        if source_model == 'accounting.gastos_caja' and sent_docs:
+            return [{'existing_sent': doc} for doc in sent_docs]
+
         try:
             built = builder.build(source)
             built_list = built if isinstance(built, list) else [built]
@@ -2143,6 +2163,32 @@ class AlegraIntegrationService:
             collected.keys(),
             exclude_doc_pk=doc.pk,
         )
+
+        # Hermanos locales del mismo gasto (p. ej. caja:bill:None:N vs caja:bill:200:N).
+        for sib in list_sent_caja_bill_docs_for_gasto(
+            doc.empresa, gasto_pk, exclude_doc_pk=doc.pk,
+        ):
+            aid = str(sib.alegra_id or '').strip()
+            if not aid:
+                continue
+            owners[aid] = {
+                'document_id': sib.pk,
+                'gasto_id': gasto_pk,
+                'local_key': sib.local_key,
+                'batch_id': getattr(sib, 'batch_id', None),
+            }
+            if aid in collected:
+                if collected[aid].get('match_kind') != 'marker':
+                    collected[aid]['match_kind'] = 'same_gasto'
+                continue
+            try:
+                bill = client.get_bill(aid)
+            except Exception:
+                bill = None
+            if not isinstance(bill, dict):
+                bill = {'id': aid}
+            collected[aid] = {'bill': bill, 'match_kind': 'same_gasto'}
+
         bills = [
             summarize_caja_bill_for_review(
                 item['bill'],
@@ -2159,13 +2205,24 @@ class AlegraIntegrationService:
         if not can_associate:
             for row in bills:
                 row['can_associate'] = False
-        bills.sort(key=lambda b: (0 if b.get('is_keep') else 1, b.get('id') or ''))
+        bills.sort(key=lambda b: (
+            0 if b.get('is_keep') else 1,
+            0 if b.get('same_gasto_duplicate') else 1,
+            b.get('id') or '',
+        ))
 
         remote_ids = {b['id'] for b in bills if b.get('id')}
         soft_count = sum(1 for b in bills if b.get('match_kind') == 'soft')
         marker_count = sum(1 for b in bills if b.get('match_kind') == 'marker')
-        has_duplicates = len(remote_ids) > 1 or bool(keep_alegra_id and remote_ids - {keep_alegra_id})
+        same_gasto_count = sum(1 for b in bills if b.get('same_gasto_duplicate'))
+        none_key_count = sum(1 for b in bills if b.get('legacy_none_key'))
+        has_duplicates = (
+            len(remote_ids) > 1
+            or bool(keep_alegra_id and remote_ids - {keep_alegra_id})
+            or same_gasto_count > 0
+        )
         associable = [b for b in bills if b.get('can_associate')]
+        current_key_kind = caja_bill_key_kind(doc.local_key)
 
         if can_associate:
             if associable:
@@ -2176,7 +2233,7 @@ class AlegraIntegrationService:
                 )
             elif remote_ids:
                 message = (
-                    'Hay documentos en Alegra, pero están están asociados a otro gasto '
+                    'Hay documentos en Alegra, pero ya están asociados a otro gasto '
                     'o a un asiento; no se pueden asociar aquí.'
                 )
             else:
@@ -2184,6 +2241,16 @@ class AlegraIntegrationService:
                     'No se encontraron documentos en Alegra por marca ni por '
                     'fecha/tercero/valor. Revisa que el gasto tenga proveedor, fecha y valor.'
                 )
+        elif same_gasto_count:
+            none_hint = (
+                f'; {none_key_count} con clave None (enviado sin reembolso).'
+                if none_key_count else ''
+            )
+            message = (
+                f'Hay {same_gasto_count} envío(s) del mismo gasto {gasto_pk} '
+                f'con otra local_key (p. ej. None vs reembolso).{none_hint} '
+                'Eso sí es duplicado real: conserva uno y elimina el otro.'
+            )
         elif has_duplicates:
             parts = []
             if marker_count > 1:
@@ -2207,9 +2274,11 @@ class AlegraIntegrationService:
             'document_id': doc.pk,
             'gasto_id': gasto_pk,
             'local_key': doc.local_key,
+            'local_key_kind': current_key_kind,
             'doc_status': doc.status,
             'can_associate': can_associate,
             'keep_alegra_id': keep_alegra_id,
+            'same_gasto_duplicates': same_gasto_count,
             'criteria': {
                 'date': criteria.get('date') or '',
                 'provider_id': criteria.get('provider_id') or '',
@@ -2501,29 +2570,49 @@ class AlegraIntegrationService:
             pending.append({
                 'gasto_id': gasto.pk,
                 'reembolso_id': gasto.reembolso_id,
-                'local_key': f'caja:bill:{gasto.reembolso_id}:{gasto.pk}',
+                'local_key': caja_bill_local_key(gasto.pk),
             })
         return pending
 
-    def _count_sent_caja_bills(self, empresa, batch, pending_bills):
-        ready = 0
-        for ref in pending_bills or []:
-            local_key = ref.get('local_key')
-            if not local_key:
-                continue
+    def _find_sent_caja_bill_doc(self, empresa, *, local_key=None, gasto_id=None, batch=None):
+        """Resuelve bill sent por local_key (actual/legacy) o por gasto_id."""
+        local_key = str(local_key or '').strip()
+        gasto_id = str(gasto_id or '').strip()
+        if batch is not None and local_key:
             bill_doc = AlegraDocument.objects.filter(
                 batch=batch,
                 document_type='caja_bill',
                 local_key=local_key,
                 status=AlegraDocument.STATUS_SENT,
             ).first()
-            if not bill_doc:
-                bill_doc = AlegraDocument.objects.filter(
-                    empresa=empresa,
-                    document_type='caja_bill',
-                    local_key=local_key,
-                    status=AlegraDocument.STATUS_SENT,
-                ).first()
+            if bill_doc and bill_doc.alegra_id:
+                return bill_doc
+        if local_key:
+            bill_doc = AlegraDocument.objects.filter(
+                empresa=empresa,
+                document_type='caja_bill',
+                local_key=local_key,
+                status=AlegraDocument.STATUS_SENT,
+            ).first()
+            if bill_doc and bill_doc.alegra_id:
+                return bill_doc
+        if gasto_id:
+            return find_sent_caja_bill_for_gasto(empresa, gasto_id)
+        if local_key.startswith('caja:bill:'):
+            parts = local_key.split(':')
+            if parts and parts[-1].isdigit():
+                return find_sent_caja_bill_for_gasto(empresa, parts[-1])
+        return None
+
+    def _count_sent_caja_bills(self, empresa, batch, pending_bills):
+        ready = 0
+        for ref in pending_bills or []:
+            bill_doc = self._find_sent_caja_bill_doc(
+                empresa,
+                local_key=ref.get('local_key'),
+                gasto_id=ref.get('gasto_id'),
+                batch=batch,
+            )
             if bill_doc and bill_doc.alegra_id:
                 ready += 1
         return ready
@@ -3161,12 +3250,11 @@ class AlegraIntegrationService:
         debit_amounts = []
         for idx, ref in enumerate(pending):
             local_key = ref.get('local_key')
-            bill_doc = AlegraDocument.objects.filter(
-                empresa=doc.empresa,
-                document_type='caja_bill',
+            bill_doc = self._find_sent_caja_bill_doc(
+                doc.empresa,
                 local_key=local_key,
-                status=AlegraDocument.STATUS_SENT,
-            ).first()
+                gasto_id=ref.get('gasto_id'),
+            )
             if not bill_doc or not bill_doc.alegra_id:
                 missing.append(local_key or f'gasto:{ref.get("gasto_id")}')
                 continue

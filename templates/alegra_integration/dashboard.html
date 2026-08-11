@@ -1446,6 +1446,14 @@ function renderCajaDupModal(data) {
   } else {
     $('#cajaDupCriteria').hide().text('');
   }
+  if (data.local_key) {
+    const kindHint = data.local_key_kind === 'legacy_none'
+      ? ' (clave None = enviado sin reembolso)'
+      : (data.local_key_kind === 'legacy_reembolso' ? ' (clave con reembolso)' : '');
+    const prev = $('#cajaDupCriteria').html() || '';
+    const keyLine = `Tu envío: <code style="font-size:11px">${escHtml(data.local_key)}</code>${kindHint}`;
+    $('#cajaDupCriteria').html((prev ? prev + '<br>' : '') + keyLine).show();
+  }
   const tbody = $('#cajaDupBody').empty();
   const bills = data.bills || [];
   if (!bills.length) {
@@ -1457,8 +1465,20 @@ function renderCajaDupModal(data) {
   bills.forEach(b => {
     const badges = [];
     if (b.is_keep) badges.push('<span class="badge badge-success">Conservar</span>');
+    if (b.same_gasto_duplicate) {
+      badges.push(
+        '<span class="badge badge-danger" title="Otro envío local del mismo gasto">Duplicado mismo gasto</span>'
+      );
+    }
+    if (b.legacy_none_key) {
+      badges.push(
+        '<span class="badge badge-dark" title="local_key con None (enviado antes del reembolso)">key None</span>'
+      );
+    }
     if (b.match_kind === 'marker') {
       badges.push('<span class="badge badge-info">Marca gasto</span>');
+    } else if (b.match_kind === 'same_gasto') {
+      badges.push('<span class="badge badge-danger">Mismo gasto local</span>');
     } else if (b.match_kind === 'soft') {
       badges.push('<span class="badge badge-warning">Misma fecha/tercero/valor</span>');
     } else if (b.match_kind === 'keep' && !b.is_keep) {
@@ -1469,7 +1489,7 @@ function renderCajaDupModal(data) {
       const gLabel = b.linked_gasto_id ? `gasto ${escHtml(String(b.linked_gasto_id))}` : 'gasto ?';
       if (b.linked_other) {
         badges.push(`<span class="badge badge-danger" title="Asociado a otro gasto de caja">Otro ${gLabel}</span>`);
-      } else {
+      } else if (!b.same_gasto_duplicate) {
         badges.push(`<span class="badge badge-secondary" title="Asociado al mismo gasto (otro documento)">Ya asociado (${gLabel})</span>`);
       }
       const where = [];
@@ -1504,7 +1524,8 @@ function renderCajaDupModal(data) {
       ? `<div class="d-flex" style="gap:6px;align-items:center">${controls.join('')}</div>`
       : '<span class="text-muted">—</span>';
     const rowCls = b.is_keep ? 'table-success'
-      : (b.linked_other || b.already_linked || b.journal_locked ? 'table-secondary' : '');
+      : (b.same_gasto_duplicate ? 'table-danger'
+        : (b.linked_other || b.already_linked || b.journal_locked ? 'table-secondary' : ''));
     tbody.append(`
       <tr class="${rowCls}">
         <td>${ctrlHtml}</td>

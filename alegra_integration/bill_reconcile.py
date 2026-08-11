@@ -57,6 +57,48 @@ def should_attempt_caja_bill_reconcile(doc):
     return local_key.startswith('caja:bill:')
 
 
+def caja_bill_local_key(gasto_pk):
+    """Clave estable por gasto (no incluye reembolso_id: evita duplicar al legalizar)."""
+    return f'caja:bill:{gasto_pk}'
+
+
+def caja_bill_key_kind(local_key):
+    """
+    Clasifica la local_key del bill de caja.
+    - stable: caja:bill:{gasto}
+    - legacy_none: caja:bill:None:{gasto}  (enviado antes de reembolso)
+    - legacy_reembolso: caja:bill:{reembolso}:{gasto}
+    """
+    key = str(local_key or '').strip()
+    if not key.startswith('caja:bill:'):
+        return 'unknown'
+    parts = key.split(':')
+    if len(parts) == 3 and parts[2].isdigit():
+        return 'stable'
+    if len(parts) >= 4 and parts[2] == 'None':
+        return 'legacy_none'
+    if len(parts) >= 4 and parts[2] not in ('', 'None'):
+        return 'legacy_reembolso'
+    return 'unknown'
+
+
+def list_sent_caja_bill_docs_for_gasto(empresa, gasto_pk, *, exclude_doc_pk=None):
+    """Todos los caja_bill sent del mismo gasto (cualquier local_key)."""
+    gasto_pk = str(gasto_pk or '').strip()
+    if not gasto_pk:
+        return []
+    qs = AlegraDocument.objects.filter(
+        empresa=empresa,
+        document_type='caja_bill',
+        source_model='accounting.gastos_caja',
+        source_pk=gasto_pk,
+        status=AlegraDocument.STATUS_SENT,
+    ).exclude(alegra_id__isnull=True).exclude(alegra_id='').order_by('pk')
+    if exclude_doc_pk not in (None, ''):
+        qs = qs.exclude(pk=exclude_doc_pk)
+    return list(qs.only('pk', 'alegra_id', 'local_key', 'source_pk', 'payload', 'batch_id'))
+
+
 def caja_gasto_pk_from_doc(doc):
     """PK del gasto local desde source_pk, local_key o marker en observations."""
     source_pk = str(getattr(doc, 'source_pk', '') or '').strip()
@@ -65,9 +107,10 @@ def caja_gasto_pk_from_doc(doc):
 
     local_key = str(getattr(doc, 'local_key', '') or '')
     if local_key.startswith('caja:bill:'):
-        # caja:bill:{reembolso_id}:{gasto_pk}
+        # Actual: caja:bill:{gasto_pk}
+        # Legacy: caja:bill:{reembolso_id}:{gasto_pk}
         parts = local_key.split(':')
-        if len(parts) >= 4 and parts[-1].isdigit():
+        if len(parts) >= 3 and parts[-1].isdigit():
             return parts[-1]
 
     payload = getattr(doc, 'payload', None)
@@ -77,6 +120,29 @@ def caja_gasto_pk_from_doc(doc):
         if match:
             return match.group(1)
     return ''
+
+
+def find_sent_caja_bill_for_gasto(empresa, gasto_pk):
+    """
+    Cualquier caja_bill sent del gasto (keys actuales o legacy con reembolso).
+    Evita reenviar el mismo gasto cuando cambió reembolso_id / local_key.
+    """
+    gasto_pk = str(gasto_pk or '').strip()
+    if not gasto_pk:
+        return None
+    return (
+        AlegraDocument.objects.filter(
+            empresa=empresa,
+            document_type='caja_bill',
+            source_model='accounting.gastos_caja',
+            source_pk=gasto_pk,
+            status=AlegraDocument.STATUS_SENT,
+        )
+        .exclude(alegra_id__isnull=True)
+        .exclude(alegra_id='')
+        .order_by('pk')
+        .first()
+    )
 
 
 def caja_bill_marker(gasto_pk):
@@ -430,6 +496,9 @@ def summarize_caja_bill_for_review(
     linked_other = bool(owner) and linked_gasto_id != current_gasto
     # Ya ligado a algún gasto de caja (aunque sea el mismo) → no re-asociar.
     already_linked = bool(owner)
+    same_gasto_duplicate = already_linked and not linked_other
+    linked_key_kind = caja_bill_key_kind(linked_local_key) if linked_local_key else ''
+    legacy_none_key = linked_key_kind == 'legacy_none'
 
     return {
         'id': bill_id,
@@ -445,6 +514,9 @@ def summarize_caja_bill_for_review(
         'linked_gasto_id': linked_gasto_id or None,
         'linked_local_key': linked_local_key or None,
         'linked_batch_id': linked_batch_id,
+        'linked_key_kind': linked_key_kind or None,
+        'legacy_none_key': legacy_none_key,
+        'same_gasto_duplicate': same_gasto_duplicate,
         'linked_other': linked_other,
         'already_linked': already_linked,
         'amount_mismatch': amount_mismatch,
