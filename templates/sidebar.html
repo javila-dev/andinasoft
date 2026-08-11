@@ -1,4 +1,5 @@
 {%load static%}
+{%load extras%}
 <button id='sidebarCollapse' class='btn btn-primary collapsebutton float-right'>
     <i id='btnsidebar' class="fas fa-arrow-left"></i>
 </button>
@@ -158,6 +159,14 @@
                 <a href="#carteraSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-search-dollar"></i>&nbsp;Cartera</a>
                 <ul class="collapse list-unstyled" id="carteraSubmenu">
+                    <li>
+                        <a href="/cartera/dashboard"><i class="fas fa-tachometer-alt"></i>&nbsp;Dashboard de gestion</a>
+                    </li>
+                    {% if user.is_superuser or perms.andinasoft.change_presupuestocartera or request.user|has_group:"Supervisor Cartera" %}
+                    <li>
+                        <a href="/projectselector/asignar_gestor">Asignar gestor</a>
+                    </li>
+                    {% endif %}
                     <li>
                         <a href="/projectselector/ver_ppto">Presupuesto</a>
                     </li>

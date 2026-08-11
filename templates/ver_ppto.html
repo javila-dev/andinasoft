@@ -137,13 +137,13 @@
                             <label class="input-group-text" for="nuevoGestor">Gestor</label>
                         </div>
                         <select class="custom-select" id="nuevoGestor" name='nuevoGestor'>
-                            <option selected>Choose...</option>
-                            <option value="DARCY JULIO">DARCY JULIO</option>
-                            <option value="DINA ORTEGA">DINA ORTEGA</option>
-                            <option value="HAROLD TANGARIFE">HAROLD TANGARIFE</option>
-                            <option value="NELSON SUAREZ">NELSON SUAREZ</option>
+                            <option selected value="">Seleccionar...</option>
+                            {% for val, label in gestores_opciones %}
+                            <option value="{{val}}">{{label}}</option>
+                            {% empty %}
                             <option value="JURIDICO">JURIDICO</option>
                             <option value="ESPECIAL">ESPECIAL</option>
+                            {% endfor %}
                         </select>
                         <div class='input-group-append'>
                             <input class='btn btn-primary' type="submit" name='btnGestor' value="Cambiar">

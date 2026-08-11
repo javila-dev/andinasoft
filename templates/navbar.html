@@ -1,5 +1,6 @@
 {%load crispy_forms_tags%}
 {%load static%}
+{%load extras%}
 <style>
   .navbar {
     margin-bottom: 0px;
@@ -130,6 +131,12 @@
                 class="fas fa-search-dollar"></i>&nbsp;Cartera</a>
             <div class="collapse" id="cartera-options">
               <div class="card card-body">
+                <a class="nav-link subitems" href="/cartera/dashboard"><i
+                    class="fas fa-tachometer-alt"></i>&nbsp;Dashboard de gestion</a>
+                {% if user.is_superuser or perms.andinasoft.change_presupuestocartera or request.user|has_group:"Supervisor Cartera" %}
+                <a class="nav-link subitems" href="/projectselector/asignar_gestor"><i
+                    class="fas fa-user-tag"></i>&nbsp;Asignar gestor</a>
+                {% endif %}
                 <a class="nav-link subitems" href="/projectselector/ver_ppto"><i
                     class="fas fa-people-arrows"></i>&nbsp;Presupuesto</a>
               </div>

@@ -1,0 +1,491 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%load humanize%}
+{%load static%}
+
+{%block title%}Línea de tiempo {{adj}}{%endblock%}
+
+{%block style%}
+<style>
+  .lt-header { margin-bottom: 1.25rem; }
+  .lt-track {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding: 1.5rem .5rem 1rem;
+  }
+  .lt-node {
+    flex: 1 1 0;
+    min-width: 110px;
+    text-align: center;
+    position: relative;
+    padding: 0 .35rem;
+  }
+  .lt-node:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    width: 100%;
+    height: 4px;
+    background: #dde3ea;
+    z-index: 0;
+  }
+  .lt-dot {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    margin: 0 auto 8px;
+    background: #dde3ea;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 2px #dde3ea;
+    position: relative;
+    z-index: 1;
+  }
+  .lt-node.superado .lt-dot {
+    background: #27ae60;
+    box-shadow: 0 0 0 2px #27ae60;
+  }
+  .lt-node.activo .lt-dot {
+    background: #c0392b;
+    box-shadow: 0 0 0 3px #f5b7b1;
+    transform: scale(1.15);
+  }
+  .lt-node.activo .lt-label { color: #c0392b; font-weight: 700; }
+  .lt-label { font-size: .8rem; }
+  .lt-monto { font-size: .75rem; color: #6c757d; white-space: nowrap; }
+  .lt-cartas .card-ck {
+    border: 1px solid #e5e8eb;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: .75rem;
+    background: #fff;
+  }
+  .lt-cartas .card-ck.locked { opacity: .55; background: #f8f9fa; }
+  .lt-cartas .card-ck.ready { border-color: #c0392b; }
+  .lt-cartas .card-ck.ready.enviada { border-color: #27ae60; background: #f6fff8; }
+  .lt-cartas .card-ck.ready.generada:not(.enviada) { border-color: #e67e22; background: #fffaf5; }
+  .lt-status { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+  .lt-status .badge { font-weight: 600; }
+  .lt-status .badge-ok { background: #27ae60; color: #fff; }
+  .lt-status .badge-warn { background: #e67e22; color: #fff; }
+  .lt-status .badge-miss { background: #ecf0f1; color: #7f8c8d; border: 1px solid #d5dbdb; }
+</style>
+{%endblock%}
+
+{%block content%}
+{%include 'seguimiento.html'%}
+{%if alerta%}{%include 'alert.html'%}{%endif%}
+
+<div class="principal-container bg-white rounded shadow-lg p-3">
+  <div class="lt-header d-flex flex-wrap justify-content-between align-items-start">
+    <div>
+      <h3 class="section-title text-white mb-1">Línea de tiempo — {{adj}}</h3>
+      <div>
+        <strong>{{row.cliente|upper}}</strong>
+        · {{row.cartera}} · Gestor: {{row.gestor}}
+        <br>
+        <small class="text-muted">
+          Consulta {{periodo}} · {{dias_mora}} días de mora
+          {% if deuda %}
+          ·
+          <a href="#" data-toggle="modal" data-target="#modalDeuda" class="font-weight-bold text-danger">
+            Adeudado ${{deuda.total_adeudado|floatformat:0|intcomma}}
+            <i class="fas fa-search-dollar"></i>
+          </a>
+          {% else %}
+          · Pendiente ${{row.total_pendiente|floatformat:0|intcomma}}
+          {% endif %}
+        </small>
+        {% if titular %}
+        <div class="mt-2 small">
+          {% if titular.celular1 %}<a href="tel:{{titular.celular1}}"><i class="fas fa-mobile-alt"></i> {{titular.celular1}}</a>{% endif %}
+          {% if titular.celular2 %} · <a href="tel:{{titular.celular2}}"><i class="fas fa-mobile-alt"></i> {{titular.celular2}}</a>{% endif %}
+          {% if titular.telefono1 %} · <a href="tel:{{titular.telefono1}}"><i class="fas fa-phone"></i> {{titular.telefono1}}</a>{% endif %}
+          {% if titular.telefono2 %} · <a href="tel:{{titular.telefono2}}"><i class="fas fa-phone"></i> {{titular.telefono2}}</a>{% endif %}
+          {% if titular.email %} · <a href="mailto:{{titular.email}}"><i class="fas fa-envelope"></i> {{titular.email}}</a>{% endif %}
+          {% if not titular.celular1 and not titular.telefono1 and not titular.email %}
+          <span class="text-muted">Sin telefonos/email registrados</span>
+          {% endif %}
+          {% if otros_titulares %}
+          <a class="ml-2" data-toggle="collapse" href="#otrosTitulares" role="button" aria-expanded="false">
+            Otros titulares ({{otros_titulares|length}}) <i class="fas fa-chevron-down"></i>
+          </a>
+          {% endif %}
+        </div>
+        {% if otros_titulares %}
+        <div class="collapse mt-2" id="otrosTitulares">
+          <div class="border rounded p-2 bg-light">
+            {% for t in otros_titulares %}
+            <div class="mb-2 {% if not forloop.last %}border-bottom pb-2{% endif %}">
+              <strong>{{t.rol}}:</strong> {{t.nombre|upper}}
+              <span class="text-muted">({{t.id}})</span><br>
+              <span class="small">
+                {% if t.celular1 %}<a href="tel:{{t.celular1}}">{{t.celular1}}</a>{% endif %}
+                {% if t.celular2 %} · <a href="tel:{{t.celular2}}">{{t.celular2}}</a>{% endif %}
+                {% if t.telefono1 %} · <a href="tel:{{t.telefono1}}">{{t.telefono1}}</a>{% endif %}
+                {% if t.email %} · <a href="mailto:{{t.email}}">{{t.email}}</a>{% endif %}
+                {% if not t.celular1 and not t.telefono1 and not t.email %}<span class="text-muted">Sin contacto</span>{% endif %}
+              </span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <a class="btn btn-sm btn-outline-secondary" href="/cartera/dashboard"><i class="fas fa-tachometer-alt"></i> Volver a dashboard</a>
+      <button type="button" class="btn btn-sm btn-outline-danger" data-toggle="modal" data-target="#modalDeuda">
+        <i class="fas fa-file-invoice-dollar"></i> Deuda
+      </button>
+      <a class="btn btn-sm btn-outline-dark" href="/cartera/estado_cuenta/{{proyecto}}/{{adj}}" target="_blank" rel="noopener">
+        <i class="fas fa-file-pdf"></i> Estado de cuenta
+      </a>
+      <a class="btn btn-sm btn-outline-primary" href="/adjudicaciones/{{proyecto}}/{{adj}}/"><i class="fas fa-folder-open"></i> Detalle ADJ</a>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalDeuda" tabindex="-1" role="dialog" aria-labelledby="modalDeudaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalDeudaLabel">
+            Deuda pendiente — {{adj}}
+          </h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+            <div>
+              <div class="text-muted small text-uppercase">Total adeudado (cuotas + mora)</div>
+              <div class="h4 mb-0 text-danger">${{deuda.total_adeudado|floatformat:0|intcomma}}</div>
+              <small class="text-muted">
+                {{deuda.count}} cuota{{deuda.count|pluralize}} · Mora máx. {{deuda.dias_mora_max}} días
+              </small>
+            </div>
+            <a class="btn btn-sm btn-dark" href="/cartera/estado_cuenta/{{proyecto}}/{{adj}}" target="_blank" rel="noopener">
+              <i class="fas fa-download"></i> Descargar estado de cuenta
+            </a>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th>#</th>
+                  <th>Tipo</th>
+                  <th>Fecha</th>
+                  <th class="text-right">Capital</th>
+                  <th class="text-right">Interés</th>
+                  <th class="text-right">Saldo cuota</th>
+                  <th class="text-center">Días mora</th>
+                  <th class="text-right">Mora</th>
+                  <th class="text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in deuda.cuotas %}
+                <tr>
+                  <td>{{c.nrocta}}</td>
+                  <td>{{c.tipocta}}</td>
+                  <td>{{c.fecha|date:"d/m/Y"}}</td>
+                  <td class="text-right">{{c.saldocapital|floatformat:0|intcomma}}</td>
+                  <td class="text-right">{{c.saldointcte|floatformat:0|intcomma}}</td>
+                  <td class="text-right">{{c.saldocuota|floatformat:0|intcomma}}</td>
+                  <td class="text-center {% if c.diasmora > 0 %}text-danger font-weight-bold{% endif %}">{{c.diasmora}}</td>
+                  <td class="text-right {% if c.saldomora %}text-danger{% endif %}">{{c.saldomora|floatformat:0|intcomma}}</td>
+                  <td class="text-right font-weight-bold">{{c.total|floatformat:0|intcomma}}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="9" class="text-center text-muted py-3">Sin cuotas pendientes a la fecha.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              {% if deuda.cuotas %}
+              <tfoot>
+                <tr class="font-weight-bold">
+                  <td colspan="3" class="text-right">Totales</td>
+                  <td class="text-right">{{deuda.total_capital|floatformat:0|intcomma}}</td>
+                  <td class="text-right">{{deuda.total_interes|floatformat:0|intcomma}}</td>
+                  <td class="text-right">{{deuda.total_cuotas|floatformat:0|intcomma}}</td>
+                  <td></td>
+                  <td class="text-right text-danger">{{deuda.total_mora|floatformat:0|intcomma}}</td>
+                  <td class="text-right text-danger">{{deuda.total_adeudado|floatformat:0|intcomma}}</td>
+                </tr>
+              </tfoot>
+              {% endif %}
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if compromiso_activo %}
+  <div class="alert {% if compromiso_activo.estado == 'vencido' %}alert-danger{% elif compromiso_activo.estado == 'hoy' %}alert-warning{% else %}alert-info{% endif %} mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-start">
+      <div>
+        <strong>Compromiso activo:</strong>
+        ${{compromiso_activo.valor|floatformat:0|intcomma}}
+        para el {{compromiso_activo.fecha_compromiso|date:"d/m/Y"}}
+        · <span class="badge badge-light">{{compromiso_activo.label}}</span>
+        {% if compromiso_activo.faltante %}
+        · Recaudado ${{compromiso_activo.recaudo|floatformat:0|intcomma}}
+        · Faltan ${{compromiso_activo.faltante|floatformat:0|intcomma}}
+        {% endif %}
+        <small class="d-block text-muted">
+          Registrado por {{compromiso_activo.usuario}} el {{compromiso_activo.fecha_registro|date:"d/m/Y"}}.
+          Un nuevo compromiso reemplaza automáticamente al anterior.
+        </small>
+      </div>
+      <div class="btn-group btn-group-sm mt-1">
+        <form method="post" class="d-inline" onsubmit="return confirm('¿Cerrar este compromiso? Quedará en el historial sin valor.');">
+          {% csrf_token %}
+          <input type="hidden" name="id_seg" value="{{compromiso_activo.id_seg}}">
+          <button type="submit" name="cerrarCompromiso" value="1" class="btn btn-outline-secondary">
+            <i class="fas fa-check"></i> Cerrar
+          </button>
+        </form>
+        <form method="post" class="d-inline ml-1" onsubmit="return confirm('¿Eliminar este compromiso y su seguimiento? Esta acción no se puede deshacer.');">
+          {% csrf_token %}
+          <input type="hidden" name="id_seg" value="{{compromiso_activo.id_seg}}">
+          <button type="submit" name="eliminarCompromiso" value="1" class="btn btn-outline-danger">
+            <i class="fas fa-trash"></i> Eliminar
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if es_supervisor %}
+  <div class="alert alert-light border mb-3">
+    <form method="post" action="/cartera/reasignar/{{proyecto}}/{{adj}}" class="form-inline flex-wrap">
+      {% csrf_token %}
+      <strong class="mr-2">Gestor actual:</strong>
+      <span class="mr-3">{% if row.gestor == gestor_juridico %}<span class="badge badge-danger">{{row.gestor}}</span>{% else %}{{row.gestor}}{% endif %}</span>
+      <select name="nuevo_gestor" class="custom-select custom-select-sm mr-2" style="min-width:200px;">
+        <option value="">Cambiar a...</option>
+        {% for val, label in gestores_opciones %}
+        <option value="{{val}}" {% if val == row.gestor %}selected{% endif %}>{{label}}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-primary mr-2">Reasignar</button>
+      <button type="submit" name="pasar_juridico" value="1" class="btn btn-sm btn-danger"
+              onclick="return confirm('Pasar esta adjudicacion a cartera juridica?')">
+        Pasar a juridico
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <h5 class="mb-0">Edad de cartera</h5>
+  <div class="lt-track mb-4">
+    {% for node in visual_nodes %}
+    <div class="lt-node {% if node.activo %}activo{% elif node.superado %}superado{% endif %}">
+      <div class="lt-dot"></div>
+      <div class="lt-label">{{node.label}}</div>
+      <div class="lt-monto">${{node.monto|floatformat:0|intcomma}}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="row">
+    <div class="col-lg-5 lt-cartas mb-3">
+      <h5>Cartas de cobro</h5>
+      <p class="small text-muted">Se habilitan cuando el cliente alcanza o supera el checkpoint (días de mora).</p>
+      {% for cn in carta_nodes %}
+      <div class="card-ck {% if cn.alcanzado %}ready{% else %}locked{% endif %}{% if cn.alcanzado and cn.generada %} generada{% endif %}{% if cn.alcanzado and cn.enviada %} enviada{% endif %}">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <strong>{{cn.checkpoint.label}}</strong>
+            <div class="small text-muted">
+              Desde {{cn.checkpoint.dias_desde}} días
+              {% if cn.checkpoint.dias_hasta %}hasta {{cn.checkpoint.dias_hasta}}{% else %}en adelante{% endif %}
+            </div>
+            {% if cn.alcanzado %}
+            <div class="lt-status">
+              {% if cn.generada %}
+              <span class="badge badge-ok" title="{% if cn.ultima_generacion %}{{cn.ultima_generacion|date:'d/m/Y H:i'}}{% endif %}">
+                <i class="fas fa-file-pdf"></i> Generada
+              </span>
+              {% else %}
+              <span class="badge badge-miss"><i class="fas fa-file"></i> Sin generar</span>
+              {% endif %}
+              {% if cn.enviada %}
+              <span class="badge badge-ok" title="{% if cn.ultimo_envio %}{{cn.ultimo_envio|date:'d/m/Y'}}{% endif %}">
+                <i class="fas fa-paper-plane"></i> Enviada
+              </span>
+              {% else %}
+              <span class="badge badge-warn"><i class="fas fa-exclamation"></i> Sin envío</span>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          <div class="text-right">
+            {% if cn.alcanzado and cn.tiene_plantilla %}
+            <a class="btn btn-sm btn-danger mb-1"
+               href="/cartera/carta/{{proyecto}}/{{adj}}/{{cn.checkpoint.id}}"
+               target="_blank" rel="noopener">
+              <i class="fas fa-file-pdf"></i> Descargar
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-secondary mb-1"
+                    data-toggle="collapse" data-target="#soporte-{{cn.checkpoint.id}}">
+              <i class="fas fa-paperclip"></i> Soporte
+            </button>
+            {% elif cn.alcanzado %}
+            <span class="badge badge-secondary">Sin plantilla</span>
+            {% else %}
+            <span class="badge badge-light text-muted">Aún no aplica</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if cn.envios %}
+        <div class="small mt-2">
+          {% for e in cn.envios %}
+          <div class="text-muted">
+            Enviado {{e.fecha_envio|date:"d/m/Y"}} · {{e.canal_label}} · {{e.usuario}}
+            {% if e.tiene_soporte %}
+            · <a href="/cartera/carta_soporte/{{proyecto}}/{{adj}}/{{e.id}}">ver soporte</a>
+            {% endif %}
+            {% if e.notas %}· {{e.notas}}{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if cn.alcanzado %}
+        <div class="collapse mt-2" id="soporte-{{cn.checkpoint.id}}">
+          <form method="post" enctype="multipart/form-data" class="border rounded p-2 bg-light">
+            {% csrf_token %}
+            <input type="hidden" name="checkpoint_id" value="{{cn.checkpoint.id}}">
+            <div class="form-row">
+              <div class="col-6 mb-1">
+                <label class="small mb-0">Canal</label>
+                <select name="canal" class="form-control form-control-sm">
+                  {% for val, label in canales_envio %}
+                  <option value="{{val}}">{{label}}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-6 mb-1">
+                <label class="small mb-0">Fecha envío</label>
+                <input type="date" name="fecha_envio" class="form-control form-control-sm" value="{{hoy}}">
+              </div>
+              <div class="col-12 mb-1">
+                <label class="small mb-0">Soporte (imagen/PDF)</label>
+                <input type="file" name="soporte" class="form-control-file form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+              </div>
+              <div class="col-12 mb-1">
+                <input type="text" name="notas" class="form-control form-control-sm" placeholder="Notas (opcional)" maxlength="255">
+              </div>
+              <div class="col-12">
+                <button type="submit" name="cargarSoporteCarta" value="1" class="btn btn-sm btn-primary">
+                  Guardar soporte
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+      {% empty %}
+      <div class="text-muted">No hay checkpoints configurados para este proyecto.</div>
+      {% endfor %}
+    </div>
+
+    <div class="col-lg-7 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0">Seguimientos y acuerdos</h5>
+        <button type="button" class="btn btn-sm btn-outline-warning" id="btnAgregarCompromiso2"
+                data-toggle="modal" data-target="#modal-seguimientos">
+          <i class="fas fa-handshake"></i> Compromiso
+        </button>
+      </div>
+      <div class="my-2 p-3 bg-light rounded overflow-auto" style="max-height: 55vh;">
+        {% for seguimiento in seguimientos %}
+        <div class="media text-muted pt-3">
+          <p class="media-body pb-3 mb-0 small lh-125 border-bottom border-gray">
+            <strong class="d-block text-gray-dark">{{seguimiento.usuario}} · {{seguimiento.fecha}}</strong>
+            <strong>Tipo:</strong> {{seguimiento.tipo_seguimiento}} ·
+            <strong>Contacto:</strong> {{seguimiento.forma_contacto}}<br>
+            {{seguimiento.respuesta_cliente}}<br>
+            {% if seguimiento.valor_compromiso %}
+            <span class="{% if seguimiento.cumplimiento.estado == 'cumplido' %}text-success{% elif seguimiento.cumplimiento.estado == 'vencido' %}text-danger{% else %}text-warning{% endif %}">
+              Compromiso: ${{seguimiento.valor_compromiso|intcomma}}
+              el {{seguimiento.fecha_compromiso}}
+              {% if seguimiento.cumplimiento %}
+              · <strong>{{seguimiento.cumplimiento.label}}</strong>
+              {% if seguimiento.cumplimiento.estado != 'cumplido' and seguimiento.cumplimiento.faltante %}
+              (faltan ${{seguimiento.cumplimiento.faltante|floatformat:0|intcomma}})
+              {% endif %}
+              {% endif %}
+            </span>
+            {% if not seguimiento.cumplimiento or seguimiento.cumplimiento.estado != 'cumplido' %}
+            <span class="ml-2">
+              <form method="post" class="d-inline" onsubmit="return confirm('¿Cerrar este compromiso?');">
+                {% csrf_token %}
+                <input type="hidden" name="id_seg" value="{{seguimiento.id_seg}}">
+                <button type="submit" name="cerrarCompromiso" value="1" class="btn btn-link btn-sm p-0 text-secondary">Cerrar</button>
+              </form>
+              ·
+              <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este compromiso y su seguimiento?');">
+                {% csrf_token %}
+                <input type="hidden" name="id_seg" value="{{seguimiento.id_seg}}">
+                <button type="submit" name="eliminarCompromiso" value="1" class="btn btn-link btn-sm p-0 text-danger">Eliminar</button>
+              </form>
+            </span>
+            {% endif %}
+            {% endif %}
+          </p>
+        </div>
+        {% empty %}
+        <div class="text-muted">Sin seguimientos. Usa <em>Compromiso</em> para registrar un acuerdo de pago.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{%endblock%}
+
+{%block jsbottom%}
+<script>
+(function(){
+  function prepCompromiso(){
+    var chk = document.querySelector('#id_tiene_compromiso, input[name="tiene_compromiso"]');
+    if (chk) { chk.checked = true; $(chk).trigger('change'); }
+    var tipo = document.querySelector('select[name="tipo_seguimiento"]');
+    if (tipo) {
+      for (var i=0;i<tipo.options.length;i++){
+        if ((tipo.options[i].value || '').toLowerCase() === 'cobro') {
+          tipo.selectedIndex = i;
+          break;
+        }
+      }
+    }
+  }
+  $('#btnAgregarCompromiso2').on('click', prepCompromiso);
+
+  // Marca visual inmediata al descargar (PDF abre en otra pestana)
+  $('.lt-cartas a[href*="/cartera/carta/"]').on('click', function(){
+    var card = $(this).closest('.card-ck');
+    card.addClass('generada');
+    var miss = card.find('.lt-status .badge-miss').filter(function(){
+      return $(this).text().indexOf('Sin generar') !== -1;
+    }).first();
+    if (miss.length) {
+      miss.replaceWith(
+        '<span class="badge badge-ok"><i class="fas fa-file-pdf"></i> Generada</span>'
+      );
+    }
+  });
+})();
+</script>
+{%endblock%}

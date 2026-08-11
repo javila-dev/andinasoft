@@ -1,0 +1,178 @@
+{%extends 'base.html'%}
+{%load humanize%}
+{%load static%}
+
+{%block title%}Asignar gestor {{proyecto}}{%endblock%}
+
+{%block style%}
+<style>
+  .ag-toolbar { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .ag-jur { color: #922b21; font-weight: 600; }
+  .badge-jur { background: #922b21; }
+</style>
+{%endblock%}
+
+{%block content%}
+{%if alerta%}{%include 'alert.html'%}{%endif%}
+
+<div class="principal-container bg-white rounded shadow-lg p-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+    <div>
+      <h3 class="section-title text-white mb-1">Asignar gestor — {{proyecto}}</h3>
+      <small class="text-muted">
+        Actualiza el gestor en info de cartera.
+        {% if ultimo_periodo_ppto %}
+        Al confirmar puedes elegir si también se actualiza el último presupuesto ({{ultimo_periodo_ppto_label}}).
+        {% else %}
+        Este proyecto aún no tiene presupuesto cargado.
+        {% endif %}
+        Consulta al {{periodo}}.
+      </small>
+    </div>
+    <div>
+      <a class="btn btn-sm btn-outline-secondary" href="/cartera/dashboard?proyecto={{proyecto}}">
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+      </a>
+    </div>
+  </div>
+
+  <form method="get" class="form-inline mb-3">
+    <label class="mr-2">Filtrar por gestor</label>
+    <select name="gestor" class="custom-select custom-select-sm mr-2" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for g in gestores_filtro %}
+      <option value="{{g}}" {% if filtro_gestor == g %}selected{% endif %}>{{g}}</option>
+      {% endfor %}
+    </select>
+    {% if filtro_gestor %}
+    <a class="btn btn-sm btn-link" href="?">Quitar filtro</a>
+    {% endif %}
+  </form>
+
+  <form method="post" id="form-asignar">{% csrf_token %}
+    <input type="hidden" name="filtro_gestor" value="{{filtro_gestor}}">
+    <input type="hidden" name="actualizar_presupuesto" id="actualizar_presupuesto" value="0">
+
+    <div class="ag-toolbar">
+      <div class="form-row align-items-end">
+        <div class="col-md-4 mb-2">
+          <label for="nuevo_gestor">Nuevo gestor</label>
+          <select class="custom-select" name="nuevo_gestor" id="nuevo_gestor">
+            <option value="">Seleccionar...</option>
+            {% for val, label in gestores_opciones %}
+            <option value="{{val}}">{{label}}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-8 mb-2">
+          <button type="submit" name="accion" value="reasignar" class="btn btn-primary"
+                  onclick="return confirmSeleccion('reasignar')">
+            <i class="fas fa-user-edit"></i> Reasignar seleccionados
+          </button>
+          <button type="submit" name="accion" value="pasar_juridico" class="btn btn-danger"
+                  onclick="return confirmSeleccion('juridico')">
+            <i class="fas fa-balance-scale"></i> Pasar a juridico
+          </button>
+          <small class="text-muted d-block mt-1">
+            Juridico asigna el gestor {{gestor_juridico}} y marca la adjudicacion como juridica.
+          </small>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table id="tableasignar" class="table table-sm table-hover" style="font-size:12px;">
+        <thead class="text-center">
+          <tr>
+            <th><input type="checkbox" id="check-all" title="Seleccionar todos"></th>
+            <th>ADJ</th>
+            <th>Cliente</th>
+            <th>Cartera</th>
+            <th>Gestor actual</th>
+            <th>Dias mora</th>
+            <th>Total pendiente</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr class="{% if r.es_juridico %}table-warning{% endif %}">
+            <td class="text-center">
+              <input type="checkbox" name="adj_ids" value="{{r.adj}}" class="adj-check">
+            </td>
+            <td>{{r.adj}}</td>
+            <td>{{r.cliente|upper}}</td>
+            <td>{{r.cartera}}</td>
+            <td class="text-center">
+              {% if r.es_juridico %}
+              <span class="badge badge-jur">{{r.gestor}}</span>
+              {% else %}
+              {{r.gestor}}
+              {% endif %}
+            </td>
+            <td class="text-center">{{r.dias_mora}}</td>
+            <td class="text-right">{{r.total_pendiente|floatformat:0|intcomma}}</td>
+            <td class="text-nowrap">
+              <a class="btn btn-sm btn-outline-primary" href="/cartera/linea_tiempo/{{proyecto}}/{{r.adj}}" title="Linea de tiempo">
+                <i class="fas fa-stream"></i>
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No hay adjudicaciones para mostrar.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+</div>
+{%endblock%}
+
+{%block jsbottom%}
+<script>
+function confirmSeleccion(tipo) {
+  var n = document.querySelectorAll('.adj-check:checked').length;
+  if (!n) {
+    alert('Selecciona al menos una adjudicacion.');
+    return false;
+  }
+  var g = document.getElementById('nuevo_gestor').value;
+  if (tipo !== 'juridico' && !g) {
+    alert('Selecciona el nuevo gestor.');
+    return false;
+  }
+  var msg = tipo === 'juridico'
+    ? ('Pasar ' + n + ' adjudicacion(es) a cartera juridica?')
+    : ('Reasignar ' + n + ' adjudicacion(es) a ' + g + '?');
+  if (!confirm(msg)) {
+    return false;
+  }
+
+  var periodo = '{{ ultimo_periodo_ppto|default:""|escapejs }}';
+  var periodoLabel = '{{ ultimo_periodo_ppto_label|default:""|escapejs }}';
+  var actualizar = false;
+  if (periodo) {
+    actualizar = confirm(
+      '¿También cambiar el gestor en el último presupuesto cargado de este proyecto (' + periodoLabel + ')?'
+    );
+  } else {
+    alert('No hay presupuesto cargado en este proyecto; solo se actualizará info de cartera.');
+  }
+  document.getElementById('actualizar_presupuesto').value = actualizar ? '1' : '0';
+  return true;
+}
+$(function () {
+  $('#check-all').on('change', function () {
+    $('.adj-check').prop('checked', this.checked);
+  });
+  if ($.fn.DataTable && $('#tableasignar').length) {
+    $('#tableasignar').DataTable({
+      pageLength: 50,
+      order: [[4, 'asc'], [2, 'asc']],
+      columnDefs: [{ orderable: false, targets: [0, 7] }],
+      language: { url: '/ajax_request/datatable_spanish' }
+    });
+  }
+});
+</script>
+{%endblock%}

@@ -21,6 +21,7 @@ from django.conf.urls import url
 from django.views.generic.base import TemplateView
 from andinasoft import views, ajax_request
 from andinasoft import views_usuarios
+from andinasoft import cartera_gestor_views
 from buildingcontrol import views as building_views, pdf as building_pdf
 from crm import views as crm_views
 from accounting import views as account_views
@@ -83,6 +84,14 @@ urlpatterns = [
     path('cartera/ver_presupuesto/<proyecto>',views.ver_presupuesto,name='ver presupuesto'),
     path('cartera/ver_presupuesto/<proyecto>/<periodo>',views.presupuesto_cartera,name='pptomes'),
     path('cartera/edades_cartera/<proyecto>',views.edades_cartera),
+    path('cartera/dashboard',cartera_gestor_views.cartera_dashboard,name='cartera dashboard'),
+    path('cartera/dashboard/<proyecto>',cartera_gestor_views.cartera_dashboard,name='cartera dashboard proyecto'),
+    path('cartera/linea_tiempo/<proyecto>/<adj>',cartera_gestor_views.cartera_linea_tiempo,name='cartera linea tiempo'),
+    path('cartera/carta/<proyecto>/<adj>/<int:checkpoint_id>',cartera_gestor_views.cartera_descargar_carta,name='cartera carta cobro'),
+    path('cartera/carta_soporte/<proyecto>/<adj>/<int:envio_id>',cartera_gestor_views.cartera_soporte_carta,name='cartera carta soporte'),
+    path('cartera/estado_cuenta/<proyecto>/<adj>',cartera_gestor_views.cartera_estado_cuenta,name='cartera estado cuenta'),
+    path('cartera/asignar_gestor/<proyecto>',cartera_gestor_views.cartera_asignar_gestor,name='cartera asignar gestor'),
+    path('cartera/reasignar/<proyecto>/<adj>',cartera_gestor_views.cartera_reasignar_adj,name='cartera reasignar adj'),
     path('cartera/otrosi',views.reestructuraciones_cartera),
     path('cartera/reporteov',views.cartera_month_results),
     path('comercial/detalle_comisiones/<proyecto>',views.detalle_comisiones,name='detalle comisiones'),

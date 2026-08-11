@@ -309,6 +309,166 @@ class ConfigDocumento(models.Model):
         return f'{self.proyecto_id} / {self.origen} / {self.motor}'
 
 
+class CarteraCheckpoint(models.Model):
+    """Umbral de edad de cartera (parametrizable) para carta de cobro."""
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='cartera_checkpoints',
+        db_constraint=False,
+    )
+    codigo = models.CharField(max_length=32)
+    label = models.CharField(max_length=64)
+    dias_desde = models.PositiveIntegerField(
+        help_text='Dias de mora a partir de los cuales el checkpoint se considera alcanzado',
+    )
+    dias_hasta = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Inclusive. Vacio = sin limite superior (ej. >120)',
+    )
+    orden = models.PositiveSmallIntegerField(default=0)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('proyecto', 'codigo')
+        ordering = ['orden', 'dias_desde']
+        verbose_name = 'Checkpoint cartera'
+        verbose_name_plural = 'Checkpoints cartera'
+
+    def __str__(self):
+        return f'{self.proyecto_id} / {self.label} ({self.dias_desde}-{self.dias_hasta or "+"})'
+
+    def alcanzado(self, dias_mora):
+        try:
+            d = int(dias_mora or 0)
+        except (TypeError, ValueError):
+            d = 0
+        return d >= int(self.dias_desde)
+
+
+class CarteraCartaPlantilla(models.Model):
+    """Plantilla PDF asociada a un checkpoint de cartera."""
+
+    MOTOR_XHTML2PDF = 'xhtml2pdf'
+    MOTOR_WEASYPRINT = 'weasyprint'
+    MOTOR_CHOICES = (
+        (MOTOR_XHTML2PDF, 'xhtml2pdf'),
+        (MOTOR_WEASYPRINT, 'WeasyPrint'),
+    )
+
+    checkpoint = models.ForeignKey(
+        CarteraCheckpoint,
+        on_delete=models.CASCADE,
+        related_name='plantillas',
+    )
+    motor = models.CharField(max_length=20, choices=MOTOR_CHOICES, default=MOTOR_WEASYPRINT)
+    plantilla = models.CharField(
+        max_length=255,
+        help_text='Ruta HTML bajo templates (ej. pdf/cartas_cobro/stub.html)',
+        default='pdf/cartas_cobro/stub.html',
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Plantilla carta cobro'
+        verbose_name_plural = 'Plantillas cartas cobro'
+
+    def __str__(self):
+        return f'{self.checkpoint} / {self.plantilla}'
+
+
+class CarteraCartaEnvio(models.Model):
+    """Soporte de envio de una carta de cobro (evidencia por checkpoint/ADJ)."""
+
+    CANAL_WHATSAPP = 'whatsapp'
+    CANAL_EMAIL = 'email'
+    CANAL_FISICO = 'fisico'
+    CANAL_OTRO = 'otro'
+    CANAL_CHOICES = (
+        (CANAL_WHATSAPP, 'WhatsApp'),
+        (CANAL_EMAIL, 'Correo'),
+        (CANAL_FISICO, 'Fisico / mensajeria'),
+        (CANAL_OTRO, 'Otro'),
+    )
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='cartera_carta_envios',
+        db_constraint=False,
+    )
+    adj = models.CharField(max_length=64, db_index=True)
+    checkpoint = models.ForeignKey(
+        CarteraCheckpoint,
+        on_delete=models.CASCADE,
+        related_name='envios',
+    )
+    canal = models.CharField(max_length=20, choices=CANAL_CHOICES, default=CANAL_WHATSAPP)
+    fecha_envio = models.DateField()
+    soporte = models.FileField(
+        upload_to='cartera/cartas_soporte/%Y/%m/',
+        storage=PRIVATE_MEDIA_STORAGE,
+    )
+    notas = models.CharField(max_length=255, blank=True, default='')
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='cartera_carta_envios',
+        db_constraint=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha_envio', '-id']
+        verbose_name = 'Envio carta cobro'
+        verbose_name_plural = 'Envios cartas cobro'
+        indexes = [
+            models.Index(fields=['proyecto', 'adj']),
+            models.Index(fields=['checkpoint', 'adj']),
+        ]
+
+    def __str__(self):
+        return f'{self.proyecto_id}/{self.adj} {self.checkpoint_id} {self.canal} {self.fecha_envio}'
+
+
+class CarteraCartaGeneracion(models.Model):
+    """Registro de generacion/descarga PDF de carta de cobro (por checkpoint/ADJ)."""
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='cartera_carta_generaciones',
+        db_constraint=False,
+    )
+    adj = models.CharField(max_length=64, db_index=True)
+    checkpoint = models.ForeignKey(
+        CarteraCheckpoint,
+        on_delete=models.CASCADE,
+        related_name='generaciones',
+    )
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='cartera_carta_generaciones',
+        db_constraint=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        verbose_name = 'Generacion carta cobro'
+        verbose_name_plural = 'Generaciones cartas cobro'
+        indexes = [
+            models.Index(fields=['proyecto', 'adj']),
+            models.Index(fields=['checkpoint', 'adj']),
+        ]
+
+    def __str__(self):
+        return f'{self.proyecto_id}/{self.adj} ck={self.checkpoint_id} {self.created_at}'
+
+
 class PromesaOtrosi(models.Model):
     """Historial de otrosi/prorrogas de entrega y/o escritura por negocio."""
 

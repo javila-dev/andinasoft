@@ -1,0 +1,320 @@
+{%extends 'base.html'%}
+{%load humanize%}
+{%load static%}
+
+{%block title%}Dashboard de gestion{%endblock%}
+
+{%block style%}
+<style>
+  .cg-kpi {
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    height: 100%;
+  }
+  .cg-kpi .label { font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+  .cg-kpi .value { font-size: 1.45rem; font-weight: 700; margin-top: .2rem; }
+  .cg-kpi .value.text-center { text-align: center; }
+  .cg-kpi .value.text-right { text-align: right; }
+  .cg-badge-filter {
+    display: inline-block;
+    padding: .35rem .7rem;
+    margin: 0 .35rem .35rem 0;
+    border-radius: 999px;
+    font-size: .8rem;
+    background: #eef2f5;
+    color: #334;
+    text-decoration: none;
+  }
+  .cg-badge-filter:hover { background: #dde5eb; text-decoration: none; color: #223; }
+  .cg-badge-filter.active { background: #2c3e50; color: #fff; }
+  .cg-card-alert {
+    border: 1px solid #e5e8eb;
+    border-radius: 8px;
+    background: #fff;
+    padding: .75rem 1rem;
+    height: 100%;
+  }
+  .cg-card-alert h6 {
+    font-size: .85rem;
+    margin: 0 0 .5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cg-card-alert .cg-item {
+    font-size: .78rem;
+    line-height: 1.25;
+    padding: .35rem 0;
+    border-bottom: 1px solid #f0f2f4;
+    display: flex;
+    justify-content: space-between;
+    gap: .5rem;
+  }
+  .cg-card-alert .cg-item:last-child { border-bottom: 0; }
+  .cg-card-alert .cg-item a { font-size: .72rem; white-space: nowrap; }
+  .cg-card-alert .muted { color: #889; font-size: .75rem; }
+  .cg-card-alert .tag-hoy { color: #b9770e; font-weight: 600; }
+  .cg-card-alert .tag-venc { color: #922b21; font-weight: 600; }
+  .cg-card-alert .tag-manana { color: #1a5276; font-weight: 600; }
+  .cg-card-alert .tag-chip {
+    display: inline-block;
+    font-size: .65rem;
+    padding: .1rem .35rem;
+    border-radius: 4px;
+    background: #eef2f5;
+    color: #445;
+    margin-right: .2rem;
+  }
+  .cg-card-alert .tag-chip.roto { background: #fdecea; color: #922b21; }
+  .cg-card-alert .tag-chip.hoy { background: #fef5e7; color: #b9770e; }
+  .cg-card-alert .tag-chip.manana { background: #eaf2f8; color: #1a5276; }
+  .cg-bucket-pill {
+    display: inline-block;
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    background: #eef2f5;
+    color: #334;
+    text-decoration: none;
+    margin: 0 .3rem .3rem 0;
+  }
+  .cg-bucket-pill:hover { background: #dde5eb; text-decoration: none; color: #223; }
+  .cg-bucket-pill.active-mora { background: #fdecea; color: #922b21; }
+  .cg-bucket-pill.active {
+    background: #2c3e50;
+    color: #fff;
+  }
+  .cg-bucket-pill.active.active-mora {
+    background: #922b21;
+    color: #fff;
+  }
+  .cg-quick a {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    margin: .25rem .35rem .25rem 0;
+  }
+</style>
+{%endblock%}
+
+{%block content%}
+<div class="principal-container bg-white rounded shadow-lg p-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+    <div>
+      <h3 class="section-title text-white mb-1">Dashboard de gestion</h3>
+      <small class="text-muted">Consulta al {{periodo}}
+        {% if es_supervisor %}· Vista supervisor{% else %}· Gestor: {{gestor_nombre}}{% endif %}
+        {% if proyecto_filtro %}· Filtrado: {{proyecto_filtro}}{% else %}· Todos los proyectos{% endif %}
+        {% if bucket_filtro %}· Edad: {{bucket_filtro}}{% endif %}
+      </small>
+    </div>
+    <div class="cg-quick">
+      <a class="btn btn-sm btn-outline-primary" href="/operaciones/buscar_cliente"><i class="fas fa-search"></i> Buscar cliente</a>
+      {% if es_supervisor %}
+        {% if proyecto_filtro %}
+        <a class="btn btn-sm btn-outline-danger" href="/cartera/asignar_gestor/{{proyecto_filtro}}"><i class="fas fa-user-tag"></i> Asignar gestor</a>
+        {% else %}
+        <a class="btn btn-sm btn-outline-danger" href="/projectselector/asignar_gestor"><i class="fas fa-user-tag"></i> Asignar gestor</a>
+        {% endif %}
+      {% endif %}
+      {% if proyecto_filtro %}
+      <a class="btn btn-sm btn-outline-secondary" href="/cartera/edades_cartera/{{proyecto_filtro}}"><i class="fas fa-table"></i> Edades</a>
+      <a class="btn btn-sm btn-outline-secondary" href="/cartera/ver_presupuesto/{{proyecto_filtro}}/{{periodo_ppto}}"><i class="fas fa-file-invoice-dollar"></i> Presupuesto mes</a>
+      {% else %}
+      <a class="btn btn-sm btn-outline-secondary" href="/projectselector/edades_cartera"><i class="fas fa-table"></i> Edades</a>
+      <a class="btn btn-sm btn-outline-secondary" href="/projectselector/ver_ppto"><i class="fas fa-file-invoice-dollar"></i> Presupuesto</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <a class="cg-badge-filter {% if not proyecto_filtro %}active{% endif %}"
+       href="/cartera/dashboard{% if bucket_filtro %}?edad={{bucket_filtro}}{% endif %}">Todos</a>
+    {% for b in proyectos_badges %}
+    <a class="cg-badge-filter {% if b.activo %}active{% endif %}"
+       href="/cartera/dashboard?proyecto={{b.nombre|urlencode}}{% if bucket_filtro %}&edad={{bucket_filtro}}{% endif %}">{{b.nombre}} <span class="badge badge-light">{{b.count}}</span></a>
+    {% endfor %}
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-6 mb-2">
+      <div class="cg-card-alert">
+        <h6>
+          <span><i class="fas fa-bolt text-warning"></i> Cobrar hoy / mañana ({{cobrar_hoy_total}})</span>
+          {% if cobrar_hoy_total > 5 %}
+          <a href="#cobrar-hoy-todos" data-toggle="collapse" class="small">Ver todos</a>
+          {% endif %}
+        </h6>
+        <div class="muted mb-2">Compromisos (hoy, mañana o incumplidos) + cuotas pactadas de hoy/mañana. 1 fila por ADJ.</div>
+        {% for n in cobrar_hoy_preview %}
+        <div class="cg-item">
+          <div>
+            {% for t in n.tags %}
+            <span class="tag-chip {% if n.es_roto %}roto{% elif n.es_hoy %}hoy{% elif n.es_manana %}manana{% endif %}">{{t}}</span>
+            {% endfor %}
+            {{n.cliente|upper|truncatechars:26}} · {{n.proyecto}} · {{n.adj}}
+            — ${{n.valor|floatformat:0|intcomma}}
+          </div>
+          <a href="/cartera/linea_tiempo/{{n.proyecto}}/{{n.adj}}" target="_blank" rel="noopener">Abrir</a>
+        </div>
+        {% empty %}
+        <div class="muted">Nada para cobrar hoy/mañana. ¡Buen trabajo!</div>
+        {% endfor %}
+        <div class="collapse" id="cobrar-hoy-todos">
+          {% for n in cobrar_hoy_all %}
+            {% if forloop.counter > 5 %}
+            <div class="cg-item">
+              <div>
+                {% for t in n.tags %}<span class="tag-chip">{{t}}</span>{% endfor %}
+                {{n.cliente|upper|truncatechars:26}} · {{n.proyecto}} · {{n.adj}} — ${{n.valor|floatformat:0|intcomma}}
+              </div>
+              <a href="/cartera/linea_tiempo/{{n.proyecto}}/{{n.adj}}" target="_blank" rel="noopener">Abrir</a>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-2">
+      <div class="cg-card-alert">
+        <h6>
+          <span><i class="fas fa-exclamation-circle text-danger"></i> En mora ({{en_mora_total}})</span>
+          {% if en_mora_total > 5 %}
+          <a href="#en-mora-todos" data-toggle="collapse" class="small">Ver todos</a>
+          {% endif %}
+        </h6>
+        <div class="muted mb-2">Cuotas vencidas, sin los ADJ que ya están en “Cobrar hoy”. Orden: cuota vencida más reciente → más antigua.</div>
+        {% for n in en_mora_preview %}
+        <div class="cg-item">
+          <div>
+            <span class="tag-venc">Vencida</span>
+            {{n.cliente|upper|truncatechars:26}} · {{n.proyecto}} · {{n.adj}}
+            — ${{n.valor|floatformat:0|intcomma}}
+            <span class="muted">
+              {{n.cuotas_vencidas}} cuota{{n.cuotas_vencidas|pluralize}}
+              {% if n.fecha_vencida_reciente %} · últ. {{n.fecha_vencida_reciente|date:"d/m/Y"}}{% endif %}
+              {% if n.dias_mora %} · {{n.dias_mora}}d{% endif %}
+            </span>
+          </div>
+          <a href="/cartera/linea_tiempo/{{n.proyecto}}/{{n.adj}}" target="_blank" rel="noopener">Abrir</a>
+        </div>
+        {% empty %}
+        <div class="muted">Sin ADJs en mora fuera de la cola de hoy.</div>
+        {% endfor %}
+        <div class="collapse" id="en-mora-todos">
+          {% for n in en_mora_all %}
+            {% if forloop.counter > 5 %}
+            <div class="cg-item">
+              <div>
+                <span class="tag-venc">Vencida</span>
+                {{n.cliente|upper|truncatechars:26}} · {{n.proyecto}} · {{n.adj}} — ${{n.valor|floatformat:0|intcomma}}
+                <span class="muted">{% if n.fecha_vencida_reciente %}últ. {{n.fecha_vencida_reciente|date:"d/m/Y"}} · {% endif %}{{n.dias_mora}}d</span>
+              </div>
+              <a href="/cartera/linea_tiempo/{{n.proyecto}}/{{n.adj}}" target="_blank" rel="noopener">Abrir</a>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Clientes</div>
+        <div class="value text-center">{{kpis.clientes}}</div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Total en mora</div>
+        <div class="value text-right">${{kpis.total_mora|floatformat:0|intcomma}}</div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Pendiente total</div>
+        <div class="value text-right">${{kpis.total_pendiente|floatformat:0|intcomma}}</div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Cobrar hoy / En mora</div>
+        <div class="value text-center">{{kpis.cobrar_hoy|default:0}} / {{kpis.en_mora|default:0}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <small class="text-muted d-block mb-1">Distribución por edad (clic para filtrar):</small>
+    {% for d in distribucion_lista %}
+    <a class="cg-bucket-pill {% if d.codigo != 'por_vencer' %}active-mora{% endif %} {% if d.activo %}active{% endif %}"
+       href="{% if d.activo %}/cartera/dashboard{% if proyecto_filtro %}?proyecto={{proyecto_filtro|urlencode}}{% endif %}{% else %}/cartera/dashboard?{% if proyecto_filtro %}proyecto={{proyecto_filtro|urlencode}}&{% endif %}edad={{d.codigo}}{% endif %}"
+       title="{% if d.activo %}Quitar filtro{% else %}Filtrar por {{d.label}}{% endif %}">
+      {{d.label}}: {{d.count}} · ${{d.monto|floatformat:0|intcomma}}
+    </a>
+    {% endfor %}
+  </div>
+
+  <div class="table-responsive">
+    <table id="tabledash" class="table table-sm table-hover" style="font-size:12px;">
+      <thead class="text-center">
+        <tr>
+          <th>Proyecto</th>
+          <th>ADJ</th>
+          <th>Cliente</th>
+          <th>Cartera</th>
+          <th>Gestor</th>
+          <th>Días mora</th>
+          <th>Bucket</th>
+          <th>Último pago</th>
+          <th>Total pendiente</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{r.proyecto}}</td>
+          <td>{{r.adj}}</td>
+          <td>{{r.cliente|upper}}</td>
+          <td>{{r.cartera}}</td>
+          <td>{{r.gestor}}</td>
+          <td class="text-center">{{r.dias_mora}}</td>
+          <td class="text-center"><span class="cg-bucket-pill">{{r.bucket_label}}</span></td>
+          <td class="text-center">{{r.ultimo_pago|date:"d/m/Y"}}</td>
+          <td class="text-right">{{r.total_pendiente|floatformat:0|intcomma}}</td>
+          <td class="text-nowrap">
+            <a class="btn btn-sm btn-outline-primary" href="/cartera/linea_tiempo/{{r.proyecto}}/{{r.adj}}" title="Línea de tiempo" target="_blank" rel="noopener">
+              <i class="fas fa-stream"></i>
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" href="/adjudicaciones/{{r.proyecto}}/{{r.adj}}/" title="Detalle" target="_blank" rel="noopener">
+              <i class="fas fa-folder-open"></i>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center text-muted py-4">No hay clientes en tu cartera{% if proyecto_filtro or bucket_filtro %} con el filtro actual{% endif %}.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{%endblock%}
+
+{%block jsbottom%}
+<script>
+$(function(){
+  if ($.fn.DataTable && $('#tabledash').length) {
+    $('#tabledash').DataTable({
+      pageLength: 25,
+      order: [[5, 'desc']],
+      language: { url: '/ajax_request/datatable_spanish' }
+    });
+  }
+});
+</script>
+{%endblock%}

@@ -68,10 +68,14 @@ def _load_recaudos_by_idcta(proyecto: str, adj_ids: list) -> dict:
 
 
 def _presupuesto_buckets(cuotas, rec_by_idcta: dict, today: datetime.date) -> dict:
-    """Misma lógica que Adjudicacion.presupuesto() para una adjudicación."""
+    """
+    Totales por edad de una adjudicacion.
+
+    El cliente se clasifica por su mora MAXIMA; todo el pendiente de ese ADJ
+    se carga en ese unico bucket (no se parte por cuota).
+    """
     dias_mora = 0
-    por_vencer = Decimal('0')
-    lt30 = lt60 = lt90 = lt120 = gt120 = Decimal('0')
+    total_pendiente = Decimal('0')
 
     for q in cuotas:
         rec = rec_by_idcta.get(q.idcta) or _empty_recaudo_bucket()
@@ -82,21 +86,25 @@ def _presupuesto_buckets(cuotas, rec_by_idcta: dict, today: datetime.date) -> di
             continue
         mora = _mora_cuota(q, pagado, rec, dia_pago=today)
         m = mora['dias_totales']
-        dias_mora = m if m > dias_mora else dias_mora
-        if m <= 0:
-            por_vencer += total_pend
-        elif 0 < m <= 30:
-            lt30 += total_pend
-        elif 30 < m <= 60:
-            lt60 += total_pend
-        elif 60 < m <= 90:
-            lt90 += total_pend
-        elif 90 < m <= 120:
-            lt120 += total_pend
-        elif 120 < m:
-            gt120 += total_pend
+        if m > dias_mora:
+            dias_mora = m
+        total_pendiente += total_pend
 
-    total_pendiente = por_vencer + lt30 + lt60 + lt90 + lt120 + gt120
+    por_vencer = lt30 = lt60 = lt90 = lt120 = gt120 = Decimal('0')
+    if total_pendiente > 0:
+        if dias_mora <= 0:
+            por_vencer = total_pendiente
+        elif dias_mora <= 30:
+            lt30 = total_pendiente
+        elif dias_mora <= 60:
+            lt60 = total_pendiente
+        elif dias_mora <= 90:
+            lt90 = total_pendiente
+        elif dias_mora <= 120:
+            lt120 = total_pendiente
+        else:
+            gt120 = total_pendiente
+
     return {
         'dias_mora': dias_mora,
         'por_vencer': por_vencer,

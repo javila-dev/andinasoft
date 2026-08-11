@@ -1,0 +1,69 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: Letter; margin: 2cm; }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    color: #222;
+    line-height: 1.45;
+  }
+  h1 { font-size: 16pt; margin: 0 0 4pt; color: #1a4a4a; }
+  .eyebrow { font-size: 9pt; color: #c0392b; text-transform: uppercase; letter-spacing: 1pt; }
+  .meta { margin: 18pt 0; padding: 12pt; background: #f4f6f8; border-radius: 4pt; }
+  .meta td { padding: 3pt 8pt; vertical-align: top; }
+  .label { color: #666; font-size: 9pt; }
+  .footer-note {
+    margin-top: 28pt;
+    font-size: 8.5pt;
+    color: #888;
+    border-top: 1pt solid #ddd;
+    padding-top: 8pt;
+  }
+</style>
+</head>
+<body>
+  <div class="eyebrow">Carta de cobro · {{ checkpoint_label }}</div>
+  <h1>{{ proyecto }}</h1>
+  <p>Plantilla provisional. Se reemplazará por el diseño oficial de cada checkpoint.</p>
+
+  <table class="meta" width="100%">
+    <tr>
+      <td><div class="label">Adjudicación</div><strong>{{ adj }}</strong></td>
+      <td><div class="label">Cliente</div><strong>{{ cliente|upper }}</strong></td>
+    </tr>
+    <tr>
+      <td><div class="label">Días de mora</div><strong>{{ dias_mora }}</strong></td>
+      <td><div class="label">Fecha</div><strong>{{ fecha|date:"d/m/Y" }}</strong></td>
+    </tr>
+    <tr>
+      <td><div class="label">Total pendiente</div><strong>${{ total_pendiente|floatformat:0|intcomma }}</strong></td>
+      <td><div class="label">Gestor</div><strong>{{ gestor }}</strong></td>
+    </tr>
+    <tr>
+      <td colspan="2">
+        <div class="label">Detalle por edad</div>
+        Por vencer ${{ por_vencer|floatformat:0|intcomma }} ·
+        0-30 ${{ lt30|floatformat:0|intcomma }} ·
+        30-60 ${{ lt60|floatformat:0|intcomma }} ·
+        60-90 ${{ lt90|floatformat:0|intcomma }} ·
+        90-120 ${{ lt120|floatformat:0|intcomma }} ·
+        &gt;120 ${{ gt120|floatformat:0|intcomma }}
+      </td>
+    </tr>
+  </table>
+
+  <p>
+    Por medio de la presente se comunica el estado de mora asociado a la adjudicación
+    <strong>{{ adj }}</strong>, en el tramo <strong>{{ checkpoint_label }}</strong>.
+  </p>
+
+  <div class="footer-note">
+    Documento generado automáticamente · stub pdf/cartas_cobro/stub.html ·
+    consulta {{ fecha_consulta|date:"d/m/Y" }}
+  </div>
+</body>
+</html>

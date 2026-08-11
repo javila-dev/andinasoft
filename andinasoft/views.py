@@ -52,6 +52,7 @@ from andinasoft.shared_models import VerificacionOperaciones, DescuentosCondicio
 from andinasoft.shared_models import Promesas, PresupuestoCartera, Parametros_Operaciones, EntregaManzanas, Pqrs
 from andinasoft.informe_cartera_orm import informe_cartera_rows
 from andinasoft.edades_cartera_service import edades_cartera_snapshot
+from andinasoft.cartera_gestor_service import asignar_gestor, listar_gestores_opciones
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.certificado_tributario_service import (
     anios_disponibles_certificado,
@@ -420,7 +421,12 @@ def proyecto_popup(request,redireccion):
         'interfaces_banco':'tesoreria/interfaces_bancarias',
         'gestion_asesores':'comercial/lista_asesores_general',
         'edades_cartera':'cartera/edades_cartera',
+        'dashboard_cobro':'cartera/dashboard',
+        'asignar_gestor':'cartera/asignar_gestor',
     }
+    # Compat: dashboard_cobro ya no usa popup; redirige directo
+    if redireccion == 'dashboard_cobro':
+        return HttpResponseRedirect('/cartera/dashboard')
     logos_proyecto = {
         'Tesoro Escondido': 'img/logo-Tesoro-Escondido.png',
         'Vegas de Venecia': 'img/logo-camisas-vegas-de-venecia.png',
@@ -6262,6 +6268,9 @@ def _fetch_informe_cartera(proyecto, periodo, gestor_param):
 @group_perm_required(('andinasoft.view_presupuestocartera',),raise_exception=True)
 def presupuesto_cartera(request,proyecto,periodo):
     check_project(request,proyecto)
+    from andinasoft.presupuesto_cartera_service import ensure_presupuesto, periodo_actual
+    if periodo == periodo_actual():
+        ensure_presupuesto(proyecto, periodo, request.user)
     context={}
     if request.method=='POST':
         adj=request.POST.get('adj')
@@ -6270,16 +6279,14 @@ def presupuesto_cartera(request,proyecto,periodo):
         if request.POST.get('btnGestor'):
             check_perms(request,('andinasoft.change_presupuestocartera',))
             gestor=request.POST.get('nuevoGestor')
-            for cuota in obj_ppto:
-                cuota.asesor=gestor
-                cuota.save()
-            if obj_infocartera.exists():
-                adj_cartera=InfoCartera.objects.using(proyecto).get(idadjudicacion=adj)
-                adj_cartera.gestorasignado=gestor
-                adj_cartera.save()
-            else:
-                InfoCartera.objects.using(proyecto).create(idadjudicacion=adj,
-                                                            gestorasignado=gestor)
+            if gestor and gestor != 'Choose...':
+                asignar_gestor(
+                    proyecto,
+                    adj,
+                    gestor,
+                    request.user,
+                    actualizar_todos_periodos=True,
+                )
         if request.POST.get('btnAccion'):
             check_perms(request,('andinasoft.delete_presupuestocartera',))
             accion=request.POST.get('acciones')
@@ -6289,10 +6296,8 @@ def presupuesto_cartera(request,proyecto,periodo):
             elif accion=='recalcular':
                 for cuota in obj_ppto:
                     cuota.delete()
-                año=periodo[:4]
-                mes=periodo[-2:]
-                dia=calendar.monthrange(int(año),int(mes))[1]
-                fecha_hasta=datetime.datetime.strptime(f"{año}-{mes}-{dia}","%Y-%m-%d")
+                from andinasoft.presupuesto_cartera_service import fecha_hasta_periodo
+                fecha_hasta = fecha_hasta_periodo(periodo)
                 stmt=f'CALL ver_presupuesto("{fecha_hasta}","{adj}")'
                 obj_verpresupuesto=saldos_adj.objects.using(proyecto).raw(stmt)
                 obj_nuevoppto=PresupuestoCartera.objects.using(proyecto)
@@ -6379,6 +6384,7 @@ def presupuesto_cartera(request,proyecto,periodo):
             context['gestor_filtro_vacio']=True
             context['gestor_nombre']=f'{request.user.first_name} {request.user.last_name}'.upper()
     context['sp_error_msg']=sp_error_msg
+    context['gestores_opciones']=listar_gestores_opciones()
             
     return render(request,'ver_ppto.html',context)
 
@@ -6392,29 +6398,23 @@ def ver_presupuesto(request,proyecto):
             check_perms(request,('andinasoft.add_presupuestocartera',))
             año=request.POST.get('periodoaño')
             mes=request.POST.get('periodomes')
-            dia=calendar.monthrange(int(año),int(mes))[1]
             periodo=f'{año}{mes}'
-            existe_periodo=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo).exists()
-            if existe_periodo:
+            from andinasoft.presupuesto_cartera_service import cargar_presupuesto, periodo_existe
+            if periodo_existe(proyecto, periodo):
                 context['alerta']=True
                 context['mensaje']=f'Ya existen datos para el periodo {periodo}. Elimine el periodo primero o use la opción "Ver" para consultar el presupuesto existente.'
                 context['titulo_alerta']='Error'
             else:
-                fecha_hasta=datetime.datetime.strptime(f"{año}-{mes}-{dia}","%Y-%m-%d")
-                stmt=f'CALL ver_presupuesto("{fecha_hasta}","")'
-                obj_verpresupuesto=saldos_adj.objects.using(proyecto).raw(stmt)
-                obj_nuevoppto=PresupuestoCartera.objects.using(proyecto)
-                for cuota in obj_verpresupuesto:
-                    obj_nuevoppto.create(id_ppto=cuota.id,periodo=periodo,idadjudicacion=cuota.adj,cliente=cuota.cliente,
-                                         tipocta=cuota.tipocta,ncta=cuota.nrocta,idcta=cuota.idcta,tipocartera=cuota.tipocartera,
-                                         fecha=cuota.fechacta,capital=cuota.saldocapital,interes=cuota.saldointcte,cuota=cuota.saldocuota,
-                                         diasmora=cuota.diasmora,mora=cuota.saldomora,asesor=cuota.asesor,usuario=request.user,
-                                         fechaoperacion=datetime.date.today(),edad=cuota.edad)
+                result = cargar_presupuesto(proyecto, periodo, request.user)
                 context['alerta']=True
-                context['mensaje']=f'El presupuesto del proyecto {proyecto} para el periodo {periodo} ha sido cargado'
-                context['titulo_alerta']='¡Listo!'
-                context['redireccion']=True
-                context['redirect']=f'/cartera/ver_presupuesto/{proyecto}/{año}{mes}'
+                if result.get('ok'):
+                    context['mensaje']=f'El presupuesto del proyecto {proyecto} para el periodo {periodo} ha sido cargado'
+                    context['titulo_alerta']='¡Listo!'
+                    context['redireccion']=True
+                    context['redirect']=f'/cartera/ver_presupuesto/{proyecto}/{periodo}'
+                else:
+                    context['mensaje']=f'No se pudo cargar el presupuesto: {result.get("error") or "error desconocido"}'
+                    context['titulo_alerta']='Error'
         if request.POST.get('btnEliminar'):
             check_perms(request,('andinasoft.delete_presupuestocartera',))
             año=request.POST.get('periodoaño')
@@ -9517,54 +9517,21 @@ def cartera_month_results(request):
             Q(proyecto = 'Sotavento')
         )
         
-        book=openpyxl.load_workbook("resources/excel_formats/Bonos_cartera.xlsx")
+        from andinasoft.bonos_cartera_excel import generar_libro_bonos
+
+        datos_por_proyecto = {}
         failed_projects = []
         for proyecto in lista_proyectos:
             contenido_ppto, err_msg = informe_cartera_rows(proyecto.proyecto, periodo, None)
             if err_msg:
                 failed_projects.append((proyecto.proyecto, err_msg))
                 continue
+            datos_por_proyecto[proyecto.proyecto] = list(contenido_ppto)
 
-            sheet=book[proyecto.proyecto]
-            encabezados=['Adjudicacion','Cliente','Estado','Origen','Venta Mes','Tipo Cartera','Edad',
-                            'Cuota Mes','Recaudo Mes','Cuotas Vencidas','Recaudo Vencido','Presupuesto Total','Recaudo Presupuestado',
-                            'Recaudo No Pptado','Recaudo Total','Asesor','Cashout']
-            j = 1
-            for x in encabezados:
-                sheet.cell(1,j,x)
-                j+=1
-            
-            #sheet.append(encabezados)
-            i=2
-            for fila in contenido_ppto:
-                sheet.cell(i,1,fila.pk)
-                sheet.cell(i,2,fila.cliente)
-                sheet.cell(i,3,fila.estado)
-                sheet.cell(i,4,fila.origen)
-                sheet.cell(i,5,fila.venta_mes)
-                sheet.cell(i,6,fila.tipocartera)
-                sheet.cell(i,7,fila.edad)
-                sheet.cell(i,8,fila.ppto_mes)
-                sheet.cell(i,9,fila.recaudo_mes)
-                sheet.cell(i,10,fila.ppto_vencido)
-                sheet.cell(i,11,fila.recaudo_vencido)
-                sheet.cell(i,12,fila.presupuesto)
-                sheet.cell(i,13,fila.recaudo_pptado)
-                sheet.cell(i,14,fila.recaudo_nopptado)
-                sheet.cell(i,15,fila.recaudo_total)
-                sheet.cell(i,16,fila.asesor)
-                i+=1
-
-        if failed_projects:
-            sheet_name = 'Errores'
-            if sheet_name in book.sheetnames:
-                error_sheet = book[sheet_name]
-                error_sheet.delete_rows(1, error_sheet.max_row)
-            else:
-                error_sheet = book.create_sheet(sheet_name)
-            error_sheet.append(['Proyecto', 'Error'])
-            for project_name, error_message in failed_projects:
-                error_sheet.append([project_name, error_message[:500]])
+        book = generar_libro_bonos(
+            datos_por_proyecto,
+            errores=failed_projects or None,
+        )
                 
         filename = f'Informe_cartera_periodo_{periodo}.xlsx'
         ruta=settings.DIR_EXPORT+filename

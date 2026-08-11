@@ -5,7 +5,8 @@ from django.utils.http import urlencode
 from django.core.exceptions import PermissionDenied
 from andinasoft.models import (asesores, clientes, Facturas, Pagos, timeline_radicados, Usuarios_Proyectos, 
                                 Avatars, Profiles, empresas,notificaciones_correo, parametros, proyectos, ConfigDocumento,
-                                PromesaOtrosi, PromesaCumplimiento)
+                                PromesaOtrosi, PromesaCumplimiento, CarteraCheckpoint, CarteraCartaPlantilla,
+                                CarteraCartaEnvio, CarteraCartaGeneracion)
 from andinasoft.shared_models import Inmuebles, ventas_nuevas, Parametros_Operaciones
 
 # Register your models here.
@@ -247,6 +248,45 @@ admin.site.register(proyectos,adminProyecto)
 admin.site.register(ConfigDocumento)
 admin.site.register(PromesaOtrosi)
 admin.site.register(PromesaCumplimiento)
+
+
+class CarteraCartaPlantillaInline(admin.TabularInline):
+    model = CarteraCartaPlantilla
+    extra = 0
+
+
+@admin.register(CarteraCheckpoint)
+class CarteraCheckpointAdmin(admin.ModelAdmin):
+    list_display = ['proyecto', 'codigo', 'label', 'dias_desde', 'dias_hasta', 'orden', 'activo']
+    list_filter = ['proyecto', 'activo']
+    search_fields = ['codigo', 'label', 'proyecto__proyecto']
+    ordering = ['proyecto', 'orden']
+    inlines = [CarteraCartaPlantillaInline]
+
+
+@admin.register(CarteraCartaPlantilla)
+class CarteraCartaPlantillaAdmin(admin.ModelAdmin):
+    list_display = ['checkpoint', 'motor', 'plantilla', 'activo']
+    list_filter = ['motor', 'activo', 'checkpoint__proyecto']
+    search_fields = ['plantilla', 'checkpoint__codigo', 'checkpoint__label']
+
+
+@admin.register(CarteraCartaEnvio)
+class CarteraCartaEnvioAdmin(admin.ModelAdmin):
+    list_display = ['proyecto', 'adj', 'checkpoint', 'canal', 'fecha_envio', 'usuario', 'created_at']
+    list_filter = ['proyecto', 'canal', 'fecha_envio']
+    search_fields = ['adj', 'notas', 'usuario__username']
+    autocomplete_fields = ['proyecto', 'checkpoint', 'usuario']
+    date_hierarchy = 'fecha_envio'
+
+
+@admin.register(CarteraCartaGeneracion)
+class CarteraCartaGeneracionAdmin(admin.ModelAdmin):
+    list_display = ['proyecto', 'adj', 'checkpoint', 'usuario', 'created_at']
+    list_filter = ['proyecto', 'created_at']
+    search_fields = ['adj', 'usuario__username']
+    autocomplete_fields = ['proyecto', 'checkpoint', 'usuario']
+    date_hierarchy = 'created_at'
 admin.site.register(Avatars,adminAvatars)
 admin.site.register(Profiles,adminProfiles)
 admin.site.register(empresas,adminEmpresas)
