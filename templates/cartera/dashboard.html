@@ -12,11 +12,14 @@
     background: #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,.08);
     height: 100%;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .cg-kpi:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(0,0,0,.12);
   }
   .cg-kpi .label { font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; text-align: center; }
-  .cg-kpi .value { font-size: 1.45rem; font-weight: 700; margin-top: .2rem; }
-  .cg-kpi .value.text-center { text-align: center; }
-  .cg-kpi .value.text-right { text-align: right; }
+  .cg-kpi .value { font-size: 1.45rem; font-weight: 700; margin-top: .2rem; text-align: center; }
   .cg-badge-filter {
     display: inline-block;
     padding: .35rem .7rem;
@@ -221,29 +224,56 @@
     </div>
   </div>
 
-  <div class="row mb-4">
+  <div class="row mb-3">
     <div class="col-md-3 mb-2">
       <div class="cg-kpi">
         <div class="label">Clientes</div>
-        <div class="value text-center">{{kpis.clientes}}</div>
+        <div class="value">{{kpis.clientes}}</div>
       </div>
     </div>
     <div class="col-md-3 mb-2">
       <div class="cg-kpi">
         <div class="label">Total en mora</div>
-        <div class="value text-right">${{kpis.total_mora|floatformat:0|intcomma}}</div>
+        <div class="value">${{kpis.total_mora|floatformat:0|intcomma}}</div>
       </div>
     </div>
     <div class="col-md-3 mb-2">
       <div class="cg-kpi">
         <div class="label">Pendiente total</div>
-        <div class="value text-right">${{kpis.total_pendiente|floatformat:0|intcomma}}</div>
+        <div class="value">${{kpis.total_pendiente|floatformat:0|intcomma}}</div>
       </div>
     </div>
     <div class="col-md-3 mb-2">
       <div class="cg-kpi">
         <div class="label">Cobrar hoy / En mora</div>
-        <div class="value text-center">{{kpis.cobrar_hoy|default:0}} / {{kpis.en_mora|default:0}}</div>
+        <div class="value">{{kpis.cobrar_hoy|default:0}} / {{kpis.en_mora|default:0}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Recaudo total</div>
+        <div class="value">${{kpis.recaudo.recaudo_total|default:0|floatformat:0|intcomma}}</div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Cuotas del mes</div>
+        <div class="value">${{kpis.recaudo.recaudo_cuota_mes|default:0|floatformat:0|intcomma}}</div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">Cuotas vencidas</div>
+        <div class="value">${{kpis.recaudo.recaudo_vencido|default:0|floatformat:0|intcomma}}</div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-2">
+      <div class="cg-kpi">
+        <div class="label">No esperado</div>
+        <div class="value">${{kpis.recaudo.recaudo_nopptado|default:0|floatformat:0|intcomma}}</div>
       </div>
     </div>
   </div>
@@ -260,7 +290,7 @@
   </div>
 
   <div class="table-responsive">
-    <table id="tabledash" class="table table-sm table-hover" style="font-size:12px;">
+    <table id="tabledash" class="table table-sm table-hover" style="font-size:11px;">
       <thead class="text-center">
         <tr>
           <th>Proyecto</th>
@@ -269,7 +299,7 @@
           <th>Cartera</th>
           <th>Gestor</th>
           <th>Días mora</th>
-          <th>Bucket</th>
+          <th>Edad</th>
           <th>Último pago</th>
           <th>Total pendiente</th>
           <th></th>

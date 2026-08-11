@@ -1341,17 +1341,10 @@ class form_revision_op(forms.Form):
         ('Opcion de Promesa','Opcion de Promesa'),
         ('Promesa','Promesa')
     )
-    carteras=User.objects.filter(groups__name='Gestor Cartera',is_active=True).order_by('first_name')
-    asesores=[]
-    for asesor in carteras:
-        nombre=f'{asesor.first_name.upper()} {asesor.last_name.upper()}'
-        asesores.append(
-            (nombre,nombre)
-        )
     Tipo_Contrato=forms.ChoiceField(choices=tiposdocs)
     Oficina=forms.ChoiceField(choices=oficinas)
     Origen_Venta=forms.ChoiceField(choices=origenes)
-    Cartera_Asignar=forms.ChoiceField(choices=asesores,label='Asignar a Cartera')
+    Cartera_Asignar=forms.ChoiceField(choices=(),label='Asignar a Cartera')
     Enmendaduras=forms.BooleanField(required=False)
     Documentacion_Incompleta=forms.BooleanField(required=False)
     Valores_Incorrectos=forms.BooleanField(required=False)
@@ -1371,6 +1364,12 @@ class form_revision_op(forms.Form):
     valor_dcto=forms.IntegerField(required=False,min_value=0,label='Valor Descuento')
     nuevo_ci=forms.IntegerField(required=False,min_value=0,label='Nueva Cuota Inicial')
     nuevo_saldo=forms.IntegerField(required=False,min_value=0,label='Nuevo Saldo')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Gestores activos del grupo (sin JURIDICO/ESPECIAL); se carga en cada request
+        from andinasoft.cartera_gestor_service import listar_gestores_opciones
+        self.fields['Cartera_Asignar'].choices = listar_gestores_opciones(include_fijos=False)
 
 class form_radicar_recibo(forms.Form):
     def __init__(self, *args, **kwargs):

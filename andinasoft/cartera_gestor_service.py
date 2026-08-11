@@ -6,12 +6,20 @@ Reutiliza edades_cartera_snapshot, InfoCartera.gestorasignado y seguimientos
 """
 from __future__ import annotations
 
+import calendar
 import datetime
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
+from django.db.models.functions import Coalesce
 
 from andinasoft.edades_cartera_service import edades_cartera_snapshot
+from andinasoft.informe_cartera_orm import (
+    _dec,
+    _recaudo_mes,
+    _recaudo_nopptado,
+    _recaudo_vencido,
+)
 from andinasoft.models import (
     CarteraCartaEnvio,
     CarteraCartaGeneracion,
@@ -70,9 +78,8 @@ def gestor_nombre_from_user(user) -> str:
 
 
 def is_supervisor_cartera(user) -> bool:
+    """Solo grupo Supervisor Cartera (y superuser)."""
     if getattr(user, 'is_superuser', False):
-        return True
-    if user.has_perm('andinasoft.change_presupuestocartera'):
         return True
     return user.groups.filter(name='Supervisor Cartera').exists()
 
@@ -718,6 +725,160 @@ def kpis_from_rows(rows, compromisos, fechas_pactadas=None):
     }
 
 
+def _recaudo_vacio():
+    z = Decimal('0')
+    return {
+        'recaudo_total': z,
+        'recaudo_cuota_mes': z,
+        'recaudo_vencido': z,
+        'recaudo_nopptado': z,
+    }
+
+
+def _clasificar_recaudos_adj(recaudo_by_adj, ppto_by_adj):
+    """
+    Misma clasificacion que informe_cartera / presupuesto:
+    cuota mes, vencido y no esperado (por encima del presupuesto).
+    """
+    tot = Decimal('0')
+    mes = Decimal('0')
+    venc = Decimal('0')
+    nop = Decimal('0')
+    for adj, recaudo in recaudo_by_adj.items():
+        r = _dec(recaudo)
+        if r <= 0:
+            continue
+        p = ppto_by_adj.get(adj) or {}
+        ppto_mes = _dec(p.get('ppto_mes'))
+        ppto_vencido = _dec(p.get('ppto_vencido'))
+        presupuesto = _dec(p.get('presupuesto'))
+        tot += r
+        mes += _recaudo_mes(r, ppto_vencido, ppto_mes, presupuesto)
+        venc += _recaudo_vencido(r, ppto_vencido)
+        nop += _recaudo_nopptado(r, presupuesto)
+    return {
+        'recaudo_total': tot,
+        'recaudo_cuota_mes': mes,
+        'recaudo_vencido': venc,
+        'recaudo_nopptado': nop,
+    }
+
+
+def _adj_ids_alcance_recaudo(proyecto, user, periodo, snapshot_adj_ids):
+    """
+    ADJs del gestor para medir recaudo del periodo.
+    None = supervisor (todos los ADJs del proyecto).
+    Incluye asignados aunque ya no tengan saldo (pagaron en el mes).
+    """
+    if is_supervisor_cartera(user):
+        return None
+
+    ids = set(snapshot_adj_ids or [])
+    nombre = gestor_nombre_from_user(user)
+    if not nombre:
+        return ids
+    ids.update(
+        InfoCartera.objects.using(proyecto)
+        .filter(gestorasignado__icontains=nombre)
+        .values_list('idadjudicacion', flat=True)
+    )
+    ids.update(
+        PresupuestoCartera.objects.using(proyecto)
+        .filter(periodo=periodo, asesor__icontains=nombre)
+        .values_list('idadjudicacion', flat=True)
+        .distinct()
+    )
+    return ids
+
+
+def recaudo_mes_resumen_proyecto(proyecto, adj_ids, periodo):
+    """
+    Recaudo del periodo para un set de ADJs, excluyendo ventas del mes.
+
+    Parte de recaudos del mes (GROUP BY) y solo consulta ppto/adj de quien pago.
+    adj_ids=None → todo el proyecto (vista supervisor).
+    """
+    empty = _recaudo_vacio()
+    if adj_ids is not None and not adj_ids:
+        return empty
+
+    try:
+        y = int(str(periodo)[:4])
+        m = int(str(periodo)[4:6])
+    except (ValueError, TypeError):
+        return empty
+
+    fecha_corte = datetime.date(y, m, 1)
+    fecha_final = datetime.date(y, m, calendar.monthrange(y, m)[1])
+    zero = Decimal('0')
+
+    # 1) Recaudos del mes (filtro por cartera solo si hay set acotado)
+    qs_rec = (
+        Recaudos_general.objects.using(proyecto)
+        .filter(fecha__gte=fecha_corte, fecha__lte=fecha_final)
+        .exclude(numrecibo__startswith='N')
+        .exclude(numrecibo__startswith='A')
+    )
+    if adj_ids is not None:
+        qs_rec = qs_rec.filter(idadjudicacion__in=list(adj_ids))
+
+    recaudo_by_adj = {
+        row['idadjudicacion']: row['t'] or zero
+        for row in qs_rec.values('idadjudicacion').annotate(t=Coalesce(Sum('valor'), zero))
+    }
+    if not recaudo_by_adj:
+        return empty
+
+    # 2) De quien pago: excluir canje/desistidos y ventas del mes
+    paid = list(recaudo_by_adj.keys())
+    elegibles = set(
+        Adjudicacion.objects.using(proyecto)
+        .filter(pk__in=paid)
+        .exclude(origenventa='Canje')
+        .filter(Q(estado__isnull=True) | ~Q(estado__startswith='Des'))
+        .filter(Q(fechacontrato__isnull=True) | Q(fechacontrato__lt=fecha_corte))
+        .values_list('pk', flat=True)
+    )
+    recaudo_by_adj = {k: v for k, v in recaudo_by_adj.items() if k in elegibles}
+    if not recaudo_by_adj:
+        return empty
+
+    # 3) Presupuesto solo de ADJs con recaudo elegible
+    adj_con_recaudo = list(recaudo_by_adj.keys())
+    ppto_by_adj = {}
+    for row in (
+        PresupuestoCartera.objects.using(proyecto)
+        .filter(periodo=periodo, idadjudicacion__in=adj_con_recaudo)
+        .values('idadjudicacion')
+        .annotate(
+            presupuesto=Coalesce(Sum('cuota'), zero),
+            ppto_mes=Coalesce(
+                Sum('cuota', filter=Q(fecha__date__gte=fecha_corte)),
+                zero,
+            ),
+            ppto_vencido=Coalesce(
+                Sum('cuota', filter=Q(fecha__date__lt=fecha_corte)),
+                zero,
+            ),
+        )
+    ):
+        ppto_by_adj[row['idadjudicacion']] = {
+            'presupuesto': row['presupuesto'] or zero,
+            'ppto_mes': row['ppto_mes'] or zero,
+            'ppto_vencido': row['ppto_vencido'] or zero,
+        }
+
+    return _clasificar_recaudos_adj(recaudo_by_adj, ppto_by_adj)
+
+
+def _sumar_recaudo_dicts(parts):
+    out = _recaudo_vacio()
+    for part in parts:
+        for key in out:
+            out[key] += _dec(part.get(key))
+    return out
+
+
 def _cliente_contacto_dict(c):
     if c is None:
         return None
@@ -987,6 +1148,7 @@ def dashboard_payload_all(
 
     all_rows = []
     rows_por_proyecto = {p: [] for p in accesibles}
+    adj_ids_snapshot = {p: [] for p in accesibles}
     fecha_consulta = today
 
     for proyecto in accesibles:
@@ -996,6 +1158,8 @@ def dashboard_payload_all(
         except Exception:
             continue
         rows = filter_snapshot_for_gestor(adjudicaciones, user)
+        # Antes del filtro de saldo: sirve para recaudo (incluye quien ya pago)
+        adj_ids_snapshot[proyecto] = [r['adj'] for r in rows if r.get('adj')]
         rows = [
             r for r in rows
             if Decimal(r.get('total_pendiente') or 0) > 0 or int(r.get('dias_mora') or 0) > 0
@@ -1064,6 +1228,16 @@ def dashboard_payload_all(
     kpis = kpis_from_rows(rows, compromisos, fechas_pactadas)
     kpis['cobrar_hoy'] = colas['count_a']
     kpis['en_mora'] = colas['count_b']
+
+    # Recaudo del mes (alcance por proyecto, sin filtro de edad): excluye ventas del mes
+    recaudo_parts = []
+    for proyecto in proyectos_scope:
+        adj_ids = _adj_ids_alcance_recaudo(
+            proyecto, user, periodo, adj_ids_snapshot.get(proyecto) or [],
+        )
+        recaudo_parts.append(recaudo_mes_resumen_proyecto(proyecto, adj_ids, periodo))
+    kpis['recaudo'] = _sumar_recaudo_dicts(recaudo_parts)
+
     notifs = _notif_bundle(compromisos, fechas_pactadas, colas)
 
     # Badges de proyecto: si hay filtro de edad, el count refleja ese bucket
@@ -1417,10 +1591,10 @@ GESTOR_ESPECIAL = 'ESPECIAL'
 GESTORES_FIJOS = (GESTOR_JURIDICO, GESTOR_ESPECIAL)
 
 
-def listar_gestores_opciones():
+def listar_gestores_opciones(*, include_fijos: bool = True):
     """
-    Opciones de gestor: usuarios del grupo Gestor Cartera + JURIDICO/ESPECIAL.
-    Formato: lista de (valor, etiqueta) en mayusculas, como InfoCartera/Presupuesto.
+    Opciones de gestor: usuarios activos del grupo Gestor Cartera.
+    Si include_fijos=True, agrega JURIDICO/ESPECIAL (reasignacion/dashboard).
     """
     from django.contrib.auth.models import User
 
@@ -1434,10 +1608,11 @@ def listar_gestores_opciones():
             continue
         vistos.add(nombre)
         opciones.append((nombre, nombre))
-    for fijo in GESTORES_FIJOS:
-        if fijo not in vistos:
-            opciones.append((fijo, fijo))
-            vistos.add(fijo)
+    if include_fijos:
+        for fijo in GESTORES_FIJOS:
+            if fijo not in vistos:
+                opciones.append((fijo, fijo))
+                vistos.add(fijo)
     return opciones
 
 

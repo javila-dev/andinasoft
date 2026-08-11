@@ -17,6 +17,7 @@ from andinasoft.cartera_gestor_service import (
     filter_snapshot_for_gestor,
     gestor_nombre_from_user,
     kpis_from_rows,
+    _clasificar_recaudos_adj,
     _parse_fecha_compromiso,
 )
 
@@ -88,6 +89,25 @@ class BucketHelpersTests(SimpleTestCase):
         self.assertEqual(kpis['distribucion_count']['lt60'], 1)
         self.assertEqual(kpis['distribucion_count']['por_vencer'], 1)
         self.assertIn('lt30', BUCKET_LABELS)
+
+    def test_clasificar_recaudos_adj(self):
+        # Paga vencido + cuota mes exacta
+        ppto = {
+            'A1': {'presupuesto': Decimal(1500), 'ppto_mes': Decimal(500), 'ppto_vencido': Decimal(1000)},
+        }
+        rec = {'A1': Decimal(1500)}
+        out = _clasificar_recaudos_adj(rec, ppto)
+        self.assertEqual(out['recaudo_total'], Decimal(1500))
+        self.assertEqual(out['recaudo_vencido'], Decimal(1000))
+        self.assertEqual(out['recaudo_cuota_mes'], Decimal(500))
+        self.assertEqual(out['recaudo_nopptado'], Decimal(0))
+
+        # Paga de más → no esperado
+        rec2 = {'A1': Decimal(2000)}
+        out2 = _clasificar_recaudos_adj(rec2, ppto)
+        self.assertEqual(out2['recaudo_vencido'], Decimal(1000))
+        self.assertEqual(out2['recaudo_cuota_mes'], Decimal(500))
+        self.assertEqual(out2['recaudo_nopptado'], Decimal(500))
 
     def test_evaluar_cumplimiento_compromiso(self):
         today = datetime.date(2026, 8, 10)
