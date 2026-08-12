@@ -6,7 +6,8 @@ from django.core.exceptions import PermissionDenied
 from andinasoft.models import (asesores, clientes, Facturas, Pagos, timeline_radicados, Usuarios_Proyectos, 
                                 Avatars, Profiles, empresas,notificaciones_correo, parametros, proyectos, ConfigDocumento,
                                 PromesaOtrosi, PromesaCumplimiento, CarteraCheckpoint, CarteraCartaPlantilla,
-                                CarteraCartaEnvio, CarteraCartaGeneracion)
+                                CarteraCartaEnvio, CarteraCartaGeneracion,
+                                IntegrationCredential, IntegrationPurposeMapping, AdjFechaDocumentoExtraccion)
 from andinasoft.shared_models import Inmuebles, ventas_nuevas, Parametros_Operaciones
 
 # Register your models here.
@@ -248,6 +249,9 @@ admin.site.register(proyectos,adminProyecto)
 admin.site.register(ConfigDocumento)
 admin.site.register(PromesaOtrosi)
 admin.site.register(PromesaCumplimiento)
+admin.site.register(IntegrationCredential)
+admin.site.register(IntegrationPurposeMapping)
+admin.site.register(AdjFechaDocumentoExtraccion)
 
 
 class CarteraCartaPlantillaInline(admin.TabularInline):

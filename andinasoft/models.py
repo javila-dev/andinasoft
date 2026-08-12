@@ -537,6 +537,140 @@ class PromesaCumplimiento(models.Model):
         return f'{self.proyecto_id} {self.adj}'
 
 
+class IntegrationCredential(models.Model):
+    """API keys de proveedores LLM (OpenAI, Gemini, Anthropic)."""
+
+    PROVIDER_OPENAI = 'openai'
+    PROVIDER_GEMINI = 'gemini'
+    PROVIDER_ANTHROPIC = 'anthropic'
+    PROVIDER_CHOICES = (
+        (PROVIDER_OPENAI, 'OpenAI'),
+        (PROVIDER_GEMINI, 'Gemini'),
+        (PROVIDER_ANTHROPIC, 'Anthropic'),
+    )
+
+    provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES)
+    label = models.CharField(max_length=255, blank=True, default='')
+    api_key = models.CharField(max_length=1024)
+    default_model = models.CharField(
+        max_length=128,
+        blank=True,
+        default='',
+        help_text='ID de modelo API (ver catalogo en Integraciones LLM)',
+    )
+    activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['provider', 'label', 'id']
+        verbose_name = 'Credencial de integracion'
+        verbose_name_plural = 'Credenciales de integracion'
+
+    def __str__(self):
+        name = self.label or self.get_provider_display()
+        return f'{name} ({self.provider})'
+
+    def masked_key(self):
+        key = (self.api_key or '').strip()
+        if len(key) <= 8:
+            return '****' if key else ''
+        return f'{key[:4]}…{key[-4:]}'
+
+
+class IntegrationPurposeMapping(models.Model):
+    """Que credencial/modelo usa cada proposito del sistema."""
+
+    PURPOSE_EXTRACCION_FECHAS = 'extraccion_fechas_contrato'
+    PURPOSE_EXTRACCION_FECHAS_ESCANEADO = 'extraccion_fechas_escaneado'
+    PURPOSE_CHOICES = (
+        (PURPOSE_EXTRACCION_FECHAS, 'Extraccion fechas — PDF con texto'),
+        (PURPOSE_EXTRACCION_FECHAS_ESCANEADO, 'Extraccion fechas — PDF escaneado (vision)'),
+    )
+
+    purpose = models.CharField(max_length=64, unique=True, choices=PURPOSE_CHOICES)
+    credential = models.ForeignKey(
+        IntegrationCredential,
+        on_delete=models.PROTECT,
+        related_name='purpose_mappings',
+        null=True,
+        blank=True,
+    )
+    model_override = models.CharField(
+        max_length=128,
+        blank=True,
+        default='',
+        help_text='Si se indica, reemplaza el modelo por defecto de la credencial',
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Uso de integracion'
+        verbose_name_plural = 'Usos de integracion'
+
+    def __str__(self):
+        return self.get_purpose_display()
+
+    def resolved_model(self):
+        from andinasoft.llm_models_catalog import DEFAULT_MODELS
+
+        if (self.model_override or '').strip():
+            return self.model_override.strip()
+        if self.credential and (self.credential.default_model or '').strip():
+            return self.credential.default_model.strip()
+        if self.credential:
+            return DEFAULT_MODELS.get(self.credential.provider, 'gpt-4o-mini')
+        return 'gpt-4o-mini'
+
+
+class AdjFechaDocumentoExtraccion(models.Model):
+    """Fechas certeras extraidas de PDFs de venta por adjudicacion."""
+
+    ESTADO_OK = 'ok'
+    ESTADO_SIN_DOCUMENTO = 'sin_documento'
+    ESTADO_SIN_FECHAS = 'sin_fechas'
+    ESTADO_ERROR = 'error'
+    ESTADO_PENDIENTE = 'pendiente'
+    ESTADO_CHOICES = (
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_OK, 'OK'),
+        (ESTADO_SIN_DOCUMENTO, 'Sin documento'),
+        (ESTADO_SIN_FECHAS, 'Sin fechas'),
+        (ESTADO_ERROR, 'Error'),
+    )
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='extracciones_fechas_doc',
+        db_constraint=False,
+    )
+    adj = models.CharField(max_length=255, db_index=True)
+    fecha_contrato = models.DateField(null=True, blank=True)
+    fecha_escritura = models.DateField(null=True, blank=True)
+    fecha_entrega = models.DateField(null=True, blank=True)
+    documento_usado = models.CharField(max_length=500, blank=True, default='')
+    tipo_doc_esperado = models.CharField(max_length=64, blank=True, default='')
+    fecha_carga_doc = models.CharField(max_length=64, blank=True, default='')
+    provider = models.CharField(max_length=32, blank=True, default='')
+    model = models.CharField(max_length=128, blank=True, default='')
+    raw_json = models.TextField(blank=True, default='')
+    estado = models.CharField(max_length=32, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE, db_index=True)
+    error_msg = models.CharField(max_length=1000, blank=True, default='')
+    synced_to_promesas = models.BooleanField(default=False)
+    actualizado = models.DateTimeField(auto_now=True)
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('proyecto', 'adj')
+        ordering = ['proyecto_id', 'adj']
+        verbose_name = 'Extraccion fechas documento'
+        verbose_name_plural = 'Extracciones fechas documentos'
+
+    def __str__(self):
+        return f'{self.proyecto_id} {self.adj} {self.estado}'
+
+
 class parametros(models.Model):
     parametro=models.CharField(max_length=255)
     valor=models.DecimalField(max_digits=10,decimal_places=2)

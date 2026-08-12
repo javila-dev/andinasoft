@@ -1,0 +1,671 @@
+{% extends 'base.html' %}
+{% block title %}Fechas documentos — {{ proyecto }}{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded shadow p-3 mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-1">Fechas desde documentos — {{ proyecto }}</h4>
+            <p class="text-muted small mb-0">
+                Analiza PDF (Promesa, luego Otrosi/Otros) y guarda el resultado en esta pantalla.
+                <strong>No modifica la tabla de promesas</strong> salvo que marques la opcion de abajo.
+            </p>
+        </div>
+        {% if user.is_superuser %}
+        <div>
+            <a class="btn btn-sm btn-outline-secondary" href="/configuracion/integraciones-llm">API keys</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<form method="get" class="bg-white rounded shadow p-3 mb-3" id="filtrosForm">
+    <div class="form-row">
+        <div class="form-group col-md-2">
+            <label class="small mb-0">Inmueble contiene</label>
+            <input type="text" name="inmueble_contains" class="form-control form-control-sm"
+                   value="{{ filters.inmueble_contains }}" placeholder="Ej: C1">
+        </div>
+        <div class="form-group col-md-2">
+            <label class="small mb-0">ADJ</label>
+            <input type="text" name="adj_query" class="form-control form-control-sm" value="{{ filters.adj_query }}">
+        </div>
+        <div class="form-group col-md-2">
+            <label class="small mb-0">Titular</label>
+            <input type="text" name="titular_query" class="form-control form-control-sm" value="{{ filters.titular_query }}">
+        </div>
+        <div class="form-group col-md-2">
+            <label class="small mb-0">Estado extraccion</label>
+            <select name="estado_extraccion" class="form-control form-control-sm">
+                <option value="">Todos</option>
+                {% for val, label in estado_choices %}
+                <option value="{{ val }}" {% if filters.estado_extraccion == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group col-md-2">
+            <label class="small mb-0">Docs desde</label>
+            <input type="date" name="docs_desde" class="form-control form-control-sm" value="{{ filters.docs_desde }}">
+        </div>
+        <div class="form-group col-md-2 d-flex align-items-end">
+            <div class="custom-control custom-checkbox mb-2">
+                <input type="checkbox" class="custom-control-input" id="solo_pendientes" name="solo_pendientes" value="1"
+                       {% if filters.solo_pendientes %}checked{% endif %}>
+                <label class="custom-control-label small" for="solo_pendientes">Solo pendientes</label>
+            </div>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+    <a class="btn btn-sm btn-outline-secondary" href="?export=1&inmueble_contains={{ filters.inmueble_contains|urlencode }}&adj_query={{ filters.adj_query|urlencode }}&titular_query={{ filters.titular_query|urlencode }}&estado_extraccion={{ filters.estado_extraccion|urlencode }}&docs_desde={{ filters.docs_desde }}{% if filters.solo_pendientes %}&solo_pendientes=1{% endif %}">Exportar Excel</a>
+</form>
+
+<style>
+.tabla-ext-wrap {
+    max-height: min(70vh, 720px);
+    overflow: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+}
+.tabla-ext-wrap thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f8f9fa;
+    box-shadow: 0 1px 0 #dee2e6;
+}
+.tabla-ext-wrap #tablaExt {
+    margin-bottom: 0;
+}
+#tablaExt tr.is-analyzing {
+    opacity: 0.65;
+    background: #f0f7ff;
+}
+#tablaExt tr.is-analyzing .btn-analizar-uno {
+    pointer-events: none;
+}
+</style>
+
+<div class="bg-white rounded shadow p-3 mb-3">
+    <div class="d-flex flex-wrap align-items-center mb-2">
+        <div class="btn-group btn-group-sm mr-2">
+            <button type="button" class="btn btn-success" id="btnAnalizarSel">Analizar seleccionados</button>
+            <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split"
+                    data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"
+                    title="Opciones de lote">
+                <span class="sr-only">Opciones</span>
+            </button>
+            <div class="dropdown-menu">
+                <button type="button" class="dropdown-item" id="btnAnalizarFiltro">Analizar todos los filtrados</button>
+                <div class="dropdown-divider"></div>
+                <h6 class="dropdown-header">Cascada OpenAI→Gemini→Anthropic</h6>
+                <button type="button" class="dropdown-item" id="btnCascadaSel"
+                        title="Hasta completar las 3 fechas (costoso)">Cascada seleccionados</button>
+                <button type="button" class="dropdown-item" id="btnCascadaFiltro"
+                        title="Cascada sobre todos los filtrados (costoso)">Cascada filtrados</button>
+            </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-danger mr-2 d-none" id="btnDetenerLote" title="Termina tras el ADJ en curso">Detener</button>
+        <div class="custom-control custom-checkbox mr-3">
+            <input type="checkbox" class="custom-control-input" id="optForce">
+            <label class="custom-control-label small" for="optForce">Reprocesar OK</label>
+        </div>
+        <div class="custom-control custom-checkbox mr-3">
+            <input type="checkbox" class="custom-control-input" id="optResync">
+            <label class="custom-control-label small" for="optResync" title="Solo si esta marcado: escribe fechas PDF en la tabla promesas">
+                Escribir en tabla promesas (opcional)
+            </label>
+        </div>
+        <span class="badge badge-secondary ml-auto" id="contadorContratos" title="Contratos en la vista filtrada actual">
+            {{ total }} contrato{{ total|pluralize:"s" }}
+        </span>
+        <span class="small text-muted ml-2" id="statusBatch"></span>
+    </div>
+
+    <div class="tabla-ext-wrap table-responsive">
+        <table class="table table-sm table-hover table-bordered" id="tablaExt" style="font-size:0.78rem;">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="checkAll"></th>
+                    <th>ADJ</th>
+                    <th>Inmueble</th>
+                    <th>Titular</th>
+                    <th>Contrato</th>
+                    <th>Entrega</th>
+                    <th>Escritura</th>
+                    <th>PDF contrato</th>
+                    <th>PDF entrega</th>
+                    <th>PDF escritura</th>
+                    <th>Estado</th>
+                    <th>Documento</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for r in rows %}
+                <tr data-adj="{{ r.adj }}" id="row-{{ r.adj }}">
+                    <td><input type="checkbox" class="chk-adj" value="{{ r.adj }}"></td>
+                    <td>{{ r.adj }}</td>
+                    <td>{{ r.inmueble }}</td>
+                    <td>{{ r.titular }}</td>
+                    <td class="col-db-ctr">{% if r.db_fecha_contrato %}{{ r.db_fecha_contrato|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="col-db-ent">{% if r.db_fecha_entrega %}{{ r.db_fecha_entrega|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="col-db-esc">{% if r.db_fecha_escritura %}{{ r.db_fecha_escritura|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="col-ext-ctr">{% if r.ext_fecha_contrato %}{{ r.ext_fecha_contrato|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="col-ext-ent">{% if r.ext_fecha_entrega %}{{ r.ext_fecha_entrega|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="col-ext-esc">{% if r.ext_fecha_escritura %}{{ r.ext_fecha_escritura|date:"d/m/Y" }}{% endif %}</td>
+                    <td class="col-estado"><span class="badge badge-light">{{ r.estado_extraccion }}</span></td>
+                    <td class="col-doc small">
+                        {% if r.documento_url %}
+                        <a class="doc-usado-link" href="{{ r.documento_url }}" target="_blank" rel="noopener"
+                           data-toggle="tooltip"
+                           title="{% if r.provider or r.model %}Modelo: {% if r.provider %}{{ r.provider }}{% endif %}{% if r.provider and r.model %} / {% endif %}{% if r.model %}{{ r.model }}{% endif %}{% else %}{{ r.documento_usado }}{% endif %}">{{ r.documento_usado|truncatechars:40 }}</a>
+                        {% else %}
+                        <span class="doc-usado-text"
+                              {% if r.provider or r.model %}data-toggle="tooltip" title="Modelo: {% if r.provider %}{{ r.provider }}{% endif %}{% if r.provider and r.model %} / {% endif %}{% if r.model %}{{ r.model }}{% endif %}"{% endif %}>{{ r.documento_usado }}</span>
+                        {% endif %}
+                        {% if r.error_msg %}
+                        <br><span class="{% if r.error_msg|slice:':7' == 'ALERTA:' %}text-warning{% else %}text-danger{% endif %}"
+                              title="{{ r.error_msg }}">{{ r.error_msg|truncatechars:80 }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <button type="button" class="btn btn-sm btn-outline-secondary btn-ver-docs"
+                                data-adj="{{ r.adj }}" title="Ver PDFs" data-toggle="tooltip">
+                            <i class="fas fa-file-pdf" aria-hidden="true"></i>
+                            <span class="sr-only">Ver PDFs</span>
+                        </button>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-primary btn-analizar-uno"
+                                    data-adj="{{ r.adj }}" title="Analizar" data-toggle="tooltip">
+                                <i class="fas fa-magic" aria-hidden="true"></i>
+                                <span class="sr-only">Analizar</span>
+                            </button>
+                            <button type="button"
+                                    class="btn btn-outline-primary dropdown-toggle dropdown-toggle-split btn-analizar-dd"
+                                    data-toggle="dropdown" data-adj="{{ r.adj }}"
+                                    title="Cascada / modelo" aria-haspopup="true" aria-expanded="false">
+                                <span class="sr-only">Opciones</span>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-right">
+                                <button type="button" class="dropdown-item btn-cascada-uno" data-adj="{{ r.adj }}">
+                                    Cascada OpenAI→Gemini→Anthropic
+                                </button>
+                                <div class="dropdown-divider"></div>
+                                <h6 class="dropdown-header">Usar modelo (override)</h6>
+                                {% for m in saved_models %}
+                                <button type="button" class="dropdown-item btn-analizar-modelo"
+                                        data-adj="{{ r.adj }}"
+                                        data-credential-id="{{ m.credential_id }}"
+                                        data-model="{{ m.model }}">{{ m.label }}</button>
+                                {% empty %}
+                                <span class="dropdown-item-text text-muted small">Sin credenciales activas</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="13" class="text-muted">No hay adjudicaciones con estos filtros.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDocsAdj" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Documentos del ADJ <span id="modalDocsAdjId"></span></h5>
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">Promesa, Otrosi, Otros y Escritura de este ADJ (todos). Abre el PDF para revisar lo que analiza el modelo.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered" id="tablaDocsAdj">
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Documento</th>
+                                <th>Carga</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div id="docsAdjEmpty" class="text-muted d-none">No hay documentos relevantes para este ADJ.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+(function(){
+  var csrftoken = '{{ csrf_token }}';
+  function opts(){
+    return {
+      force: $('#optForce').is(':checked') ? '1' : '',
+      resync_promesas: $('#optResync').is(':checked') ? '1' : '',
+      docs_desde: $('input[name=docs_desde]').val() || ''
+    };
+  }
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, function(c){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
+    });
+  }
+  function modelTooltip(result){
+    var parts = [];
+    if (result.provider) parts.push(result.provider);
+    if (result.model) parts.push(result.model);
+    return parts.length ? ('Modelo: ' + parts.join(' / ')) : '';
+  }
+  function estadoBadgeClass(estado){
+    if (estado === 'error') return 'badge-danger';
+    if (estado === 'ok') return 'badge-success';
+    if (estado === 'sin_fechas' || estado === 'sin_documento') return 'badge-warning';
+    return 'badge-info';
+  }
+  function paintRow(adj, result){
+    var tr = $('#row-' + adj.replace(/(:|\.|\[|\]|,|=|@)/g, '\\$1'));
+    if (!tr.length) return;
+    tr.toggleClass('table-danger', result.estado === 'error');
+    if (result.fecha_contrato !== undefined) tr.find('.col-ext-ctr').text(result.fecha_contrato || '');
+    if (result.fecha_entrega !== undefined) tr.find('.col-ext-ent').text(result.fecha_entrega || '');
+    if (result.fecha_escritura !== undefined) tr.find('.col-ext-esc').text(result.fecha_escritura || '');
+    tr.find('.col-estado').html(
+      '<span class="badge ' + estadoBadgeClass(result.estado) + '">' + escapeHtml(result.estado || '') + '</span>'
+    );
+    var name = result.documento_usado || '';
+    var url = result.documento_url || '';
+    var tip = modelTooltip(result) || name;
+    var tipAttr = tip ? ' data-toggle="tooltip" title="' + escapeHtml(tip) + '"' : '';
+    var docHtml = '';
+    if (url && name) {
+      docHtml = '<a class="doc-usado-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener"' + tipAttr + '>' + escapeHtml(name.length > 40 ? name.slice(0,40)+'…' : name) + '</a>';
+    } else {
+      docHtml = '<span class="doc-usado-text"' + tipAttr + '>' + escapeHtml(name) + '</span>';
+    }
+    if (result.error_msg) {
+      var em = String(result.error_msg);
+      var warnCls = 'text-danger font-weight-bold';
+      if (em.indexOf('ALERTA:') === 0) warnCls = 'text-warning';
+      else if (em.indexOf('Cascada') === 0) warnCls = result.estado === 'ok' ? 'text-muted' : 'text-warning';
+      docHtml += '<br><span class="' + warnCls + '" title="' + escapeHtml(em) + '">' + escapeHtml(em.length > 80 ? em.slice(0,80)+'…' : em) + '</span>';
+    }
+    if (result.skipped) docHtml += ' <span class="text-muted">(omitido)</span>';
+    if (result.synced_to_promesas) docHtml += ' <span class="badge badge-warning">escrito en promesas</span>';
+    tr.find('.col-doc').find('[data-toggle="tooltip"]').tooltip('dispose');
+    tr.find('.col-doc').html(docHtml);
+    tr.find('.col-doc [data-toggle="tooltip"]').tooltip({container: 'body', trigger: 'hover'});
+  }
+  function openDocsModal(adj){
+    $('#modalDocsAdjId').text(adj);
+    var $tb = $('#tablaDocsAdj tbody').empty();
+    $('#docsAdjEmpty').addClass('d-none').text('No hay documentos relevantes para este ADJ.');
+    $('#modalDocsAdj').modal('show');
+    $tb.append('<tr class="docs-loading"><td colspan="4" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Cargando…</td></tr>');
+    $.ajax({
+      url: window.location.pathname,
+      method: 'POST',
+      headers: {'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest'},
+      data: {
+        action: 'list_docs',
+        adj: adj
+      }
+    }).done(function(resp){
+      $tb.empty();
+      if (!resp || !resp.passed) {
+        $('#docsAdjEmpty').removeClass('d-none').text(resp && resp.msj ? resp.msj : 'Error al listar');
+        return;
+      }
+      var docs = resp.documentos || [];
+      if (!docs.length) {
+        $('#docsAdjEmpty').removeClass('d-none');
+        return;
+      }
+      docs.forEach(function(d){
+        var link = d.url
+          ? '<a href="' + escapeHtml(d.url) + '" target="_blank" rel="noopener">Abrir</a>'
+          : '—';
+        var miss = d.en_storage === false ? ' <span class="text-warning small">(no en storage)</span>' : '';
+        $tb.append(
+          '<tr><td>' + escapeHtml(d.tipo) + '</td><td>' + escapeHtml(d.descripcion) + miss +
+          '</td><td>' + escapeHtml(d.fecha_carga) + '</td><td>' + link + '</td></tr>'
+        );
+      });
+    }).fail(function(xhr){
+      $tb.empty();
+      var msg = (xhr.responseJSON && xhr.responseJSON.msj) || 'No se pudieron listar los documentos';
+      $('#docsAdjEmpty').removeClass('d-none').text(msg);
+    });
+  }
+  var iconAnalizar = '<i class="fas fa-magic" aria-hidden="true"></i><span class="sr-only">Analizar</span>';
+  var iconBusy = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="sr-only">Analizando</span>';
+  var statusBusyHtml = '<i class="fas fa-spinner fa-spin mr-1"></i>Analizando…';
+
+  function rowByAdj(adj){
+    return $('#row-' + String(adj).replace(/(:|\.|\[|\]|,|=|@)/g, '\\$1'));
+  }
+  function setRowAnalyzing(adj, on){
+    var tr = rowByAdj(adj);
+    if (!tr.length) return;
+    var btn = tr.find('.btn-analizar-uno');
+    var dd = tr.find('.btn-analizar-dd');
+    try { btn.tooltip('hide'); btn.tooltip('dispose'); } catch (e) {}
+    if (on) {
+      tr.addClass('is-analyzing');
+      btn.prop('disabled', true).attr('title', 'Analizando…').html(iconBusy);
+      dd.prop('disabled', true);
+      tr.find('.col-estado').html('<span class="badge badge-primary"><i class="fas fa-spinner fa-spin mr-1"></i>analizando</span>');
+    } else {
+      tr.removeClass('is-analyzing');
+      btn.prop('disabled', false).attr('title', 'Analizar').html(iconAnalizar);
+      dd.prop('disabled', false);
+      btn.tooltip({container: 'body', trigger: 'hover'});
+    }
+  }
+  function setBatchBusy(on){
+    $('#btnAnalizarSel, #btnAnalizarFiltro, #btnCascadaSel, #btnCascadaFiltro')
+      .prop('disabled', !!on)
+      .closest('.btn-group').find('> .dropdown-toggle').prop('disabled', !!on);
+    $('#btnDetenerLote').toggleClass('d-none', !on).prop('disabled', !on).text('Detener');
+    if (on) $('#statusBatch').html(statusBusyHtml);
+  }
+
+  var batchAbort = false;
+  var CASCADE_CREDENTIALS = [
+    {% for c in cascade_credentials %}
+    {provider: '{{ c.provider }}', credentialId: {{ c.credential_id }}, model: '{{ c.model|escapejs }}'}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  function analyzeOne(adj, override){
+    override = override || {};
+    var data = $.extend({action: 'analyze_one', adj: adj}, opts());
+    // Clic individual: siempre reprocesar. En lote respeta "Reprocesar OK".
+    if (override.force !== undefined) {
+      data.force = override.force ? '1' : '';
+    } else {
+      data.force = '1';
+    }
+    if (override.credentialId) {
+      data.credential_id = override.credentialId;
+      data.model_override = override.model || '';
+    }
+    setRowAnalyzing(adj, true);
+    return $.ajax({
+      url: window.location.pathname,
+      method: 'POST',
+      headers: {'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest'},
+      data: data
+    }).done(function(resp){
+      if (resp.passed && resp.result) {
+        paintRow(adj, resp.result);
+      } else {
+        var msj = (resp && resp.msj) || 'Error al analizar';
+        paintRow(adj, {adj: adj, estado: 'error', error_msg: msj});
+        if (!override.quiet) alert(msj);
+      }
+    }).fail(function(xhr){
+      var msg = (xhr.responseJSON && xhr.responseJSON.msj) || ('Error al analizar (' + (xhr.status || '?') + ')');
+      paintRow(adj, {adj: adj, estado: 'error', error_msg: msg});
+      if (!override.quiet) alert(msg);
+    }).always(function(){
+      setRowAnalyzing(adj, false);
+    });
+  }
+
+  function cascadeStepRequest(adj, cred, cascadeReset, force){
+    var data = $.extend({
+      action: 'analyze_cascade_step',
+      adj: adj,
+      provider: cred.provider,
+      credential_id: cred.credentialId,
+      model_override: cred.model || '',
+      cascade_reset: cascadeReset ? '1' : '',
+      force: force ? '1' : ''
+    }, opts());
+    data.force = force ? '1' : '';
+    return $.ajax({
+      url: window.location.pathname,
+      method: 'POST',
+      headers: {'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest'},
+      data: data
+    });
+  }
+
+  function analyzeCascadeOne(adj, override){
+    override = override || {};
+    var chain = CASCADE_CREDENTIALS.slice();
+    var dfd = $.Deferred();
+    if (!chain.length) {
+      var msg = 'Configura al menos una credencial (OpenAI/Gemini/Anthropic) en Integraciones LLM';
+      if (!override.quiet) alert(msg);
+      paintRow(adj, {adj: adj, estado: 'error', error_msg: msg});
+      return dfd.reject(msg).promise();
+    }
+    var force = override.force !== undefined ? !!override.force : true;
+    var idx = 0;
+    var lastResult = null;
+    setRowAnalyzing(adj, true);
+    function nextStep(){
+      if (batchAbort && override.quiet) {
+        setRowAnalyzing(adj, false);
+        dfd.resolve({passed: true, result: lastResult, aborted: true});
+        return;
+      }
+      if (idx >= chain.length) {
+        setRowAnalyzing(adj, false);
+        dfd.resolve({passed: true, result: lastResult});
+        return;
+      }
+      var cred = chain[idx];
+      var isFirst = idx === 0;
+      idx += 1;
+      if (override.onProgress) {
+        override.onProgress(adj, cred.provider, idx, chain.length);
+      }
+      cascadeStepRequest(adj, cred, isFirst, force).done(function(resp){
+        if (resp.passed && resp.result) {
+          lastResult = resp.result;
+          paintRow(adj, resp.result);
+          if (resp.result.cascade_complete) {
+            setRowAnalyzing(adj, false);
+            dfd.resolve(resp);
+            return;
+          }
+          nextStep();
+        } else {
+          var msj = (resp && resp.msj) || 'Error en cascada';
+          paintRow(adj, {adj: adj, estado: 'error', error_msg: msj});
+          setRowAnalyzing(adj, false);
+          if (!override.quiet) alert(msj);
+          dfd.resolve({passed: false, result: {estado: 'error', error_msg: msj}});
+        }
+      }).fail(function(xhr){
+        var msg = (xhr.responseJSON && xhr.responseJSON.msj) || ('Error cascada (' + (xhr.status || '?') + ')');
+        paintRow(adj, {adj: adj, estado: 'error', error_msg: msg});
+        setRowAnalyzing(adj, false);
+        if (!override.quiet) alert(msg);
+        dfd.resolve({passed: false, result: {estado: 'error', error_msg: msg}});
+      });
+    }
+    nextStep();
+    return dfd.promise();
+  }
+  function fetchBatchAdjs(mode, adjList){
+    var formData = new FormData();
+    formData.append('action', 'list_batch_adjs');
+    formData.append('mode', mode);
+    formData.append('inmueble_contains', $('input[name=inmueble_contains]').val() || '');
+    formData.append('adj_query', $('input[name=adj_query]').val() || '');
+    formData.append('titular_query', $('input[name=titular_query]').val() || '');
+    formData.append('estado_extraccion', $('select[name=estado_extraccion]').val() || '');
+    formData.append('solo_pendientes', $('#solo_pendientes').is(':checked') ? '1' : '');
+    formData.append('docs_desde', $('input[name=docs_desde]').val() || '');
+    if (mode === 'selected') {
+      (adjList || []).forEach(function(a){ formData.append('adj', a); });
+    }
+    return $.ajax({
+      url: window.location.pathname,
+      method: 'POST',
+      headers: {'X-CSRFToken': csrftoken, 'X-Requested-With': 'XMLHttpRequest'},
+      data: formData,
+      processData: false,
+      contentType: false
+    });
+  }
+  function analyzeBatch(mode, adjList, batchOpts){
+    batchOpts = batchOpts || {};
+    var useCascade = !!batchOpts.cascade;
+    batchAbort = false;
+    setBatchBusy(true);
+    $('#statusBatch').text(useCascade ? 'Cascada: preparando lista…' : 'Preparando lista…');
+    var forceBatch = $('#optForce').is(':checked');
+    var dfd = $.Deferred();
+    function runSequential(list){
+      if (!list.length) {
+        $('#statusBatch').text('Sin ADJs para analizar');
+        setBatchBusy(false);
+        dfd.resolve({ok: 0, err: 0, total: 0});
+        return;
+      }
+      var i = 0, ok = 0, err = 0;
+      function next(){
+        if (batchAbort) {
+          $('#statusBatch').text('Detenido en ' + i + '/' + list.length + ' (ok ' + ok + ', error ' + err + ')');
+          setBatchBusy(false);
+          dfd.resolve({ok: ok, err: err, total: list.length, aborted: true});
+          return;
+        }
+        if (i >= list.length) {
+          $('#statusBatch').text('Listo: ' + ok + ' ok, ' + err + ' error de ' + list.length);
+          setBatchBusy(false);
+          dfd.resolve({ok: ok, err: err, total: list.length});
+          return;
+        }
+        var adj = list[i];
+        i += 1;
+        var label = useCascade ? 'Cascada' : 'Analizando';
+        $('#statusBatch').text(label + ' ' + i + '/' + list.length + ': ' + adj + ' (ok ' + ok + ', error ' + err + ')');
+        var runner = useCascade
+          ? analyzeCascadeOne(adj, {
+              quiet: true,
+              force: true,
+              onProgress: function(a, provider, stepIdx, stepTotal){
+                $('#statusBatch').text(
+                  'Cascada ' + i + '/' + list.length + ' · ' + a + ' · ' + provider +
+                  ' (' + stepIdx + '/' + stepTotal + ') — ok ' + ok + ', error ' + err
+                );
+              }
+            })
+          : analyzeOne(adj, {quiet: true, force: forceBatch});
+        runner.always(function(resp, textStatus){
+          var result = resp && resp.result;
+          if (textStatus === 'error' || textStatus === 'timeout' || textStatus === 'parsererror') {
+            err += 1;
+          } else if (result && (result.estado === 'error' || (resp && resp.passed === false))) {
+            err += 1;
+          } else if (result && result.estado === 'ok') {
+            ok += 1;
+          } else if (result && result.skipped) {
+            ok += 1;
+          } else if (result) {
+            ok += 1;
+          } else {
+            err += 1;
+          }
+          next();
+        });
+      }
+      next();
+    }
+    if (mode === 'selected') {
+      runSequential(adjList || []);
+    } else {
+      fetchBatchAdjs(mode, adjList).done(function(resp){
+        if (!resp.passed) {
+          alert(resp.msj || 'No se pudo listar ADJs');
+          setBatchBusy(false);
+          dfd.reject();
+          return;
+        }
+        runSequential(resp.adjs || []);
+      }).fail(function(xhr){
+        var msg = (xhr.responseJSON && xhr.responseJSON.msj) || 'No se pudo listar ADJs';
+        $('#statusBatch').text(msg);
+        alert(msg);
+        setBatchBusy(false);
+        dfd.reject();
+      });
+    }
+    return dfd.promise();
+  }
+  $('#checkAll').on('change', function(){
+    $('.chk-adj').prop('checked', this.checked);
+  });
+  $('[data-toggle="tooltip"]').tooltip({container: 'body', trigger: 'hover'});
+  $('.btn-analizar-uno').on('click', function(){
+    analyzeOne($(this).data('adj'));
+  });
+  $(document).on('click', '.btn-cascada-uno', function(e){
+    e.preventDefault();
+    if (!CASCADE_CREDENTIALS.length) {
+      alert('Configura OpenAI / Gemini / Anthropic en Integraciones LLM para usar cascada.');
+      return;
+    }
+    analyzeCascadeOne($(this).data('adj'));
+  });
+  $(document).on('click', '.btn-analizar-modelo', function(e){
+    e.preventDefault();
+    var $el = $(this);
+    analyzeOne($el.data('adj'), {
+      credentialId: $el.data('credential-id'),
+      model: $el.data('model') || ''
+    });
+  });
+  $('.btn-ver-docs').on('click', function(){
+    openDocsModal($(this).data('adj'));
+  });
+  $('#btnAnalizarSel').on('click', function(){
+    var list = $('.chk-adj:checked').map(function(){ return this.value; }).get();
+    if (!list.length) { alert('Selecciona al menos un ADJ'); return; }
+    analyzeBatch('selected', list);
+  });
+  $('#btnAnalizarFiltro').on('click', function(){
+    if (!confirm('Analizar todos los filtrados uno por uno (secuencial, sin saturar el servidor)?')) return;
+    analyzeBatch('filtered', []);
+  });
+  $('#btnCascadaSel').on('click', function(){
+    var list = $('.chk-adj:checked').map(function(){ return this.value; }).get();
+    if (!list.length) { alert('Selecciona al menos un ADJ'); return; }
+    if (!CASCADE_CREDENTIALS.length) {
+      alert('Configura OpenAI / Gemini / Anthropic en Integraciones LLM.');
+      return;
+    }
+    if (!confirm('Cascada OpenAI→Gemini→Anthropic en ' + list.length + ' ADJ(s). Es costoso. ¿Continuar?')) return;
+    analyzeBatch('selected', list, {cascade: true});
+  });
+  $('#btnCascadaFiltro').on('click', function(){
+    if (!CASCADE_CREDENTIALS.length) {
+      alert('Configura OpenAI / Gemini / Anthropic en Integraciones LLM.');
+      return;
+    }
+    if (!confirm('Cascada OpenAI→Gemini→Anthropic en TODOS los filtrados (secuencial, costoso). ¿Continuar?')) return;
+    analyzeBatch('filtered', [], {cascade: true});
+  });
+  $('#btnDetenerLote').on('click', function(){
+    batchAbort = true;
+    $(this).prop('disabled', true).text('Deteniendo…');
+    $('#statusBatch').text('Deteniendo tras el ADJ en curso…');
+  });
+})();
+</script>
+{% endblock %}

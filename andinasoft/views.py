@@ -404,6 +404,7 @@ def proyecto_popup(request,redireccion):
         'parametros':'operaciones/parametros',
         'informe_mes':'operaciones/informes',
         'promesas':'operaciones/promesas',
+        'extraccion_fechas':'operaciones/extraccion-fechas',
         'descuentos':'operaciones/descuentos_condicionados',
         'interfaces':'contabilidad/interfaces',
         'detalle_comisiones':'comercial/detalle_comisiones',

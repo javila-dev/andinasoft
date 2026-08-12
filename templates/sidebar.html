@@ -94,6 +94,9 @@
                         <a href="/projectselector/promesas">Estados promesas</a>
                     </li>
                     <li>
+                        <a href="/projectselector/extraccion_fechas">Fechas desde documentos</a>
+                    </li>
+                    <li>
                         <a href="/projectselector/comisiones">Comisiones</a>
                     </li>
                     <li>
@@ -253,6 +256,13 @@
                     </li>
                 </ul>
             </li>
+            {% if user.is_superuser %}
+            <li>
+                <a href="/configuracion/integraciones-llm">
+                    <i class="fas fa-key"></i>&nbsp;Integraciones LLM
+                </a>
+            </li>
+            {% endif %}
             {% if user.is_superuser %}
             <li>
                 <a href="{% url 'usuarios_lista' %}">

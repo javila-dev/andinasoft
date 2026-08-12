@@ -1,0 +1,278 @@
+{% extends 'base.html' %}
+{% block title %}Integraciones LLM{% endblock %}
+
+{% block content %}
+<style>
+.integraciones-llm { font-size: 0.8rem; }
+.integraciones-llm h4 { font-size: 1.05rem; font-weight: 600; }
+.integraciones-llm h5 { font-size: 0.95rem; font-weight: 600; }
+.integraciones-llm h6 { font-size: 0.85rem; font-weight: 600; }
+.integraciones-llm .table { font-size: 0.75rem; }
+.integraciones-llm .table th,
+.integraciones-llm .table td { padding: 0.3rem 0.4rem; vertical-align: middle; }
+.integraciones-llm label { font-size: 0.75rem; margin-bottom: 0.15rem; }
+.integraciones-llm .form-control,
+.integraciones-llm .form-control-sm {
+    font-size: 0.75rem;
+    height: calc(1.4em + 0.45rem + 2px);
+    padding: 0.2rem 0.4rem;
+}
+.integraciones-llm select.form-control {
+    height: calc(1.4em + 0.45rem + 2px);
+}
+.integraciones-llm .btn { font-size: 0.75rem; padding: 0.2rem 0.55rem; }
+.integraciones-llm .btn-sm { font-size: 0.7rem; padding: 0.12rem 0.4rem; }
+.integraciones-llm .text-muted,
+.integraciones-llm .small { font-size: 0.72rem !important; }
+.integraciones-llm .alert { font-size: 0.78rem; padding: 0.45rem 0.7rem; }
+.integraciones-llm code { font-size: 0.7rem; }
+.integraciones-llm .custom-control-label { font-size: 0.75rem; }
+.integraciones-llm .purpose-box { border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 0.55rem 0.65rem; margin-bottom: 0.65rem; }
+.integraciones-llm .hint-links a { margin-right: 0.6rem; }
+</style>
+
+<div class="integraciones-llm">
+<div class="bg-white rounded shadow p-2 px-3 mb-2">
+    <h4 class="mb-1">Integraciones — API keys</h4>
+    <p class="text-muted mb-1">Configura OpenAI, Gemini o Anthropic y elige cual se usa para cada funcion. Hay dos flujos de fechas: PDF con texto (barato) y PDF escaneado/vision (recomendado Gemini Flash). Los listados de modelos siguen la documentacion oficial.</p>
+    <p class="text-muted hint-links mb-0">
+        Docs:
+        <a href="https://developers.openai.com/api/docs/models/all" target="_blank" rel="noopener">OpenAI</a>
+        <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">Gemini</a>
+        <a href="https://platform.claude.com/docs/en/about-claude/models/overview" target="_blank" rel="noopener">Anthropic</a>
+    </p>
+</div>
+
+{% if mensaje %}
+<div class="alert alert-success py-2">{{ mensaje }}</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger py-2">{{ error }}</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-lg-7 mb-2">
+        <div class="bg-white rounded shadow p-2 px-3">
+            <h5 class="mb-2">Credenciales</h5>
+            <table class="table table-sm table-bordered mb-2">
+                <thead>
+                    <tr>
+                        <th>Proveedor</th>
+                        <th>Nombre</th>
+                        <th>Modelo</th>
+                        <th>Key</th>
+                        <th>Activa</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for c in credentials %}
+                    <tr>
+                        <td>{{ c.get_provider_display }}</td>
+                        <td>{{ c.label|default:"—" }}</td>
+                        <td><code>{{ c.default_model|default:"—" }}</code></td>
+                        <td><code>{{ c.masked_key }}</code></td>
+                        <td>{% if c.activo %}Si{% else %}No{% endif %}</td>
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-sm btn-outline-primary btn-edit-cred"
+                                data-id="{{ c.id }}"
+                                data-provider="{{ c.provider }}"
+                                data-label="{{ c.label }}"
+                                data-model="{{ c.default_model }}"
+                                data-activo="{% if c.activo %}1{% else %}0{% endif %}">Editar</button>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Eliminar credencial?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_credential">
+                                <input type="hidden" name="cred_id" value="{{ c.id }}">
+                                <button class="btn btn-sm btn-outline-danger">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="text-muted">No hay credenciales. Crea una abajo.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <hr class="my-2">
+            <h6 id="credFormTitle" class="mb-2">Nueva credencial</h6>
+            <form method="post" id="formCred">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_credential">
+                <input type="hidden" name="cred_id" id="cred_id" value="">
+                <div class="form-row">
+                    <div class="form-group col-md-4 mb-2">
+                        <label>Proveedor</label>
+                        <select name="provider" id="cred_provider" class="form-control" required>
+                            {% for val, label in provider_choices %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group col-md-4 mb-2">
+                        <label>Nombre</label>
+                        <input type="text" name="label" id="cred_label" class="form-control" placeholder="Ej: OpenAI prod">
+                    </div>
+                    <div class="form-group col-md-4 mb-2">
+                        <label>Modelo por defecto</label>
+                        <select name="default_model" id="cred_model" class="form-control"></select>
+                    </div>
+                </div>
+                <div class="form-group mb-2">
+                    <label>API key</label>
+                    <input type="password" name="api_key" id="cred_api_key" class="form-control" autocomplete="new-password" placeholder="Pegar key (vacio = no cambiar al editar)">
+                </div>
+                <div class="custom-control custom-switch mb-2">
+                    <input type="checkbox" class="custom-control-input" id="cred_activo" name="activo" checked>
+                    <label class="custom-control-label" for="cred_activo">Activa</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Guardar</button>
+                <button type="button" class="btn btn-link" id="btnResetCred">Limpiar</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-5 mb-2">
+        <div class="bg-white rounded shadow p-2 px-3">
+            <h5 class="mb-1">Usos</h5>
+            <p class="small text-muted mb-2">Asigna que credencial usa cada proceso. El modelo opcional reemplaza el de la credencial.</p>
+            {% for row in purpose_rows %}
+            <form method="post" class="purpose-box" data-purpose-form>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_purpose">
+                <input type="hidden" name="purpose" value="{{ row.code }}">
+                <div class="font-weight-bold mb-1">{{ row.label }}</div>
+                <div class="form-group mb-2">
+                    <label class="mb-0">Credencial</label>
+                    <select name="credential_id" class="form-control purpose-cred">
+                        <option value="">— Sin asignar (fallback env OpenAI) —</option>
+                        {% for c in credentials %}
+                        <option value="{{ c.id }}"
+                            data-provider="{{ c.provider }}"
+                            {% if row.mapping and row.mapping.credential_id == c.id %}selected{% endif %}>
+                            {{ c.get_provider_display }} — {{ c.label|default:c.id }}{% if not c.activo %} (inactiva){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mb-2">
+                    <label class="mb-0">Modelo (opcional)</label>
+                    <select name="model_override" class="form-control purpose-model"
+                            data-current="{% if row.mapping %}{{ row.mapping.model_override }}{% endif %}">
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Guardar uso</button>
+            </form>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block jsbottom %}
+{{ models_catalog|json_script:"models-catalog-data" }}
+{{ default_models|json_script:"default-models-data" }}
+<script>
+(function(){
+  var CATALOG = JSON.parse(document.getElementById('models-catalog-data').textContent);
+  var DEFAULTS = JSON.parse(document.getElementById('default-models-data').textContent);
+
+  function fillModelSelect(selectEl, provider, selected, opts) {
+    opts = opts || {};
+    var allowEmpty = !!opts.allowEmpty;
+    var emptyLabel = opts.emptyLabel || '— Usar modelo de la credencial —';
+    var prev = selected != null ? String(selected) : '';
+    selectEl.innerHTML = '';
+    if (allowEmpty) {
+      var o0 = document.createElement('option');
+      o0.value = '';
+      o0.textContent = emptyLabel;
+      selectEl.appendChild(o0);
+    }
+    var groups = CATALOG[provider] || [];
+    var found = false;
+    groups.forEach(function(g){
+      var og = document.createElement('optgroup');
+      og.label = g.label;
+      (g.models || []).forEach(function(m){
+        var o = document.createElement('option');
+        o.value = m.id;
+        o.textContent = m.label;
+        if (prev && prev === m.id) {
+          o.selected = true;
+          found = true;
+        }
+        og.appendChild(o);
+      });
+      selectEl.appendChild(og);
+    });
+    if (prev && !found) {
+      var custom = document.createElement('option');
+      custom.value = prev;
+      custom.textContent = prev + ' (guardado)';
+      custom.selected = true;
+      selectEl.insertBefore(custom, selectEl.firstChild);
+    }
+    if (!prev && !allowEmpty) {
+      var def = DEFAULTS[provider];
+      if (def) selectEl.value = def;
+    }
+  }
+
+  function refreshCredModel(keepValue) {
+    var provider = $('#cred_provider').val();
+    var selected = keepValue ? $('#cred_model').val() : (DEFAULTS[provider] || '');
+    fillModelSelect(document.getElementById('cred_model'), provider, selected, {allowEmpty: false});
+  }
+
+  function refreshPurposeModel($form) {
+    var $cred = $form.find('.purpose-cred');
+    var $model = $form.find('.purpose-model');
+    var opt = $cred.find('option:selected');
+    var provider = opt.data('provider') || 'openai';
+    var current = $model.attr('data-current') || $model.val() || '';
+    fillModelSelect($model[0], provider, current, {allowEmpty: true});
+  }
+
+  function resetCred(){
+    $('#credFormTitle').text('Nueva credencial');
+    $('#cred_id').val('');
+    $('#cred_label').val('');
+    $('#cred_api_key').val('');
+    $('#cred_activo').prop('checked', true);
+    $('#cred_provider').val('openai');
+    fillModelSelect(document.getElementById('cred_model'), 'openai', DEFAULTS.openai || 'gpt-4o-mini', {allowEmpty: false});
+  }
+
+  $('#cred_provider').on('change', function(){
+    fillModelSelect(document.getElementById('cred_model'), $(this).val(), DEFAULTS[$(this).val()] || '', {allowEmpty: false});
+  });
+
+  $('#btnResetCred').on('click', resetCred);
+
+  $('.btn-edit-cred').on('click', function(){
+    var b = $(this);
+    $('#credFormTitle').text('Editar credencial #' + b.data('id'));
+    $('#cred_id').val(b.data('id'));
+    $('#cred_provider').val(b.data('provider'));
+    $('#cred_label').val(b.data('label'));
+    fillModelSelect(document.getElementById('cred_model'), b.data('provider'), b.data('model') || '', {allowEmpty: false});
+    $('#cred_api_key').val('');
+    $('#cred_activo').prop('checked', String(b.data('activo')) === '1');
+    $('html, body').animate({scrollTop: $('#formCred').offset().top - 80}, 200);
+  });
+
+  $('[data-purpose-form]').each(function(){
+    var $form = $(this);
+    refreshPurposeModel($form);
+    $form.find('.purpose-cred').on('change', function(){
+      $form.find('.purpose-model').attr('data-current', '');
+      refreshPurposeModel($form);
+    });
+  });
+
+  resetCred();
+})();
+</script>
+{% endblock %}

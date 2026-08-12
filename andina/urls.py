@@ -22,6 +22,7 @@ from django.views.generic.base import TemplateView
 from andinasoft import views, ajax_request
 from andinasoft import views_usuarios
 from andinasoft import cartera_gestor_views
+from andinasoft import documento_fechas_views
 from buildingcontrol import views as building_views, pdf as building_pdf
 from crm import views as crm_views
 from accounting import views as account_views
@@ -103,6 +104,8 @@ urlpatterns = [
     path('contabilidad/interfaces/<proyecto>',views.interfaces_contabilidad,name='interfaz recibos'),
     path('operaciones/descuentos_condicionados/<proyecto>',views.descuentos_condicionados,name='descuentos condicionados'),
     path('operaciones/promesas/<proyecto>',views.promesas,name='promesas'),
+    path('operaciones/extraccion-fechas/<proyecto>', documento_fechas_views.extraccion_fechas_documentos, name='extraccion fechas documentos'),
+    path('configuracion/integraciones-llm', documento_fechas_views.integraciones_llm, name='integraciones llm'),
     path('operaciones/informes/<proyecto>',views.informe_mes,name='informes'),
     path('contabilidad/informes/gastos/cargar',views.informe_gastos,name='gastos'),
     path('contabilidad/gastos/detalle/<empresa>/<año>/<mes>',views.detalle_gastos,name='detalle gastos'),
