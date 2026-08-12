@@ -200,6 +200,11 @@ def extraccion_fechas_documentos(request, proyecto):
             cred_raw = (request.POST.get('credential_id') or '').strip()
             model_override = (request.POST.get('model_override') or '').strip()
             credential_id = int(cred_raw) if cred_raw.isdigit() else None
+            documento_force = (
+                request.POST.get('documento')
+                or request.POST.get('descripcion_doc')
+                or ''
+            ).strip()
             try:
                 if action == 'analyze_cascade_step':
                     provider = (request.POST.get('provider') or '').strip().lower()
@@ -215,6 +220,7 @@ def extraccion_fechas_documentos(request, proyecto):
                         cascade_reset=request.POST.get('cascade_reset') in ('1', 'true', 'on', 'True'),
                         credential_id=credential_id,
                         model_override=model_override,
+                        documento_force=documento_force,
                     )
                 else:
                     result = analyze_adj(
@@ -225,6 +231,7 @@ def extraccion_fechas_documentos(request, proyecto):
                         overwrite_promesas=overwrite,
                         credential_id=credential_id,
                         model_override=model_override,
+                        documento_force=documento_force,
                     )
             except Exception as exc:
                 err = str(exc)[:1000]

@@ -220,7 +220,10 @@
                 <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
-                <p class="small text-muted mb-2">Promesa, Otrosi, Otros y Escritura de este ADJ (todos). Abre el PDF para revisar lo que analiza el modelo.</p>
+                <p class="small text-muted mb-2">
+                    Promesa, Otrosi, Otros y Escritura de este ADJ. Puedes abrir el PDF o
+                    <strong>analizar un documento concreto</strong> (bypass del flujo automatico).
+                </p>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered" id="tablaDocsAdj">
                         <thead>
@@ -228,7 +231,8 @@
                                 <th>Tipo</th>
                                 <th>Documento</th>
                                 <th>Carga</th>
-                                <th></th>
+                                <th class="text-nowrap">PDF</th>
+                                <th class="text-nowrap">Analizar</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -305,12 +309,61 @@
     tr.find('.col-doc').html(docHtml);
     tr.find('.col-doc [data-toggle="tooltip"]').tooltip({container: 'body', trigger: 'hover'});
   }
+  var iconAnalizar = '<i class="fas fa-magic" aria-hidden="true"></i><span class="sr-only">Analizar</span>';
+  var iconBusy = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="sr-only">Analizando</span>';
+  var statusBusyHtml = '<i class="fas fa-spinner fa-spin mr-1"></i>Analizando…';
+
+  var SAVED_MODELS = [
+    {% for m in saved_models %}
+    {credentialId: {{ m.credential_id }}, model: '{{ m.model|escapejs }}', label: '{{ m.label|escapejs }}'}{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  function modalDocActionsHtml(adj, descripcion, enStorage){
+    var disabled = enStorage === false ? ' disabled' : '';
+    var modelItems = '';
+    if (SAVED_MODELS.length) {
+      SAVED_MODELS.forEach(function(m){
+        modelItems += '<button type="button" class="dropdown-item btn-analizar-modelo"' +
+          ' data-adj="' + escapeHtml(adj) + '"' +
+          ' data-documento="' + escapeHtml(descripcion) + '"' +
+          ' data-credential-id="' + m.credentialId + '"' +
+          ' data-model="' + escapeHtml(m.model) + '">' + escapeHtml(m.label) + '</button>';
+      });
+    } else {
+      modelItems = '<span class="dropdown-item-text text-muted small">Sin credenciales activas</span>';
+    }
+    return (
+      '<div class="btn-group btn-group-sm">' +
+        '<button type="button" class="btn btn-outline-primary btn-analizar-uno"' +
+          ' data-adj="' + escapeHtml(adj) + '" data-documento="' + escapeHtml(descripcion) + '"' +
+          ' title="Analizar este documento" data-toggle="tooltip"' + disabled + '>' +
+          iconAnalizar +
+        '</button>' +
+        '<button type="button" class="btn btn-outline-primary dropdown-toggle dropdown-toggle-split btn-analizar-dd"' +
+          ' data-toggle="dropdown" data-adj="' + escapeHtml(adj) + '"' +
+          ' title="Cascada / modelo" aria-haspopup="true" aria-expanded="false"' + disabled + '>' +
+          '<span class="sr-only">Opciones</span>' +
+        '</button>' +
+        '<div class="dropdown-menu dropdown-menu-right">' +
+          '<button type="button" class="dropdown-item btn-cascada-uno"' +
+            ' data-adj="' + escapeHtml(adj) + '" data-documento="' + escapeHtml(descripcion) + '">' +
+            'Cascada OpenAI→Gemini→Anthropic' +
+          '</button>' +
+          '<div class="dropdown-divider"></div>' +
+          '<h6 class="dropdown-header">Usar modelo (override)</h6>' +
+          modelItems +
+        '</div>' +
+      '</div>'
+    );
+  }
+
   function openDocsModal(adj){
     $('#modalDocsAdjId').text(adj);
     var $tb = $('#tablaDocsAdj tbody').empty();
     $('#docsAdjEmpty').addClass('d-none').text('No hay documentos relevantes para este ADJ.');
     $('#modalDocsAdj').modal('show');
-    $tb.append('<tr class="docs-loading"><td colspan="4" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Cargando…</td></tr>');
+    $tb.append('<tr class="docs-loading"><td colspan="5" class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Cargando…</td></tr>');
     $.ajax({
       url: window.location.pathname,
       method: 'POST',
@@ -335,21 +388,25 @@
           ? '<a href="' + escapeHtml(d.url) + '" target="_blank" rel="noopener">Abrir</a>'
           : '—';
         var miss = d.en_storage === false ? ' <span class="text-warning small">(no en storage)</span>' : '';
-        $tb.append(
-          '<tr><td>' + escapeHtml(d.tipo) + '</td><td>' + escapeHtml(d.descripcion) + miss +
-          '</td><td>' + escapeHtml(d.fecha_carga) + '</td><td>' + link + '</td></tr>'
+        var $tr = $(
+          '<tr data-adj="' + escapeHtml(adj) + '" data-documento="' + escapeHtml(d.descripcion || '') + '">' +
+            '<td>' + escapeHtml(d.tipo) + '</td>' +
+            '<td class="small">' + escapeHtml(d.descripcion) + miss + '</td>' +
+            '<td class="small">' + escapeHtml(d.fecha_carga) + '</td>' +
+            '<td>' + link + '</td>' +
+            '<td class="text-nowrap col-doc-actions"></td>' +
+          '</tr>'
         );
+        $tr.find('.col-doc-actions').html(modalDocActionsHtml(adj, d.descripcion || '', d.en_storage !== false));
+        $tb.append($tr);
       });
+      $tb.find('[data-toggle="tooltip"]').tooltip({container: 'body', trigger: 'hover'});
     }).fail(function(xhr){
       $tb.empty();
       var msg = (xhr.responseJSON && xhr.responseJSON.msj) || 'No se pudieron listar los documentos';
       $('#docsAdjEmpty').removeClass('d-none').text(msg);
     });
   }
-  var iconAnalizar = '<i class="fas fa-magic" aria-hidden="true"></i><span class="sr-only">Analizar</span>';
-  var iconBusy = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span class="sr-only">Analizando</span>';
-  var statusBusyHtml = '<i class="fas fa-spinner fa-spin mr-1"></i>Analizando…';
-
   function rowByAdj(adj){
     return $('#row-' + String(adj).replace(/(:|\.|\[|\]|,|=|@)/g, '\\$1'));
   }
@@ -386,6 +443,27 @@
     {% endfor %}
   ];
 
+  function setModalDocAnalyzing(adj, documento, on){
+    if (!documento) return;
+    var $tr = $('#tablaDocsAdj tbody tr').filter(function(){
+      return $(this).data('adj') === adj && $(this).data('documento') === documento;
+    });
+    if (!$tr.length) return;
+    var btn = $tr.find('.btn-analizar-uno');
+    var dd = $tr.find('.btn-analizar-dd');
+    try { btn.tooltip('hide'); btn.tooltip('dispose'); } catch (e) {}
+    if (on) {
+      $tr.addClass('table-info');
+      btn.prop('disabled', true).html(iconBusy);
+      dd.prop('disabled', true);
+    } else {
+      $tr.removeClass('table-info');
+      btn.prop('disabled', false).html(iconAnalizar);
+      dd.prop('disabled', false);
+      btn.tooltip({container: 'body', trigger: 'hover'});
+    }
+  }
+
   function analyzeOne(adj, override){
     override = override || {};
     var data = $.extend({action: 'analyze_one', adj: adj}, opts());
@@ -399,7 +477,12 @@
       data.credential_id = override.credentialId;
       data.model_override = override.model || '';
     }
+    if (override.documento) {
+      data.documento = override.documento;
+      data.force = '1';
+    }
     setRowAnalyzing(adj, true);
+    setModalDocAnalyzing(adj, override.documento, true);
     return $.ajax({
       url: window.location.pathname,
       method: 'POST',
@@ -419,10 +502,11 @@
       if (!override.quiet) alert(msg);
     }).always(function(){
       setRowAnalyzing(adj, false);
+      setModalDocAnalyzing(adj, override.documento, false);
     });
   }
 
-  function cascadeStepRequest(adj, cred, cascadeReset, force){
+  function cascadeStepRequest(adj, cred, cascadeReset, force, documento){
     var data = $.extend({
       action: 'analyze_cascade_step',
       adj: adj,
@@ -433,6 +517,7 @@
       force: force ? '1' : ''
     }, opts());
     data.force = force ? '1' : '';
+    if (documento) data.documento = documento;
     return $.ajax({
       url: window.location.pathname,
       method: 'POST',
@@ -452,18 +537,23 @@
       return dfd.reject(msg).promise();
     }
     var force = override.force !== undefined ? !!override.force : true;
+    var documento = override.documento || '';
     var idx = 0;
     var lastResult = null;
     setRowAnalyzing(adj, true);
+    setModalDocAnalyzing(adj, documento, true);
+    function finish(resp){
+      setRowAnalyzing(adj, false);
+      setModalDocAnalyzing(adj, documento, false);
+      dfd.resolve(resp);
+    }
     function nextStep(){
       if (batchAbort && override.quiet) {
-        setRowAnalyzing(adj, false);
-        dfd.resolve({passed: true, result: lastResult, aborted: true});
+        finish({passed: true, result: lastResult, aborted: true});
         return;
       }
       if (idx >= chain.length) {
-        setRowAnalyzing(adj, false);
-        dfd.resolve({passed: true, result: lastResult});
+        finish({passed: true, result: lastResult});
         return;
       }
       var cred = chain[idx];
@@ -472,29 +562,26 @@
       if (override.onProgress) {
         override.onProgress(adj, cred.provider, idx, chain.length);
       }
-      cascadeStepRequest(adj, cred, isFirst, force).done(function(resp){
+      cascadeStepRequest(adj, cred, isFirst, force, documento).done(function(resp){
         if (resp.passed && resp.result) {
           lastResult = resp.result;
           paintRow(adj, resp.result);
           if (resp.result.cascade_complete) {
-            setRowAnalyzing(adj, false);
-            dfd.resolve(resp);
+            finish(resp);
             return;
           }
           nextStep();
         } else {
           var msj = (resp && resp.msj) || 'Error en cascada';
           paintRow(adj, {adj: adj, estado: 'error', error_msg: msj});
-          setRowAnalyzing(adj, false);
           if (!override.quiet) alert(msj);
-          dfd.resolve({passed: false, result: {estado: 'error', error_msg: msj}});
+          finish({passed: false, result: {estado: 'error', error_msg: msj}});
         }
       }).fail(function(xhr){
         var msg = (xhr.responseJSON && xhr.responseJSON.msj) || ('Error cascada (' + (xhr.status || '?') + ')');
         paintRow(adj, {adj: adj, estado: 'error', error_msg: msg});
-        setRowAnalyzing(adj, false);
         if (!override.quiet) alert(msg);
-        dfd.resolve({passed: false, result: {estado: 'error', error_msg: msg}});
+        finish({passed: false, result: {estado: 'error', error_msg: msg}});
       });
     }
     nextStep();
@@ -612,8 +699,11 @@
     $('.chk-adj').prop('checked', this.checked);
   });
   $('[data-toggle="tooltip"]').tooltip({container: 'body', trigger: 'hover'});
-  $('.btn-analizar-uno').on('click', function(){
-    analyzeOne($(this).data('adj'));
+  $(document).on('click', '.btn-analizar-uno', function(){
+    var $el = $(this);
+    analyzeOne($el.data('adj'), {
+      documento: $el.attr('data-documento') || ''
+    });
   });
   $(document).on('click', '.btn-cascada-uno', function(e){
     e.preventDefault();
@@ -621,14 +711,18 @@
       alert('Configura OpenAI / Gemini / Anthropic en Integraciones LLM para usar cascada.');
       return;
     }
-    analyzeCascadeOne($(this).data('adj'));
+    var $el = $(this);
+    analyzeCascadeOne($el.data('adj'), {
+      documento: $el.attr('data-documento') || ''
+    });
   });
   $(document).on('click', '.btn-analizar-modelo', function(e){
     e.preventDefault();
     var $el = $(this);
     analyzeOne($el.data('adj'), {
       credentialId: $el.data('credential-id'),
-      model: $el.data('model') || ''
+      model: $el.data('model') || '',
+      documento: $el.attr('data-documento') || ''
     });
   });
   $('.btn-ver-docs').on('click', function(){

@@ -270,20 +270,39 @@ def _text_from_pdf_bytes(pdf_bytes: bytes) -> str:
 
 
 def _pdf_is_docusign_or_form_overlay(pdf_bytes: bytes, text: str = '') -> bool:
+    """True si el PDF parece firmado/aplanado por plataforma de firma electronica."""
+    return bool(_detect_esign_platform(pdf_bytes, text))
+
+
+# Plataformas de firma electronica frecuentes en contratos andinos/latam
+_ESIGN_MARKERS = (
+    # platform, byte needles, text needles (lower)
+    ('docusign', (b'DocuSign', b'docusign', b'DOCUSIGN'), ('docusign', 'envelope id')),
+    ('zapsign', (b'ZapSign', b'zapsign', b'ZAPSIGN', b'zap-sign'), ('zapsign', 'zap sign')),
+    ('adobe_sign', (b'Adobe Sign', b'AdobeSign', b'echosign'), ('adobe sign', 'echosign')),
+    ('clicksign', (b'ClickSign', b'clicksign', b'CLICKSIGN'), ('clicksign',)),
+    ('hellosign', (b'HelloSign', b'hellosign', b'Dropbox Sign'), ('hellosign', 'dropbox sign')),
+)
+
+
+def _detect_esign_platform(pdf_bytes: bytes, text: str = '') -> str:
     """
-    PDFs firmados/aplanados (DocuSign u overlays FormXob): el texto de pypdf suele ser
-    solo valores de campos; las etiquetas viven en XObjects no decodificables.
+    Detecta plataforma de firma electronica por huellas en bytes/texto del PDF.
+    Retorna id corto (docusign, zapsign, ...) o '' si no hay senal.
     """
     low = (text or '').lower()
-    if 'docusign' in low:
-        return True
-    head = pdf_bytes[:2_000_000] if pdf_bytes else b''
-    if b'DocuSign' in head or b'docusign' in head:
-        return True
-    # Prefijo tipico de XObjects en estos contratos firmados Perla/etc.
+    head = pdf_bytes[:2_500_000] if pdf_bytes else b''
+    head_l = head.lower()
+    for platform, byte_needles, text_needles in _ESIGN_MARKERS:
+        for n in text_needles:
+            if n and n in low:
+                return platform
+        for n in byte_needles:
+            if n in head or n.lower() in head_l:
+                return platform
     if b'FormXob' in head:
-        return True
-    return False
+        return 'form_overlay'
+    return ''
 
 
 def _text_usable_for_extraccion(text: str, pdf_bytes: bytes | None = None) -> bool:
@@ -308,9 +327,10 @@ def _text_route_reason(text: str, pdf_bytes: bytes) -> str:
         return 'sin texto extraible (escaneado o solo imagen)'
     if len(text) < MIN_TEXT_CHARS:
         return f'texto corto ({len(text)} chars)'
-    if _pdf_is_docusign_or_form_overlay(pdf_bytes, text):
+    platform = _detect_esign_platform(pdf_bytes, text)
+    if platform:
         return (
-            f'PDF DocuSign/formulario firmado: pypdf solo ve campos '
+            f'PDF firmado ({platform}): pypdf solo ve campos '
             f'({len(text)} chars), sin etiquetas de contrato'
         )
     return f'texto no usable ({len(text)} chars)'
@@ -323,7 +343,7 @@ def _extract_pdf_text(proyecto: str, adj: str, descripcion_doc: str) -> str:
 OTROS_GATE_KEYWORDS = ('escritura', 'entrega')
 
 
-def _otros_texto_relevante(
+def _otros_otrosi_relevante(
     proyecto: str,
     adj: str,
     descripcion_doc: str,
@@ -331,22 +351,50 @@ def _otros_texto_relevante(
     keywords: tuple[str, ...] = OTROS_GATE_KEYWORDS,
 ) -> tuple[bool, str]:
     """
-    Chequeo barato con pypdf (sin LLM/vision).
-    True solo si hay texto suficiente y aparecen todas las keywords.
-    Escaneados / sin texto util -> False (nos quedamos con Promesa).
+    Gate para Otros / Otrosi (barato, sin LLM).
+
+    1) Si el texto tiene las keywords de fechas -> incluir.
+    2) Si no: si hay firma electronica (DocuSign, ZapSign, etc.) -> incluir
+       y analizar con vision (asumimos enmienda/otros relevante firmado).
+    3) Si no hay keywords ni firma -> omitir.
     """
     try:
         pdf_bytes = _load_pdf_bytes(proyecto, adj, descripcion_doc)
         text = _text_from_pdf_bytes(pdf_bytes)
     except Exception as exc:
         return False, f'no legible: {exc}'[:180]
-    if not _text_usable_for_extraccion(text, pdf_bytes=pdf_bytes):
-        return False, _text_route_reason(text, pdf_bytes)
-    low = text.lower()
-    missing = [k for k in keywords if k not in low]
-    if missing:
-        return False, f'sin palabras: {", ".join(missing)}'
-    return True, 'ok'
+
+    low = (text or '').lower()
+    if text and len(text) >= MIN_TEXT_CHARS:
+        missing = [k for k in keywords if k not in low]
+        if not missing:
+            return True, 'keywords ok'
+
+    platform = _detect_esign_platform(pdf_bytes, text)
+    if platform:
+        return True, f'firma:{platform} -> vision'
+
+    if text and len(text) >= MIN_TEXT_CHARS:
+        missing = [k for k in keywords if k not in low]
+        return False, f'sin palabras ni firma: {", ".join(missing)}'
+    return False, 'sin texto util ni firma electronica'
+
+
+# Compat con llamadas previas
+_otros_texto_relevante = _otros_otrosi_relevante
+
+
+def _filtrar_relevantes_con_gate(proyecto: str, adj: str, candidatos: list) -> tuple[list, list]:
+    """Aplica gate keywords/firma. Retorna (elegidos_en_orden, omitidos[(nombre, reason)])."""
+    elegidos = []
+    omitidos = []
+    for c in candidatos:
+        ok, reason = _otros_otrosi_relevante(proyecto, adj, c[4].descripcion_doc)
+        if ok:
+            elegidos.append(c)
+        else:
+            omitidos.append((c[4].descripcion_doc or c[3], reason))
+    return elegidos, omitidos
 
 
 def _candidate_sort_key(c) -> tuple:
@@ -374,15 +422,42 @@ def _candidate_docs(proyecto: str, adj: str, docs_desde: datetime.date):
     return scored
 
 
+def _forced_doc_candidates(proyecto: str, adj: str, descripcion_doc: str) -> list:
+    """Candidato unico forzado (bypass de la seleccion automatica Promesa/Otros)."""
+    desc = (descripcion_doc or '').strip()
+    if not desc:
+        return []
+    qs = documentos_contratos.objects.using(proyecto).filter(adj=adj)
+    doc = qs.filter(descripcion_doc=desc).first()
+    if not doc:
+        alt = desc[:-4] if desc.lower().endswith('.pdf') else f'{desc}.pdf'
+        doc = qs.filter(descripcion_doc=alt).first()
+    if not doc:
+        desc_l = desc.lower()
+        for row in qs:
+            name = (row.descripcion_doc or '').strip()
+            if name.lower() == desc_l or name.lower() == f'{desc_l}.pdf':
+                doc = row
+                break
+    if not doc:
+        return []
+    tipo = _tipo_from_descripcion(doc.descripcion_doc or '') or 'Otros'
+    fecha = _parse_fecha_carga(doc.fecha_carga)
+    try:
+        tipo_rank = TIPOS_PRIORIDAD.index(tipo)
+    except ValueError:
+        tipo_rank = 99
+    return [(tipo_rank, fecha or datetime.date.min, doc.id_model, tipo, doc)]
+
+
 def _docs_para_analisis(proyecto: str, adj: str, candidates: list) -> tuple[list, str]:
     """
     Regla de seleccion:
     - Si hay Promesa: Promesa mas reciente.
-      Si hay Otros con fecha_carga posterior: solo se analiza con LLM si pypdf
-      encuentra texto con "escritura" y "entrega" (evita vision en escaneados).
-      Si no pasa el gate, se omite Otros y queda Promesa (+ alerta).
-      Luego Otrosi / Escritura.
-    - Si no hay Promesa: la Otros mas reciente, luego Escritura.
+      Otros posteriores y Otrosi: keywords (escritura+entrega) O firma electronica
+      (DocuSign/ZapSign/…) → incluir (firma → vision al analizar).
+      Luego Escritura.
+    - Si no hay Promesa: Otros mas reciente, Otrosi con el mismo gate, Escritura.
     """
     promesas = [c for c in candidates if c[3] == 'Promesa']
     otros = [c for c in candidates if c[3] == 'Otros']
@@ -398,29 +473,25 @@ def _docs_para_analisis(proyecto: str, adj: str, candidates: list) -> tuple[list
             c for c in otros
             if _candidate_sort_key(c) > _candidate_sort_key(promesa)
         ]
-        # Ya vienen newest-first dentro del tipo; tomar el mas reciente que pase gate
-        elegido = None
-        omitidos = []
-        for c in posteriores:
-            ok, reason = _otros_texto_relevante(proyecto, adj, c[4].descripcion_doc)
-            if ok:
-                elegido = c
-                break
-            omitidos.append((c[4].descripcion_doc or 'Otros', reason))
-        if elegido:
-            out.append(elegido)
+        elegidos_otros, omitidos_otros = _filtrar_relevantes_con_gate(proyecto, adj, posteriores)
+        if elegidos_otros:
+            out.append(elegidos_otros[0])
         elif posteriores:
-            sample = '; '.join(f'{n} ({r})' for n, r in omitidos[:2])
+            sample = '; '.join(f'{n} ({r})' for n, r in omitidos_otros[:2])
             alerta = (
-                'ALERTA: Otros posterior a Promesa sin texto util '
-                f'(escaneado o sin escritura/entrega). Revisar: {sample}'
+                'ALERTA: Otros posterior a Promesa sin keywords ni firma electronica. '
+                f'Revisar: {sample}'
             )[:1000]
-        out.extend(otrosi)
+
+        elegidos_otrosi, _omitidos_otrosi = _filtrar_relevantes_con_gate(proyecto, adj, otrosi)
+        out.extend(elegidos_otrosi)
         out.extend(escritura)
     else:
         if otros:
-            out.append(otros[0])
-        out.extend(otrosi)
+            elegidos_otros, _ = _filtrar_relevantes_con_gate(proyecto, adj, [otros[0]])
+            out.append(elegidos_otros[0] if elegidos_otros else otros[0])
+        elegidos_otrosi, _ = _filtrar_relevantes_con_gate(proyecto, adj, otrosi)
+        out.extend(elegidos_otrosi)
         out.extend(escritura)
     return out, alerta
 
@@ -621,8 +692,13 @@ def analyze_adj(
     credential_id: int | None = None,
     model_override: str = '',
     force_direct: bool | None = None,
+    documento_force: str = '',
 ) -> dict:
     docs_desde = docs_desde or DOCS_DESDE_DEFAULT
+    documento_force = (documento_force or '').strip()
+    if documento_force:
+        # Documento elegido a mano: siempre reprocesar ese PDF
+        force = True
     llm_config = None
     use_force_direct = False
     if credential_id:
@@ -660,12 +736,20 @@ def analyze_adj(
     attempts = 0
     last_error = ''
 
-    candidates = _candidate_docs(proyecto, adj, docs_desde)
-    analisis_docs, alerta_otros = _docs_para_analisis(proyecto, adj, candidates)
+    if documento_force:
+        analisis_docs = _forced_doc_candidates(proyecto, adj, documento_force)
+        alerta_otros = ''
+    else:
+        candidates = _candidate_docs(proyecto, adj, docs_desde)
+        analisis_docs, alerta_otros = _docs_para_analisis(proyecto, adj, candidates)
     if not analisis_docs:
         result = {
             'estado': AdjFechaDocumentoExtraccion.ESTADO_SIN_DOCUMENTO,
-            'error_msg': f'Sin documentos Promesa/Otros desde {docs_desde.isoformat()}',
+            'error_msg': (
+                f'Documento no encontrado: {documento_force}'
+                if documento_force
+                else f'Sin documentos Promesa/Otros desde {docs_desde.isoformat()}'
+            ),
         }
         if not dry_run:
             obj, _ = AdjFechaDocumentoExtraccion.objects.update_or_create(
@@ -833,6 +917,7 @@ def analyze_adj_cascade_step(
     cascade_reset: bool = False,
     credential_id: int | None = None,
     model_override: str = '',
+    documento_force: str = '',
 ) -> dict:
     """
     Un paso de cascada OpenAI → Gemini → Anthropic.
@@ -947,6 +1032,7 @@ def analyze_adj_cascade_step(
             }
         cred_id = cred.pk
 
+    documento_force = (documento_force or '').strip()
     step = analyze_adj(
         proyecto,
         adj,
@@ -958,13 +1044,17 @@ def analyze_adj_cascade_step(
         credential_id=cred_id,
         model_override=model_override or '',
         force_direct=False,
+        documento_force=documento_force,
     )
 
     before = dict(seed)
     merged = _merge_fill_gaps(seed, step)
     filled = [k for k in DATE_KEYS if not before.get(k) and merged.get(k)]
 
-    if step.get('documento_usado') and (
+    if documento_force:
+        doc_usado = step.get('documento_usado') or documento_force
+        tipo_usado = step.get('tipo_doc_esperado') or tipo_usado
+    elif step.get('documento_usado') and (
         not doc_usado or (tipo_usado != 'Promesa' and step.get('tipo_doc_esperado') == 'Promesa')
     ):
         doc_usado = step.get('documento_usado') or doc_usado
