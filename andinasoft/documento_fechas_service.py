@@ -192,15 +192,28 @@ def _resolve_doc_key(proyecto: str, adj: str, descripcion_doc: str) -> str:
     return keys[0]
 
 
-def doc_url(proyecto: str, adj: str, descripcion_doc: str) -> str:
-    """URL firmada MinIO/S3 (mismo media_service que produccion)."""
+def doc_url(
+    proyecto: str,
+    adj: str,
+    descripcion_doc: str,
+    *,
+    check_exists: bool = True,
+) -> str:
+    """
+    URL firmada MinIO/S3 (mismo media_service que produccion).
+
+    check_exists=False: no hace HEAD a MinIO (listados). La firma es local.
+    """
     if not descripcion_doc:
         return ''
     from andina.storage import media_service
 
-    key = _resolve_doc_key(proyecto, adj, descripcion_doc)
+    if check_exists:
+        key = _resolve_doc_key(proyecto, adj, descripcion_doc)
+    else:
+        key = _doc_storage_key(proyecto, adj, descripcion_doc)
     try:
-        return media_service.url_media(key, private=True)
+        return media_service.url_media(key, private=True, check_exists=check_exists)
     except Exception:
         from django.conf import settings
         from urllib.parse import quote
@@ -1218,6 +1231,19 @@ def list_adj_candidates(
             clientes_map[str(c.idTercero).strip()] = c
 
     rows = []
+    # Una sola instancia de storage para firmar URLs del listado (sin HEAD MinIO).
+    _url_storage = None
+    try:
+        from andina.storage import media_service as _ms
+        if _ms._read_from_s3():
+            from andina.storage_backends import PrivateMediaStorage
+            _url_storage = PrivateMediaStorage()
+        else:
+            from andina.storage_backends import LocalMediaStorage
+            _url_storage = LocalMediaStorage()
+    except Exception:
+        _url_storage = None
+
     for a in adjs:
         tid = str(a.idtercero1).strip() if a.idtercero1 else ''
         titular = ''
@@ -1235,6 +1261,18 @@ def list_adj_candidates(
         if estado_extraccion and estado_ext != estado_extraccion:
             continue
         doc_name = e.documento_usado if e else ''
+        documento_url = ''
+        if doc_name:
+            key = _doc_storage_key(proyecto, a.idadjudicacion, doc_name)
+            try:
+                documento_url = (
+                    _url_storage.url(key) if _url_storage is not None
+                    else doc_url(proyecto, a.idadjudicacion, doc_name, check_exists=False)
+                )
+            except Exception:
+                documento_url = doc_url(
+                    proyecto, a.idadjudicacion, doc_name, check_exists=False,
+                )
         rows.append({
             'adj': a.idadjudicacion,
             'inmueble': (a.idinmueble or '').strip(),
@@ -1248,7 +1286,7 @@ def list_adj_candidates(
             'ext_fecha_entrega': e.fecha_entrega if e else None,
             'estado_extraccion': estado_ext,
             'documento_usado': doc_name,
-            'documento_url': doc_url(proyecto, a.idadjudicacion, doc_name) if doc_name else '',
+            'documento_url': documento_url,
             'error_msg': e.error_msg if e else '',
             'provider': e.provider if e else '',
             'model': e.model if e else '',

@@ -91,10 +91,17 @@ def exists_media(path, private=True):
         return False
 
 
-def url_media(path, private=True):
-    """URL firmada MinIO/S3 en produccion; local como respaldo."""
+def url_media(path, private=True, *, check_exists=True):
+    """
+    URL firmada MinIO/S3 en produccion; local como respaldo.
+
+    check_exists=False: solo firma/presigna la key (sin HEAD a MinIO).
+    Usar en listados masivos; el exists por fila es lo que provoca 504 en prod.
+    """
     if _read_from_s3():
         storage = PrivateMediaStorage() if private else PublicMediaStorage()
+        if not check_exists:
+            return storage.url(path)
         try:
             if storage.exists(path):
                 return storage.url(path)
