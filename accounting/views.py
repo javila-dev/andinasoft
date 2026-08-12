@@ -1,6 +1,7 @@
 import math
 import json
 import os
+import hashlib
 import tempfile
 import unicodedata
 from django.shortcuts import render
@@ -5596,7 +5597,9 @@ def partners(request):
                         'class':'alert-success',
                         'partner':{
                             'idTercero':id_numero,
-                            'full_name': f'{nombres} {apellidos}'
+                            'full_name': f'{nombres} {apellidos}',
+                            'document_type': tipo_id,
+                            'es_persona_juridica': tipo_id in Partners.DOCUMENT_TYPES_PERSONA_JURIDICA,
                         },
                         'status_response':'success'
                     }
@@ -5852,6 +5855,85 @@ def _rango_fechas_gasto_caja():
     return fecha_min, today
 
 
+_GASTO_SOFT_DUP_DIAS = 20
+
+
+def _hash_uploaded_file(uploaded_file):
+    """SHA256 del contenido del archivo (el nombre no afecta)."""
+    if not uploaded_file:
+        return ''
+    uploaded_file.seek(0)
+    hasher = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        hasher.update(chunk)
+    uploaded_file.seek(0)
+    return hasher.hexdigest()
+
+
+def _gasto_por_soporte_hash(soporte_hash, *, exclude_pk=None):
+    """Gasto existente con el mismo PDF (contenido idéntico)."""
+    if not soporte_hash:
+        return None
+    qs = gastos_caja.objects.filter(soporte_hash=soporte_hash).select_related(
+        'forma_pago', 'tercero',
+    )
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs.order_by('pk').first()
+
+
+def _msj_gasto_hash_duplicado(existente):
+    caja_lbl = ''
+    if existente.forma_pago_id:
+        caja_lbl = getattr(existente.forma_pago, 'cuentabanco', None) or str(existente.forma_pago_id)
+    fecha = existente.fecha_gasto.isoformat() if existente.fecha_gasto else '—'
+    valor = f'{int(existente.valor or 0):,}'.replace(',', '.')
+    return (
+        f'No se puede registrar: el PDF de soporte es idéntico al del gasto '
+        f'#{existente.pk} (fecha {fecha}, valor ${valor}, caja {caja_lbl}, '
+        f'estado {existente.estado}). El nombre del archivo no importa: es el mismo contenido. '
+        f'Revisa ese gasto antes de cargar otro.'
+    )
+
+
+def _gastos_soft_duplicados(*, caja, tercero, valor, fecha_gasto, exclude_pk=None, dias=_GASTO_SOFT_DUP_DIAS):
+    """
+    Candidatos soft: misma caja + tercero + valor, fecha_gasto en los últimos `dias`
+    respecto a la fecha del gasto nuevo (no bloquea, solo alerta).
+    """
+    if not caja or not tercero or fecha_gasto is None or valor is None:
+        return []
+    desde = fecha_gasto - datetime.timedelta(days=dias)
+    qs = gastos_caja.objects.filter(
+        forma_pago=caja,
+        tercero=tercero,
+        valor=valor,
+        fecha_gasto__gte=desde,
+        fecha_gasto__lte=fecha_gasto,
+    ).select_related('tercero').order_by('-fecha_gasto', '-pk')
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return list(qs[:10])
+
+
+def _msj_gasto_soft_duplicado(candidatos, dias=_GASTO_SOFT_DUP_DIAS):
+    partes = []
+    for g in candidatos[:5]:
+        fecha = g.fecha_gasto.isoformat() if g.fecha_gasto else '—'
+        partes.append(f'#{g.pk} ({fecha}, {g.estado})')
+    lista = ', '.join(partes)
+    return (
+        f'Posible gasto duplicado: en los últimos {dias} días ya hay '
+        f'{len(candidatos)} gasto(s) con el mismo tercero y valor: {lista}. '
+        f'¿Deseas continuar de todos modos?'
+    )
+
+
+def _confirm_soft_duplicate_flag(request):
+    raw = (request.POST.get('confirm_soft_duplicate') or '').strip().lower()
+    return raw in ('1', 'true', 'on', 'yes', 'si', 'sí')
+
+
 #Cajas efectivo
 @login_required
 @group_perm_required(('accounting.view_gastos_caja',),raise_exception=True)
@@ -5890,6 +5972,10 @@ def cajas_efectivo(request):
                     
                     if solo_pendientes == 'true':
                         obj_gastos = obj_gastos.filter(estado='Pendiente')
+
+                    obj_gastos = obj_gastos.select_related(
+                        'tercero', 'concepto', 'cuenta_iva', 'cuenta_rte', 'usuario_aprueba',
+                    )
                         
                     for i in obj_gastos:
                         id_iva = i.cuenta_iva.id if i.cuenta_iva is not None else None
@@ -5929,6 +6015,7 @@ def cajas_efectivo(request):
                             'concepto':i.concepto.descripcion,
                             'concepto_id': i.concepto_id,
                             'tipo_documento_soporte': i.tipo_documento_soporte or '',
+                            'tercero_es_juridica': i.tercero.es_persona_juridica(),
                             'soporte_doc_prov': _media_url(i.tercero.soporte_identificacion),
                         })
                         
@@ -6315,6 +6402,15 @@ def cajas_efectivo(request):
                 
                 partner = Partners.objects.get(pk=nit_tercero)
                 
+                err_cc = gastos_caja.error_cuenta_cobro_persona_juridica(
+                    tipo_documento_soporte, partner,
+                )
+                if err_cc:
+                    return JsonResponse({
+                        'msj': err_cc,
+                        'class': 'alert-danger',
+                    })
+
                 soporte.name = soporte.name.translate(trans)
                 
                 if not soporte.name.endswith('.pdf'):
@@ -6324,11 +6420,54 @@ def cajas_efectivo(request):
                     }
                 
                     return JsonResponse(data)
+
+                soporte_hash = _hash_uploaded_file(soporte)
+                existente_hash = _gasto_por_soporte_hash(soporte_hash)
+                if existente_hash:
+                    return JsonResponse({
+                        'msj': _msj_gasto_hash_duplicado(existente_hash),
+                        'class': 'alert-danger',
+                        'duplicate_kind': 'hash',
+                        'existing_gasto_id': existente_hash.pk,
+                    })
+
+                try:
+                    valor_int = int(str(valor).replace(',', ''))
+                except (TypeError, ValueError):
+                    return JsonResponse({
+                        'msj': 'El valor del gasto es inválido.',
+                        'class': 'alert-danger',
+                    })
+
+                if not _confirm_soft_duplicate_flag(request):
+                    soft = _gastos_soft_duplicados(
+                        caja=cuenta,
+                        tercero=partner,
+                        valor=valor_int,
+                        fecha_gasto=fecha_gasto,
+                    )
+                    if soft:
+                        return JsonResponse({
+                            'msj': _msj_gasto_soft_duplicado(soft),
+                            'class': 'alert-warning',
+                            'duplicate_kind': 'soft',
+                            'requires_confirm': True,
+                            'soft_matches': [
+                                {
+                                    'pk': g.pk,
+                                    'fecha': g.fecha_gasto.isoformat() if g.fecha_gasto else '',
+                                    'estado': g.estado,
+                                    'valor': int(g.valor or 0),
+                                }
+                                for g in soft
+                            ],
+                        })
                 
                 gasto = gastos_caja.objects.create(
                     fecha_gasto = fecha_gasto, concepto = obj_concepto,
                     descripcion = descripcion.upper(),  tercero = partner,
-                    valor = valor.replace(',',''), soporte = soporte,
+                    valor = valor_int, soporte = soporte,
+                    soporte_hash = soporte_hash or None,
                     usuario_carga = request.user, forma_pago = cuenta,
                     tipo_documento_soporte = tipo_documento_soporte,
                 )
@@ -6385,6 +6524,14 @@ def cajas_efectivo(request):
                         'msj': 'No tienes permiso de realizar cambios sobre un gasto.',
                         'class': 'alert-danger',
                     })
+                err_cc = gastos_caja.error_cuenta_cobro_persona_juridica(
+                    tipo, obj_gasto.tercero,
+                )
+                if err_cc:
+                    return JsonResponse({
+                        'msj': err_cc,
+                        'class': 'alert-danger',
+                    })
                 obj_gasto.tipo_documento_soporte = tipo
                 obj_gasto.save(update_fields=['tipo_documento_soporte'])
                 return JsonResponse({
@@ -6415,9 +6562,20 @@ def cajas_efectivo(request):
                     }
                     
                     return JsonResponse(data)
+
+                soporte_hash = _hash_uploaded_file(file)
+                existente_hash = _gasto_por_soporte_hash(soporte_hash, exclude_pk=obj_gasto.pk)
+                if existente_hash:
+                    return JsonResponse({
+                        'msj': _msj_gasto_hash_duplicado(existente_hash),
+                        'class': 'alert-danger',
+                        'duplicate_kind': 'hash',
+                        'existing_gasto_id': existente_hash.pk,
+                    })
                 
                 obj_gasto.soporte = file
-                obj_gasto.save()
+                obj_gasto.soporte_hash = soporte_hash or None
+                obj_gasto.save(update_fields=['soporte', 'soporte_hash'])
                 
                 data = {
                     'msj':'Se cambió el soporte del gasto seleccionado.',
@@ -6850,6 +7008,15 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
 
+                err_cc = gastos_caja.error_cuenta_cobro_persona_juridica(
+                    tipo_documento_soporte, partner,
+                )
+                if err_cc:
+                    return JsonResponse({
+                        'msj': err_cc,
+                        'class': 'alert-danger',
+                    })
+
                 if soporte:
                     soporte.name = soporte.name.translate(trans)
                     if not soporte.name.endswith('.pdf'):
@@ -6857,7 +7024,42 @@ def cajas_efectivo(request):
                             'msj': 'El soporte debe ser un archivo en formato PDF.',
                             'class': 'alert-danger',
                         })
+                    soporte_hash = _hash_uploaded_file(soporte)
+                    existente_hash = _gasto_por_soporte_hash(soporte_hash, exclude_pk=obj_gasto.pk)
+                    if existente_hash:
+                        return JsonResponse({
+                            'msj': _msj_gasto_hash_duplicado(existente_hash),
+                            'class': 'alert-danger',
+                            'duplicate_kind': 'hash',
+                            'existing_gasto_id': existente_hash.pk,
+                        })
                     obj_gasto.soporte = soporte
+                    obj_gasto.soporte_hash = soporte_hash or None
+
+                if not _confirm_soft_duplicate_flag(request):
+                    soft = _gastos_soft_duplicados(
+                        caja=obj_gasto.forma_pago,
+                        tercero=partner,
+                        valor=valor_int,
+                        fecha_gasto=fecha_gasto,
+                        exclude_pk=obj_gasto.pk,
+                    )
+                    if soft:
+                        return JsonResponse({
+                            'msj': _msj_gasto_soft_duplicado(soft),
+                            'class': 'alert-warning',
+                            'duplicate_kind': 'soft',
+                            'requires_confirm': True,
+                            'soft_matches': [
+                                {
+                                    'pk': g.pk,
+                                    'fecha': g.fecha_gasto.isoformat() if g.fecha_gasto else '',
+                                    'estado': g.estado,
+                                    'valor': int(g.valor or 0),
+                                }
+                                for g in soft
+                            ],
+                        })
 
                 tipo_iva = request.POST.get('tipo_iva')
                 tipo_rte = request.POST.get('tipo_rte')
@@ -6964,6 +7166,12 @@ def cajas_efectivo(request):
         'form_reg_legaliz': forms.form_reg_legaliz,
         'abrir_mes_anterior':parametros.objects.get(descripcion='abrir_mes_anterior'),
         'es_contabilidad': contabilidad or superuser,
+        'partners_juridica_ids_json': json.dumps(list(
+            Partners.objects.filter(
+                document_type__in=Partners.DOCUMENT_TYPES_PERSONA_JURIDICA,
+            ).values_list('pk', flat=True)
+        )),
+        'msg_cuenta_cobro_juridica': gastos_caja.MSG_CUENTA_COBRO_PERSONA_JURIDICA,
     }
     
     """ lista = [78725,78730,78706,78707,78709,78714,78708,78715,78722,78724,78723,78720,78705,78735,78713,78728,78718,78737,78733,78727,78736,78726,78712,78734,78704,78721,78716,78729,78731,78710,78703,78719,78748,78741,78747,78742,78744,78738,78745,78743,78739,78740,78746,78770,78796,78786,78775,78755,78769,78790,78764,78792,78760,78779,78773,78791,78753,78758,78788,78780,78766,78793,78782,78771,78787,78762,78757,78778,78772,78777,78761,78781,78799,78797,78756,78765,78776,78783,78794,78785,77048,78759,78763,78767,77871,78774,78795,77602,78083,78077,78043,78066,78068,78064,78070,78055,78088,78087,78065,78082,78049,78086,78051,78034,78050,78072,77642,78067,78059,78045,78061,78078,78073,78058,78041,78084,78069,78048,78053,78044,78042,78054,78071,78038,78040,78052,78056,78035,78089,78079,78037,78075,78081,78033,78060,78076,78085,78047,78080,78074,78306,78247,78218,78205,78305,78219,78242,78217,78151,78126,78315,78204,77820,78187,78222,78276,78221,78181,78202,78201,78149,78150,77713,78284,78285,78203,78243,78233,78195,78317,78192,78177,78178,78209,77888,78180,78297,78230,78318,78208,78234,78168,78138,78193,78212,78277,78278,78146,78173,78307,78288,78179,78100,78105,78125,78140,78141,78142,78143,78144,78145,78154,78157,78169,78170,78171,78172,78174,78175,78186,78196,78197,78198,78199,78213,78214,78235,78236,78237,78238,78239,78251,78252,78260,78261,78262,78263,78264,78265,78272,78273,78274,78275,78283,78296,78298,78299,78300,78301,78302,78303,78312,78148,78223,78282,78194,78279,78281,78165,78132,78159,78309,78090,78103,78123,78131,78133,78134,78135,78136,78137,78152,78155,78158,78160,78161,78162,78163,78164,78183,78188,78189,78190,78191,78206,78207,78224,78225,78226,78227,78228,78248,78249,78253,78254,78255,78256,78257,78258,78266,78267,78268,78269,78280,78286,78287,78289,78290,78291,78292,78293,78229,78220,78316,78184,78294,78124,78210,78259,78106,78271,78156,78250,78310,78104,78153,78270,78176,78314,78182,78139,78313,78244,78232,78185,78295,78231,78216,78240,78311,78246,78215,78304,78211,78245,78200,78614,78547,78425,78560,78418,78643,78451,78346,78608,78631,78594,78429,78518,78552,78544,78639,78484,78469,78483,78446,78565,78460,78617,78432,78448,78509,78574,77940,78597,78499,78593,78615,78611,78581,78582,78416,78506,78433,78450,78546,78550,78584,78634,78488,78489,78470,78492,78596,78598,78424,78491,78503,78573,78575,78512,78515,78494,78495,78507,78342,78519,78536,78500,78595,78465,78517,78505,78479,78486,78490,78496,78504,78487,78449,78498,78516,78501,78514,78481,78480,78497,78502,78508,78511,78513,78635,78636,78482,78510,78609,78545,78553,78637,78579,78468,78606,78431,78434,78435,78610,78640,78633,78473,78638,78641,78532,78447,78627,78628,78632,77938,78612,78430,77915,77944,77956,78442,78629,78616,78485,78620,78556,78583,78414,78645,78589,78426,78466,78343,78567,78458,78445,78462,78417,78467,78537,78576,78548,78472,78599,78471,78534,78551,78549,78423,78522,78523,78524,78535,78649,78520,78539,78571,78619,78323,78461,78538,78540,78541,78542,78543,78572,78564,78525,78526,78528,78422,78563,78527,78529,78530,78562,78588,78642,78602,78437,78586,78452,78441,76985,78345,78439,78454,78455,78475,78521,78533,78569,78618,78648,78621,78436,78444,78463,78622,78623,78651,78568,78646,78443,78585,78413,78570,78459,78344,78347,78474,78478,78561,78590,78600,78601,78613,78592,78604,78457,78559,78464,78456,78578,78652,78554,78415,78438,78477,78558,78626,78577,78647,78591,78453,78650,78440,78644,78566,78624,78476,78557,78531,78587,78625,78428,78603,78427,78555,77736,78669,78684,78679,78676,78681,78672,78692,78673,78677,78675,78691,78685,78686,78693,78662,78661,78671,78670,78680,78687,78678,78690,78683,78682,78663]

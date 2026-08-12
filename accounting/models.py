@@ -789,6 +789,12 @@ class Partners(models.Model):
         if self.apellidos is not None:
             nc+= ' ' + self.apellidos.upper()
         return nc
+
+    # DIAN: NIT (31) y NIT de otro país (50) → persona jurídica.
+    DOCUMENT_TYPES_PERSONA_JURIDICA = ('31', '50')
+
+    def es_persona_juridica(self):
+        return (self.document_type or '') in self.DOCUMENT_TYPES_PERSONA_JURIDICA
     
 class conceptos_legalizacion(models.Model):
     descripcion = models.CharField(max_length=255)
@@ -906,6 +912,13 @@ class gastos_caja(models.Model):
     tercero = models.ForeignKey(Partners, related_name='tercero_gasto',on_delete=models.PROTECT)
     valor = models.IntegerField()
     soporte = models.FileField(upload_to='Cajas/Gastos', storage=PRIVATE_MEDIA_STORAGE)
+    soporte_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text='SHA256 del PDF de soporte (dedupe exacto por contenido).',
+    )
     aprobado = models.BooleanField(default=False)
     usuario_carga = models.ForeignKey(User, on_delete = models.PROTECT,
                                       related_name='user_carga_gasto')
@@ -952,6 +965,24 @@ class gastos_caja(models.Model):
         default='',
         help_text='Tipo de soporte para envio a Alegra (factura electronica o cuenta de cobro).',
     )
+
+    MSG_CUENTA_COBRO_PERSONA_JURIDICA = (
+        'El tercero es una persona jurídica y por lo tanto debe emitir factura. '
+        'En caso de no ser una factura electrónica, por favor escoge el concepto '
+        'de gasto no deducible.'
+    )
+
+    @classmethod
+    def error_cuenta_cobro_persona_juridica(cls, tipo_documento_soporte, tercero):
+        """
+        Si tipo es cuenta de cobro y el tercero es persona jurídica, devuelve el
+        mensaje de error; si no, None.
+        """
+        if (tipo_documento_soporte or '') != cls.TIPO_DOC_CUENTA_COBRO:
+            return None
+        if tercero is not None and getattr(tercero, 'es_persona_juridica', lambda: False)():
+            return cls.MSG_CUENTA_COBRO_PERSONA_JURIDICA
+        return None
         
     class Meta:
         verbose_name = 'Gasto de caja'

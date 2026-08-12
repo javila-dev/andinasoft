@@ -574,6 +574,23 @@
     return '—';
   }
 
+  const partnersJuridicaIds = new Set({{ partners_juridica_ids_json|safe }}.map(String));
+  const MSG_CUENTA_COBRO_JURIDICA = "{{ msg_cuenta_cobro_juridica|escapejs }}";
+
+  function terceroEsPersonaJuridica(nit) {
+    return partnersJuridicaIds.has(String(nit || ''));
+  }
+
+  function alertCuentaCobroPersonaJuridica() {
+    const msg = MSG_CUENTA_COBRO_JURIDICA || (
+      'El tercero es una persona jurídica y por lo tanto debe emitir factura. '
+      + 'En caso de no ser una factura electrónica, por favor escoge el concepto de gasto no deducible.'
+    );
+    $('#alert-title').text('Andinasoft dice:')
+    $('#alert-data').text(msg)
+    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+  }
+
   function positionContextMenu($menu, evt) {
     $menu.css({ display: 'block', visibility: 'hidden', left: 0, top: 0 });
     $menu.find('.dropdown-submenu').removeClass('submenu-left');
@@ -1247,6 +1264,10 @@
                 alert('Opcion invalida. Usa 1, 2 o deja vacio.')
                 break
               }
+              if (tipo === 'cuenta_cobro' && (line.tercero_es_juridica || terceroEsPersonaJuridica(line.nit_tercero))) {
+                alertCuentaCobroPersonaJuridica()
+                break
+              }
               $.post('/accounting/cajasefectivo', {
                 to_do: 'change_tipo_documento',
                 id_gasto: line.pk,
@@ -1690,6 +1711,12 @@
           return;
         }
       }
+      const tipoSoporte = ($('#id_tipo_documento_soporte').val() || '').trim()
+      const nitTercero = $('#id_nit_tercero').val()
+      if (tipoSoporte === 'cuenta_cobro' && terceroEsPersonaJuridica(nitTercero)) {
+        alertCuentaCobroPersonaJuridica()
+        return;
+      }
       $('#submit-id-registrar-leg').addClass('disabled').val('Cargando...')
       if (isEdit) {
         data.set('to_do', 'editar_gasto_devuelto')
@@ -1698,34 +1725,54 @@
         data.append('to_do','nuevogasto')
         data.append('id_caja',caja)
       }
-      $.ajax({
-        type:'POST',
-        url:'/accounting/cajasefectivo',
-        data:data,
-        contentType: false,
-        processData: false,
-        success: (xhr) => {
-          tabla_movimientos.ajax.reload()
-          resetGastoModalCreateMode()
-          $("#modalNuevaLegalizacion").modal('hide')
-          $('#alert-title').text('Andinasoft dice:')
-          $('#alert-data').text(xhr.msj)
-          $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
-          
-        },
-        error: (xhr) => {
-          $('#alert-title').text('Andinasoft dice:')
-          $('#alert-data').text('Ocurrió un error')
-          $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-        },
-        complete: (xhr) => {
-          if ($('#id_gasto_edit').val()) {
-            $('#submit-id-registrar-leg').removeClass('disabled').val('Guardar')
-          } else {
-            $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+      const submitGastoAjax = (formData) => {
+        $.ajax({
+          type:'POST',
+          url:'/accounting/cajasefectivo',
+          data:formData,
+          contentType: false,
+          processData: false,
+          success: (xhr) => {
+            if (xhr.duplicate_kind === 'soft' && xhr.requires_confirm) {
+              if (confirm(xhr.msj || 'Posible gasto duplicado. ¿Continuar?')) {
+                formData.set('confirm_soft_duplicate', '1')
+                submitGastoAjax(formData)
+                return
+              }
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').text('Registro cancelado: posible duplicado.')
+              $('#general-right-alert').toggleClass('show').toggleClass('alert-warning')
+              return
+            }
+            if (xhr.class === 'alert-danger') {
+              $('#alert-title').text('Andinasoft dice:')
+              $('#alert-data').text(xhr.msj)
+              $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+              return
+            }
+            tabla_movimientos.ajax.reload()
+            resetGastoModalCreateMode()
+            $("#modalNuevaLegalizacion").modal('hide')
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text(xhr.msj)
+            $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
+            
+          },
+          error: (xhr) => {
+            $('#alert-title').text('Andinasoft dice:')
+            $('#alert-data').text('Ocurrió un error')
+            $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+          },
+          complete: (xhr) => {
+            if ($('#id_gasto_edit').val()) {
+              $('#submit-id-registrar-leg').removeClass('disabled').val('Guardar')
+            } else {
+              $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+            }
           }
-        }
-      })
+        })
+      }
+      submitGastoAjax(data)
     })
     $('#modalNuevaLegalizacion').on('hidden.bs.modal', function(){
       resetGastoModalCreateMode()
@@ -1754,6 +1801,9 @@
             $("#modalcreatepartner").modal('hide')
             $("#id_nit_tercero").append(`<option value="${xhr.partner.idTercero}">${xhr.partner.full_name}</option>`)
             document.querySelector("#id_nit_tercero").fstdropdown.rebind()
+            if (xhr.partner.es_persona_juridica) {
+              partnersJuridicaIds.add(String(xhr.partner.idTercero))
+            }
           }            
         },
         error: (xhr) => {
