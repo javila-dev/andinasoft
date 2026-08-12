@@ -64,9 +64,12 @@ Reglas generales:
 Reglas IMPORTANTES si el documento es PROMESA (o contrato de promesa de compraventa):
 - fecha_escritura y fecha_entrega suelen estar en la SEGUNDA PAGINA del PDF; prioriza esa zona para esas dos.
 - fecha_escritura: busca la clausula o parrafo de "otorgamiento de la escritura publica" (o redacciones muy similares: otorgar escritura, escritura publica). La fecha de escritura esta CERCA de ese texto, en el mismo parrafo o el inmediato.
-- fecha_contrato (firma/celebracion): busca PRIMERO en la ULTIMA pagina del PDF; si no aparece ahi, busca en la PENULTIMA pagina. Suele estar cerca de firmas, "en constancia", "se firma", ciudad y fecha al cierre.
+- fecha_contrato (firma/celebracion): prioriza el texto de aceptacion/firma de las partes, aunque NO este en la ultima hoja. Busca frases como:
+  "En señal de aceptación de lo aquí suscrito, firman LAS PARTES, el día …" (o variantes: "en senal de aceptacion", "firman las partes el dia", "en constancia de lo cual firman").
+  La fecha va justo despues de "el día" / "el dia" (puede venir como "10 de Octubre de 2.025" o "10 de octubre de 2025"; normalizala a YYYY-MM-DD).
+  Si no aparece esa formula, recien entonces busca en la ULTIMA pagina y, si falta, en la PENULTIMA (firmas, "se firma", ciudad y fecha al cierre).
 - No confundas fecha_escritura con fecha_entrega: escritura va con otorgamiento de escritura publica; entrega va con entrega del inmueble / entrega material.
-- No uses la fecha_contrato (firma al final) como fecha_escritura ni como fecha_entrega.
+- No uses la fecha_contrato (firma/aceptacion) como fecha_escritura ni como fecha_entrega.
 
 ENTREGA RELATIVA (muy frecuente en promesas nuevas, p.ej. "bien futuro" / "Perla Del Mar Territorio Campestre"):
 - Busca clausulas tipo "ENTREGA MATERIAL", "entrega del lote", "fecha aproximada de entrega".
@@ -100,7 +103,9 @@ USER_PROMPT_VISION = (
     "Analiza este PDF escaneado/firmado de venta inmobiliaria (imagenes/paginas del documento).\n"
     "Lee el contenido visual del contrato aunque no haya texto seleccionable.\n"
     "Si es promesa: pagina 2 para escritura y entrega (incluye clausula ENTREGA MATERIAL / meses desde firma); "
-    "fecha_contrato en la ultima pagina y, si no esta, en la penultima.\n\n"
+    "fecha_contrato: busca en TODO el documento la formula "
+    "\"En señal de aceptación de lo aquí suscrito, firman LAS PARTES, el día …\" "
+    "(no asumas que esta solo al final); si no esta, ultima/penultima pagina.\n\n"
     + FECHAS_RULES
 )
 
