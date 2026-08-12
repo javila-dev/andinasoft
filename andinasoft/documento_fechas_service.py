@@ -3,6 +3,7 @@ Extraccion de fechas certeras desde PDFs de venta (promesa / otrosi / otros).
 """
 from __future__ import annotations
 
+import calendar
 import datetime
 import io
 import json
@@ -53,20 +54,30 @@ FECHAS_RULES = """Clasifica el documento y extrae fechas pactadas si aparecen.
 
 Reglas generales:
 - fecha_contrato: fecha de firma/celebracion del contrato o promesa (no la de carga del archivo).
-- fecha_escritura: fecha pactada o comprometida de escritura publica.
-- fecha_entrega: fecha pactada o comprometida de entrega del inmueble.
+- fecha_escritura: fecha pactada o comprometida de escritura publica (calendario), si aparece.
+- fecha_entrega: fecha pactada o comprometida de entrega del inmueble (calendario), si aparece.
 - Si un otrosi MODIFICA fechas, usa las fechas NUEVAS del otrosi.
 - Si una fecha no aparece con claridad, usa null.
 - doc_tipo_detectado: uno de "promesa", "contrato", "otrosi", "escritura", "otro", "irrelevante".
-- util: true solo si el documento es promesa/contrato/otrosi/escritura relevante y aporta al menos una fecha o confirma ser ese tipo de contrato.
+- util: true solo si el documento es promesa/contrato/otrosi/escritura relevante y aporta al menos una fecha, meses de entrega, o confirma ser ese tipo de contrato.
 
 Reglas IMPORTANTES si el documento es PROMESA (o contrato de promesa de compraventa):
 - fecha_escritura y fecha_entrega suelen estar en la SEGUNDA PAGINA del PDF; prioriza esa zona para esas dos.
 - fecha_escritura: busca la clausula o parrafo de "otorgamiento de la escritura publica" (o redacciones muy similares: otorgar escritura, escritura publica). La fecha de escritura esta CERCA de ese texto, en el mismo parrafo o el inmediato.
-- fecha_entrega: busca el apartado o clausula "Entrega del inmueble" (o "entrega del inmueble"). La fecha de entrega esta en ese bloque.
 - fecha_contrato (firma/celebracion): busca PRIMERO en la ULTIMA pagina del PDF; si no aparece ahi, busca en la PENULTIMA pagina. Suele estar cerca de firmas, "en constancia", "se firma", ciudad y fecha al cierre.
-- No confundas fecha_escritura con fecha_entrega: escritura va con otorgamiento de escritura publica; entrega va con entrega del inmueble.
+- No confundas fecha_escritura con fecha_entrega: escritura va con otorgamiento de escritura publica; entrega va con entrega del inmueble / entrega material.
 - No uses la fecha_contrato (firma al final) como fecha_escritura ni como fecha_entrega.
+
+ENTREGA RELATIVA (muy frecuente en promesas nuevas, p.ej. "bien futuro" / "Perla Del Mar Territorio Campestre"):
+- Busca clausulas tipo "ENTREGA MATERIAL", "entrega del lote", "fecha aproximada de entrega".
+- Si NO hay fecha de calendario y dice que la entrega es a los N meses contados a partir de la firma del contrato
+  (ej. "se estima una fecha aproximada de entrega del lote, de 13 meses, contados a partir de la firma de este contrato"),
+  entonces:
+  - entrega_meses_desde_firma = N (entero, ej. 13)
+  - fecha_entrega = null (el sistema la calcula como fecha_contrato + N meses)
+- Si ademas dice que la fecha cierta de entrega quedara en la escritura publica, NO inventes fecha_entrega de calendario;
+  usa solo entrega_meses_desde_firma.
+- Si hay fecha de calendario explicita de entrega, usa fecha_entrega y deja entrega_meses_desde_firma en null.
 
 Responde exactamente con este JSON:
 {
@@ -75,6 +86,7 @@ Responde exactamente con este JSON:
   "fecha_contrato": "YYYY-MM-DD" o null,
   "fecha_escritura": "YYYY-MM-DD" o null,
   "fecha_entrega": "YYYY-MM-DD" o null,
+  "entrega_meses_desde_firma": null o entero,
   "notas": "breve"
 }"""
 
@@ -85,10 +97,9 @@ USER_PROMPT_TEMPLATE = (
 )
 
 USER_PROMPT_VISION = (
-    "Analiza este PDF escaneado de venta inmobiliaria (imagenes/paginas del documento).\n"
+    "Analiza este PDF escaneado/firmado de venta inmobiliaria (imagenes/paginas del documento).\n"
     "Lee el contenido visual del contrato aunque no haya texto seleccionable.\n"
-    "Si es promesa: pagina 2 para fecha_escritura (otorgamiento de la escritura publica) "
-    "y fecha_entrega (Entrega del inmueble); "
+    "Si es promesa: pagina 2 para escritura y entrega (incluye clausula ENTREGA MATERIAL / meses desde firma); "
     "fecha_contrato en la ultima pagina y, si no esta, en la penultima.\n\n"
     + FECHAS_RULES
 )
@@ -413,12 +424,56 @@ DATE_KEYS = ('fecha_contrato', 'fecha_escritura', 'fecha_entrega')
 CASCADE_PROVIDER_ORDER = ('openai', 'gemini', 'anthropic')
 
 
+def _add_months(d: datetime.date, months: int) -> datetime.date:
+    """Suma meses de calendario (ajusta dia si no existe en el mes destino)."""
+    months = int(months)
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    day = min(d.day, calendar.monthrange(y, m)[1])
+    return datetime.date(y, m, day)
+
+
+def _parse_meses_desde_firma(value) -> Optional[int]:
+    if value is None or value == '' or value is False:
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        s = str(value).strip()
+        m = re.search(r'(\d{1,3})', s)
+        if not m:
+            return None
+        n = int(m.group(1))
+    if 1 <= n <= 120:
+        return n
+    return None
+
+
+def _apply_entrega_relativa(payload: dict) -> dict:
+    """Si hay meses desde firma y fecha_contrato, calcula fecha_entrega faltante."""
+    out = dict(payload)
+    meses = out.get('entrega_meses_desde_firma')
+    if out.get('fecha_entrega') or not meses or not out.get('fecha_contrato'):
+        return out
+    try:
+        out['fecha_entrega'] = _add_months(out['fecha_contrato'], int(meses))
+    except Exception:
+        return out
+    notas = (out.get('notas') or '').strip()
+    hint = f'entrega={meses}m desde firma'
+    if hint not in notas:
+        out['notas'] = f'{notas}; {hint}'.strip('; ').strip()[:500]
+    return out
+
+
 def _merge_dates(base: dict, new: dict) -> dict:
     out = dict(base)
     for key in DATE_KEYS:
         if new.get(key):
             out[key] = new[key]
-    return out
+    if new.get('entrega_meses_desde_firma') and not out.get('entrega_meses_desde_firma'):
+        out['entrega_meses_desde_firma'] = new['entrega_meses_desde_firma']
+    return _apply_entrega_relativa(out)
 
 
 def _merge_fill_gaps(base: dict, new: dict) -> dict:
@@ -427,11 +482,16 @@ def _merge_fill_gaps(base: dict, new: dict) -> dict:
     for key in DATE_KEYS:
         if not out.get(key) and new.get(key):
             out[key] = new[key]
-    return out
+    if not out.get('entrega_meses_desde_firma') and new.get('entrega_meses_desde_firma'):
+        out['entrega_meses_desde_firma'] = new['entrega_meses_desde_firma']
+    return _apply_entrega_relativa(out)
 
 
 def _has_useful_dates(payload: dict) -> bool:
-    return any(payload.get(k) for k in DATE_KEYS)
+    if any(payload.get(k) for k in DATE_KEYS):
+        return True
+    # Meses desde firma cuentan aunque aun no haya fecha_contrato (se combina al merge)
+    return bool(payload.get('entrega_meses_desde_firma'))
 
 
 def _dates_complete(payload: dict) -> bool:
@@ -470,16 +530,20 @@ def list_cascade_credentials() -> list[dict]:
 
 
 def _parse_llm_fechas(data: dict, *, flujo: str) -> dict:
-    return {
+    parsed = {
         'doc_tipo_detectado': (data.get('doc_tipo_detectado') or '').strip().lower(),
         'util': bool(data.get('util')),
         'fecha_contrato': _parse_iso_date(data.get('fecha_contrato')),
         'fecha_escritura': _parse_iso_date(data.get('fecha_escritura')),
         'fecha_entrega': _parse_iso_date(data.get('fecha_entrega')),
+        'entrega_meses_desde_firma': _parse_meses_desde_firma(
+            data.get('entrega_meses_desde_firma'),
+        ),
         'notas': (data.get('notas') or '')[:500],
         'flujo': flujo,
         'raw': data,
     }
+    return _apply_entrega_relativa(parsed)
 
 
 def _analyze_text(text: str, *, config: LlmResolvedConfig | None = None) -> tuple[dict, object]:
@@ -580,6 +644,7 @@ def analyze_adj(
         'fecha_contrato': None,
         'fecha_escritura': None,
         'fecha_entrega': None,
+        'entrega_meses_desde_firma': None,
     }
     doc_usado = ''
     tipo_usado = ''
