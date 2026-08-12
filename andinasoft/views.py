@@ -9525,6 +9525,7 @@ def cartera_month_results(request):
         book = generar_libro_bonos(
             datos_por_proyecto,
             errores=failed_projects or None,
+            periodo=periodo,
         )
                 
         filename = f'Informe_cartera_periodo_{periodo}.xlsx'

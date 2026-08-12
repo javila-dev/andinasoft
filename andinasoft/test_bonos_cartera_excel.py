@@ -12,6 +12,7 @@ from andinasoft.bonos_cartera_excel import (
     bono_por_escala,
     construir_override,
     es_cashout,
+    etiqueta_periodo,
     generar_libro_bonos,
     normalizar_gestor,
 )
@@ -110,14 +111,31 @@ class BonosAgregacionTests(SimpleTestCase):
             'Oasis': [_fila()],
             'Proyecto Nuevo X': [_fila(asesor='NUEVO GESTOR', presupuesto=2000, recaudo_pptado=2000, recaudo_nopptado=0)],
         }
-        wb = generar_libro_bonos(datos)
-        self.assertIn('Override', wb.sheetnames)
-        self.assertIn('Escalas', wb.sheetnames)
+        wb = generar_libro_bonos(datos, periodo='202608')
+        self.assertEqual(wb.sheetnames[0], 'Override')
+        self.assertEqual(wb.sheetnames[1], 'Escalas')
         self.assertIn('Oasis', wb.sheetnames)
         self.assertIn('Proyecto Nuevo X', wb.sheetnames)
-        # Override debe listar ambos gestores
+        self.assertNotIn('Indicaciones', wb.sheetnames)
         ov = wb['Override']
-        gestores = {ov.cell(r, 1).value for r in range(2, 20) if ov.cell(r, 1).value}
+        self.assertIn('Agosto 2026', ov['A1'].value)
+        self.assertEqual(ov['A4'].value, 'Gestor')
+        self.assertEqual(ov['I4'].value, 'Bono OV')
+        gestores = {ov.cell(r, 1).value for r in range(1, 40) if ov.cell(r, 1).value}
         self.assertIn('ANA PEREZ', gestores)
         self.assertIn('NUEVO GESTOR', gestores)
+        self.assertTrue(any(str(v).startswith('TOTAL  ANA PEREZ') for v in gestores))
+        self.assertIn('TOTAL GENERAL', gestores)
+        # Totales van en las mismas columnas que el detalle (Bono OV = col I)
+        total_ana = next(
+            r for r in range(5, 40)
+            if ov.cell(r, 1).value and str(ov.cell(r, 1).value).startswith('TOTAL  ANA PEREZ')
+        )
+        self.assertEqual(ov.cell(total_ana, 9).number_format, '"$"#,##0.00')
+        self.assertGreater(ov.cell(total_ana, 9).value, 0)
         self.assertEqual(TASA_OV_DEFAULT, Decimal('0.002'))
+
+    def test_etiqueta_periodo(self):
+        self.assertEqual(etiqueta_periodo('202608'), 'Agosto 2026')
+        self.assertEqual(etiqueta_periodo('202601'), 'Enero 2026')
+        self.assertEqual(etiqueta_periodo(None), '')
