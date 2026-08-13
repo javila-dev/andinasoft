@@ -77,6 +77,9 @@ def informe_cartera_rows(proyecto: str, periodo: str, gestor_param):
     """
     Devuelve (lista de SimpleNamespace compatibles con ver_ppto.html, mensaje_error).
 
+    Excluye ventas del mes (fechacontrato >= primer día del periodo), igual que el
+    recaudo del dashboard de cartera.
+
     gestor_param: None o '' = sin filtro por gestor. En MySQL el SP con NULL en el
     segundo parámetro hace que LIKE CONCAT('%',NULL,'%') no devuelva filas; aquí
     omitimos el filtro para equivaler al uso en la aplicación (admin / NULL).
@@ -181,6 +184,7 @@ def informe_cartera_rows(proyecto: str, periodo: str, gestor_param):
         Adjudicacion.objects.using(proyecto)
         .exclude(origenventa='Canje')
         .filter(Q(estado__isnull=True) | ~Q(estado__startswith='Des'))
+        .filter(Q(fechacontrato__isnull=True) | Q(fechacontrato__lt=fecha_corte))
         .annotate(
             _cliente=nombre_adj,
             _recaudo=Coalesce(recaudo_mes, _ZERO),
