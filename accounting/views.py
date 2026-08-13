@@ -5934,6 +5934,42 @@ def _confirm_soft_duplicate_flag(request):
     return raw in ('1', 'true', 'on', 'yes', 'si', 'sí')
 
 
+def _recalcular_valor_reembolso(reembolso):
+    """Sincroniza reembolsos_caja.valor con la suma de sus gastos."""
+    if reembolso is None:
+        return 0
+    total = gastos_caja.objects.filter(reembolso=reembolso).aggregate(
+        total=Sum('valor')
+    ).get('total') or 0
+    total = int(total)
+    if reembolso.valor != total:
+        reembolso.valor = total
+        reembolso.save(update_fields=['valor'])
+    return total
+
+
+def _estado_destino_tras_correccion(gasto):
+    """
+    Estado al cerrar una corrección (editar Devuelto / re-aprobar / revisar).
+    Si el gasto sigue ligado a un reembolso, vuelve a Reembolso.
+    """
+    if gasto.reembolso_id:
+        return gastos_caja.ESTADO_REEMBOLSO
+    previo = (gasto.estado_antes_devolver or '').strip()
+    return previo or gastos_caja.ESTADO_PENDIENTE
+
+
+def _volver_gasto_a_reembolso(gasto):
+    """Restaura estado Reembolso y el total del reembolso al que pertenece."""
+    if not gasto.reembolso_id:
+        return False
+    gasto.estado = gastos_caja.ESTADO_REEMBOLSO
+    gasto.estado_antes_devolver = ''
+    gasto.save(update_fields=['estado', 'estado_antes_devolver'])
+    _recalcular_valor_reembolso(gasto.reembolso)
+    return True
+
+
 #Cajas efectivo
 @login_required
 @group_perm_required(('accounting.view_gastos_caja',),raise_exception=True)
@@ -6642,15 +6678,27 @@ def cajas_efectivo(request):
                     }
                 
                 else:
-                    obj_gasto.estado = 'Aprobado'
                     obj_gasto.usuario_aprueba = request.user
                     obj_gasto.fecha_aprobacion = datetime.date.today()
-                    obj_gasto.save()
-                    
-                    data = {
-                        'msj':'Se aprobó el gasto seleccionado',
-                        'class':'alert-success'
-                    }
+                    if obj_gasto.reembolso_id:
+                        obj_gasto.estado = gastos_caja.ESTADO_REEMBOLSO
+                        obj_gasto.estado_antes_devolver = ''
+                        obj_gasto.save()
+                        _recalcular_valor_reembolso(obj_gasto.reembolso)
+                        data = {
+                            'msj': (
+                                'Se aprobó el gasto y volvió al estado Reembolso '
+                                'porque ya pertenece a un reembolso.'
+                            ),
+                            'class': 'alert-success',
+                        }
+                    else:
+                        obj_gasto.estado = gastos_caja.ESTADO_APROBADO
+                        obj_gasto.save()
+                        data = {
+                            'msj': 'Se aprobó el gasto seleccionado',
+                            'class': 'alert-success',
+                        }
                 
                 return JsonResponse(data)
                 
@@ -6871,9 +6919,12 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
                 if obj_gasto.reembolso_id:
+                    _volver_gasto_a_reembolso(obj_gasto)
                     return JsonResponse({
-                        'msj': 'El gasto ya pertenece a un reembolso; no se puede marcar como revisado.',
-                        'class': 'alert-danger',
+                        'msj': (
+                            'El gasto ya pertenecía a un reembolso; se restauró el estado Reembolso.'
+                        ),
+                        'class': 'alert-success',
                     })
                 obj_gasto.estado = gastos_caja.ESTADO_REVISADO
                 obj_gasto.save(update_fields=['estado'])
@@ -7106,7 +7157,7 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
 
-                estado_previo = (obj_gasto.estado_antes_devolver or '').strip() or gastos_caja.ESTADO_PENDIENTE
+                estado_previo = _estado_destino_tras_correccion(obj_gasto)
                 reembolso = obj_gasto.reembolso
 
                 obj_gasto.fecha_gasto = fecha_gasto
@@ -7125,11 +7176,7 @@ def cajas_efectivo(request):
                 obj_gasto.save()
 
                 if reembolso is not None:
-                    total_reemb = gastos_caja.objects.filter(reembolso=reembolso).aggregate(
-                        total=Sum('valor')
-                    ).get('total') or 0
-                    reembolso.valor = int(total_reemb)
-                    reembolso.save(update_fields=['valor'])
+                    _recalcular_valor_reembolso(reembolso)
 
                 return JsonResponse({
                     'msj': f'Se actualizó el gasto y volvió a estado {estado_previo}.',
