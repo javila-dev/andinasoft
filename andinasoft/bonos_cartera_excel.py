@@ -10,6 +10,10 @@ Logica equivalente a la hoja Override del template historico:
 - Total bonificable = rcdo_pptado + rcdo_no_pptado_sin_cashout
 - Bono override = total_bonificable * tasa_ov (default 0.2%)
 
+En el detalle: Recaudo presupuestado = MIN(total, ppto) y siempre entra al bono.
+No esperado = 0 si Cashout=Si (ese excedente ya pago bono aparte); si no, total-ppto.
+El Override suma presupuestado (col M) + no esperado (col N).
+
 La hoja Escalas se incluye como referencia parametrizable; el Override
 historico usaba tasa fija (no consultaba Escalas).
 """
@@ -41,7 +45,7 @@ ENCABEZADOS_DETALLE = [
     'Recaudo vencido',
     'Presupuesto total',
     'Recaudo presupuestado',
-    'Recaudo no presupuestado',
+    'No esperado',
     'Recaudo total',
     'Gestor',
     'Cashout',
@@ -53,7 +57,7 @@ ENCABEZADOS_OVERRIDE = [
     'Presupuesto',
     'Recaudo presupuestado',
     'Cumplimiento',
-    'Recaudo no presupuestado',
+    'No esperado (sin cashout)',
     'Recaudo bonificable',
     'Tasa OV',
     'Bono OV',
@@ -126,7 +130,7 @@ def normalizar_gestor(asesor) -> str:
 
 
 def es_cashout(valor) -> bool:
-    """True si la fila se considera cashout (no entra al rcdo no pptado bonificable)."""
+    """True si la fila es cashout: el no esperado no entra al bono; el presupuestado sí."""
     if valor is None:
         return False
     text = str(valor).strip().lower()
@@ -326,6 +330,36 @@ def _cashout_label(valor) -> str:
     return 'Sí' if es_cashout(valor) else 'No'
 
 
+def _excel_sheet_ref(nombre: str) -> str:
+    title = (nombre or '')[:31].replace("'", "''")
+    return f"'{title}'"
+
+
+def _formula_pptado(row: int) -> str:
+    """Recaudo esperado: siempre entra al bono, aunque haya cashout."""
+    return f'=MIN(O{row},L{row})'
+
+
+def _formula_nopptado(row: int) -> str:
+    """Cashout=Si: solo el no esperado queda en 0; el presupuestado se paga igual."""
+    return (
+        f'=IF(OR(UPPER(TRIM(Q{row}))="SI",UPPER(TRIM(Q{row}))="SÍ"),'
+        f'0,MAX(0,O{row}-L{row}))'
+    )
+
+
+def _formula_sumif_col(proyecto: str, col_letter: str, override_row: int) -> str:
+    sheet = _excel_sheet_ref(proyecto)
+    return (
+        f'=SUMIF({sheet}!P:P,A{override_row},{sheet}!{col_letter}:{col_letter})'
+    )
+
+
+def _formula_sum_rows(col_letter: str, rows) -> str:
+    refs = ','.join(f'{col_letter}{r}' for r in rows)
+    return f'=SUM({refs})' if refs else '=0'
+
+
 def _write_override_money_row(ws, row_i, values, *, zebra=False, subtotal=False, grand=False, highlight_bono=True):
     """values: tuple aligned with ENCABEZADOS_OVERRIDE."""
     ncol = len(ENCABEZADOS_OVERRIDE)
@@ -362,21 +396,6 @@ def _write_override_money_row(ws, row_i, values, *, zebra=False, subtotal=False,
     ws.row_dimensions[row_i].height = 18
 
 
-def _totales_a_values(etiqueta, tot, tasa_ov):
-    return (
-        etiqueta,
-        '',
-        float(tot.presupuesto),
-        float(tot.rcdo_pptado),
-        float(tot.cumplimiento),
-        float(tot.rcdo_nopptado_sin_cashout),
-        float(tot.total_bonificable),
-        float(tasa_ov),
-        float(tot.bono_override),
-        float(tot.bono_escala),
-    )
-
-
 def _write_detalle_sheet(wb, proyecto: str, filas):
     title = proyecto[:31]
     if title in wb.sheetnames:
@@ -405,8 +424,8 @@ def _write_detalle_sheet(wb, proyecto: str, filas):
             float(_dec(getattr(fila, 'ppto_vencido', 0))),
             float(_dec(getattr(fila, 'recaudo_vencido', 0))),
             float(_dec(getattr(fila, 'presupuesto', 0))),
-            float(_dec(getattr(fila, 'recaudo_pptado', 0))),
-            float(_dec(getattr(fila, 'recaudo_nopptado', 0))),
+            _formula_pptado(i),
+            _formula_nopptado(i),
             float(_dec(getattr(fila, 'recaudo_total', 0))),
             normalizar_gestor(getattr(fila, 'asesor', None)),
             _cashout_label(getattr(fila, 'cashout', None)),
@@ -483,7 +502,11 @@ def _write_override_sheet(wb, filas_ov, totales, *, tasa_ov=TASA_OV_DEFAULT, per
     ws.row_dimensions[1].height = 26
 
     ws.merge_cells(f'A2:{last_col}2')
-    cell_s = ws.cell(2, 1, f'Tasa OV: {float(tasa_ov):.2%}     ·     Columna Bono OV = valor a pagar')
+    cell_s = ws.cell(
+        2,
+        1,
+        f'Tasa OV: {float(tasa_ov):.2%}     ·     Cashout=Sí: se excluye solo el no esperado; el presupuestado sí entra al bono',
+    )
     cell_s.font = _font_subtitle()
     ws.row_dimensions[2].height = 18
 
@@ -503,7 +526,9 @@ def _write_override_sheet(wb, filas_ov, totales, *, tasa_ov=TASA_OV_DEFAULT, per
         empty.alignment = ALIGN_CENTER
         row_i += 1
     else:
+        subtotal_rows = []
         for gestor, grupo in groupby(filas_ov, key=lambda r: r.gestor):
+            data_rows = []
             for row in grupo:
                 zebra_on = not zebra_on
                 _write_override_money_row(
@@ -513,45 +538,60 @@ def _write_override_sheet(wb, filas_ov, totales, *, tasa_ov=TASA_OV_DEFAULT, per
                         row.gestor,
                         row.proyecto,
                         float(row.presupuesto),
-                        float(row.rcdo_pptado),
-                        float(row.cumplimiento),
-                        float(row.rcdo_nopptado_sin_cashout),
-                        float(row.total_bonificable),
+                        _formula_sumif_col(row.proyecto, 'M', row_i),
+                        f'=IF(C{row_i}=0,0,D{row_i}/C{row_i})',
+                        _formula_sumif_col(row.proyecto, 'N', row_i),
+                        f'=D{row_i}+F{row_i}',
                         float(tasa_ov),
-                        float(row.bono_override),
+                        f'=G{row_i}*H{row_i}',
                         float(row.bono_escala),
                     ),
                     zebra=zebra_on,
                 )
+                data_rows.append(row_i)
                 row_i += 1
             tot = totales_map.get(gestor)
-            if tot:
+            if tot and data_rows:
                 _write_override_money_row(
                     ws,
                     row_i,
-                    _totales_a_values(f'TOTAL  {gestor}', tot, tasa_ov),
+                    (
+                        f'TOTAL  {gestor}',
+                        '',
+                        _formula_sum_rows('C', data_rows),
+                        _formula_sum_rows('D', data_rows),
+                        f'=IF(C{row_i}=0,0,D{row_i}/C{row_i})',
+                        _formula_sum_rows('F', data_rows),
+                        f'=D{row_i}+F{row_i}',
+                        float(tasa_ov),
+                        f'=G{row_i}*H{row_i}',
+                        _formula_sum_rows('J', data_rows),
+                    ),
                     subtotal=True,
                 )
+                subtotal_rows.append(row_i)
                 row_i += 1
             row_i += 1  # espacio entre gestores
 
-        grand = SimpleNamespace(
-            presupuesto=_money(sum((t.presupuesto for t in totales), ZERO)),
-            rcdo_pptado=_money(sum((t.rcdo_pptado for t in totales), ZERO)),
-            rcdo_nopptado_sin_cashout=_money(sum((t.rcdo_nopptado_sin_cashout for t in totales), ZERO)),
-            total_bonificable=_money(sum((t.total_bonificable for t in totales), ZERO)),
-            bono_override=_money(sum((t.bono_override for t in totales), ZERO)),
-            bono_escala=_money(sum((t.bono_escala for t in totales), ZERO)),
-        )
-        ppto = grand.presupuesto
-        grand.cumplimiento = _pct((grand.rcdo_pptado / ppto) if ppto > 0 else ZERO)
-        _write_override_money_row(
-            ws,
-            row_i,
-            _totales_a_values('TOTAL GENERAL', grand, tasa_ov),
-            grand=True,
-        )
-        row_i += 1
+        if subtotal_rows:
+            _write_override_money_row(
+                ws,
+                row_i,
+                (
+                    'TOTAL GENERAL',
+                    '',
+                    _formula_sum_rows('C', subtotal_rows),
+                    _formula_sum_rows('D', subtotal_rows),
+                    f'=IF(C{row_i}=0,0,D{row_i}/C{row_i})',
+                    _formula_sum_rows('F', subtotal_rows),
+                    f'=D{row_i}+F{row_i}',
+                    float(tasa_ov),
+                    f'=G{row_i}*H{row_i}',
+                    _formula_sum_rows('J', subtotal_rows),
+                ),
+                grand=True,
+            )
+            row_i += 1
 
     _set_widths(ws, [28, 22, 16, 22, 14, 24, 20, 12, 14, 16])
     _apply_print_setup(ws, freeze='A5', title_rows='4:4')

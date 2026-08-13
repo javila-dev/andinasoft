@@ -90,7 +90,7 @@ class BonosAgregacionTests(SimpleTestCase):
         self.assertEqual(perla.bono_override, Decimal('800.00'))
         self.assertEqual(totales[0].bono_override, Decimal('3000.00'))
 
-    def test_cashout_excluye_nopptado(self):
+    def test_cashout_excluye_solo_nopptado(self):
         acc = defaultdict(lambda: {
             'presupuesto': Decimal('0'),
             'rcdo_pptado': Decimal('0'),
@@ -100,11 +100,18 @@ class BonosAgregacionTests(SimpleTestCase):
         agregar_fila_override(
             acc,
             'Oasis',
-            _fila(recaudo_pptado=0, presupuesto=100, recaudo_nopptado=50_000, cashout='Si'),
+            _fila(
+                recaudo_pptado=100_000,
+                presupuesto=100_000,
+                recaudo_nopptado=50_000,
+                cashout='Si',
+            ),
         )
         filas, _ = construir_override(acc)
+        self.assertEqual(filas[0].rcdo_pptado, Decimal('100000.00'))
         self.assertEqual(filas[0].rcdo_nopptado_sin_cashout, Decimal('0.00'))
-        self.assertEqual(filas[0].bono_override, Decimal('0.00'))
+        # Esperado sí se paga: 100_000 * 0.2% = 200
+        self.assertEqual(filas[0].bono_override, Decimal('200.00'))
 
     def test_generar_libro_sheets_dinamicas(self):
         datos = {
@@ -126,13 +133,21 @@ class BonosAgregacionTests(SimpleTestCase):
         self.assertIn('NUEVO GESTOR', gestores)
         self.assertTrue(any(str(v).startswith('TOTAL  ANA PEREZ') for v in gestores))
         self.assertIn('TOTAL GENERAL', gestores)
-        # Totales van en las mismas columnas que el detalle (Bono OV = col I)
-        total_ana = next(
+        oasis = wb['Oasis']
+        self.assertEqual(str(oasis.cell(2, 13).value), '=MIN(O2,L2)')
+        self.assertTrue(str(oasis.cell(2, 14).value).startswith('=IF('))
+        self.assertIn('Q2', str(oasis.cell(2, 14).value))
+        self.assertEqual(oasis.cell(2, 17).value, 'No')
+        ana_row = next(
             r for r in range(5, 40)
-            if ov.cell(r, 1).value and str(ov.cell(r, 1).value).startswith('TOTAL  ANA PEREZ')
+            if ov.cell(r, 1).value == 'ANA PEREZ'
         )
-        self.assertEqual(ov.cell(total_ana, 9).number_format, '"$"#,##0.00')
-        self.assertGreater(ov.cell(total_ana, 9).value, 0)
+        self.assertTrue(str(ov.cell(ana_row, 4).value).startswith('=SUMIF('))
+        self.assertIn('!M:M', str(ov.cell(ana_row, 4).value))
+        self.assertTrue(str(ov.cell(ana_row, 6).value).startswith('=SUMIF('))
+        self.assertIn('!N:N', str(ov.cell(ana_row, 6).value))
+        self.assertTrue(str(ov.cell(ana_row, 7).value).startswith('='))
+        self.assertTrue(str(ov.cell(ana_row, 9).value).startswith('='))
         self.assertEqual(TASA_OV_DEFAULT, Decimal('0.002'))
 
     def test_etiqueta_periodo(self):
