@@ -83,6 +83,7 @@ CARTA_LOGO_STATIC = {
     'Perla del Mar': 'img/logo-perla-mar-nuevo.png',
     'Vegas de Venecia': 'img/logo_vegas_de_venecia.png',
     'Carmelo Reservado': 'img/logo_carmelo_reservado.png',
+    'Casas de Verano': 'img/casas-de-verano450x.png',
 }
 CARTA_FONDO_DEFAULT = 'img/bg-andina.jpg'
 CARTA_FONDO_STATIC = {

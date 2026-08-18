@@ -1008,17 +1008,13 @@
       });
 
       var span = daysBetween(desde, hasta);
-      var ticks = [];
-      ticks.push(desde);
       var monthStarts = [];
       var cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
       if (desde.getDate() > 1) cursor.setMonth(cursor.getMonth() + 1);
       while (cursor < hasta) {
         monthStarts.push(new Date(cursor.getTime()));
-        if (span > 45) ticks.push(new Date(cursor.getTime()));
         cursor.setMonth(cursor.getMonth() + 1);
       }
-      ticks.push(hasta);
       if (gridEl) {
         monthStarts.forEach(function(t){
           var p = pct(t, desde, hasta);
@@ -1029,22 +1025,35 @@
           gridEl.appendChild(line);
         });
       }
-      var lastPct = -99;
-      ticks.forEach(function(t, idx){
-        var p = pct(t, desde, hasta);
-        var isEdge = idx === 0 || idx === ticks.length - 1;
-        if (!isEdge && p - lastPct < 8) return;
-        lastPct = p;
+
+      function addTick(t, p, kind){
         var lab = document.createElement('span');
         lab.className = 'bh-tick';
-        if (idx === 0) lab.classList.add('is-start');
-        if (idx === ticks.length - 1) lab.classList.add('is-end');
+        if (kind === 'start') lab.classList.add('is-start');
+        if (kind === 'end') lab.classList.add('is-end');
         lab.style.left = p + '%';
-        lab.textContent = (span <= 45 || isEdge)
-          ? fmt(t)
-          : t.toLocaleDateString('es-CO', {month: 'short', year: '2-digit'});
+        lab.textContent = (kind === 'month')
+          ? t.toLocaleDateString('es-CO', {month: 'short', year: '2-digit'})
+          : fmt(t);
         ticksEl.appendChild(lab);
-      });
+      }
+
+      if (span <= 45) {
+        addTick(desde, 0, 'start');
+        addTick(hasta, 100, 'end');
+      } else {
+        var EDGE_GAP = 12;
+        addTick(desde, 0, 'start');
+        var lastPct = 0;
+        monthStarts.forEach(function(t){
+          var p = pct(t, desde, hasta);
+          if (p < EDGE_GAP || p > 100 - EDGE_GAP) return;
+          if (p - lastPct < 8) return;
+          addTick(t, p, 'month');
+          lastPct = p;
+        });
+        if (100 - lastPct >= EDGE_GAP) addTick(hasta, 100, 'end');
+      }
 
       if (empty) empty.classList.toggle('d-none', visible > 0);
     }
