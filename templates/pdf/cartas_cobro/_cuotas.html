@@ -1,0 +1,40 @@
+{% load humanize %}
+<table class="cuotas">
+  <thead>
+    <tr>
+      <th>Fecha</th>
+      <th>Cuota</th>
+      <th class="num">Valor</th>
+      <th class="ctr">Días mora</th>
+      <th class="num">Interés de mora</th>
+      <th class="num">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in cuotas %}
+    <tr>
+      <td class="ctr">{{ c.fecha|date:"d/m/Y" }}</td>
+      <td class="ctr">{{ c.id_cuota }}</td>
+      <td class="num">${{ c.saldocuota|floatformat:0|intcomma }}</td>
+      <td class="ctr">{{ c.diasmora }}</td>
+      <td class="num">${{ c.saldomora|floatformat:0|intcomma }}</td>
+      <td class="num">${{ c.total|floatformat:0|intcomma }}</td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="6" class="ctr">No hay cuotas pendientes a la fecha.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  {% if cuotas %}
+  <tfoot>
+    <tr>
+      <td colspan="2" class="num">Totales</td>
+      <td class="num">${{ deuda.total_cuotas|floatformat:0|intcomma }}</td>
+      <td></td>
+      <td class="num">${{ deuda.total_mora|floatformat:0|intcomma }}</td>
+      <td class="num">${{ deuda.total_adeudado|floatformat:0|intcomma }}</td>
+    </tr>
+  </tfoot>
+  {% endif %}
+</table>

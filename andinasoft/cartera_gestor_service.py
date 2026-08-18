@@ -21,6 +21,7 @@ from andinasoft.informe_cartera_orm import (
     _recaudo_vencido,
 )
 from andinasoft.models import (
+    CarteraCartaConfig,
     CarteraCartaEnvio,
     CarteraCartaGeneracion,
     CarteraCheckpoint,
@@ -51,14 +52,44 @@ COMPROMISO_REGISTRO_LOOKBACK_DAYS = 120
 COMPROMISO_VENCIDO_MAX_DIAS = 60
 
 DEFAULT_CHECKPOINTS = (
-    ('lt30', '0 a 30', 1, 30, 10),
-    ('lt60', '30 a 60', 31, 60, 20),
-    ('lt90', '60 a 90', 61, 90, 30),
-    ('lt120', '90 a 120', 91, 120, 40),
-    ('gt120', 'Mas de 120', 121, None, 50),
+    # codigo, label, dias_desde, dias_hasta, orden
+    ('d30', '30 dias', 30, None, 10),
+    ('d45', '45 dias', 45, None, 20),
+    ('d60', '60 dias', 60, None, 30),
+    ('d90', '90 dias o mas', 90, None, 40),
 )
 
 STUB_PLANTILLA = 'pdf/cartas_cobro/stub.html'
+PLANTILLAS_POR_CODIGO = {
+    'd30': 'pdf/cartas_cobro/lt30.html',
+    'd45': 'pdf/cartas_cobro/lt60.html',
+    'd60': 'pdf/cartas_cobro/lt90.html',
+    'd90': 'pdf/cartas_cobro/d90.html',
+}
+
+CARTA_CIUDAD = 'Medellin'
+CARTA_TELEFONO = '301 8585672'
+CARTA_EMAIL = 'haroldtangarife@somosandina.co'
+CARTA_FIRMA_NOMBRE = {
+    'Oasis': 'OASIS DEL CARIBE',
+}
+CARTA_LOGO_STATIC = {
+    'Oasis': 'img/logo_oasis.png',
+    'Sandville Beach': 'img/sandville_beach.png',
+    'Tesoro Escondido': 'img/logo-Tesoro-Escondido.png',
+    'Perla del Mar': 'img/logo-perla-mar-nuevo.png',
+    'Vegas de Venecia': 'img/logo_vegas_de_venecia.png',
+    'Carmelo Reservado': 'img/logo_carmelo_reservado.png',
+}
+CARTA_FONDO_DEFAULT = 'img/bg-andina.jpg'
+CARTA_FONDO_STATIC = {
+    # PNG carta (Letter) por proyecto, cuando existan:
+    # 'Oasis': 'img/cartas_cobro/oasis.png',
+}
+MESES_ES = (
+    '', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+)
 
 BUCKET_KEYS = (
     ('por_vencer', 'Al dia / por vencer', 0),
@@ -73,6 +104,178 @@ BUCKET_LABELS = {codigo: label for codigo, label, _ in BUCKET_KEYS}
 BUCKET_CODIGOS = frozenset(BUCKET_LABELS)
 
 
+def plantilla_html_por_codigo(codigo: str) -> str:
+    return PLANTILLAS_POR_CODIGO.get(codigo) or STUB_PLANTILLA
+
+
+_UNIDADES_ES = (
+    'cero', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve',
+)
+_ESPECIALES_ES = {
+    10: 'diez', 11: 'once', 12: 'doce', 13: 'trece', 14: 'catorce', 15: 'quince',
+    16: 'dieciseis', 17: 'diecisiete', 18: 'dieciocho', 19: 'diecinueve',
+    20: 'veinte', 21: 'veintiun', 22: 'veintidos', 23: 'veintitres',
+    24: 'veinticuatro', 25: 'veinticinco', 26: 'veintiseis', 27: 'veintisiete',
+    28: 'veintiocho', 29: 'veintinueve',
+}
+_DECENAS_ES = {
+    30: 'treinta', 40: 'cuarenta', 50: 'cincuenta', 60: 'sesenta',
+    70: 'setenta', 80: 'ochenta', 90: 'noventa',
+}
+
+
+def dias_en_letras(n) -> str:
+    try:
+        n = int(n or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n < 0:
+        n = 0
+    if n < 10:
+        return _UNIDADES_ES[n]
+    if n in _ESPECIALES_ES:
+        return _ESPECIALES_ES[n]
+    if n < 100:
+        dec = (n // 10) * 10
+        uni = n % 10
+        base = _DECENAS_ES.get(dec, '')
+        if uni == 0:
+            return base
+        return f'{base} y {_UNIDADES_ES[uni]}'
+    if n == 100:
+        return 'cien'
+    if n < 200:
+        resto = n - 100
+        return f'ciento {dias_en_letras(resto)}'
+    if n < 1000:
+        cent = (n // 100) * 100
+        resto = n % 100
+        centenas = {
+            200: 'doscientos', 300: 'trescientos', 400: 'cuatrocientos',
+            500: 'quinientos', 600: 'seiscientos', 700: 'setecientos',
+            800: 'ochocientos', 900: 'novecientos',
+        }
+        base = centenas.get(cent, '')
+        if resto == 0:
+            return base
+        return f'{base} {dias_en_letras(resto)}'
+    return str(n)
+
+
+def fecha_en_letras(value) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, datetime.datetime):
+        value = value.date()
+    if not isinstance(value, datetime.date):
+        return str(value)
+    mes = MESES_ES[value.month] if 1 <= value.month <= 12 else ''
+    return f'{value.day} de {mes} del {value.year}'
+
+
+def id_cuota_label(tipocta, nrocta) -> str:
+    tipo = (tipocta or '').strip().upper()
+    if nrocta is None or nrocta == '':
+        return tipo
+    try:
+        nro = int(nrocta)
+    except (TypeError, ValueError):
+        return f'{tipo}{nrocta}'
+    return f'{tipo}{nro}'
+
+
+def firma_proyecto_carta(proyecto: str) -> str:
+    """Fallback de firma (sin consultar BD). Las cartas usan contacto_carta_proyecto."""
+    key = (proyecto or '').strip()
+    return CARTA_FIRMA_NOMBRE.get(key) or key.upper()
+
+
+def contacto_carta_proyecto(proyecto: str, *, config=None, lookup=True) -> dict:
+    """Telefono, correo y nombre de firma para pie / Atentamente, por proyecto."""
+    key = (proyecto or '').strip()
+    firma = firma_proyecto_carta(key)
+    telefono = CARTA_TELEFONO
+    email = CARTA_EMAIL
+    if lookup and config is None:
+        try:
+            config = CarteraCartaConfig.objects.filter(proyecto_id=key).first()
+        except Exception:
+            config = None
+    if config is not None:
+        if (getattr(config, 'firma_nombre', None) or '').strip():
+            firma = config.firma_nombre.strip()
+        telefono = (getattr(config, 'telefono', None) or '').strip()
+        email = (getattr(config, 'email', None) or '').strip()
+    return {
+        'firma_nombre': firma,
+        'telefono': telefono,
+        'email': email,
+    }
+
+
+def listar_config_cartas(nombres):
+    """Filas de UI: contacto efectivo por proyecto (BD o fallback)."""
+    nombres = list(nombres or [])
+    by_p = {
+        c.proyecto_id: c
+        for c in CarteraCartaConfig.objects.filter(proyecto_id__in=nombres)
+    }
+    rows = []
+    for nombre in nombres:
+        cfg = by_p.get(nombre)
+        contacto = contacto_carta_proyecto(nombre, config=cfg, lookup=False)
+        rows.append({
+            'proyecto': nombre,
+            'firma_nombre': (cfg.firma_nombre or '').strip() if cfg else '',
+            'firma_placeholder': contacto['firma_nombre'],
+            'telefono': contacto['telefono'],
+            'email': contacto['email'],
+        })
+    return rows
+
+
+def guardar_config_cartas(items, *, permitidos):
+    """Crea/actualiza CarteraCartaConfig. items: dicts proyecto/firma_nombre/telefono/email."""
+    permitidos = set(permitidos or [])
+    saved = 0
+    for item in items or []:
+        proyecto = (item.get('proyecto') or '').strip()
+        if not proyecto or proyecto not in permitidos:
+            continue
+        if not Proyectos.objects.filter(pk=proyecto).exists():
+            continue
+        CarteraCartaConfig.objects.update_or_create(
+            proyecto_id=proyecto,
+            defaults={
+                'firma_nombre': (item.get('firma_nombre') or '').strip()[:120],
+                'telefono': (item.get('telefono') or '').strip()[:40],
+                'email': (item.get('email') or '').strip()[:120],
+            },
+        )
+        saved += 1
+    return saved
+
+
+def logo_carta_static(proyecto: str) -> str:
+    return CARTA_LOGO_STATIC.get((proyecto or '').strip()) or ''
+
+
+def fondo_carta_static(proyecto: str) -> str:
+    return CARTA_FONDO_STATIC.get((proyecto or '').strip()) or CARTA_FONDO_DEFAULT
+
+
+def resolver_plantilla_carta(checkpoint):
+    rec = plantilla_activa_checkpoint(checkpoint)
+    mapped = PLANTILLAS_POR_CODIGO.get(getattr(checkpoint, 'codigo', None))
+    if rec is None and not mapped:
+        return None
+    return {
+        'motor': rec.motor if rec else CarteraCartaPlantilla.MOTOR_WEASYPRINT,
+        'plantilla': mapped or rec.plantilla,
+        'record': rec,
+    }
+
+
 def gestor_nombre_from_user(user) -> str:
     return f'{user.first_name} {user.last_name}'.upper().strip()
 
@@ -85,7 +288,7 @@ def is_supervisor_cartera(user) -> bool:
 
 
 def ensure_default_checkpoints(proyecto: str) -> None:
-    """Crea checkpoints + plantilla stub si el proyecto aun no tiene ninguno."""
+    """Crea checkpoints de carta (30/45/60/90+) si el proyecto aun no tiene ninguno."""
     try:
         proyecto_obj = Proyectos.objects.get(pk=proyecto)
     except Proyectos.DoesNotExist:
@@ -105,7 +308,7 @@ def ensure_default_checkpoints(proyecto: str) -> None:
         CarteraCartaPlantilla.objects.create(
             checkpoint=ck,
             motor=CarteraCartaPlantilla.MOTOR_WEASYPRINT,
-            plantilla=STUB_PLANTILLA,
+            plantilla=plantilla_html_por_codigo(codigo),
             activo=True,
         )
 
@@ -143,6 +346,34 @@ def monto_bucket(row: dict, codigo: str) -> Decimal:
     if codigo == 'por_vencer':
         return Decimal(row.get('por_vencer') or 0)
     return Decimal(row.get(codigo) or 0)
+
+
+def visual_nodes_cartas(checkpoints, dias_mora, total_pendiente):
+    """Nodos de la linea visual: 30 / 45 / 60 / 90+. Activo = ultimo umbral alcanzado."""
+    try:
+        dias = int(dias_mora or 0)
+    except (TypeError, ValueError):
+        dias = 0
+    total = Decimal(total_pendiente or 0)
+    alcanzado = [ck for ck in checkpoints if int(ck.dias_desde or 0) <= dias]
+    activo_codigo = alcanzado[-1].codigo if alcanzado else None
+    nodes = []
+    for ck in checkpoints:
+        umbral = int(ck.dias_desde or 0)
+        es_activo = ck.codigo == activo_codigo
+        if umbral >= 90:
+            label = '90 días+'
+        else:
+            label = f'{umbral} días'
+        nodes.append({
+            'codigo': ck.codigo,
+            'label': label,
+            'monto': total if es_activo else Decimal(0),
+            'activo': es_activo,
+            'superado': umbral <= dias and not es_activo,
+            'umbral': umbral,
+        })
+    return nodes
 
 
 def _parse_fecha_compromiso(raw):
@@ -945,6 +1176,7 @@ def deuda_detalle_adj(proyecto: str, adj: str, *, today=None):
     rows = list(
         saldos_adj.objects.using(proyecto)
         .filter(adj=adj, saldocuota__gt=0, fecha__lte=today)
+        .exclude(tipocta='SF')
         .order_by('fecha', 'nrocta')
     )
     cuotas = []
@@ -964,6 +1196,7 @@ def deuda_detalle_adj(proyecto: str, adj: str, *, today=None):
         cuotas.append({
             'nrocta': r.nrocta,
             'tipocta': r.tipocta or '',
+            'id_cuota': id_cuota_label(r.tipocta, r.nrocta),
             'fecha': r.fecha,
             'saldocapital': capital,
             'saldointcte': interes,
@@ -1284,21 +1517,15 @@ def timeline_payload(proyecto: str, adj: str, *, today=None):
     dias_mora = int(row.get('dias_mora') or 0)
     activo = bucket_codigo_from_dias(dias_mora)
 
-    visual_nodes = []
-    for codigo, label, umbral in BUCKET_KEYS:
-        visual_nodes.append({
-            'codigo': codigo,
-            'label': label,
-            'monto': monto_bucket(row, codigo),
-            'activo': codigo == activo,
-            'superado': dias_mora >= umbral and codigo != activo,
-            'umbral': umbral,
-        })
-
     checkpoints = list(
         CarteraCheckpoint.objects.filter(proyecto_id=proyecto, activo=True)
         .prefetch_related('plantillas')
         .order_by('orden', 'dias_desde')
+    )
+    visual_nodes = visual_nodes_cartas(
+        checkpoints,
+        dias_mora,
+        row.get('total_pendiente'),
     )
     carta_nodes = []
     ck_ids = [ck.id for ck in checkpoints]
@@ -1434,6 +1661,30 @@ def timeline_payload(proyecto: str, adj: str, *, today=None):
     }
 
 
+def nro_contrato_from_adj(adj_obj, adj_id: str) -> str:
+    """Numero de contrato (columna Contrato), no el id de adjudicacion."""
+    nro = str(getattr(adj_obj, 'contrato', None) or '').strip()
+    return nro or str(adj_id)
+
+
+def _adj_carta_info(proyecto: str, adj: str):
+    info = {
+        'nro_contrato': adj,
+        'fecha_contrato': None,
+        'inmueble': '',
+    }
+    try:
+        obj = Adjudicacion.objects.using(proyecto).only(
+            'idadjudicacion', 'contrato', 'fechacontrato', 'idinmueble',
+        ).get(pk=adj)
+    except Adjudicacion.DoesNotExist:
+        return info
+    info['nro_contrato'] = nro_contrato_from_adj(obj, adj)
+    info['fecha_contrato'] = obj.fechacontrato
+    info['inmueble'] = (obj.idinmueble or '').strip()
+    return info
+
+
 def plantilla_activa_checkpoint(checkpoint: CarteraCheckpoint):
     return (
         CarteraCartaPlantilla.objects.filter(checkpoint=checkpoint, activo=True)
@@ -1442,19 +1693,30 @@ def plantilla_activa_checkpoint(checkpoint: CarteraCheckpoint):
     )
 
 
-def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, *, today=None):
+def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, *, today=None, payload=None):
     today = today or datetime.date.today()
-    payload = timeline_payload(proyecto, adj, today=today)
+    payload = payload if payload is not None else timeline_payload(proyecto, adj, today=today)
     if payload is None:
         return None
     row = payload['row']
+    titular = payload.get('titular') or {}
+    nombre = (titular.get('nombre') or row.get('cliente') or '').strip()
+    deuda = payload.get('deuda') or {}
+    adj_info = _adj_carta_info(proyecto, adj)
+    fecha_ctr = adj_info.get('fecha_contrato')
+    contacto = contacto_carta_proyecto(proyecto)
     return {
         'proyecto': proyecto,
         'adj': adj,
         'cliente': row.get('cliente') or '',
+        'nombre_cliente': nombre,
+        'nro_contrato': adj_info.get('nro_contrato') or adj,
+        'fecha_contrato': fecha_ctr,
+        'fecha_contrato_letras': fecha_en_letras(fecha_ctr),
         'cartera': row.get('cartera') or '',
         'gestor': row.get('gestor') or '',
         'dias_mora': payload['dias_mora'],
+        'dias_mora_letras': dias_en_letras(payload['dias_mora']),
         'total_pendiente': row.get('total_pendiente') or 0,
         'por_vencer': row.get('por_vencer') or 0,
         'lt30': row.get('lt30') or 0,
@@ -1466,7 +1728,17 @@ def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, 
         'checkpoint': checkpoint,
         'checkpoint_label': checkpoint.label,
         'fecha': today,
+        'fecha_letras': fecha_en_letras(today),
         'fecha_consulta': payload['fecha_consulta'],
+        'ciudad': CARTA_CIUDAD,
+        'deuda': deuda,
+        'cuotas': deuda.get('cuotas') or [],
+        'inmueble': adj_info.get('inmueble') or '',
+        'logo_static': logo_carta_static(proyecto),
+        'fondo_static': fondo_carta_static(proyecto),
+        'firma_nombre': contacto['firma_nombre'],
+        'telefono_cartera': contacto['telefono'],
+        'email_cartera': contacto['email'],
     }
 
 

@@ -1,0 +1,55 @@
+{% extends "pdf/cartas_cobro/base.html" %}
+{% load humanize %}
+
+{% block asunto %}
+  <div class="asunto">ASUNTO: Requerimiento final de pago – Última gestión prejudicial</div>
+{% endblock %}
+
+{% block contenido %}
+  <p class="fecha">Medellín {{ fecha_letras }}</p>
+
+  <div class="destinatario">
+    <div class="label">Señor(a):</div>
+    <strong>{{ nombre_cliente|default:cliente }}</strong>
+  </div>
+
+  <div class="cuerpo">
+    <p>
+      Por medio de la presente nos permitimos informarle que la obligación en su
+      contrato No. <strong>{{ nro_contrato }}</strong>{% if fecha_contrato_letras %}
+      suscrito el día {{ fecha_contrato_letras }}{% endif %}
+      registra un atraso de {{ dias_mora_letras }} ({{ dias_mora }}) días, con un
+      saldo pendiente por valor de:
+    </p>
+  </div>
+
+  {% include "pdf/cartas_cobro/_cuotas.html" %}
+
+  <div class="cuerpo">
+    <p>
+      Pese a los recordatorios y requerimientos previamente enviados, la
+      obligación continúa en estado de mora.
+    </p>
+    <p>
+      En virtud de lo anterior, se requiere el pago inmediato de la totalidad
+      del saldo adeudado o la formalización de un acuerdo de pago dentro de los
+      próximos tres (3) días hábiles.
+    </p>
+    <p>
+      En caso de no recibir respuesta dentro del término indicado, la obligación
+      será remitida a cobro prejurídico, con el fin de iniciar las acciones
+      judiciales que resulten procedentes para la recuperación de la cartera,
+      incluyendo el cobro de intereses de mora.
+    </p>
+    <p>
+      De igual manera, la información de la obligación podrá ser tratada y
+      reportada ante las centrales de información financiera, siempre que se
+      hayan cumplido los requisitos y garantías previstos en la Ley 1266 de 2008
+      y demás normas aplicables.
+    </p>
+    <p>
+      Este constituye el último requerimiento prejudicial de pago antes del
+      inicio de las acciones correspondientes.
+    </p>
+  </div>
+{% endblock %}

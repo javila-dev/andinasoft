@@ -1,0 +1,56 @@
+{% extends "pdf/cartas_cobro/base.html" %}
+{% load humanize %}
+
+{% block asunto %}
+  <div class="asunto">ASUNTO: Requerimiento formal de pago – Obligación con {{ dias_mora }} días de mora</div>
+{% endblock %}
+
+{% block contenido %}
+  <p class="fecha">Medellín {{ fecha_letras }}</p>
+
+  <div class="destinatario">
+    <div class="label">Señor(a):</div>
+    <strong>{{ nombre_cliente|default:cliente }}</strong>
+  </div>
+
+  <div class="cuerpo">
+    <p>Cordial saludo.</p>
+    <p>
+      De acuerdo con nuestros registros, la obligación en su contrato No.
+      <strong>{{ nro_contrato }}</strong>{% if fecha_contrato_letras %}
+      suscrito el día {{ fecha_contrato_letras }}{% endif %}
+      presenta un atraso de {{ dias_mora_letras }} ({{ dias_mora }}) días, con un
+      saldo pendiente por valor de:
+    </p>
+  </div>
+
+  {% include "pdf/cartas_cobro/_cuotas.html" %}
+
+  <div class="cuerpo">
+    <p>
+      A la fecha no se evidencia el pago de la obligación ni un acuerdo que
+      permita su normalización.
+    </p>
+    <p>
+      En consecuencia, le solicitamos realizar el pago dentro de los próximos
+      cinco (5) días hábiles o comunicarse con nuestro Departamento de Cartera
+      para definir una alternativa de pago.
+    </p>
+    <p>
+      En caso de persistir el incumplimiento, la obligación podrá ser remitida a
+      gestión de cobro prejurídico y, de cumplirse los requisitos previstos en la
+      Ley 1266 de 2008 y demás normas aplicables, podrá iniciarse el
+      procedimiento correspondiente para el reporte de la información a las
+      centrales de riesgo, previo cumplimiento del deber de comunicación al
+      titular cuando legalmente sea exigible.
+    </p>
+    <p>
+      Nuestro interés continúa siendo alcanzar una solución amistosa que evite
+      mayores costos y actuaciones posteriores.
+    </p>
+    <p>
+      Agradecemos atender este requerimiento y esperamos contar con su pronta
+      respuesta.
+    </p>
+  </div>
+{% endblock %}

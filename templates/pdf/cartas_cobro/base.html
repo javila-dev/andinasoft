@@ -1,0 +1,206 @@
+{% load static %}
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: Letter;
+    margin: 2.35cm 1.9cm 1.4cm 1.9cm;
+    @top-right {
+      content: element(logo-running);
+      vertical-align: top;
+      padding-top: 0.28cm;
+    }
+  }
+  @page :first {
+    margin-top: 1.15cm;
+    @top-right { content: none; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10pt;
+    color: #222;
+    line-height: 1.38;
+  }
+  .fondo-hoja {
+    position: fixed;
+    z-index: -1;
+    top: 0;
+    left: -1.9cm;
+    width: 8.5in;
+    height: 11in;
+    object-fit: cover;
+    opacity: 0.28;
+  }
+  .logo-running {
+    position: running(logo-running);
+    text-align: right;
+  }
+  .letterhead {
+    width: 100%;
+    margin: 0 0 10pt 0;
+    border-collapse: collapse;
+  }
+  .letterhead td { vertical-align: top; }
+  .letterhead-left {
+    padding-right: 10pt;
+    padding-top: 2pt;
+  }
+  .letterhead-right {
+    width: 150pt;
+    text-align: right;
+    padding: 0 12pt 0 8pt;
+    vertical-align: top;
+  }
+  .logo { height: 62pt; width: auto; }
+  .asunto {
+    font-size: 12pt;
+    font-weight: bold;
+    margin: 0;
+    line-height: 1.3;
+  }
+  .fecha { margin: 0 0 12pt 0; }
+  .destinatario { margin: 0 0 10pt 0; }
+  .destinatario .label { margin-bottom: 2pt; }
+  .cuerpo p { margin: 0 0 8pt 0; text-align: justify; }
+  table.cuotas {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0 12pt 0;
+    font-size: 7.5pt;
+  }
+  table.cuotas th {
+    background: #1A4A4A;
+    color: #fff;
+    font-weight: bold;
+    text-align: center;
+    padding: 4pt 3pt;
+    border: 0.5pt solid #1A4A4A;
+  }
+  table.cuotas td {
+    padding: 3.5pt 3pt;
+    border: 0.5pt solid #cfd6d6;
+    vertical-align: middle;
+  }
+  table.cuotas td.num, table.cuotas th.num { text-align: right; }
+  table.cuotas td.ctr, table.cuotas th.ctr { text-align: center; }
+  table.cuotas tfoot td {
+    font-weight: bold;
+    background: #EDF4F4;
+    border-top: 1.2pt solid #1A4A4A;
+  }
+  .firma {
+    margin-top: 16pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .firma .atenta { margin-bottom: 12pt; }
+  .firma .empresa { font-weight: bold; }
+  .firma .area { margin-top: 2pt; }
+  .firma .contacto { margin-top: 6pt; font-size: 9pt; line-height: 1.35; }
+  .pie-banner {
+    position: fixed;
+    left: -1.9cm;
+    bottom: -1.4cm;
+    width: 8.5in;
+    margin: 0;
+    padding: 0;
+  }
+  .pie-accent {
+    height: 3.5pt;
+    background: #c9a227;
+    margin: 0;
+    padding: 0;
+  }
+  .pie-bar {
+    background: #1A4A4A;
+    color: #fff;
+    font-size: 8pt;
+    margin: 0;
+    padding: 0;
+  }
+  .pie-inner {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .pie-inner td {
+    color: #fff;
+    font-size: 8pt;
+    line-height: 1.2;
+    vertical-align: middle;
+    padding-top: 9pt;
+    padding-bottom: 9pt;
+    white-space: normal;
+  }
+  .pie-left {
+    text-align: left;
+    padding-left: 1.9cm;
+    padding-right: 8pt;
+  }
+  .pie-right {
+    text-align: right;
+    padding-right: 1.9cm;
+    padding-left: 8pt;
+    width: 1%;
+  }
+  .pie-right::after {
+    content: "Pág. " counter(page) " de " counter(pages);
+  }
+</style>
+</head>
+<body>
+  {% if fondo_static %}
+  <img class="fondo-hoja" src="{% static fondo_static %}" alt="" />
+  {% endif %}
+
+  {% if logo_static %}
+  <div class="logo-running">
+    <img src="{% static logo_static %}" alt="" class="logo" />
+  </div>
+  {% endif %}
+
+  <div class="pie-banner">
+    <div class="pie-accent"></div>
+    <div class="pie-bar">
+      <table class="pie-inner">
+        <tr>
+          <td class="pie-left">
+            <strong>{{ firma_nombre }}</strong>
+            · Departamento de Cartera{% if telefono_cartera %} · Tel. {{ telefono_cartera }}{% endif %}{% if email_cartera %} · {{ email_cartera }}{% endif %}
+          </td>
+          <td class="pie-right"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="letterhead">
+    <tr>
+      <td class="letterhead-left">
+        {% block asunto %}{% endblock %}
+      </td>
+      <td class="letterhead-right">
+        {% if logo_static %}
+        <img src="{% static logo_static %}" alt="" class="logo" />
+        {% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {% block contenido %}{% endblock %}
+
+  <div class="firma">
+    <p class="atenta">Atentamente,</p>
+    <div class="empresa">{{ firma_nombre }}</div>
+    <div class="area">Departamento de Cartera</div>
+    <div class="contacto">
+      {% if telefono_cartera %}Teléfono: {{ telefono_cartera }}{% if email_cartera %}<br>{% endif %}{% endif %}
+      {% if email_cartera %}Correo: {{ email_cartera }}{% endif %}
+    </div>
+  </div>
+</body>
+</html>

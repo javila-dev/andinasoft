@@ -92,6 +92,7 @@ urlpatterns = [
     path('cartera/carta_soporte/<proyecto>/<adj>/<int:envio_id>',cartera_gestor_views.cartera_soporte_carta,name='cartera carta soporte'),
     path('cartera/estado_cuenta/<proyecto>/<adj>',cartera_gestor_views.cartera_estado_cuenta,name='cartera estado cuenta'),
     path('cartera/asignar_gestor/<proyecto>',cartera_gestor_views.cartera_asignar_gestor,name='cartera asignar gestor'),
+    path('cartera/config_cartas',cartera_gestor_views.cartera_config_cartas,name='cartera config cartas'),
     path('cartera/reasignar/<proyecto>/<adj>',cartera_gestor_views.cartera_reasignar_adj,name='cartera reasignar adj'),
     path('cartera/otrosi',views.reestructuraciones_cartera),
     path('cartera/reporteov',views.cartera_month_results),

@@ -1,0 +1,47 @@
+{% extends "pdf/cartas_cobro/base.html" %}
+{% load humanize %}
+
+{% block asunto %}
+  <div class="asunto">ASUNTO: Recordatorio de pago – Obligación en mora (30 días)</div>
+{% endblock %}
+
+{% block contenido %}
+  <p class="fecha">Medellín {{ fecha_letras }}</p>
+
+  <div class="destinatario">
+    <div class="label">Señor(a):</div>
+    <strong>{{ nombre_cliente|default:cliente }}</strong>
+  </div>
+
+  <div class="cuerpo">
+    <p>Cordial saludo.</p>
+    <p>
+      De acuerdo con nuestros registros, la obligación en su contrato No.
+      <strong>{{ nro_contrato }}</strong>{% if fecha_contrato_letras %}
+      suscrito el día {{ fecha_contrato_letras }}{% endif %}
+      presenta un atraso de <strong>{{ dias_mora }}</strong> días, con un saldo
+      pendiente por valor de:
+    </p>
+  </div>
+
+  {% include "pdf/cartas_cobro/_cuotas.html" %}
+
+  <div class="cuerpo">
+    <p>
+      Con el presente comunicado le recordamos la importancia de normalizar su
+      obligación para evitar la generación de intereses de mora y demás
+      consecuencias derivadas del incumplimiento de las condiciones pactadas.
+    </p>
+    <p>
+      Entendemos que esta situación puede obedecer a circunstancias transitorias;
+      por ello, nuestro interés es brindarle la oportunidad de ponerse al día de
+      manera voluntaria y conservar una adecuada relación comercial.
+    </p>
+    <p>
+      Lo invitamos a efectuar el pago a la mayor brevedad o, si presenta alguna
+      dificultad, comunicarse con nuestro Departamento de Cartera para revisar
+      alternativas de normalización de su obligación.
+    </p>
+    <p>Agradecemos su atención y quedamos atentos a su pronta gestión.</p>
+  </div>
+{% endblock %}

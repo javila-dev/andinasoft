@@ -1,0 +1,67 @@
+{% extends "pdf/cartas_cobro/base.html" %}
+{% load humanize %}
+
+{% block asunto %}
+  <div class="asunto">ASUNTO: Último requerimiento de pago – Preaviso de terminación del contrato y remisión a cobro jurídico</div>
+{% endblock %}
+
+{% block contenido %}
+  <p class="fecha">Medellín, {{ fecha_letras }}</p>
+
+  <div class="destinatario">
+    <div class="label">Señor(a):</div>
+    <strong>{{ nombre_cliente|default:cliente }}</strong>
+  </div>
+
+  <div class="cuerpo">
+    <p>Cordial saludo.</p>
+    <p>
+      De conformidad con nuestros registros, la obligación derivada del contrato
+      No. <strong>{{ nro_contrato }}</strong> presenta un atraso de
+      {{ dias_mora_letras }} ({{ dias_mora }}) días, con un saldo pendiente por
+      valor de:
+    </p>
+  </div>
+
+  {% include "pdf/cartas_cobro/_cuotas.html" %}
+
+  <div class="cuerpo">
+    <p>
+      Durante este periodo, <strong>{{ firma_nombre }}</strong> ha adelantado diferentes gestiones
+      de cobranza y ha remitido los correspondientes requerimientos de pago, sin
+      que a la fecha se haya recibido el pago de la obligación o se haya
+      formalizado un acuerdo que permita su normalización.
+    </p>
+    <p>
+      En consecuencia, y de conformidad con las cláusulas del contrato y la
+      normatividad aplicable, mediante la presente se le notifica el inicio del
+      procedimiento para la terminación del contrato por incumplimiento de sus
+      obligaciones de pago, tal y como lo expresa la cláusula penal del
+      contrato.
+    </p>
+    <p>
+      En tal sentido, si dentro de los cinco (5) días hábiles siguientes al
+      recibo de esta comunicación no se acredita el pago total de la obligación
+      o no se suscribe un acuerdo de pago aceptado por la compañía, se procederá
+      a la terminación del contrato y a la remisión del expediente al área de
+      Cobro Jurídico para el inicio de las acciones legales correspondientes.
+    </p>
+    <p>
+      Así mismo, la información relacionada con la obligación podrá ser
+      reportada a los operadores de información financiera y crediticia, una vez
+      se hayan cumplido los requisitos establecidos en la Ley 1266 de 2008, sus
+      modificaciones y demás normas que la reglamentan.
+    </p>
+    <p>
+      Esta comunicación constituye el último requerimiento de pago y el preaviso
+      formal previo a la terminación del contrato y al inicio de las acciones
+      judiciales que correspondan.
+    </p>
+    <p>
+      Si desea evitar el avance del proceso, lo invitamos a comunicarse de
+      manera inmediata con nuestro Departamento de Cartera para efectuar el pago
+      o gestionar una alternativa de normalización, dentro del término
+      anteriormente indicado.
+    </p>
+  </div>
+{% endblock %}

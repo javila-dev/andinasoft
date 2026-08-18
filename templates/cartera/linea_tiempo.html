@@ -90,7 +90,13 @@
     line-height: 1.3;
   }
   .lt-cartas .card-ck.locked { opacity: .55; }
-  .lt-status { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
+  .lt-status { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: 0; }
+  .lt-ck-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .45rem;
+  }
   .lt-status .badge {
     font-weight: 600;
     font-size: .65rem;
@@ -358,7 +364,8 @@
   </div>
   {% endif %}
 
-  <h5 class="mb-0">Edad de cartera</h5>
+  <h5 class="mb-0">Línea de cobro</h5>
+  <p class="small text-muted mb-0">La carta se habilita al alcanzar cada umbral (30, 45, 60 y 90 días).</p>
   <div class="lt-track mb-4">
     {% for node in visual_nodes %}
     <div class="lt-node {% if node.activo %}activo{% elif node.superado %}superado{% endif %}">
@@ -372,34 +379,35 @@
   <div class="row">
     <div class="col-lg-5 lt-cartas mb-3">
       <h5>Cartas de cobro</h5>
-      <p class="small text-muted">Se habilitan cuando el cliente alcanza o supera el checkpoint (días de mora).</p>
+      <p class="small text-muted">Cada carta se habilita al cumplir o superar esos días de mora.</p>
       {% for cn in carta_nodes %}
       <div class="card-ck {% if cn.alcanzado %}ready{% else %}locked{% endif %}{% if cn.alcanzado and cn.generada %} generada{% endif %}{% if cn.alcanzado and cn.enviada %} enviada{% endif %}">
         <div class="d-flex justify-content-between align-items-start">
           <div>
-            <strong>{{cn.checkpoint.label}}</strong>
+            <div class="lt-ck-title">
+              <strong>{{cn.checkpoint.label}}</strong>
+              {% if cn.alcanzado %}
+              <div class="lt-status">
+                {% if cn.generada %}
+                <span class="badge badge-ok" title="{% if cn.ultima_generacion %}{{cn.ultima_generacion|date:'d/m/Y H:i'}}{% endif %}">
+                  <i class="fas fa-file-pdf"></i> Generada
+                </span>
+                {% else %}
+                <span class="badge badge-miss"><i class="fas fa-file"></i> Sin generar</span>
+                {% endif %}
+                {% if cn.enviada %}
+                <span class="badge badge-ok" title="{% if cn.ultimo_envio %}{{cn.ultimo_envio|date:'d/m/Y'}}{% endif %}">
+                  <i class="fas fa-paper-plane"></i> Enviada
+                </span>
+                {% else %}
+                <span class="badge badge-warn"><i class="fas fa-exclamation"></i> Sin envío</span>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
             <div class="small text-muted">
-              Desde {{cn.checkpoint.dias_desde}} días
-              {% if cn.checkpoint.dias_hasta %}hasta {{cn.checkpoint.dias_hasta}}{% else %}en adelante{% endif %}
+              A partir de {{cn.checkpoint.dias_desde}} días
             </div>
-            {% if cn.alcanzado %}
-            <div class="lt-status">
-              {% if cn.generada %}
-              <span class="badge badge-ok" title="{% if cn.ultima_generacion %}{{cn.ultima_generacion|date:'d/m/Y H:i'}}{% endif %}">
-                <i class="fas fa-file-pdf"></i> Generada
-              </span>
-              {% else %}
-              <span class="badge badge-miss"><i class="fas fa-file"></i> Sin generar</span>
-              {% endif %}
-              {% if cn.enviada %}
-              <span class="badge badge-ok" title="{% if cn.ultimo_envio %}{{cn.ultimo_envio|date:'d/m/Y'}}{% endif %}">
-                <i class="fas fa-paper-plane"></i> Enviada
-              </span>
-              {% else %}
-              <span class="badge badge-warn"><i class="fas fa-exclamation"></i> Sin envío</span>
-              {% endif %}
-            </div>
-            {% endif %}
           </div>
           <div class="text-right">
             {% if cn.alcanzado and cn.tiene_plantilla %}

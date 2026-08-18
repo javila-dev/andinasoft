@@ -18,15 +18,17 @@ from andinasoft.cartera_gestor_service import (
     cerrar_compromiso,
     crear_seguimiento,
     dashboard_payload_all,
+    guardar_config_cartas,
+    listar_config_cartas,
     eliminar_compromiso,
     filter_snapshot_for_gestor,
     is_supervisor_cartera,
     label_periodo_presupuesto,
     listado_asignaciones,
     listar_gestores_opciones,
-    plantilla_activa_checkpoint,
     registrar_envio_carta,
     registrar_generacion_carta,
+    resolver_plantilla_carta,
     timeline_payload,
     ultimo_periodo_presupuesto,
 )
@@ -34,6 +36,7 @@ from andinasoft.edades_cartera_service import edades_cartera_snapshot
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.forms import form_seguimiento
 from andinasoft.models import CarteraCartaEnvio, CarteraCheckpoint
+from andinasoft.presupuesto_cartera_service import proyectos_accesibles
 from andinasoft.promesa_pdf import ConfigDocumentoInvalida, generar_documento_pdf_directo
 from andinasoft.utilities import file_response_from_pdf_root, pdf_gen
 
@@ -307,6 +310,46 @@ def cartera_asignar_gestor(request, proyecto):
 
 @login_required
 @group_perm_required(perms=('andinasoft.change_presupuestocartera',), raise_exception=True)
+def cartera_config_cartas(request):
+    """UI supervisor: telefono, correo y nombre de firma de cartas por proyecto."""
+    if not is_supervisor_cartera(request.user):
+        raise PermissionDenied
+
+    accesibles = proyectos_accesibles(request.user)
+    alerta = False
+    titulo = None
+    mensaje = None
+
+    if request.method == 'POST':
+        proyectos = request.POST.getlist('row_proyecto')
+        firmas = request.POST.getlist('row_firma')
+        telefonos = request.POST.getlist('row_telefono')
+        emails = request.POST.getlist('row_email')
+        items = []
+        for i, proyecto in enumerate(proyectos):
+            items.append({
+                'proyecto': proyecto,
+                'firma_nombre': firmas[i] if i < len(firmas) else '',
+                'telefono': telefonos[i] if i < len(telefonos) else '',
+                'email': emails[i] if i < len(emails) else '',
+            })
+        saved = guardar_config_cartas(items, permitidos=accesibles)
+        alerta = True
+        titulo = 'Listo'
+        mensaje = f'Se actualizo el contacto de cartas en {saved} proyecto(s).'
+
+    rows = listar_config_cartas(accesibles)
+    context = {
+        'rows': rows,
+        'alerta': alerta,
+        'titulo_alerta': titulo,
+        'mensaje': mensaje,
+    }
+    return render(request, 'cartera/config_cartas.html', context)
+
+
+@login_required
+@group_perm_required(perms=('andinasoft.change_presupuestocartera',), raise_exception=True)
 def cartera_reasignar_adj(request, proyecto, adj):
     """POST rapido desde linea de tiempo: cambia gestor de un ADJ."""
     check_project(request, proyecto)
@@ -346,16 +389,16 @@ def cartera_descargar_carta(request, proyecto, adj, checkpoint_id):
     if not checkpoint.alcanzado(payload['dias_mora']):
         raise PermissionDenied('El cliente aun no alcanza este checkpoint')
 
-    plantilla = plantilla_activa_checkpoint(checkpoint)
+    plantilla = resolver_plantilla_carta(checkpoint)
     if plantilla is None:
         raise Http404('No hay plantilla activa para este checkpoint')
 
-    html_context = build_carta_context(proyecto, adj, checkpoint)
+    html_context = build_carta_context(proyecto, adj, checkpoint, payload=payload)
     filename = f'carta_cobro_{proyecto}_{adj}_{checkpoint.codigo}.pdf'.replace(' ', '_')
     try:
         result = generar_documento_pdf_directo(
-            plantilla.motor,
-            plantilla.plantilla,
+            plantilla['motor'],
+            plantilla['plantilla'],
             html_context=html_context,
             filename=filename,
         )

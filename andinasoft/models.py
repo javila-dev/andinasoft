@@ -469,6 +469,33 @@ class CarteraCartaGeneracion(models.Model):
         return f'{self.proyecto_id}/{self.adj} ck={self.checkpoint_id} {self.created_at}'
 
 
+class CarteraCartaConfig(models.Model):
+    """Contacto de cartera por proyecto (pie de pagina y Atentamente de las cartas)."""
+
+    proyecto = models.OneToOneField(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='cartera_carta_config',
+        db_constraint=False,
+    )
+    firma_nombre = models.CharField(
+        max_length=120,
+        blank=True,
+        default='',
+        help_text='Nombre en Atentamente y pie. Vacio = nombre del proyecto en mayusculas.',
+    )
+    telefono = models.CharField(max_length=40, blank=True, default='')
+    email = models.CharField(max_length=120, blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Config carta cobro'
+        verbose_name_plural = 'Config cartas cobro'
+
+    def __str__(self):
+        return f'{self.proyecto_id} / {self.telefono} / {self.email}'
+
+
 class PromesaOtrosi(models.Model):
     """Historial de otrosi/prorrogas de entrega y/o escritura por negocio."""
 

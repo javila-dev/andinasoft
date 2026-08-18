@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied
 from andinasoft.models import (asesores, clientes, Facturas, Pagos, timeline_radicados, Usuarios_Proyectos, 
                                 Avatars, Profiles, empresas,notificaciones_correo, parametros, proyectos, ConfigDocumento,
                                 PromesaOtrosi, PromesaCumplimiento, CarteraCheckpoint, CarteraCartaPlantilla,
-                                CarteraCartaEnvio, CarteraCartaGeneracion,
+                                CarteraCartaEnvio, CarteraCartaGeneracion, CarteraCartaConfig,
                                 IntegrationCredential, IntegrationPurposeMapping, AdjFechaDocumentoExtraccion)
 from andinasoft.shared_models import Inmuebles, ventas_nuevas, Parametros_Operaciones
 
@@ -291,6 +291,15 @@ class CarteraCartaGeneracionAdmin(admin.ModelAdmin):
     search_fields = ['adj', 'usuario__username']
     autocomplete_fields = ['proyecto', 'checkpoint', 'usuario']
     date_hierarchy = 'created_at'
+
+
+@admin.register(CarteraCartaConfig)
+class CarteraCartaConfigAdmin(admin.ModelAdmin):
+    list_display = ['proyecto', 'firma_nombre', 'telefono', 'email', 'updated_at']
+    search_fields = ['proyecto__proyecto', 'firma_nombre', 'telefono', 'email']
+    autocomplete_fields = ['proyecto']
+
+
 admin.site.register(Avatars,adminAvatars)
 admin.site.register(Profiles,adminProfiles)
 admin.site.register(empresas,adminEmpresas)

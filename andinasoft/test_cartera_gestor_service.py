@@ -12,14 +12,27 @@ from django.test import SimpleTestCase
 
 from andinasoft.cartera_gestor_service import (
     BUCKET_LABELS,
+    CARTA_EMAIL,
+    CARTA_TELEFONO,
+    DEFAULT_CHECKPOINTS,
+    STUB_PLANTILLA,
     bucket_codigo_from_dias,
+    contacto_carta_proyecto,
+    dias_en_letras,
     evaluar_cumplimiento_compromiso,
+    fecha_en_letras,
     filter_snapshot_for_gestor,
+    firma_proyecto_carta,
     gestor_nombre_from_user,
+    id_cuota_label,
     kpis_from_rows,
+    nro_contrato_from_adj,
+    plantilla_html_por_codigo,
+    visual_nodes_cartas,
     _clasificar_recaudos_adj,
     _parse_fecha_compromiso,
 )
+from andinasoft.models import CarteraCheckpoint
 
 
 class BucketHelpersTests(SimpleTestCase):
@@ -128,3 +141,100 @@ class BucketHelpersTests(SimpleTestCase):
             today=today, recaudos_cache={},
         )
         self.assertEqual(hoy['estado'], 'hoy')
+
+
+class CartaCobroHelpersTests(SimpleTestCase):
+    def test_fecha_en_letras(self):
+        self.assertEqual(fecha_en_letras(datetime.date(2026, 8, 18)), '18 de agosto del 2026')
+        self.assertEqual(fecha_en_letras(None), '')
+
+    def test_id_cuota_label(self):
+        self.assertEqual(id_cuota_label('CI', 2), 'CI2')
+        self.assertEqual(id_cuota_label('fn', '12'), 'FN12')
+        self.assertEqual(id_cuota_label('CI', None), 'CI')
+
+    def test_plantilla_lt30(self):
+        self.assertEqual(plantilla_html_por_codigo('d30'), 'pdf/cartas_cobro/lt30.html')
+        self.assertEqual(plantilla_html_por_codigo('d45'), 'pdf/cartas_cobro/lt60.html')
+        self.assertEqual(plantilla_html_por_codigo('d60'), 'pdf/cartas_cobro/lt90.html')
+        self.assertEqual(plantilla_html_por_codigo('d90'), 'pdf/cartas_cobro/d90.html')
+        self.assertEqual(plantilla_html_por_codigo('lt30'), STUB_PLANTILLA)
+
+    def test_dias_en_letras(self):
+        self.assertEqual(dias_en_letras(45), 'cuarenta y cinco')
+        self.assertEqual(dias_en_letras(60), 'sesenta')
+        self.assertEqual(dias_en_letras(30), 'treinta')
+        self.assertEqual(dias_en_letras(1), 'un')
+        self.assertEqual(dias_en_letras(121), 'ciento veintiun')
+
+    def test_nro_contrato_from_adj(self):
+        self.assertEqual(nro_contrato_from_adj(SimpleNamespace(contrato='19'), 'adj10'), '19')
+        self.assertEqual(nro_contrato_from_adj(SimpleNamespace(contrato='  19  '), 'adj10'), '19')
+        self.assertEqual(nro_contrato_from_adj(SimpleNamespace(contrato=''), 'adj10'), 'adj10')
+        self.assertEqual(nro_contrato_from_adj(SimpleNamespace(contrato=None), 'adj10'), 'adj10')
+
+    def test_firma_proyecto(self):
+        self.assertEqual(firma_proyecto_carta('Oasis'), 'OASIS DEL CARIBE')
+        self.assertEqual(firma_proyecto_carta('Sotavento'), 'SOTAVENTO')
+
+    def test_contacto_carta_fallback(self):
+        oasis = contacto_carta_proyecto('Oasis', lookup=False)
+        self.assertEqual(oasis['firma_nombre'], 'OASIS DEL CARIBE')
+        self.assertEqual(oasis['telefono'], CARTA_TELEFONO)
+        self.assertEqual(oasis['email'], CARTA_EMAIL)
+        sota = contacto_carta_proyecto('Sotavento', lookup=False)
+        self.assertEqual(sota['firma_nombre'], 'SOTAVENTO')
+
+    def test_contacto_carta_config(self):
+        cfg = SimpleNamespace(
+            firma_nombre='PROYECTO X',
+            telefono='300 1112233',
+            email='cartera@proyecto.co',
+        )
+        c = contacto_carta_proyecto('Sotavento', config=cfg, lookup=False)
+        self.assertEqual(c['firma_nombre'], 'PROYECTO X')
+        self.assertEqual(c['telefono'], '300 1112233')
+        self.assertEqual(c['email'], 'cartera@proyecto.co')
+
+    def test_contacto_carta_config_firma_vacia_usa_fallback(self):
+        cfg = SimpleNamespace(firma_nombre='  ', telefono='300 000', email='')
+        c = contacto_carta_proyecto('Oasis', config=cfg, lookup=False)
+        self.assertEqual(c['firma_nombre'], 'OASIS DEL CARIBE')
+        self.assertEqual(c['telefono'], '300 000')
+        self.assertEqual(c['email'], '')
+
+    def test_checkpoints_cartas(self):
+        umbrales = [(c[0], c[2]) for c in DEFAULT_CHECKPOINTS]
+        self.assertEqual(umbrales, [
+            ('d30', 30),
+            ('d45', 45),
+            ('d60', 60),
+            ('d90', 90),
+        ])
+        ck = CarteraCheckpoint(dias_desde=30)
+        self.assertFalse(ck.alcanzado(29))
+        self.assertTrue(ck.alcanzado(30))
+        self.assertTrue(ck.alcanzado(45))
+
+    def test_visual_nodes_cartas(self):
+        checkpoints = [
+            SimpleNamespace(codigo=c, label=l, dias_desde=d)
+            for c, l, d, _, _ in DEFAULT_CHECKPOINTS
+        ]
+        nodes = visual_nodes_cartas(checkpoints, 29, 1000)
+        self.assertEqual([n['label'] for n in nodes], ['30 días', '45 días', '60 días', '90 días+'])
+        self.assertFalse(any(n['activo'] or n['superado'] for n in nodes))
+
+        nodes = visual_nodes_cartas(checkpoints, 50, 7777730)
+        by = {n['codigo']: n for n in nodes}
+        self.assertTrue(by['d30']['superado'])
+        self.assertTrue(by['d45']['activo'])
+        self.assertEqual(by['d45']['monto'], Decimal('7777730'))
+        self.assertFalse(by['d60']['activo'] or by['d60']['superado'])
+        self.assertEqual(by['d60']['monto'], Decimal(0))
+
+        nodes = visual_nodes_cartas(checkpoints, 90, 500)
+        by = {n['codigo']: n for n in nodes}
+        self.assertTrue(by['d60']['superado'])
+        self.assertTrue(by['d90']['activo'])
+        self.assertEqual(by['d90']['monto'], Decimal(500))
