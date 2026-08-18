@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import calendar
 import datetime
+from collections import defaultdict
 from decimal import Decimal
 
 from django.db.models import Q, Sum
@@ -37,7 +38,9 @@ from andinasoft.presupuesto_cartera_service import (
 from andinasoft.shared_models import (
     Adjudicacion,
     InfoCartera,
+    PlanPagos,
     PresupuestoCartera,
+    Recaudos,
     Recaudos_general,
     Vista_Adjudicacion,
     saldos_adj,
@@ -342,35 +345,79 @@ def bucket_codigo_from_dias(dias_mora: int) -> str:
     return 'gt120'
 
 
+LINEA_COBRO_NODOS = (
+    # codigo, label, dias_desde del rango (por_vencer = 0)
+    ('por_vencer', 'Por vencer', 0),
+    ('lt30', '<30 días', 1),
+    ('d30', '30 días', 30),
+    ('d45', '45 días', 45),
+    ('d60', '60 días', 60),
+    ('d90', '90 días+', 90),
+)
+
+
+def codigo_nodo_linea(dias) -> str:
+    """Rango de la linea de cobro segun dias de esa cuota (no el max del ADJ)."""
+    try:
+        d = int(dias or 0)
+    except (TypeError, ValueError):
+        d = 0
+    if d <= 0:
+        return 'por_vencer'
+    if d < 30:
+        return 'lt30'
+    if d < 45:
+        return 'd30'
+    if d < 60:
+        return 'd45'
+    if d < 90:
+        return 'd60'
+    return 'd90'
+
+
+def montos_linea_cobro(cuotas, cuotas_por_vencer=None) -> dict:
+    """Suma el saldo de cada cuota en su propio nodo (no acumula en el activo)."""
+    montos = {codigo: Decimal('0') for codigo, _, _ in LINEA_COBRO_NODOS}
+    for c in cuotas or []:
+        codigo = codigo_nodo_linea(c.get('diasmora'))
+        montos[codigo] += Decimal(c.get('total') or 0)
+    for c in cuotas_por_vencer or []:
+        montos['por_vencer'] += Decimal(c.get('saldocuota') or c.get('total') or 0)
+    return montos
+
+
 def monto_bucket(row: dict, codigo: str) -> Decimal:
     if codigo == 'por_vencer':
         return Decimal(row.get('por_vencer') or 0)
     return Decimal(row.get(codigo) or 0)
 
 
-def visual_nodes_cartas(checkpoints, dias_mora, total_pendiente):
-    """Nodos de la linea visual: 30 / 45 / 60 / 90+. Activo = ultimo umbral alcanzado."""
+def visual_nodes_cartas(dias_mora, montos=None):
+    """Nodos: por vencer / <30 / 30 / 45 / 60 / 90+. Monto propio de cada rango."""
     try:
         dias = int(dias_mora or 0)
     except (TypeError, ValueError):
         dias = 0
-    total = Decimal(total_pendiente or 0)
-    alcanzado = [ck for ck in checkpoints if int(ck.dias_desde or 0) <= dias]
-    activo_codigo = alcanzado[-1].codigo if alcanzado else None
+    montos = montos or {}
+    activo_codigo = 'por_vencer' if dias <= 0 else 'lt30'
+    for codigo, _label, umbral in LINEA_COBRO_NODOS:
+        if codigo == 'por_vencer':
+            continue
+        if dias >= int(umbral):
+            activo_codigo = codigo
     nodes = []
-    for ck in checkpoints:
-        umbral = int(ck.dias_desde or 0)
-        es_activo = ck.codigo == activo_codigo
-        if umbral >= 90:
-            label = '90 días+'
+    for codigo, label, umbral in LINEA_COBRO_NODOS:
+        es_activo = codigo == activo_codigo
+        if codigo == 'por_vencer':
+            superado = dias > 0
         else:
-            label = f'{umbral} días'
+            superado = dias >= int(umbral) and not es_activo
         nodes.append({
-            'codigo': ck.codigo,
+            'codigo': codigo,
             'label': label,
-            'monto': total if es_activo else Decimal(0),
+            'monto': Decimal(montos.get(codigo) or 0),
             'activo': es_activo,
-            'superado': umbral <= dias and not es_activo,
+            'superado': superado,
             'umbral': umbral,
         })
     return nodes
@@ -1166,19 +1213,43 @@ def titulares_contacto(proyecto: str, adj: str):
     return {'titular': titular, 'otros': otros}
 
 
+def _cuota_from_saldo(r, today=None):
+    capital = Decimal(r.saldocapital or 0)
+    interes = Decimal(r.saldointcte or 0)
+    saldo = Decimal(r.saldocuota or 0)
+    mora = Decimal(r.saldomora or 0)
+    fecha = r.fecha
+    if today and fecha:
+        dias = (today - fecha).days if fecha < today else 0
+    else:
+        dias = int(r.diasmora or 0)
+    return {
+        'nrocta': r.nrocta,
+        'tipocta': r.tipocta or '',
+        'id_cuota': id_cuota_label(r.tipocta, r.nrocta),
+        'fecha': fecha,
+        'saldocapital': capital,
+        'saldointcte': interes,
+        'saldocuota': saldo,
+        'diasmora': dias,
+        'saldomora': mora,
+        'total': saldo + mora,
+    }
+
+
 def deuda_detalle_adj(proyecto: str, adj: str, *, today=None):
     """
     Cuotas pendientes a la fecha (saldos_cuotas) con mora por cuota.
 
-    Misma fuente que detalle ADJ / edades: saldos_adj con saldocuota > 0 y fecha <= hoy.
+    Fuente del Adeudado: saldos_adj con saldocuota > 0 y fecha <= hoy.
+    Por vencer: cuotas del mes corriente con fecha > hoy.
     """
     today = today or datetime.date.today()
-    rows = list(
-        saldos_adj.objects.using(proyecto)
-        .filter(adj=adj, saldocuota__gt=0, fecha__lte=today)
-        .exclude(tipocta='SF')
-        .order_by('fecha', 'nrocta')
-    )
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    end_month = datetime.date(today.year, today.month, last_day)
+    qs = saldos_adj.objects.using(proyecto).filter(adj=adj, saldocuota__gt=0).exclude(tipocta='SF')
+    rows = list(qs.filter(fecha__lte=today).order_by('fecha', 'nrocta'))
+    rows_pv = list(qs.filter(fecha__gt=today, fecha__lte=end_month).order_by('fecha', 'nrocta'))
     cuotas = []
     tot_capital = Decimal(0)
     tot_interes = Decimal(0)
@@ -1186,29 +1257,20 @@ def deuda_detalle_adj(proyecto: str, adj: str, *, today=None):
     tot_mora = Decimal(0)
     max_dias = 0
     for r in rows:
-        capital = Decimal(r.saldocapital or 0)
-        interes = Decimal(r.saldointcte or 0)
-        saldo = Decimal(r.saldocuota or 0)
-        mora = Decimal(r.saldomora or 0)
-        dias = int(r.diasmora or 0)
-        if dias > max_dias:
-            max_dias = dias
-        cuotas.append({
-            'nrocta': r.nrocta,
-            'tipocta': r.tipocta or '',
-            'id_cuota': id_cuota_label(r.tipocta, r.nrocta),
-            'fecha': r.fecha,
-            'saldocapital': capital,
-            'saldointcte': interes,
-            'saldocuota': saldo,
-            'diasmora': dias,
-            'saldomora': mora,
-            'total': saldo + mora,
-        })
-        tot_capital += capital
-        tot_interes += interes
-        tot_cuota += saldo
-        tot_mora += mora
+        item = _cuota_from_saldo(r, today=today)
+        if item['diasmora'] > max_dias:
+            max_dias = item['diasmora']
+        cuotas.append(item)
+        tot_capital += item['saldocapital']
+        tot_interes += item['saldointcte']
+        tot_cuota += item['saldocuota']
+        tot_mora += item['saldomora']
+    cuotas_pv = []
+    tot_pv = Decimal(0)
+    for r in rows_pv:
+        item = _cuota_from_saldo(r, today=today)
+        cuotas_pv.append(item)
+        tot_pv += item['saldocuota']
     return {
         'cuotas': cuotas,
         'count': len(cuotas),
@@ -1218,6 +1280,9 @@ def deuda_detalle_adj(proyecto: str, adj: str, *, today=None):
         'total_mora': tot_mora,
         'total_adeudado': tot_cuota + tot_mora,
         'dias_mora_max': max_dias,
+        'cuotas_por_vencer': cuotas_pv,
+        'total_por_vencer': tot_pv,
+        'montos_linea': montos_linea_cobro(cuotas, cuotas_pv),
     }
 
 
@@ -1506,6 +1571,531 @@ def dashboard_payload_all(
     }
 
 
+COMPORTAMIENTO_UMBRALES = (30, 45, 60, 90)
+COMPORTAMIENTO_VENTANA_DIAS = 365
+MORA_GRACIA_DIAS = 15
+# Color fijo por edad. La barra empieza tras la gracia (15-30), no en 0-30.
+MORA_EDADES = (
+    (15, 30, '15-30 días'),
+    (30, 45, '30 días'),
+    (45, 60, '45 días'),
+    (60, 90, '60 días'),
+    (90, None, '90+ días'),
+)
+COLOR_MORA_EDAD = {
+    0: '#f0b429',
+    15: '#f0b429',
+    30: '#e67e22',
+    45: '#d35400',
+    60: '#c0392b',
+    90: '#6c3483',
+}
+
+
+def _as_date(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    return None
+
+
+def fecha_pago_cuota(capital_due, movimientos, interes_due=0):
+    """Primera fecha en que capital + interés cubren la cuota (igual que pendiente)."""
+    due = Decimal(capital_due or 0) + Decimal(interes_due or 0)
+    if due <= 0:
+        return None
+    acc = Decimal('0')
+    ordered = []
+    for item in movimientos or []:
+        if isinstance(item, dict):
+            fecha = _as_date(item.get('fecha'))
+            cap = Decimal(item.get('capital') or 0)
+            inte = Decimal(item.get('interes') or 0)
+        else:
+            fecha = _as_date(item[0] if item else None)
+            cap = Decimal((item[1] if len(item) > 1 else 0) or 0)
+            inte = Decimal((item[2] if len(item) > 2 else 0) or 0)
+        if fecha is None:
+            continue
+        ordered.append((fecha, cap + inte))
+    ordered.sort(key=lambda x: x[0])
+    for fecha, abono in ordered:
+        acc += abono
+        if acc >= due:
+            return fecha
+    return None
+
+
+def color_umbral_mora(dias) -> str:
+    d = int(dias or 0)
+    if d >= 90:
+        return COLOR_MORA_EDAD[90]
+    if d >= 60:
+        return COLOR_MORA_EDAD[60]
+    if d >= 45:
+        return COLOR_MORA_EDAD[45]
+    if d >= 30:
+        return COLOR_MORA_EDAD[30]
+    if d >= MORA_GRACIA_DIAS:
+        return COLOR_MORA_EDAD[15]
+    return COLOR_MORA_EDAD[0]
+
+
+def segmentos_edad_mora(inicio, fin, origen=None):
+    """Parte [inicio, fin] por edad desde origen. Empieza en día 15 (gracia). Sin solape."""
+    origen = origen or inicio
+    segs = []
+    if not inicio or not fin or fin < inicio:
+        return segs
+    # Día origen+15 sigue en gracia (igual que estado de cuenta). Sin barra ni punto.
+    primer_mora = origen + datetime.timedelta(days=MORA_GRACIA_DIAS)
+    if fin <= primer_mora:
+        return segs
+    cursor = inicio
+    for lo, hi, label in MORA_EDADES:
+        a = origen + datetime.timedelta(days=int(lo))
+        if hi is None:
+            b = fin
+        else:
+            b = origen + datetime.timedelta(days=int(hi) - 1)
+        a = max(a, cursor, inicio)
+        b = min(b, fin)
+        if b >= a:
+            segs.append({
+                'inicio': a,
+                'fin': b,
+                'dias': int(lo),
+                'color': COLOR_MORA_EDAD[lo],
+                'label': label,
+            })
+            cursor = b + datetime.timedelta(days=1)
+        if hi is None or cursor > fin:
+            break
+    return segs
+
+
+def marcar_empalmes(bandas):
+    """join_izq/der: el tramo vecino empieza al día siguiente (un color termina, el otro empieza)."""
+    day = datetime.timedelta(days=1)
+    items = list(bandas or [])
+    for i, s in enumerate(items):
+        s['join_izq'] = i > 0 and items[i - 1]['fin'] + day == s['inicio']
+        s['join_der'] = i + 1 < len(items) and s['fin'] + day == items[i + 1]['inicio']
+    return items
+
+
+def merge_intervalos(intervalos):
+    """Une rangos [inicio, fin] que se solapan o estan a un dia."""
+    items = sorted((a, b) for a, b in (intervalos or []) if a and b and a <= b)
+    if not items:
+        return []
+    merged = [list(items[0])]
+    for start, end in items[1:]:
+        prev_s, prev_e = merged[-1]
+        if start <= prev_e + datetime.timedelta(days=1):
+            if end > prev_e:
+                merged[-1][1] = end
+        else:
+            merged.append([start, end])
+    return [(a, b) for a, b in merged]
+
+
+def episodios_mora(cuotas, *, today):
+    """Intervalos de mora medidos por la cuota impaga mas antigua en cada momento.
+
+    Si se paga la cuota vieja y queda otra mas reciente, la edad actual arranca
+    de esa (igual que edades de cartera). Ese tramo sigue abierto: no es salida
+    de mora, solo baja la edad y cambia el color. Salida = cero cuotas impagas.
+    """
+    today = _as_date(today)
+    # (fecha, kind, due) kind 1=pago/cierre, 0=vencimiento. Cierra primero el mismo dia.
+    events = []
+    for c in cuotas or []:
+        due = _as_date(c.get('fecha'))
+        if due is None or today is None or due > today:
+            continue
+        pagada = fecha_pago_cuota(
+            c.get('capital'),
+            c.get('pagos') or [],
+            interes_due=c.get('intcte') or 0,
+        )
+        if pagada and pagada <= due:
+            continue
+        if pagada is not None and pagada < due:
+            continue
+        events.append((due, 0, due))
+        if pagada is not None:
+            events.append((pagada, 1, due))
+    events.sort(key=lambda x: (x[0], -x[1], x[2]))
+
+    open_dues = []
+    episodios = []
+    current_oldest = None
+    period_start = None
+
+    def _oldest():
+        return min(open_dues) if open_dues else None
+
+    def _flush(end, abierto):
+        if current_oldest is None or period_start is None or end is None:
+            return
+        if end < period_start:
+            return
+        episodios.append({
+            'inicio': period_start,
+            'fin': end,
+            'origen': current_oldest,
+            'abierto': bool(abierto),
+        })
+
+    for t, kind, due in events:
+        if kind == 1:
+            try:
+                open_dues.remove(due)
+            except ValueError:
+                pass
+        else:
+            open_dues.append(due)
+        new_oldest = _oldest()
+        if new_oldest == current_oldest:
+            continue
+        if current_oldest is not None:
+            end = t
+            if new_oldest is not None:
+                end = t - datetime.timedelta(days=1)
+            if end >= period_start:
+                _flush(end, abierto=new_oldest is not None)
+        current_oldest = new_oldest
+        period_start = t if new_oldest is not None else None
+
+    if current_oldest is not None:
+        _flush(today, abierto=True)
+    return episodios
+
+
+def eventos_umbral_mora(episodios, umbrales=COMPORTAMIENTO_UMBRALES):
+    events = []
+    for ep in episodios or []:
+        if isinstance(ep, dict):
+            inicio = ep['inicio']
+            fin = ep['fin']
+            origen = ep.get('origen') or inicio
+        else:
+            inicio = origen = ep[0]
+            fin = ep[1]
+        for dias in umbrales:
+            marca = origen + datetime.timedelta(days=int(dias))
+            if inicio <= marca <= fin:
+                d = int(dias)
+                events.append({
+                    'tipo': 'umbral',
+                    'fecha': marca,
+                    'dias': d,
+                    'color': color_umbral_mora(d),
+                    'label': f'{d} días de mora',
+                    'detalle': f'Alcanzó {d} días de mora',
+                })
+    return events
+
+
+def agrupar_pagos_por_fecha(rows):
+    by = {}
+    for fecha, valor, recibo in rows or []:
+        f = _as_date(fecha)
+        if f is None:
+            continue
+        item = by.setdefault(f, {
+            'fecha': f,
+            'valor': Decimal('0'),
+            'count': 0,
+            'recibos': [],
+        })
+        item['valor'] += Decimal(valor or 0)
+        item['count'] += 1
+        if recibo:
+            item['recibos'].append(str(recibo))
+    return [by[k] for k in sorted(by)]
+
+
+def rango_comportamiento(fechas, *, today, ventana_dias=COMPORTAMIENTO_VENTANA_DIAS):
+    today = _as_date(today)
+    hasta = today
+    fechas = [f for f in (_as_date(x) for x in (fechas or [])) if f]
+    if not fechas:
+        return today - datetime.timedelta(days=ventana_dias), hasta
+    earliest = min(fechas)
+    latest = max(fechas)
+    desde = max(earliest, today - datetime.timedelta(days=ventana_dias))
+    if latest < desde:
+        hasta = min(today, latest + datetime.timedelta(days=14))
+        desde = max(earliest, hasta - datetime.timedelta(days=ventana_dias))
+    return desde, hasta
+
+
+def _envio_carta_fields(ev):
+    if isinstance(ev, dict):
+        fecha = _as_date(ev.get('fecha_envio'))
+        label = ev.get('checkpoint_label') or ev.get('label') or 'Carta'
+        canal = ev.get('canal_label') or ev.get('canal') or ''
+        return fecha, label, canal
+    fecha = _as_date(getattr(ev, 'fecha_envio', None))
+    ck = getattr(ev, 'checkpoint', None)
+    label = getattr(ck, 'label', None) or 'Carta'
+    canal = ''
+    getter = getattr(ev, 'get_canal_display', None)
+    if callable(getter):
+        canal = getter() or ''
+    else:
+        canal = getattr(ev, 'canal', '') or ''
+    return fecha, label, canal
+
+
+def _seg_fields(seg):
+    if isinstance(seg, dict):
+        return {
+            'fecha': _as_date(seg.get('fecha')),
+            'tipo': (seg.get('tipo_seguimiento') or '').strip(),
+            'contacto': (seg.get('forma_contacto') or '').strip(),
+            'nota': (seg.get('respuesta_cliente') or '').strip(),
+            'valor': int(seg.get('valor_compromiso') or 0),
+            'fecha_compromiso': _parse_fecha_compromiso(seg.get('fecha_compromiso')),
+            'usuario': (seg.get('usuario') or '').strip(),
+        }
+    return {
+        'fecha': _as_date(getattr(seg, 'fecha', None)),
+        'tipo': (getattr(seg, 'tipo_seguimiento', None) or '').strip(),
+        'contacto': (getattr(seg, 'forma_contacto', None) or '').strip(),
+        'nota': (getattr(seg, 'respuesta_cliente', None) or '').strip(),
+        'valor': int(getattr(seg, 'valor_compromiso', 0) or 0),
+        'fecha_compromiso': _parse_fecha_compromiso(getattr(seg, 'fecha_compromiso', None)),
+        'usuario': str(getattr(seg, 'usuario', None) or '').strip(),
+    }
+
+
+def eventos_seguimientos(segs):
+    events = []
+    for seg in segs or []:
+        s = _seg_fields(seg)
+        if s['fecha']:
+            detalle = ' · '.join(p for p in (s['tipo'], s['contacto'], (s['nota'] or '')[:80]) if p)
+            events.append({
+                'tipo': 'seguimiento',
+                'fecha': s['fecha'],
+                'label': 'Seguimiento',
+                'detalle': detalle,
+            })
+        if s['valor'] > 0:
+            fecha_c = s['fecha_compromiso'] or s['fecha']
+            if fecha_c:
+                extra = s['tipo']
+                events.append({
+                    'tipo': 'acuerdo',
+                    'fecha': fecha_c,
+                    'valor': s['valor'],
+                    'label': 'Acuerdo de pago',
+                    'detalle': (f'{extra} · ' if extra else '') + f'vence {fecha_c.strftime("%d/%m/%Y")}',
+                })
+    return events
+
+
+def eventos_timeline_adj(rows):
+    """Acciones de timeline_adj (reestructuración, promesa, lote, etc.)."""
+    events = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            fecha = _as_date(row.get('fecha'))
+            accion = (row.get('accion') or '').strip()
+            usuario = (row.get('usuario') or '').strip()
+        elif isinstance(row, (list, tuple)):
+            fecha = _as_date(row[0] if row else None)
+            accion = (row[1] if len(row) > 1 else '') or ''
+            usuario = (row[2] if len(row) > 2 else '') or ''
+            accion, usuario = str(accion).strip(), str(usuario).strip()
+        else:
+            fecha = _as_date(getattr(row, 'fecha', None))
+            accion = (getattr(row, 'accion', None) or '').strip()
+            usuario = str(getattr(row, 'usuario', None) or '').strip()
+        if fecha is None or not accion:
+            continue
+        events.append({
+            'tipo': 'adj',
+            'fecha': fecha,
+            'label': accion[:40] + ('…' if len(accion) > 40 else ''),
+            'detalle': usuario,
+        })
+    return events
+
+
+def comportamiento_timeline_from_parts(*, pagos_rows, envios, cuotas, today, segs=None, tl_rows=None):
+    """Arma bandas y eventos de comportamiento (sin consultar BD)."""
+    today = _as_date(today)
+    raw = episodios_mora(cuotas, today=today)
+    episodios = list(raw)
+    events = []
+    segs_raw = []
+    en_mora = False
+    for ep in episodios:
+        origen = ep.get('origen') or ep['inicio']
+        segs_raw.extend(segmentos_edad_mora(ep['inicio'], ep['fin'], origen=origen))
+        entra = origen + datetime.timedelta(days=MORA_GRACIA_DIAS)
+        if entra < ep['inicio']:
+            entra = ep['inicio']
+        # Pagó en gracia (día 15 inclusive): no entró, no hay "salió de mora".
+        if not en_mora and entra < ep['fin']:
+            events.append({
+                'tipo': 'mora',
+                'fecha': entra,
+                'color': color_umbral_mora(MORA_GRACIA_DIAS),
+                'label': 'Entró en mora',
+                'detalle': (
+                    f'Venció {origen.strftime("%d/%m/%Y")} · '
+                    f'gracia {MORA_GRACIA_DIAS} días'
+                ),
+            })
+            en_mora = True
+        if not ep['abierto']:
+            if en_mora:
+                dias_salida = (ep['fin'] - origen).days
+                events.append({
+                    'tipo': 'mora_salida',
+                    'fecha': ep['fin'],
+                    'color': color_umbral_mora(dias_salida),
+                    'label': 'Salió de mora',
+                    'detalle': f'Normalizó el {ep["fin"].strftime("%d/%m/%Y")}',
+                })
+            en_mora = False
+    bandas = marcar_empalmes(segs_raw)
+    events.extend(eventos_umbral_mora(episodios))
+    for p in agrupar_pagos_por_fecha(pagos_rows):
+        n = p['count']
+        recs = p['recibos'][:3]
+        extra = ''
+        if n > 1:
+            extra = f'{n} recibos'
+        elif recs:
+            extra = recs[0]
+        events.append({
+            'tipo': 'pago',
+            'fecha': p['fecha'],
+            'valor': int(p['valor']),
+            'label': 'Pago',
+            'detalle': extra,
+        })
+    for ev in envios or []:
+        fecha, ck_label, canal = _envio_carta_fields(ev)
+        if fecha is None:
+            continue
+        detalle = ck_label if not canal else f'{ck_label} · {canal}'
+        events.append({
+            'tipo': 'carta',
+            'fecha': fecha,
+            'label': 'Carta enviada',
+            'detalle': detalle,
+        })
+    events.extend(eventos_seguimientos(segs))
+    events.extend(eventos_timeline_adj(tl_rows))
+
+    fechas = [e['fecha'] for e in events]
+    for ep in episodios:
+        fechas.extend([ep['inicio'], ep['fin']])
+    desde, hasta = rango_comportamiento(fechas, today=today)
+    min_data = min(fechas) if fechas else desde
+    max_data = max(fechas) if fechas else hasta
+
+    def _ser(e):
+        out = {
+            'tipo': e['tipo'],
+            'fecha': e['fecha'].isoformat(),
+            'label': e['label'],
+            'detalle': e.get('detalle') or '',
+        }
+        if e.get('valor') is not None:
+            out['valor'] = e['valor']
+        if e.get('dias') is not None:
+            out['dias'] = e['dias']
+        if e.get('color'):
+            out['color'] = e['color']
+        if e.get('fecha_fin'):
+            out['fecha_fin'] = e['fecha_fin'].isoformat()
+        return out
+
+    return {
+        'desde': desde.isoformat(),
+        'hasta': hasta.isoformat(),
+        'min': min_data.isoformat(),
+        'max': max(max_data, today).isoformat(),
+        'bandas': [
+            {
+                'inicio': s['inicio'].isoformat(),
+                'fin': s['fin'].isoformat(),
+                'dias': s['dias'],
+                'color': s['color'],
+                'label': s['label'],
+                'join_izq': bool(s.get('join_izq')),
+                'join_der': bool(s.get('join_der')),
+            }
+            for s in bandas
+        ],
+        'eventos': [_ser(e) for e in sorted(events, key=lambda x: (x['fecha'], x['tipo']))],
+    }
+
+
+def build_comportamiento_timeline(proyecto, adj, *, today=None, envios=None, segs=None):
+    """Pagos, cartas, seguimientos, acuerdos, timeline ADJ y episodios de mora."""
+    today = today or datetime.date.today()
+    rec_by_cta = defaultdict(list)
+    for idcta, fecha, capital, interes in (
+        Recaudos.objects.using(proyecto)
+        .filter(idadjudicacion=adj)
+        .exclude(idcta__startswith='SF')
+        .values_list('idcta', 'fecha', 'capital', 'interescte')
+    ):
+        if idcta:
+            rec_by_cta[idcta].append((fecha, capital or 0, interes or 0))
+
+    cuotas = [
+        {
+            'fecha': q.fecha,
+            'capital': q.capital,
+            'intcte': getattr(q, 'intcte', 0) or 0,
+            'pagos': rec_by_cta.get(q.idcta) or [],
+        }
+        for q in PlanPagos.objects.using(proyecto).filter(adj=adj).exclude(tipocta='SF')
+    ]
+    pagos_rows = list(
+        Recaudos_general.objects.using(proyecto)
+        .filter(idadjudicacion=adj)
+        .exclude(numrecibo__startswith='N')
+        .exclude(numrecibo__startswith='A')
+        .values_list('fecha', 'valor', 'numrecibo')
+    )
+    if envios is None:
+        envios = listar_envios_carta(proyecto, adj)
+    if segs is None:
+        segs = list(
+            seguimientos.objects.using(proyecto)
+            .filter(adj=adj)
+            .order_by('-fecha', '-id_seg')[:200]
+        )
+    tl_rows = list(
+        timeline.objects.using(proyecto)
+        .filter(adj=adj)
+        .order_by('fecha', 'id_line')
+        .values_list('fecha', 'accion', 'usuario')[:300]
+    )
+    return comportamiento_timeline_from_parts(
+        pagos_rows=pagos_rows,
+        envios=envios,
+        cuotas=cuotas,
+        today=today,
+        segs=segs,
+        tl_rows=tl_rows,
+    )
+
+
 def timeline_payload(proyecto: str, adj: str, *, today=None):
     today = today or datetime.date.today()
     ensure_default_checkpoints(proyecto)
@@ -1516,17 +2106,14 @@ def timeline_payload(proyecto: str, adj: str, *, today=None):
 
     dias_mora = int(row.get('dias_mora') or 0)
     activo = bucket_codigo_from_dias(dias_mora)
+    deuda = deuda_detalle_adj(proyecto, adj, today=today)
 
     checkpoints = list(
         CarteraCheckpoint.objects.filter(proyecto_id=proyecto, activo=True)
         .prefetch_related('plantillas')
         .order_by('orden', 'dias_desde')
     )
-    visual_nodes = visual_nodes_cartas(
-        checkpoints,
-        dias_mora,
-        row.get('total_pendiente'),
-    )
+    visual_nodes = visual_nodes_cartas(dias_mora, deuda.get('montos_linea'))
     carta_nodes = []
     ck_ids = [ck.id for ck in checkpoints]
     envios = listar_envios_carta(proyecto, adj, checkpoint_ids=ck_ids)
@@ -1641,7 +2228,9 @@ def timeline_payload(proyecto: str, adj: str, *, today=None):
         seguimientos_enriched.append(item)
 
     contactos = titulares_contacto(proyecto, adj)
-    deuda = deuda_detalle_adj(proyecto, adj, today=today)
+    comportamiento = build_comportamiento_timeline(
+        proyecto, adj, today=today, envios=envios, segs=segs,
+    )
 
     return {
         'proyecto': proyecto,
@@ -1658,6 +2247,7 @@ def timeline_payload(proyecto: str, adj: str, *, today=None):
         'otros_titulares': contactos.get('otros') or [],
         'canales_envio': CarteraCartaEnvio.CANAL_CHOICES,
         'deuda': deuda,
+        'comportamiento': comportamiento,
     }
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -201,6 +202,8 @@ def cartera_linea_tiempo(request, proyecto, adj):
         'otros_titulares': payload.get('otros_titulares') or [],
         'canales_envio': payload.get('canales_envio') or CarteraCartaEnvio.CANAL_CHOICES,
         'deuda': payload.get('deuda') or {},
+        'comportamiento': payload.get('comportamiento') or {},
+        'comportamiento_json': json.dumps(payload.get('comportamiento') or {}),
         'hoy': datetime.date.today().isoformat(),
         'form_seguimiento': form,
         'alerta': alerta,

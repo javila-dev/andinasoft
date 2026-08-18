@@ -34,10 +34,10 @@
   }
   .lt-node {
     flex: 1 1 0;
-    min-width: 110px;
+    min-width: 92px;
     text-align: center;
     position: relative;
-    padding: 0 .35rem;
+    padding: 0 .25rem;
   }
   .lt-node:not(:last-child)::after {
     content: '';
@@ -70,21 +70,34 @@
     transform: scale(1.15);
   }
   .lt-node.activo .lt-label { color: #c0392b; font-weight: 700; }
+  .lt-node.activo.por_vencer .lt-dot {
+    background: #27ae60;
+    box-shadow: 0 0 0 3px #a9dfbf;
+  }
+  .lt-node.activo.por_vencer .lt-label { color: #1e8449; }
   .lt-label { font-size: .8rem; }
   .lt-monto { font-size: .75rem; color: #6c757d; white-space: nowrap; }
-  .lt-cartas h5 { font-size: 1rem; margin-bottom: .35rem; }
-  .lt-cartas > .small { font-size: .72rem; margin-bottom: .5rem; }
+  .lt-cartas h5,
+  .lt-segs h5 { font-size: 1rem; margin-bottom: .35rem; }
+  .lt-cartas > .small,
+  .lt-segs > .small { font-size: .72rem; margin-bottom: .5rem; }
+  .lt-cartas .card-ck,
+  .lt-segs {
+    font-size: .78rem;
+  }
   .lt-cartas .card-ck {
     border: 1px solid #e5e8eb;
     border-radius: 6px;
     padding: .55rem .65rem;
     margin-bottom: .45rem;
     background: #fff;
-    font-size: .78rem;
   }
-  .lt-cartas .card-ck strong { font-size: .82rem; }
-  .lt-cartas .card-ck .small { font-size: .7rem; }
-  .lt-cartas .card-ck .btn-sm {
+  .lt-cartas .card-ck strong,
+  .lt-segs strong { font-size: .82rem; }
+  .lt-cartas .card-ck .small,
+  .lt-segs .small { font-size: .7rem; }
+  .lt-cartas .card-ck .btn-sm,
+  .lt-segs .btn-sm {
     padding: .12rem .4rem;
     font-size: .7rem;
     line-height: 1.3;
@@ -118,6 +131,146 @@
     color: #7f8c8d;
     border-color: #d5dbdb;
     background: transparent;
+  }
+  .bh-box { margin: 0 0 1.5rem; overflow: visible; }
+  .bh-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .6rem 1rem;
+    margin-bottom: .75rem;
+  }
+  .bh-filters label { font-size: .78rem; color: #6c757d; margin: 0; }
+  .bh-filters .form-control { height: calc(1.5em + .4rem + 2px); padding: .15rem .45rem; font-size: .8rem; }
+  .bh-checks { display: flex; flex-wrap: wrap; gap: .55rem 1rem; font-size: .8rem; }
+  .bh-checks label { color: #334; cursor: pointer; }
+  .bh-legend { display: flex; flex-wrap: wrap; gap: .35rem .9rem; font-size: .72rem; color: #6c757d; margin-bottom: .35rem; }
+  .bh-swatch {
+    display: inline-block;
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    margin-right: .25rem;
+    vertical-align: middle;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+  }
+  .bh-swatch.band { border-radius: 3px; width: 14px; height: 8px; background: rgba(192,57,43,.28); }
+  .bh-swatch.sq { border-radius: 2px; transform: rotate(45deg); }
+  .bh-chart {
+    position: relative;
+    height: 156px;
+    margin: .4rem 0 1.6rem;
+    padding: 0 10px;
+    overflow: visible;
+  }
+  .bh-line {
+    position: absolute;
+    left: 10px; right: 10px;
+    top: 72px;
+    height: 3px;
+    background: #dde3ea;
+    border-radius: 2px;
+  }
+  .bh-band {
+    position: absolute;
+    top: 65px;
+    height: 16px;
+    background: rgba(192, 57, 43, 0.22);
+    border-radius: 0;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .bh-dot {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.14);
+    transform: translate(-50%, -50%);
+    cursor: default;
+    padding: 0;
+    z-index: 2;
+  }
+  .bh-dot.pago { background: #1e8a4c; top: 18px; }
+  .bh-dot.acuerdo { background: #c9a227; top: 40px; border-radius: 2px; transform: translate(-50%, -50%) rotate(45deg); }
+  .bh-dot.mora { background: #c0392b; top: 72px; }
+  .bh-dot.umbral { background: #e67e22; top: 72px; width: 8px; height: 8px; }
+  .bh-dot.mora_salida { background: #fff; top: 72px; }
+  .bh-dot.edad { top: 72px; width: 10px; height: 10px; }
+  .bh-dot.adj { background: #5d6d7e; top: 104px; }
+  .bh-dot.seguimiento { background: #5dade2; top: 126px; }
+  .bh-dot.carta { background: #1A4A4A; top: 126px; }
+  .bh-grid {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 0;
+    bottom: 18px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .bh-grid-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    margin-left: -0.5px;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgba(110, 118, 126, 0.55) 0,
+      rgba(110, 118, 126, 0.55) 2px,
+      transparent 2px,
+      transparent 7px
+    );
+  }
+  .bh-ticks {
+    position: absolute;
+    left: 10px; right: 10px;
+    top: 142px;
+    height: 18px;
+    z-index: 1;
+  }
+  .bh-tick {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: .68rem;
+    color: #8a939c;
+    white-space: nowrap;
+  }
+  .bh-tick.is-start { transform: none; }
+  .bh-tick.is-end { transform: translateX(-100%); }
+  .bh-empty { font-size: .85rem; color: #6c757d; padding: .5rem 0; }
+  .bh-tip {
+    position: absolute;
+    z-index: 20;
+    display: none;
+    max-width: 260px;
+    padding: .35rem .55rem;
+    background: #2c3e50;
+    color: #fff;
+    font-size: .75rem;
+    line-height: 1.3;
+    border-radius: 4px;
+    pointer-events: none;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .bh-tip:after {
+    content: '';
+    position: absolute;
+    left: var(--arrow-left, 50%);
+    bottom: -5px;
+    width: 0;
+    height: 0;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: #2c3e50;
+  }
+  .bh-tip.below:after {
+    bottom: auto;
+    top: -5px;
+    border-top-color: transparent;
+    border-bottom-color: #2c3e50;
   }
 </style>
 {%endblock%}
@@ -365,15 +518,58 @@
   {% endif %}
 
   <h5 class="mb-0">Línea de cobro</h5>
-  <p class="small text-muted mb-0">La carta se habilita al alcanzar cada umbral (30, 45, 60 y 90 días).</p>
+  <p class="small text-muted mb-0">Cuánto debe en cada etapa, de lo que aún no vence a 90 días o más. El punto marcado es donde está hoy.</p>
   <div class="lt-track mb-4">
     {% for node in visual_nodes %}
-    <div class="lt-node {% if node.activo %}activo{% elif node.superado %}superado{% endif %}">
+    <div class="lt-node {{node.codigo}} {% if node.activo %}activo{% elif node.superado %}superado{% endif %}">
       <div class="lt-dot"></div>
       <div class="lt-label">{{node.label}}</div>
       <div class="lt-monto">${{node.monto|floatformat:0|intcomma}}</div>
     </div>
     {% endfor %}
+  </div>
+
+  <div class="bh-box">
+    <h5 class="mb-1">Comportamiento</h5>
+    <p class="small text-muted mb-2">La historia del cliente: cuando estuvo en mora, qué pagó y qué se hizo. Pasa el cursor para ver el detalle.</p>
+    <div class="bh-filters">
+      <div>
+        <label for="bhDesde">Desde</label>
+        <input type="date" id="bhDesde" class="form-control">
+      </div>
+      <div>
+        <label for="bhHasta">Hasta</label>
+        <input type="date" id="bhHasta" class="form-control">
+      </div>
+      <div class="bh-checks">
+        <label><input type="checkbox" id="bhMora" checked> Mora</label>
+        <label><input type="checkbox" id="bhPago" checked> Pagos</label>
+        <label><input type="checkbox" id="bhAcuerdo" checked> Acuerdos</label>
+        <label><input type="checkbox" id="bhAdj" checked> Timeline ADJ</label>
+        <label><input type="checkbox" id="bhCarta" checked> Cartas</label>
+        <label><input type="checkbox" id="bhSeg" checked> Seguimientos</label>
+      </div>
+    </div>
+    <div class="bh-legend">
+      <span><i class="bh-swatch band" style="background:#f0b429"></i>15-30</span>
+      <span><i class="bh-swatch band" style="background:#e67e22"></i>30 días</span>
+      <span><i class="bh-swatch band" style="background:#d35400"></i>45 días</span>
+      <span><i class="bh-swatch band" style="background:#c0392b"></i>60 días</span>
+      <span><i class="bh-swatch band" style="background:#6c3483"></i>90+</span>
+      <span><i class="bh-swatch" style="background:#1e8a4c"></i>Pago</span>
+      <span><i class="bh-swatch sq" style="background:#c9a227"></i>Acuerdo</span>
+      <span><i class="bh-swatch" style="background:#5d6d7e"></i>ADJ</span>
+      <span><i class="bh-swatch" style="background:#5dade2"></i>Seguimiento</span>
+      <span><i class="bh-swatch" style="background:#1A4A4A"></i>Carta</span>
+    </div>
+    <div class="bh-chart" id="bhChart">
+      <div class="bh-grid" id="bhGrid"></div>
+      <div class="bh-line"></div>
+      <div class="bh-ticks" id="bhTicks"></div>
+      <div class="bh-tip" id="bhTip"></div>
+    </div>
+    <div class="bh-empty d-none" id="bhEmpty">No hay eventos en este rango.</div>
+    <script type="application/json" id="bh-data">{{ comportamiento_json|safe }}</script>
   </div>
 
   <div class="row">
@@ -480,7 +676,7 @@
       {% endfor %}
     </div>
 
-    <div class="col-lg-7 mb-3">
+    <div class="col-lg-7 lt-segs mb-3">
       <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0">Seguimientos y acuerdos</h5>
         <button type="button" class="btn btn-sm btn-outline-warning" id="btnAgregarCompromiso2"
@@ -491,7 +687,7 @@
       <div class="my-2 p-3 bg-light rounded overflow-auto" style="max-height: 55vh;">
         {% for seguimiento in seguimientos %}
         <div class="media text-muted pt-3">
-          <p class="media-body pb-3 mb-0 small lh-125 border-bottom border-gray">
+          <p class="media-body pb-3 mb-0 lh-125 border-bottom border-gray">
             <strong class="d-block text-gray-dark">{{seguimiento.usuario}} · {{seguimiento.fecha}}</strong>
             <strong>Tipo:</strong> {{seguimiento.tipo_seguimiento}} ·
             <strong>Contacto:</strong> {{seguimiento.forma_contacto}}<br>
@@ -565,6 +761,305 @@
       );
     }
   });
+
+  (function initComportamiento(){
+    var raw = document.getElementById('bh-data');
+    var chart = document.getElementById('bhChart');
+    if (!raw || !chart) return;
+    var data;
+    try { data = JSON.parse(raw.textContent || '{}'); }
+    catch (e) { return; }
+    var bandas = data.bandas || [];
+    var eventos = data.eventos || [];
+    var inpDesde = document.getElementById('bhDesde');
+    var inpHasta = document.getElementById('bhHasta');
+    var tip = document.getElementById('bhTip');
+    var empty = document.getElementById('bhEmpty');
+    var ticksEl = document.getElementById('bhTicks');
+    var gridEl = document.getElementById('bhGrid');
+
+    function parseISO(s){
+      if (!s) return null;
+      var p = String(s).split('-');
+      if (p.length !== 3) return null;
+      return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    }
+    function iso(d){
+      var m = d.getMonth() + 1;
+      var day = d.getDate();
+      return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+    }
+    function fmt(d){
+      var day = d.getDate();
+      var m = d.getMonth() + 1;
+      return (day < 10 ? '0' : '') + day + '/' + (m < 10 ? '0' : '') + m + '/' + d.getFullYear();
+    }
+    function money(n){
+      return '$' + Number(n || 0).toLocaleString('es-CO');
+    }
+    function daysBetween(a, b){
+      return Math.round((b - a) / 86400000);
+    }
+    function pct(d, a, b){
+      var span = daysBetween(a, b);
+      if (span <= 0) return 0;
+      var x = daysBetween(a, d) / span;
+      if (x < 0) return 0;
+      if (x > 1) return 1;
+      return x * 100;
+    }
+    function hexRgba(hex, a){
+      if (!hex) return '';
+      var h = String(hex).replace('#','');
+      if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+      var n = parseInt(h, 16);
+      if (isNaN(n)) return hex;
+      return 'rgba(' + ((n>>16)&255) + ',' + ((n>>8)&255) + ',' + (n&255) + ',' + a + ')';
+    }
+    function tooltip(ev, fecha){
+      var parts = [fmt(fecha), ev.label];
+      if ((ev.tipo === 'pago' || ev.tipo === 'acuerdo') && ev.valor != null) parts.push(money(ev.valor));
+      if (ev.detalle) parts.push(ev.detalle);
+      return parts.join(' · ');
+    }
+
+    var minD = parseISO(data.min) || parseISO(data.desde);
+    var maxD = parseISO(data.max) || parseISO(data.hasta);
+    var defDesde = parseISO(data.desde);
+    var defHasta = parseISO(data.hasta);
+    if (inpDesde) {
+      if (minD) inpDesde.min = iso(minD);
+      if (maxD) inpDesde.max = iso(maxD);
+      if (defDesde) inpDesde.value = iso(defDesde);
+    }
+    if (inpHasta) {
+      if (minD) inpHasta.min = iso(minD);
+      if (maxD) inpHasta.max = iso(maxD);
+      if (defHasta) inpHasta.value = iso(defHasta);
+    }
+
+    function showTip(el, text){
+      if (!tip || !chart) return;
+      tip.classList.remove('below');
+      tip.textContent = text;
+      tip.style.display = 'block';
+      tip.style.left = '0px';
+      tip.style.top = '0px';
+      tip.style.maxWidth = Math.min(260, Math.max(120, chart.clientWidth - 16)) + 'px';
+
+      var pad = 6;
+      var chartRect = chart.getBoundingClientRect();
+      var elRect = el.getBoundingClientRect();
+      var cx = elRect.left + elRect.width / 2 - chartRect.left;
+      var cy = elRect.top + elRect.height / 2 - chartRect.top;
+      var tw = tip.offsetWidth;
+      var th = tip.offsetHeight;
+      var cw = chart.clientWidth;
+      var ch = chart.clientHeight;
+
+      var left = cx - tw / 2;
+      if (left < pad) left = pad;
+      if (left + tw > cw - pad) left = Math.max(pad, cw - pad - tw);
+
+      var above = cy - th - 10;
+      var below = cy + elRect.height / 2 + 8;
+      if (above >= 2) {
+        tip.style.top = above + 'px';
+      } else {
+        tip.classList.add('below');
+        tip.style.top = Math.min(below, Math.max(2, ch - th - 2)) + 'px';
+      }
+      tip.style.left = left + 'px';
+
+      var arrow = cx - left;
+      arrow = Math.max(8, Math.min(tw - 8, arrow));
+      tip.style.setProperty('--arrow-left', arrow + 'px');
+    }
+
+    function draw(){
+      chart.querySelectorAll('.bh-band, .bh-dot').forEach(function(n){ n.remove(); });
+      ticksEl.innerHTML = '';
+      if (gridEl) gridEl.innerHTML = '';
+      var desde = parseISO(inpDesde && inpDesde.value) || defDesde;
+      var hasta = parseISO(inpHasta && inpHasta.value) || defHasta;
+      if (!desde || !hasta) return;
+      if (hasta < desde) {
+        var tmp = desde; desde = hasta; hasta = tmp;
+      }
+      var showMora = !document.getElementById('bhMora') || document.getElementById('bhMora').checked;
+      var showPago = !document.getElementById('bhPago') || document.getElementById('bhPago').checked;
+      var showCarta = !document.getElementById('bhCarta') || document.getElementById('bhCarta').checked;
+      var showSeg = !document.getElementById('bhSeg') || document.getElementById('bhSeg').checked;
+      var showAcuerdo = !document.getElementById('bhAcuerdo') || document.getElementById('bhAcuerdo').checked;
+      var showAdj = !document.getElementById('bhAdj') || document.getElementById('bhAdj').checked;
+      var visible = 0;
+
+      if (showMora) {
+        var MIN_BAR_PCT = 2.5;
+        var MIN_BAR_PX = 24;
+        var trackW = Math.max(1, chart.clientWidth - 20);
+        var minW = Math.max(MIN_BAR_PCT, (MIN_BAR_PX / trackW) * 100);
+        var vis = [];
+        bandas.forEach(function(b){
+          var a = parseISO(b.inicio);
+          var z = parseISO(b.fin);
+          if (!a || !z) return;
+          var clipA = a < desde ? desde : a;
+          var clipZ = z > hasta ? hasta : z;
+          if (clipZ < clipA) return;
+          var left = pct(clipA, desde, hasta);
+          var right = pct(clipZ, desde, hasta);
+          var w = right - left;
+          if (w < 0) return;
+          vis.push({b: b, a: a, z: z, left: left, right: right, w: w});
+        });
+        vis.sort(function(x, y){ return x.left - y.left; });
+
+        function bindTip(node, text){
+          node.setAttribute('aria-label', text);
+          node.addEventListener('mouseenter', function(){ showTip(node, text); });
+          node.addEventListener('mouseleave', function(){ if (tip) tip.style.display = 'none'; });
+        }
+        function drawPoint(item, tipTxt, color){
+          var elp = document.createElement('button');
+          elp.type = 'button';
+          elp.className = 'bh-dot edad';
+          elp.style.left = 'calc(10px + (100% - 20px) * ' + ((item.left + item.right) / 200) + ')';
+          if (color) elp.style.backgroundColor = color;
+          bindTip(elp, tipTxt);
+          chart.insertBefore(elp, ticksEl);
+          visible += 1;
+        }
+        function drawBar(item){
+          var el = document.createElement('div');
+          el.className = 'bh-band';
+          el.style.left = 'calc(10px + (100% - 20px) * ' + (item.left / 100) + ')';
+          el.style.right = 'calc(10px + (100% - 20px) * ' + ((100 - item.right) / 100) + ')';
+          el.style.width = 'auto';
+          var tl = item.b.join_izq ? '0' : '8px';
+          var tr = item.b.join_der ? '0' : '8px';
+          el.style.borderRadius = tl + ' ' + tr + ' ' + tr + ' ' + tl;
+          if (item.b.color) el.style.background = hexRgba(item.b.color, 0.82);
+          bindTip(el, (item.b.label || 'Mora') + ' · ' + fmt(item.a) + ' — ' + fmt(item.z));
+          chart.insertBefore(el, ticksEl);
+          visible += 1;
+        }
+
+        var i = 0;
+        while (i < vis.length) {
+          var group = [vis[i]];
+          while (i + 1 < vis.length && vis[i].b.join_der && vis[i + 1].b.join_izq) {
+            i += 1;
+            group.push(vis[i]);
+          }
+          var gW = group[group.length - 1].right - group[0].left;
+          if (gW < minW) {
+            var first = group[0];
+            var last = group[group.length - 1];
+            var labels = [];
+            group.forEach(function(g){
+              var lb = g.b.label || 'Mora';
+              if (labels.indexOf(lb) === -1) labels.push(lb);
+            });
+            var rango = (last.z.getTime() === hasta.getTime())
+              ? ('Entró ' + fmt(first.a) + ' · sigue en ' + (last.b.label || 'mora'))
+              : ('Entró ' + fmt(first.a) + ' · Salió ' + fmt(last.z));
+            drawPoint(
+              {left: first.left, right: last.right},
+              labels.join(' → ') + ' · ' + rango,
+              (last.b.color || first.b.color)
+            );
+          } else {
+            group.forEach(drawBar);
+          }
+          i += 1;
+        }
+      }
+
+      eventos.forEach(function(ev){
+        var f = parseISO(ev.fecha);
+        if (!f || f < desde || f > hasta) return;
+        if (ev.tipo === 'pago' && !showPago) return;
+        if (ev.tipo === 'carta' && !showCarta) return;
+        if (ev.tipo === 'seguimiento' && !showSeg) return;
+        if (ev.tipo === 'acuerdo' && !showAcuerdo) return;
+        if (ev.tipo === 'adj' && !showAdj) return;
+        if ((ev.tipo === 'mora' || ev.tipo === 'umbral' || ev.tipo === 'mora_salida' || ev.tipo === 'edad') && !showMora) return;
+        var el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'bh-dot ' + ev.tipo;
+        var left = pct(f, desde, hasta);
+        el.style.left = 'calc(10px + (100% - 20px) * ' + (left / 100) + ')';
+        if (ev.color) {
+          if (ev.tipo === 'mora_salida') {
+            el.style.borderColor = ev.color;
+            el.style.background = '#fff';
+          } else {
+            el.style.backgroundColor = ev.color;
+          }
+        }
+        el.setAttribute('aria-label', tooltip(ev, f));
+        el.addEventListener('mouseenter', function(){ showTip(el, tooltip(ev, f)); });
+        el.addEventListener('mouseleave', function(){ if (tip) tip.style.display = 'none'; });
+        el.addEventListener('focus', function(){ showTip(el, tooltip(ev, f)); });
+        el.addEventListener('blur', function(){ if (tip) tip.style.display = 'none'; });
+        chart.insertBefore(el, ticksEl);
+        visible += 1;
+      });
+
+      var span = daysBetween(desde, hasta);
+      var ticks = [];
+      ticks.push(desde);
+      var monthStarts = [];
+      var cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
+      if (desde.getDate() > 1) cursor.setMonth(cursor.getMonth() + 1);
+      while (cursor < hasta) {
+        monthStarts.push(new Date(cursor.getTime()));
+        if (span > 45) ticks.push(new Date(cursor.getTime()));
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      ticks.push(hasta);
+      if (gridEl) {
+        monthStarts.forEach(function(t){
+          var p = pct(t, desde, hasta);
+          if (p < 0.4 || p > 99.6) return;
+          var line = document.createElement('span');
+          line.className = 'bh-grid-line';
+          line.style.left = p + '%';
+          gridEl.appendChild(line);
+        });
+      }
+      var lastPct = -99;
+      ticks.forEach(function(t, idx){
+        var p = pct(t, desde, hasta);
+        var isEdge = idx === 0 || idx === ticks.length - 1;
+        if (!isEdge && p - lastPct < 8) return;
+        lastPct = p;
+        var lab = document.createElement('span');
+        lab.className = 'bh-tick';
+        if (idx === 0) lab.classList.add('is-start');
+        if (idx === ticks.length - 1) lab.classList.add('is-end');
+        lab.style.left = p + '%';
+        lab.textContent = (span <= 45 || isEdge)
+          ? fmt(t)
+          : t.toLocaleDateString('es-CO', {month: 'short', year: '2-digit'});
+        ticksEl.appendChild(lab);
+      });
+
+      if (empty) empty.classList.toggle('d-none', visible > 0);
+    }
+
+    ['bhDesde', 'bhHasta', 'bhMora', 'bhPago', 'bhCarta', 'bhSeg', 'bhAcuerdo', 'bhAdj'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', draw);
+    });
+    var resizeTimer;
+    window.addEventListener('resize', function(){
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(draw, 120);
+    });
+    draw();
+  })();
 })();
 </script>
 {%endblock%}
