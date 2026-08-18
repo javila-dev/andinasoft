@@ -655,8 +655,9 @@
                 <input type="date" name="fecha_envio" class="form-control form-control-sm" value="{{hoy}}">
               </div>
               <div class="col-12 mb-1">
-                <label class="small mb-0">Soporte (imagen/PDF)</label>
+                <label class="small mb-0">Soporte de envío (imagen/PDF)</label>
                 <input type="file" name="soporte" class="form-control-file form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                <small class="form-text text-muted">Adjunta la prueba de que se envió (captura de WhatsApp, correo, etc.). No subas la carta.</small>
               </div>
               <div class="col-12 mb-1">
                 <input type="text" name="notas" class="form-control form-control-sm" placeholder="Notas (opcional)" maxlength="255">
@@ -1007,7 +1008,6 @@
         visible += 1;
       });
 
-      var span = daysBetween(desde, hasta);
       var monthStarts = [];
       var cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
       if (desde.getDate() > 1) cursor.setMonth(cursor.getMonth() + 1);
@@ -1032,28 +1032,20 @@
         if (kind === 'start') lab.classList.add('is-start');
         if (kind === 'end') lab.classList.add('is-end');
         lab.style.left = p + '%';
-        lab.textContent = (kind === 'month')
-          ? t.toLocaleDateString('es-CO', {month: 'short', year: '2-digit'})
-          : fmt(t);
+        lab.textContent = t.toLocaleDateString('es-CO', {month: 'short', year: '2-digit'});
         ticksEl.appendChild(lab);
       }
 
-      if (span <= 45) {
-        addTick(desde, 0, 'start');
-        addTick(hasta, 100, 'end');
-      } else {
-        var EDGE_GAP = 12;
-        addTick(desde, 0, 'start');
-        var lastPct = 0;
-        monthStarts.forEach(function(t){
-          var p = pct(t, desde, hasta);
-          if (p < EDGE_GAP || p > 100 - EDGE_GAP) return;
-          if (p - lastPct < 8) return;
-          addTick(t, p, 'month');
-          lastPct = p;
-        });
-        if (100 - lastPct >= EDGE_GAP) addTick(hasta, 100, 'end');
-      }
+      var lastPct = -99;
+      monthStarts.forEach(function(t, idx){
+        var p = pct(t, desde, hasta);
+        if (p - lastPct < 8) return;
+        var kind = 'month';
+        if (idx === 0 && p < 4) kind = 'start';
+        if (idx === monthStarts.length - 1 && p > 96) kind = 'end';
+        addTick(t, p, kind);
+        lastPct = p;
+      });
 
       if (empty) empty.classList.toggle('d-none', visible > 0);
     }

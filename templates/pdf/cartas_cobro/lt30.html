@@ -8,10 +8,7 @@
 {% block contenido %}
   <p class="fecha">Medellín {{ fecha_letras }}</p>
 
-  <div class="destinatario">
-    <div class="label">Señor(a):</div>
-    <strong>{{ nombre_cliente|default:cliente }}</strong>
-  </div>
+  {% include "pdf/cartas_cobro/_destinatario.html" %}
 
   <div class="cuerpo">
     <p>Cordial saludo.</p>

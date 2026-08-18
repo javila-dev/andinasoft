@@ -27,6 +27,7 @@ from andinasoft.cartera_gestor_service import (
     id_cuota_label,
     kpis_from_rows,
     logo_carta_static,
+    nombres_titulares_carta,
     nro_contrato_from_adj,
     plantilla_html_por_codigo,
     visual_nodes_cartas,
@@ -190,6 +191,21 @@ class CartaCobroHelpersTests(SimpleTestCase):
     def test_logo_casas_de_verano(self):
         self.assertEqual(logo_carta_static('Casas de Verano'), 'img/casas-de-verano450x.png')
         self.assertEqual(logo_carta_static('Oasis'), 'img/logo_oasis.png')
+
+    def test_nombres_titulares_carta(self):
+        names = nombres_titulares_carta({
+            'titular': {'nombre': 'Ana Perez'},
+            'otros_titulares': [
+                {'nombre': 'Luis Perez'},
+                {'nombre': ' ana  perez '},
+                {'nombre': ''},
+            ],
+        })
+        self.assertEqual(names, ['Ana Perez', 'Luis Perez'])
+        self.assertEqual(
+            nombres_titulares_carta({}, {'cliente': 'Cliente fila'}),
+            ['Cliente fila'],
+        )
 
     def test_contacto_carta_fallback(self):
         oasis = contacto_carta_proyecto('Oasis', lookup=False)

@@ -1214,6 +1214,33 @@ def titulares_contacto(proyecto: str, adj: str):
     return {'titular': titular, 'otros': otros}
 
 
+def nombres_titulares_carta(payload, row=None):
+    """Nombres de todos los titulares, sin repetir, para el encabezado de la carta."""
+    names = []
+    seen = set()
+    payload = payload or {}
+    items = []
+    if payload.get('titular'):
+        items.append(payload['titular'])
+    items.extend(payload.get('otros_titulares') or [])
+    for item in items:
+        if not item:
+            continue
+        nom = (item.get('nombre') or '').strip()
+        if not nom:
+            continue
+        key = ' '.join(nom.upper().split())
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(nom)
+    if not names:
+        fallback = ((row or {}).get('cliente') or '').strip()
+        if fallback:
+            names.append(fallback)
+    return names
+
+
 def _cuota_from_saldo(r, today=None):
     capital = Decimal(r.saldocapital or 0)
     interes = Decimal(r.saldointcte or 0)
@@ -2290,8 +2317,8 @@ def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, 
     if payload is None:
         return None
     row = payload['row']
-    titular = payload.get('titular') or {}
-    nombre = (titular.get('nombre') or row.get('cliente') or '').strip()
+    nombres = nombres_titulares_carta(payload, row)
+    nombre = nombres[0] if nombres else ''
     deuda = payload.get('deuda') or {}
     adj_info = _adj_carta_info(proyecto, adj)
     fecha_ctr = adj_info.get('fecha_contrato')
@@ -2301,6 +2328,7 @@ def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, 
         'adj': adj,
         'cliente': row.get('cliente') or '',
         'nombre_cliente': nombre,
+        'nombres_titulares': nombres,
         'nro_contrato': adj_info.get('nro_contrato') or adj,
         'fecha_contrato': fecha_ctr,
         'fecha_contrato_letras': fecha_en_letras(fecha_ctr),

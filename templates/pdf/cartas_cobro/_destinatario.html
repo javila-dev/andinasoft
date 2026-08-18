@@ -1,0 +1,8 @@
+<div class="destinatario">
+  <div class="label">{% if nombres_titulares|length > 1 %}Señores:{% else %}Señor(a):{% endif %}</div>
+  {% for nom in nombres_titulares %}
+  <div class="dest-nombre"><strong>{{ nom }}</strong></div>
+  {% empty %}
+  <div class="dest-nombre"><strong>{{ nombre_cliente|default:cliente }}</strong></div>
+  {% endfor %}
+</div>
