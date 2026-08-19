@@ -7,7 +7,7 @@
 <style>
   @page {
     size: Letter;
-    margin: 2.35cm 1.9cm 1.4cm 1.9cm;
+    margin: 3.35cm 1.9cm 1.4cm 1.9cm;
     @top-right {
       content: element(logo-running);
       vertical-align: top;
@@ -42,18 +42,18 @@
   }
   .letterhead {
     width: 100%;
-    margin: 0 0 10pt 0;
+    margin: 0 0 18pt 0;
     border-collapse: collapse;
   }
   .letterhead td { vertical-align: top; }
   .letterhead-left {
-    padding-right: 10pt;
+    padding-right: 14pt;
     padding-top: 2pt;
   }
   .letterhead-right {
-    width: 150pt;
+    width: 160pt;
     text-align: right;
-    padding: 0 12pt 0 8pt;
+    padding: 0 8pt 8pt 12pt;
     vertical-align: top;
   }
   .logo { height: 62pt; width: auto; }
@@ -135,21 +135,23 @@
     vertical-align: middle;
     padding-top: 9pt;
     padding-bottom: 9pt;
-    white-space: normal;
+    white-space: nowrap;
   }
   .pie-left {
     text-align: left;
     padding-left: 1.9cm;
-    padding-right: 8pt;
+    padding-right: 12pt;
   }
   .pie-right {
     text-align: right;
     padding-right: 1.9cm;
-    padding-left: 8pt;
-    width: 1%;
+    padding-left: 12pt;
+    width: 110pt;
+    white-space: nowrap;
   }
   .pie-right::after {
     content: "Pág. " counter(page) " de " counter(pages);
+    white-space: nowrap;
   }
 </style>
 </head>
@@ -171,7 +173,7 @@
         <tr>
           <td class="pie-left">
             <strong>{{ firma_nombre }}</strong>
-            · Departamento de Cartera{% if telefono_cartera %} · Tel. {{ telefono_cartera }}{% endif %}{% if email_cartera %} · {{ email_cartera }}{% endif %}
+            · Departamento de Cartera
           </td>
           <td class="pie-right"></td>
         </tr>

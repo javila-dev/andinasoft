@@ -477,6 +477,11 @@ class Promesas(models.Model):
                 )
         return titulares_list
     
+    @property
+    def forma_pago(self):
+        # Las plantillas HTML leen ctr.forma_pago (ventas_nuevas); aqui el campo es formapago.
+        return self.formapago
+
     def fp(self):
         return self.formaci, self.formasaldo
     
@@ -489,14 +494,16 @@ class Promesas(models.Model):
         obj_planpagos=PlanPagos.objects.using(db_name).filter(adj=obj_adj.pk)
         cuota_inicial=obj_planpagos.filter(tipocta='CI').aggregate(Sum('capital'))['capital__sum']
         if cuota_inicial==None: cuota_inicial=0
+        fp_ci = getattr(self, '_fp_ci_override', None)
+        fp_saldo = getattr(self, '_fp_saldo_override', None)
         info = {
             'valor':obj_adj.valor,
             'inmueble':obj_inmueble,
             'valor_en_letras':Utilidades().numeros_letras(obj_adj.valor),
             'ci':cuota_inicial,
             'saldo':obj_adj.valor - cuota_inicial,
-            'fp_ci':fps[0],
-            'fp_saldo':fps[1]
+            'fp_ci': fps[0] if fp_ci is None else fp_ci,
+            'fp_saldo': fps[1] if fp_saldo is None else fp_saldo,
         }
         
         return info
@@ -900,7 +907,7 @@ class seguimientos(models.Model):
     forma_contacto=models.CharField(max_length=255,db_column='forma_contacto')
     respuesta_cliente=models.CharField(max_length=255,db_column='respuesta_cliente')
     valor_compromiso=models.IntegerField(db_column='valor_compromiso')
-    fecha_compromiso=models.CharField(max_length=255,db_column='fecha_compromiso')
+    fecha_compromiso=models.DateField(null=True, blank=True, db_column='fecha_compromiso')
     usuario=models.CharField(max_length=255,db_column='usuario')
     
     class Meta:

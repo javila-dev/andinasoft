@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import calendar
 import datetime
+import re
 from collections import defaultdict
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Q, Sum
 from django.db.models.functions import Coalesce
 
@@ -30,6 +32,7 @@ from andinasoft.models import (
     clientes,
     proyectos as Proyectos,
 )
+from andinasoft.handlers_functions import upload_docs, upload_docs_contratos
 from andinasoft.presupuesto_cartera_service import (
     ensure_presupuestos,
     periodo_actual,
@@ -43,6 +46,7 @@ from andinasoft.shared_models import (
     Recaudos,
     Recaudos_general,
     Vista_Adjudicacion,
+    documentos_contratos,
     saldos_adj,
     seguimientos,
     timeline,
@@ -1353,6 +1357,45 @@ _CANAL_A_CONTACTO = {
 }
 
 
+_DOC_EXT_CONTRATO = frozenset({'pdf', 'jpg', 'jpeg', 'png', 'webp'})
+
+
+def _nombre_base_doc_carta_cobro(checkpoint, fecha_envio, envio_id):
+    ck = (getattr(checkpoint, 'label', None) or getattr(checkpoint, 'codigo', None) or 'carta').strip()
+    ck = re.sub(r'[^\w\s-]', '', ck).strip().replace(' ', '_')[:50] or 'carta'
+    fecha_txt = fecha_envio.strftime('%Y-%m-%d') if fecha_envio else datetime.date.today().isoformat()
+    return f'Carta de Cobro_{ck}_{fecha_txt}_{envio_id}'
+
+
+def registrar_carta_cobro_en_documentos_adj(proyecto, adj, user, envio, checkpoint):
+    """Copia el soporte del envio a doc_contratos y lo registra en documentos_contratos."""
+    if not envio or not envio.soporte:
+        return None
+
+    base_name = _nombre_base_doc_carta_cobro(checkpoint, envio.fecha_envio, envio.id)
+    orig_name = envio.soporte.name.rsplit('/', 1)[-1]
+    ext = orig_name.rsplit('.', 1)[-1].lower() if '.' in orig_name else 'pdf'
+    if ext not in _DOC_EXT_CONTRATO:
+        ext = 'pdf'
+
+    with envio.soporte.open('rb') as fh:
+        if ext == 'pdf':
+            descrip_doc = base_name
+            upload_docs_contratos(fh, adj, proyecto, descrip_doc)
+        else:
+            descrip_doc = f'{base_name}.{ext}'
+            file_dir = f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{adj}/'
+            upload_docs(fh, file_dir, base_name, doctype=ext)
+
+    documentos_contratos.objects.using(proyecto).create(
+        adj=adj,
+        descripcion_doc=descrip_doc,
+        fecha_carga=datetime.datetime.today(),
+        usuario_carga=str(user),
+    )
+    return descrip_doc
+
+
 def registrar_envio_carta(proyecto, adj, checkpoint, user, *, canal, fecha_envio, soporte, notas=''):
     envio = CarteraCartaEnvio.objects.create(
         proyecto_id=proyecto,
@@ -1364,6 +1407,7 @@ def registrar_envio_carta(proyecto, adj, checkpoint, user, *, canal, fecha_envio
         notas=(notas or '')[:255],
         usuario=user,
     )
+    registrar_carta_cobro_en_documentos_adj(proyecto, adj, user, envio, checkpoint)
     canal_label = envio.get_canal_display()
     ck_label = checkpoint.label or checkpoint.codigo
     fecha_txt = envio.fecha_envio.strftime('%d/%m/%Y') if envio.fecha_envio else ''
@@ -2368,9 +2412,6 @@ def crear_seguimiento(proyecto, adj, user, cleaned, *, fecha=None):
     if not cleaned.get('tiene_compromiso'):
         valor = 0
         fecha_c = None
-    if fecha_c and hasattr(fecha_c, 'isoformat'):
-        fecha_c = fecha_c.isoformat()
-
     # Un nuevo compromiso reemplaza (cierra) los anteriores del ADJ
     if int(valor or 0) > 0:
         cerrar_compromisos_previos(proyecto, adj, user, motivo='reemplazado')
@@ -2382,7 +2423,7 @@ def crear_seguimiento(proyecto, adj, user, cleaned, *, fecha=None):
         forma_contacto=cleaned.get('forma_contacto'),
         respuesta_cliente=(cleaned.get('comentarios') or '')[:255],
         valor_compromiso=valor or 0,
-        fecha_compromiso=fecha_c or '',
+        fecha_compromiso=fecha_c or None,
         usuario=user,
     )
 
@@ -2395,7 +2436,7 @@ def _marcar_compromiso_cerrado(seg, *, motivo='cerrado'):
     texto = f'{nota} {prev}'.strip() if prev else nota
     seg.respuesta_cliente = texto[:255]
     seg.valor_compromiso = 0
-    seg.fecha_compromiso = ''
+    seg.fecha_compromiso = None
     seg.save(update_fields=['respuesta_cliente', 'valor_compromiso', 'fecha_compromiso'])
     return seg
 

@@ -27,7 +27,7 @@
                 </thead>
                 <tbody>
                 {%for documento in lista_documentos%}
-                    <tr data-url="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:adj|add:'/'|add:documento.descripcion_doc|add:'.pdf'|media_url }}">
+                    <tr data-url="{{ 'docs_andinasoft/doc_contratos/'|add:proyecto|add:'/'|add:adj|add:'/'|add:documento.descripcion_doc|doc_contrato_storage_name|media_url }}">
                         <th>{{documento.descripcion_doc}}</th>
                         <th class='text-align-center'>{{documento.fecha_carga|date:"d/m/Y"}}</th>
                         <th class='text-align-center'>{{documento.usuario_carga}}</th>

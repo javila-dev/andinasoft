@@ -6,7 +6,7 @@ Solo mocks / helpers puros — no requieren BD de proyecto.
 import datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
@@ -27,6 +27,7 @@ from andinasoft.cartera_gestor_service import (
     id_cuota_label,
     kpis_from_rows,
     logo_carta_static,
+    registrar_carta_cobro_en_documentos_adj,
     nombres_titulares_carta,
     nro_contrato_from_adj,
     plantilla_html_por_codigo,
@@ -680,3 +681,53 @@ class ComportamientoTimelineTests(SimpleTestCase):
         acuerdo = next(e for e in data['eventos'] if e['tipo'] == 'acuerdo')
         self.assertEqual(acuerdo['fecha'], '2026-08-10')
         self.assertEqual(acuerdo['valor'], 800000)
+
+
+class RegistrarCartaDocumentosAdjTests(SimpleTestCase):
+    def test_registra_pdf_en_documentos_contratos(self):
+        checkpoint = SimpleNamespace(label='30 dias', codigo='d30')
+        envio = SimpleNamespace(
+            id=42,
+            fecha_envio=datetime.date(2026, 8, 19),
+            soporte=MagicMock(name='soporte.pdf'),
+        )
+        envio.soporte.name = 'cartera/cartas_soporte/2026/08/soporte.pdf'
+        envio.soporte.open.return_value.__enter__.return_value = b'%PDF'
+
+        docs_qs = MagicMock()
+        with patch('andinasoft.cartera_gestor_service.upload_docs_contratos') as upload_pdf, \
+             patch('andinasoft.cartera_gestor_service.upload_docs') as upload_other, \
+             patch('andinasoft.cartera_gestor_service.documentos_contratos') as docs_model:
+            docs_model.objects.using.return_value = docs_qs
+            descrip = registrar_carta_cobro_en_documentos_adj(
+                'PROY1', 'ADJ-1', 'gestor1', envio, checkpoint,
+            )
+
+        upload_pdf.assert_called_once()
+        upload_other.assert_not_called()
+        docs_qs.create.assert_called_once()
+        self.assertEqual(descrip, 'Carta de Cobro_30_dias_2026-08-19_42')
+        self.assertEqual(docs_qs.create.call_args.kwargs['descripcion_doc'], descrip)
+
+    def test_registra_imagen_con_extension_en_descripcion(self):
+        checkpoint = SimpleNamespace(label='45 dias', codigo='d45')
+        envio = SimpleNamespace(
+            id=7,
+            fecha_envio=datetime.date(2026, 8, 19),
+            soporte=MagicMock(name='captura.jpg'),
+        )
+        envio.soporte.name = 'cartera/cartas_soporte/2026/08/captura.jpg'
+        envio.soporte.open.return_value.__enter__.return_value = b'JPEG'
+
+        docs_qs = MagicMock()
+        with patch('andinasoft.cartera_gestor_service.upload_docs_contratos') as upload_pdf, \
+             patch('andinasoft.cartera_gestor_service.upload_docs') as upload_other, \
+             patch('andinasoft.cartera_gestor_service.documentos_contratos') as docs_model:
+            docs_model.objects.using.return_value = docs_qs
+            descrip = registrar_carta_cobro_en_documentos_adj(
+                'PROY1', 'ADJ-1', 'gestor1', envio, checkpoint,
+            )
+
+        upload_other.assert_called_once()
+        upload_pdf.assert_not_called()
+        self.assertEqual(descrip, 'Carta de Cobro_45_dias_2026-08-19_7.jpg')

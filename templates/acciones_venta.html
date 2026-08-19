@@ -538,12 +538,10 @@
 
 
         $('#formOpcion').on('submit',function(e){
-            let fci = $('#formaci').clone()
-            fci = fci.prop('hidden',true)
-            let fs = $('#formasaldo').clone()
-            fs = fs.prop('hidden',true)
-            $(this).append(fci)
-            $(this).append(fs)
+            // clone() no copia el valor vivo de un textarea; hay que mandar .val().
+            $(this).find('input[name="formaci"], input[name="formasaldo"]').remove()
+            $('<input>', {type: 'hidden', name: 'formaci', value: $('#formaci').val() || ''}).appendTo(this)
+            $('<input>', {type: 'hidden', name: 'formasaldo', value: $('#formasaldo').val() || ''}).appendTo(this)
             return true;
         })
         $('#titular1').val('{{datos_venta.id_t1}}')

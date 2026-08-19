@@ -257,6 +257,40 @@
     </div>
 </div>
 
+<div class="modal fade" id="ModalformaManual" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title">Digita la forma de pago manual</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="text-justify">Estas viendo esta ventana porque el parametro de formas de pago
+                    manual esta activo. Esta forma de pago es solo para impresion, no se guarda ni afecta el plan de pagos.</p>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text" style="padding-right: 3.2rem;">Forma CI</span>
+                    </div>
+                    <textarea class="form-control" name="formaci" id="formaci" rows="3"></textarea>
+                </div>
+                <br>
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text" style="padding-right: 1.7rem;">Forma Saldo</span>
+                    </div>
+                    <textarea class="form-control" name="formasaldo" id="formasaldo" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnContinuarFormaManual">Imprimir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <form id="formReimp" method="POST" action="">{%csrf_token%}
     <input type="hidden" name="adjpromesa" id="reimp_adj">
     <input type="hidden" name="btnReimpPromesa" value="1">
@@ -282,6 +316,7 @@
     var urlBase = '/operaciones/promesas/{{proyecto}}';
     var csrf = '{{csrf_token}}';
     var tablasPromesas = {};
+    var formaPagoManualModulo = '{{forma_pago_manual_modulo|yesno:"true,false"}}' === 'true';
 
     function initPromesaTables(){
         $('.promesa-table').each(function(){
@@ -394,8 +429,22 @@
     function reimprimir(adj){
         if (!confirm('Reimprimir la promesa de ' + adj + '?')) return;
         $('#reimp_adj').val(adj);
+        if (formaPagoManualModulo) {
+            $('#formaci').val('');
+            $('#formasaldo').val('');
+            $('#ModalformaManual').modal('show');
+            return;
+        }
         $('#formReimp').submit();
     }
+
+    $('#btnContinuarFormaManual').on('click', function(){
+        $('#formReimp').find('input[name="formaci"], input[name="formasaldo"]').remove();
+        $('<input>', {type: 'hidden', name: 'formaci', value: $('#formaci').val() || ''}).appendTo('#formReimp');
+        $('<input>', {type: 'hidden', name: 'formasaldo', value: $('#formasaldo').val() || ''}).appendTo('#formReimp');
+        $('#ModalformaManual').modal('hide');
+        $('#formReimp').submit();
+    });
 
     $(document).on('click', '.btn-accion-promesa', function(e){
         e.preventDefault();

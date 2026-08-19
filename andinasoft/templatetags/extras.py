@@ -200,6 +200,18 @@ def porcentaje_entero(value,total):
     return porcentaje
 
 
+@register.filter(name='doc_contrato_storage_name')
+def doc_contrato_storage_name(descripcion_doc):
+    """Nombre de archivo en storage: legacy sin extension asume .pdf."""
+    if not descripcion_doc:
+        return ''
+    lower = str(descripcion_doc).lower()
+    for ext in ('.pdf', '.jpg', '.jpeg', '.png', '.webp'):
+        if lower.endswith(ext):
+            return descripcion_doc
+    return f'{descripcion_doc}.pdf'
+
+
 @register.filter(name='media_url')
 def media_url(path):
     if not path:

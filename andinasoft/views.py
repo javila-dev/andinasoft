@@ -4615,11 +4615,16 @@ def acciones_venta(request,proyecto,contrato):
                     ruta=settings.DIR_EXPORT+f'{proyecto}_contrato_{contrato}.pdf'
 
                     if forma_pago_es_manual(proyecto, ORIGEN_VENTA):
-                        formaCI = request.POST.get('formaci') or ''
-                        formaFN = request.POST.get('formasaldo') or ''
-                        # Plantillas HTML (xhtml2pdf/weasyprint) leen ctr.general_info.fp_*.
-                        obj_ctr._fp_ci_override = formaCI
-                        obj_ctr._fp_saldo_override = formaFN
+                        posted_ci = (request.POST.get('formaci') or '').strip()
+                        posted_saldo = (request.POST.get('formasaldo') or '').strip()
+                        # Solo pisa el texto automatico si realmente llego texto digitado.
+                        # Un POST vacio (p.ej. clone de textarea) dejaba el PDF en blanco.
+                        if posted_ci:
+                            formaCI = posted_ci
+                            obj_ctr._fp_ci_override = posted_ci
+                        if posted_saldo:
+                            formaFN = posted_saldo
+                            obj_ctr._fp_saldo_override = posted_saldo
 
                     try:
                         cfg = get_config_documento(proyecto, ORIGEN_VENTA)
@@ -7160,9 +7165,15 @@ def promesas(request,proyecto):
             forma = ('', '', '')
         formaci = promesa.formaci or ''
         formasaldo = promesa.formasaldo or ''
-        if not forma_pago_es_manual(proyecto, ORIGEN_MODULO):
-            formaci = formaci or ''
-            formasaldo = formasaldo or ''
+        if forma_pago_es_manual(proyecto, ORIGEN_MODULO):
+            posted_ci = (request.POST.get('formaci') or '').strip()
+            posted_saldo = (request.POST.get('formasaldo') or '').strip()
+            if posted_ci:
+                formaci = posted_ci
+                promesa._fp_ci_override = posted_ci
+            if posted_saldo:
+                formasaldo = posted_saldo
+                promesa._fp_saldo_override = posted_saldo
         obs = promesa.observaciones or ''
         ciudad = promesa.ciudad or ''
         fecha_prom = promesa.fechapromesa or datetime.date.today()
@@ -7223,6 +7234,8 @@ def promesas(request,proyecto):
             'fecha_escritura': fecha_escritura,
             'meses_entrega': meses_entrega,
             'oficina': ciudad,
+            'formaCI': formaci,
+            'formaFN': formasaldo,
         }
         cfg = get_config_documento(proyecto, ORIGEN_MODULO)
         if cfg.plantilla == 'ExportPromesaBugambilias':
