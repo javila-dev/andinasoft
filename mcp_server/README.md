@@ -27,9 +27,10 @@ Consulta el inventario de lotes/inmuebles de un proyecto.
 | Parámetro | Tipo | Requerido | Descripción |
 |---|---|---|---|
 | `proyecto` | string | ✅ | Nombre del proyecto (ej: `"Fractal"`, `"Casas de Verano"`) |
-| `estado` | string | — | `Libre` · `Bloqueado` · `Sin Liberar` · `Adjudicado` · `Reservado` (case-insensitive). Default: `Libre` |
-| `manzana` | string | — | Manzanas separadas por coma: `"1,2,3"` |
-| `idinmueble` | string | — | ID exacto de un lote. Si se envía, ignora `estado` y `manzana` |
+| `estado` | string | — | `Libre` · `Bloqueado` · `Sin Liberar` · `Adjudicado` · `Reservado` (case-insensitive). Default: `Libre` (incluye “libres en manzana X”). Si envías `lote` sin estado, no fuerza `Libre` |
+| `manzana` | string | — | Manzanas separadas por coma: `"6"` o `"06"` (tolera padding) |
+| `lote` | string | — | Números de lote separados por coma: `"1A,1B"` (case-insensitive) |
+| `idinmueble` | string | — | ID exacto de un lote. Si se envía, ignora `estado`, `manzana` y `lote` |
 
 **Respuesta:**
 ```json

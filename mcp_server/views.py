@@ -385,6 +385,7 @@ def _handle_call_tool(params: dict, user) -> dict:
             proyecto=args.get('proyecto'),
             estado=args.get('estado'),
             manzana=args.get('manzana'),
+            lote=args.get('lote'),
             idinmueble=args.get('idinmueble'),
             user=user
         ),
