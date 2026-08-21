@@ -6,8 +6,13 @@
     <h4 class='border-bottom border-gray' style='padding-bottom:1rem;'><strong>Correr fechas a cuotas pendientes</strong>
     <small class='text-muted'>{{adj}}</small>
     </h4>
-    <br>
-    <p class='lead'>Escoge la cuota a partir de la cual deseas mover la fecha de pago</p>
+    {% if mensaje %}
+    <div class="alert alert-success" role="alert">{{ mensaje }}</div>
+    {% endif %}
+    {% if mensaje_error %}
+    <div class="alert alert-danger" role="alert">{{ mensaje_error }}</div>
+    {% endif %}
+    <p class='lead'>Escoge la cuota. Puedes mover solo esa fecha, o aplazar desde esa cuota hacia adelante.</p>
     <br>
     <div class='table-responsive'>
         <table id='tablaCuotas' class='striped hover compact row-border'>
@@ -23,7 +28,12 @@
             <tbody>
                 {%for cuota in cuotas_pendientes%}
                 <tr>
-                    <td class='text-center'><a href="#" data-toggle='modal' data-target='#modalCorrerfecha' data-cuota='{{cuota.nrocta}}' data-fecha='{{cuota.fecha|date:"d/m/Y"}}'>{{cuota.idcta}}</a></td>
+                    <td class='text-center'>
+                        <a href="#" data-toggle='modal' data-target='#modalCorrerfecha'
+                           data-idcta='{{cuota.idcta}}'
+                           data-cuota='{{cuota.nrocta}}'
+                           data-fecha='{{cuota.fecha|date:"d/m/Y"}}'>{{cuota.idcta}}</a>
+                    </td>
                     <td class='text-center'>{{cuota.fecha|date:"d/m/Y"}}</td>
                     <td class='text-center'>{{cuota.tipocta}}</td>
                     <td class='text-center'>{{cuota.nrocta}}</td>
@@ -33,42 +43,69 @@
             </tbody>
         </table>
     </div>
-</div>     
+</div>
 <div class="modal fade" id="modalCorrerfecha" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
     aria-labelledby="staticBackdropLabel" aria-hidden="true">
-    <div class="modal-dialog modal-sm">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="staticBackdropLabel">Mover fechas de pago</h5>
+                <h5 class="modal-title" id="staticBackdropLabel">Mover fecha de pago</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <form method='POST'>{%csrf_token%}
+            <form method='POST' id='formMoverFecha'>{%csrf_token%}
+                <input type="hidden" name="idcta" id="idcta" value="">
                 <div class="modal-body">
-                    <div class="input-group text-center">
+                    <div class="input-group text-center mb-2">
                         <div class='input-group-prepend'>
-                            <span class="input-group-text">Cuota desde</span>
+                            <span class="input-group-text">Cuota</span>
                         </div>
-                        <input type='text' id='cuotadesde' name='cuotadesde'class='text-center form-control' readonly required>
+                        <input type='text' id='cuotadesde' name='cuotadesde' class='text-center form-control' readonly required>
                     </div>
-                    <br>
-                    <div class="input-group text-center">
+                    <div class="input-group text-center mb-2">
                         <div class='input-group-prepend'>
                             <span class="input-group-text">Fecha actual</span>
                         </div>
-                        <input type='text' id='fechacuota' name='fechacuota'class='text-center form-control' readonly required>
+                        <input type='text' id='fechacuota' name='fechacuota' class='text-center form-control' readonly required>
                     </div>
-                    <br>
-                    <div class="input-group text-center">
+                    <div class="form-group mb-2">
+                        <label class="mb-1">Que quieres mover</label>
+                        <select class="form-control" name="alcance" id="alcance" required>
+                            <option value="individual" selected>Solo esta cuota</option>
+                            <option value="desde">Esta y las siguientes (por fecha)</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="mb-1">Como mover la fecha</label>
+                        <select class="form-control" name="modo" id="modo" required>
+                            <option value="meses" selected>Sumar meses</option>
+                            <option value="dias">Sumar dias</option>
+                            <option value="fecha" id="optFechaExacta">Ir a una fecha exacta</option>
+                        </select>
+                    </div>
+                    <div class="input-group text-center mb-2" id="grupoMeses">
                         <div class='input-group-prepend'>
-                            <span class="input-group-text" style='padding-right: 55px;'>Mover</span>
+                            <span class="input-group-text">Meses</span>
                         </div>
-                        <input type='number' min='1' class='text-center form-control' name='meses' placeholder='meses' required>
+                        <input type='number' min='1' class='text-center form-control' name='meses' id='meses' placeholder='ej. 1'>
                     </div>
+                    <div class="input-group text-center mb-2 d-none" id="grupoDias">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text">Dias</span>
+                        </div>
+                        <input type='number' min='1' class='text-center form-control' name='dias' id='dias' placeholder='ej. 15'>
+                    </div>
+                    <div class="input-group text-center mb-2 d-none" id="grupoFechaDestino">
+                        <div class='input-group-prepend'>
+                            <span class="input-group-text">Nueva fecha</span>
+                        </div>
+                        <input type='date' class='text-center form-control' name='fecha_destino' id='fecha_destino'>
+                    </div>
+                    <small class="text-muted" id="ayudaAlcance">Solo cambia la fecha de esta cuota; las demas no se afectan.</small>
                 </div>
                 <div class="modal-footer" id='footer'>
-                    <button type='submit' class='btn btn-primary' id='correrFecha'>Aceptar</a>
+                    <button type='submit' class='btn btn-primary' id='correrFecha'>Aceptar</button>
                 </div>
             </form>
         </div>
@@ -84,12 +121,54 @@
         ],
         columnDefs: [{ type: 'date-uk', targets: 1 }]
     })
-    $('#modalCorrerfecha').on('show.bs.modal',function(event){
+
+    function actualizarCamposModo() {
+        var modo = $('#modo').val()
+        var alcance = $('#alcance').val()
+        $('#grupoMeses').addClass('d-none')
+        $('#grupoDias').addClass('d-none')
+        $('#grupoFechaDestino').addClass('d-none')
+        $('#meses').prop('required', false)
+        $('#dias').prop('required', false)
+        $('#fecha_destino').prop('required', false)
+
+        if (alcance === 'desde') {
+            $('#optFechaExacta').prop('disabled', true)
+            if (modo === 'fecha') {
+                $('#modo').val('meses')
+                modo = 'meses'
+            }
+            $('#ayudaAlcance').text('Mueve esta cuota y todas las que tengan fecha igual o posterior.')
+        } else {
+            $('#optFechaExacta').prop('disabled', false)
+            $('#ayudaAlcance').text('Solo cambia la fecha de esta cuota; las demas no se afectan.')
+        }
+
+        if (modo === 'meses') {
+            $('#grupoMeses').removeClass('d-none')
+            $('#meses').prop('required', true)
+        } else if (modo === 'dias') {
+            $('#grupoDias').removeClass('d-none')
+            $('#dias').prop('required', true)
+        } else {
+            $('#grupoFechaDestino').removeClass('d-none')
+            $('#fecha_destino').prop('required', true)
+        }
+    }
+
+    $('#modo, #alcance').on('change', actualizarCamposModo)
+
+    $('#modalCorrerfecha').on('show.bs.modal', function(event){
         var button = $(event.relatedTarget)
-        var fecha = button.data('fecha')
-        var cuota = button.data('cuota')
-        $('#fechacuota').val(fecha)
-        $('#cuotadesde').val(cuota)
+        $('#fechacuota').val(button.data('fecha'))
+        $('#cuotadesde').val(button.data('cuota'))
+        $('#idcta').val(button.data('idcta'))
+        $('#alcance').val('individual')
+        $('#modo').val('meses')
+        $('#meses').val('')
+        $('#dias').val('')
+        $('#fecha_destino').val('')
+        actualizarCamposModo()
     })
 </script>
 {%endblock%}

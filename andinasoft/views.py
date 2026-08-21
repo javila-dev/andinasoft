@@ -5940,28 +5940,148 @@ def reestructuraciones(request,proyecto,adj):
             
     return render(request,'reestructuracion.html',context)
 
+def _parse_fecha_mover(value):
+    """Acepta d/m/Y o YYYY-MM-DD. Devuelve date o None."""
+    if not value:
+        return None
+    value = str(value).strip()
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.datetime.strptime(value, fmt).date()
+        except (ValueError, TypeError):
+            continue
+    parsed = parse_date(value)
+    return parsed
+
+
+def _delta_fecha_cuota(fecha_actual, modo, meses=None, dias=None, fecha_destino=None):
+    """
+    Calcula la nueva fecha de una cuota.
+    modo: 'meses' | 'dias' | 'fecha'
+    """
+    if modo == 'meses':
+        try:
+            n = int(meses)
+        except (TypeError, ValueError):
+            raise ValueError('Indica un numero de meses valido.')
+        if n < 1:
+            raise ValueError('Indica al menos 1 mes.')
+        return fecha_actual + relativedelta(months=n)
+    if modo == 'dias':
+        try:
+            n = int(dias)
+        except (TypeError, ValueError):
+            raise ValueError('Indica un numero de dias valido.')
+        if n < 1:
+            raise ValueError('Indica al menos 1 dia.')
+        return fecha_actual + relativedelta(days=n)
+    if modo == 'fecha':
+        nueva = _parse_fecha_mover(fecha_destino)
+        if nueva is None:
+            raise ValueError('Indica una fecha valida.')
+        return nueva
+    raise ValueError('Modo de movimiento no valido.')
+
+
 @group_perm_required(perms=('andinasoft.change_adjudicacion',),raise_exception=True)
 def mover_fechas(request,proyecto,adj):
-    cuotas_pendientes=saldos_adj.objects.using(proyecto).filter(adj=adj,saldocuota__gt=0)
-    context={
-        'proyecto':proyecto,
-        'adj':adj,
-        'cuotas_pendientes':cuotas_pendientes,
-    }
+    check_project(request, proyecto)
+    mensaje = None
+    mensaje_error = None
+
     if request.method == 'POST':
-        fecha=request.POST.get('fechacuota')
-        meses=request.POST.get('meses')
-        fecha_inicio=datetime.datetime.strptime(fecha,'%d/%m/%Y')
-        cuotas_modify=PlanPagos.objects.using(proyecto).filter(adj=adj,fecha__gte=fecha_inicio)        
-        for cuota in cuotas_modify:
-            cuota.fecha+=relativedelta(cuota.fecha,months=int(meses))
-            cuota.save()
-        obj_timeline=timeline.objects.using(proyecto)
-        obj_timeline.create(adj=adj,
-                        fecha=datetime.date.today(),
-                        usuario=request.user,
-                        accion='Aplicó un aplazamiento en fechas')
-    return render(request,'mover_fechas.html',context)
+        alcance = (request.POST.get('alcance') or 'individual').strip()
+        modo = (request.POST.get('modo') or 'meses').strip()
+        idcta = (request.POST.get('idcta') or '').strip()
+        fecha_ref = _parse_fecha_mover(request.POST.get('fechacuota'))
+        meses = request.POST.get('meses')
+        dias = request.POST.get('dias')
+        fecha_destino = request.POST.get('fecha_destino')
+
+        try:
+            if alcance == 'individual':
+                if not idcta:
+                    raise ValueError('Selecciona una cuota.')
+                cuota = PlanPagos.objects.using(proyecto).filter(adj=adj, idcta=idcta).first()
+                if cuota is None or cuota.fecha is None:
+                    raise ValueError('No se encontro la cuota seleccionada.')
+                if not saldos_adj.objects.using(proyecto).filter(
+                    adj=adj, idcta=idcta, saldocuota__gt=0
+                ).exists():
+                    raise ValueError('Solo se pueden mover cuotas con saldo pendiente.')
+                fecha_anterior = cuota.fecha
+                cuota.fecha = _delta_fecha_cuota(
+                    fecha_anterior, modo, meses=meses, dias=dias, fecha_destino=fecha_destino,
+                )
+                cuota.save()
+                timeline.objects.using(proyecto).create(
+                    adj=adj,
+                    fecha=datetime.date.today(),
+                    usuario=request.user,
+                    accion=(
+                        f'Cambio fecha cuota {idcta}: '
+                        f'{fecha_anterior.strftime("%d/%m/%Y")} a '
+                        f'{cuota.fecha.strftime("%d/%m/%Y")}'
+                    )[:255],
+                )
+                mensaje = (
+                    f'Fecha de la cuota {idcta} actualizada: '
+                    f'{fecha_anterior.strftime("%d/%m/%Y")} -> '
+                    f'{cuota.fecha.strftime("%d/%m/%Y")}.'
+                )
+            elif alcance == 'desde':
+                if modo == 'fecha':
+                    raise ValueError(
+                        'La fecha exacta solo aplica a una cuota. '
+                        'Para mover varias usa meses o dias.'
+                    )
+                if fecha_ref is None:
+                    raise ValueError('No se pudo leer la fecha de referencia.')
+                # Preview delta sobre una fecha dummy para validar el modo
+                _delta_fecha_cuota(
+                    fecha_ref, modo, meses=meses, dias=dias, fecha_destino=fecha_destino,
+                )
+                cuotas_modify = list(
+                    PlanPagos.objects.using(proyecto).filter(adj=adj, fecha__gte=fecha_ref)
+                )
+                if not cuotas_modify:
+                    raise ValueError('No hay cuotas desde la fecha seleccionada.')
+                for cuota in cuotas_modify:
+                    cuota.fecha = _delta_fecha_cuota(
+                        cuota.fecha, modo, meses=meses, dias=dias, fecha_destino=fecha_destino,
+                    )
+                    cuota.save()
+                if modo == 'meses':
+                    detalle = f'{int(meses)} mes(es)'
+                else:
+                    detalle = f'{int(dias)} dia(s)'
+                timeline.objects.using(proyecto).create(
+                    adj=adj,
+                    fecha=datetime.date.today(),
+                    usuario=request.user,
+                    accion=(
+                        f'Aplazo fechas desde {fecha_ref.strftime("%d/%m/%Y")} '
+                        f'({len(cuotas_modify)} cuotas, {detalle})'
+                    )[:255],
+                )
+                mensaje = (
+                    f'Se movieron {len(cuotas_modify)} cuotas desde '
+                    f'{fecha_ref.strftime("%d/%m/%Y")} ({detalle}).'
+                )
+            else:
+                raise ValueError('Alcance no valido.')
+        except (ValueError, TypeError) as exc:
+            mensaje_error = str(exc) or 'No se pudo aplicar el cambio de fecha.'
+
+    cuotas_pendientes = saldos_adj.objects.using(proyecto).filter(adj=adj, saldocuota__gt=0)
+    context = {
+        'proyecto': proyecto,
+        'adj': adj,
+        'cuotas_pendientes': cuotas_pendientes,
+        'mensaje': mensaje,
+        'mensaje_error': mensaje_error,
+    }
+    return render(request, 'mover_fechas.html', context)
 
 @group_perm_required(perms=('andinasoft.add_pagocomision',),raise_exception=True)
 def comisiones(request,proyecto):
