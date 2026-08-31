@@ -50,5 +50,7 @@ urlpatterns = [
     path('caja-bills/duplicates/review', views.caja_bills_duplicates_review, name='alegra-caja-bills-duplicates-review'),
     path('caja-bills/duplicates/delete', views.caja_bills_duplicates_delete, name='alegra-caja-bills-duplicates-delete'),
     path('caja-bills/duplicates/associate', views.caja_bills_duplicates_associate, name='alegra-caja-bills-duplicates-associate'),
+    path('expense-payments/bill-review', views.expense_payment_bill_review, name='alegra-expense-payment-bill-review'),
+    path('expense-payments/bill-apply', views.expense_payment_bill_apply, name='alegra-expense-payment-bill-apply'),
     path('debug/mapping-check', views.debug_mapping_check, name='alegra-debug-mapping-check'),
 ]

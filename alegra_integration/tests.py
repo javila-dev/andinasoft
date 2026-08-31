@@ -2434,6 +2434,198 @@ class PaymentReconcileTests(SimpleTestCase):
         mock_reconcile.assert_called_once()
 
 
+class ExpensePaymentBillReviewTests(SimpleTestCase):
+    def _factura(self, **overrides):
+        base = dict(
+            pk=18409,
+            nrofactura='2932',
+            alegra_bill_id='901018375:330',
+            alegra_document_type='bill',
+            empresa=SimpleNamespace(pk='901018375'),
+            save=Mock(),
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def _pago(self, factura):
+        return SimpleNamespace(
+            pk=15651,
+            nroradicado=factura,
+            valor=602437,
+            cuenta=SimpleNamespace(pk=1),
+        )
+
+    def _doc(self, **overrides):
+        from alegra_integration.models import AlegraDocument
+
+        base = dict(
+            pk=99,
+            document_type='expense_payment',
+            status=AlegraDocument.STATUS_FAILED,
+            source_model='accounting.Pagos',
+            source_pk='15651',
+            local_key='expense:pago:15651',
+            empresa=SimpleNamespace(pk='901018375'),
+            empresa_id='901018375',
+            alegra_operation='POST /payments',
+            transport='rest',
+            payload={
+                'type': 'out',
+                'bills': [{'id': '329', 'amount': 602437}],
+                '__local': {'etiqueta': 'Pago 15651'},
+            },
+            error='El monto es mayor',
+            response={},
+            alegra_id='',
+            save=Mock(),
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.Pagos.objects')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_review_detects_mismatch_and_other_owner(
+        self, mock_doc_objects, mock_pagos, mock_client_cls,
+    ):
+        from alegra_integration.services import AlegraIntegrationService
+
+        factura = self._factura()
+        pago = self._pago(factura)
+        doc = self._doc()
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_pagos.select_related.return_value.get.return_value = pago
+
+        client = Mock()
+        client.get_bill.side_effect = lambda bid, **kw: {
+            'id': str(bid),
+            'date': '2026-08-05',
+            'client': {'name': 'PROVEEDOR'},
+            'total': 602437,
+            'balance': 602437,
+            'status': 'open',
+            'numberTemplate': {'number': bid},
+        }
+        mock_client_cls.return_value = client
+
+        def owners(empresa, bill_id, *, exclude_factura_pk=None):
+            if str(bill_id) == '329':
+                return [{'factura_id': 100, 'nrofactura': 'OTHER', 'via': 'radicado'}]
+            return []
+
+        with patch.object(AlegraIntegrationService, '_mapping_bill_id', return_value='329'), \
+             patch.object(AlegraIntegrationService, '_factura_bill_owners', side_effect=owners):
+            data = AlegraIntegrationService().review_expense_payment_bill(document_id=99)
+
+        self.assertTrue(data['mismatch'])
+        self.assertEqual(data['sources']['payload'], '329')
+        self.assertEqual(data['sources']['mapping'], '329')
+        self.assertEqual(data['sources']['factura'], '330')
+        self.assertEqual(data['suggested_bill_id'], '330')
+        by_id = {b['id']: b for b in data['bills']}
+        self.assertTrue(by_id['329']['used_by_other'])
+        self.assertEqual(by_id['329']['owners'][0]['factura_id'], 100)
+        self.assertTrue(by_id['330']['exists_in_alegra'])
+        self.assertFalse(by_id['330']['used_by_other'])
+
+    @patch('alegra_integration.services.ExpensePaymentBuilder')
+    @patch('alegra_integration.services.sync_alegra_bill_mapping')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.Pagos.objects')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_apply_updates_mapping_and_rebuilds_payload(
+        self, mock_doc_objects, mock_pagos, mock_client_cls, mock_sync, mock_builder_cls,
+    ):
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        factura = self._factura()
+        pago = self._pago(factura)
+        doc = self._doc()
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_pagos.select_related.return_value.get.return_value = pago
+
+        client = Mock()
+        client.get_bill.return_value = {
+            'id': '330', 'date': '2026-08-05', 'total': 602437, 'balance': 602437,
+        }
+        mock_client_cls.return_value = client
+
+        built = SimpleNamespace(
+            local_key='expense:pago:15651',
+            operation='POST /payments',
+            transport='rest',
+            payload={
+                'type': 'out',
+                'bills': [{'id': '330', 'amount': 602437.0}],
+                '__local': {'etiqueta': 'Pago 15651'},
+            },
+        )
+        mock_builder_cls.return_value.build.return_value = built
+
+        with patch.object(AlegraIntegrationService, '_factura_bill_owners', return_value=[]), \
+             patch.object(
+                 AlegraIntegrationService, '_document_summary',
+                 return_value={'id': 99, 'status': 'valid', 'payload': built.payload},
+             ):
+            result = AlegraIntegrationService().apply_expense_payment_bill(
+                document_id=99, bill_id='330',
+            )
+
+        self.assertEqual(factura.alegra_bill_id, '901018375:330')
+        self.assertEqual(factura.alegra_document_type, 'bill')
+        factura.save.assert_called_once()
+        mock_sync.assert_called_once()
+        self.assertEqual(doc.payload['bills'][0]['id'], '330')
+        self.assertEqual(doc.status, AlegraDocument.STATUS_VALID)
+        self.assertEqual(doc.error, '')
+        doc.save.assert_called_once()
+        self.assertEqual(result['bill_id'], '330')
+        self.assertEqual(result['status'], AlegraDocument.STATUS_VALID)
+
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_apply_rejects_sent(self, mock_doc_objects):
+        from alegra_integration.exceptions import AlegraIntegrationError
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        doc = self._doc(status=AlegraDocument.STATUS_SENT, alegra_id='720')
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+
+        with self.assertRaises(AlegraIntegrationError) as ctx:
+            AlegraIntegrationService().apply_expense_payment_bill(
+                document_id=99, bill_id='330',
+            )
+        self.assertIn('válido', str(ctx.exception).lower())
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.Pagos.objects')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_apply_rejects_bill_owned_by_other(
+        self, mock_doc_objects, mock_pagos, mock_client_cls,
+    ):
+        from alegra_integration.exceptions import AlegraIntegrationError
+        from alegra_integration.services import AlegraIntegrationService
+
+        factura = self._factura()
+        pago = self._pago(factura)
+        doc = self._doc()
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_pagos.select_related.return_value.get.return_value = pago
+
+        with patch.object(
+            AlegraIntegrationService,
+            '_factura_bill_owners',
+            return_value=[{'factura_id': 200, 'nrofactura': 'DUPE', 'via': 'radicado'}],
+        ):
+            with self.assertRaises(AlegraIntegrationError) as ctx:
+                AlegraIntegrationService().apply_expense_payment_bill(
+                    document_id=99, bill_id='330',
+                )
+        self.assertIn('200', str(ctx.exception))
+        mock_client_cls.assert_not_called()
+
+
 class ReceiptReconcileTests(SimpleTestCase):
     def test_reference_from_payload_strips_local(self):
         from alegra_integration.receipt_reconcile import reference_from_payload
