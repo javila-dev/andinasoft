@@ -2735,7 +2735,101 @@ class ExpensePaymentBillReviewTests(SimpleTestCase):
         self.assertEqual(factura.alegra_bill_id, '901018375:330')
         self.assertEqual(other.alegra_bill_id, '901018375:329')
         self.assertEqual(result['conflict_action'], 'swap')
+        self.assertEqual(result['swapped_bill_id'], '329')
         self.assertIn('intercambiaron', result['message'].lower())
+
+    @patch('alegra_integration.services.transaction.atomic')
+    @patch('alegra_integration.services.deactivate_alegra_bill_mapping')
+    @patch('alegra_integration.services.sync_alegra_bill_mapping')
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.Facturas.objects')
+    @patch('alegra_integration.services.Pagos.objects')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_apply_swap_uses_payload_id_when_factura_already_target(
+        self, mock_doc_objects, mock_pagos, mock_fac_qs, mock_client_cls, mock_sync, mock_deact, mock_atomic,
+    ):
+        """Si el radicado ya muestra 330 pero el pago tiene 329, el swap cede el 329."""
+        from alegra_integration.models import AlegraDocument
+        from alegra_integration.services import AlegraIntegrationService
+
+        mock_atomic.return_value.__enter__ = Mock(return_value=None)
+        mock_atomic.return_value.__exit__ = Mock(return_value=False)
+
+        # Radicado ya apunta a 330 (mismo id que se aplica); el id real a ceder está en el payload.
+        factura = self._factura(alegra_bill_id='901018375:330')
+        other = self._factura(pk=18410, nrofactura='2933', alegra_bill_id='901018375:330')
+        pago = self._pago(factura)
+        doc = self._doc()  # payload bills[].id = 329
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_pagos.select_related.return_value.get.return_value = pago
+        mock_fac_qs.get.return_value = other
+        mock_client_cls.return_value.get_bill.return_value = {'id': '330', 'total': 1}
+        summary = {'id': 99, 'status': 'valid', 'payload': {'bills': [{'id': '330'}]}}
+
+        def _rebuild(empresa, fac, *, prefer_doc=None):
+            if prefer_doc:
+                prefer_doc.payload = {'bills': [{'id': '330'}]}
+                prefer_doc.status = AlegraDocument.STATUS_VALID
+                prefer_doc.error = ''
+                return summary
+            return None
+
+        with patch.object(
+            AlegraIntegrationService, '_factura_bill_owners',
+            return_value=[{'factura_id': 18410, 'nrofactura': '2933', 'via': 'radicado'}],
+        ), patch.object(
+            AlegraIntegrationService, '_factura_has_sent_expense_payment', return_value=False,
+        ), patch.object(
+            # Mapping vacío: el id a ceder debe salir del payload 329
+            AlegraIntegrationService, '_mapping_bill_id', return_value='',
+        ), patch.object(
+            AlegraIntegrationService, '_rebuild_open_expense_docs_for_factura',
+            side_effect=_rebuild,
+        ), patch.object(
+            AlegraIntegrationService, '_document_summary', return_value=summary,
+        ):
+            # doc.payload sigue con 329 de _doc(); no pisarlo antes del apply
+            result = AlegraIntegrationService().apply_expense_payment_bill(
+                document_id=99, bill_id='330', conflict_action='swap',
+            )
+
+        self.assertEqual(factura.alegra_bill_id, '901018375:330')
+        self.assertEqual(other.alegra_bill_id, '901018375:329')
+        self.assertEqual(result['swapped_bill_id'], '329')
+
+    @patch('alegra_integration.services.AlegraMCPClient')
+    @patch('alegra_integration.services.Pagos.objects')
+    @patch('alegra_integration.services.AlegraDocument.objects')
+    def test_review_manual_bill_id_is_suggested_first(
+        self, mock_doc_objects, mock_pagos, mock_client_cls,
+    ):
+        from alegra_integration.services import AlegraIntegrationService
+
+        factura = self._factura(alegra_bill_id=None, alegra_document_type='')
+        pago = self._pago(factura)
+        doc = self._doc(payload={
+            'type': 'out',
+            'bills': [{'id': '330', 'amount': 1}],
+            '__local': {},
+        })
+        mock_doc_objects.select_related.return_value.get.return_value = doc
+        mock_pagos.select_related.return_value.get.return_value = pago
+        mock_client_cls.return_value.get_bill.side_effect = lambda bid, **kw: {
+            'id': str(bid), 'date': '2026-08-05', 'total': 1, 'status': 'open',
+            'client': {'name': 'X'}, 'numberTemplate': {'number': bid},
+        }
+
+        with patch.object(AlegraIntegrationService, '_mapping_bill_id', return_value=''), \
+             patch.object(AlegraIntegrationService, '_factura_bill_owners', return_value=[]), \
+             patch.object(AlegraIntegrationService, '_factura_has_sent_expense_payment', return_value=False):
+            data = AlegraIntegrationService().review_expense_payment_bill(
+                document_id=99, bill_id='329',
+            )
+
+        self.assertEqual(data['suggested_bill_id'], '329')
+        self.assertEqual(data['bills'][0]['id'], '329')
+        self.assertIn('329', {b['id'] for b in data['bills']})
+        self.assertIn('330', {b['id'] for b in data['bills']})
 
     @patch('alegra_integration.services.AlegraMCPClient')
     @patch('alegra_integration.services.Facturas.objects')

@@ -2833,7 +2833,10 @@ class AlegraIntegrationService:
             if bid and bid not in ids:
                 ids.append(bid)
         extra = str(bill_id or '').strip()
-        if extra and extra not in ids:
+        if extra and re.fullmatch(r'\d+', extra) and extra not in ids:
+            # Id tipado a mano: va primero para que el detalle/conflicto lo prioricen.
+            ids.insert(0, extra)
+        elif extra and extra not in ids:
             ids.append(extra)
 
         client = AlegraMCPClient(empresa)
@@ -2847,9 +2850,12 @@ class AlegraIntegrationService:
         mismatch = len({
             v for v in (payload_id, mapping_id, factura_id) if v
         }) > 1
-        suggested = factura_id or mapping_id or payload_id or extra
-        if mismatch and factura_id and factura_id != payload_id:
-            suggested = factura_id
+        if extra and re.fullmatch(r'\d+', extra):
+            suggested = extra
+        else:
+            suggested = factura_id or mapping_id or payload_id or ''
+            if mismatch and factura_id and factura_id != payload_id:
+                suggested = factura_id
 
         used_elsewhere = [b for b in bills if b.get('used_by_other')]
         missing = [b for b in bills if b.get('id') and not b.get('exists_in_alegra')]
@@ -2968,18 +2974,35 @@ class AlegraIntegrationService:
         if not isinstance(bill, dict) or not str(bill.get('id') or '').strip():
             raise AlegraIntegrationError(f'El id {bill_id} no existe en Alegra.')
 
-        _, current_bill_id = parse_alegra_bill_id_for_api(getattr(factura, 'alegra_bill_id', None))
-        current_bill_id = str(current_bill_id or '').strip() or self._mapping_bill_id(
-            doc.empresa, factura.pk,
-        )
+        # Id a ceder al otro en un swap: el que este radicado "deja", aunque el
+        # campo del radicado ya muestre el mismo id que se quiere aplicar
+        # (caso típico: radicado=330, payload/enlace=329 → aplicar 330).
+        swap_to_other = None
+        if action == 'swap':
+            _, factura_bill_id = parse_alegra_bill_id_for_api(
+                getattr(factura, 'alegra_bill_id', None),
+            )
+            factura_bill_id = str(factura_bill_id or '').strip()
+            mapping_bill_id = self._mapping_bill_id(doc.empresa, factura.pk)
+            payload_bill_id = self._payload_bill_id(doc.payload)
+            for candidate in (payload_bill_id, mapping_bill_id, factura_bill_id):
+                cand = str(candidate or '').strip()
+                if cand and cand != bill_id and re.fullmatch(r'\d+', cand):
+                    swap_to_other = cand
+                    break
+            if not swap_to_other:
+                raise AlegraIntegrationError(
+                    'No hay un id distinto en este pago/enlace para intercambiar. '
+                    'Usa liberar, o indica primero el id correcto en este radicado.'
+                )
 
         with transaction.atomic():
             if other_factura is not None:
                 # Liberar unique de alegra_bill_id antes de reasignar.
                 self._clear_factura_bill_link(doc.empresa, other_factura)
                 self._clear_factura_bill_link(doc.empresa, factura)
-                if action == 'swap' and current_bill_id and current_bill_id != bill_id:
-                    self._set_factura_bill_link(doc.empresa, other_factura, current_bill_id)
+                if action == 'swap' and swap_to_other:
+                    self._set_factura_bill_link(doc.empresa, other_factura, swap_to_other)
                 self._set_factura_bill_link(doc.empresa, factura, bill_id)
             else:
                 self._set_factura_bill_link(doc.empresa, factura, bill_id)
@@ -3034,8 +3057,9 @@ class AlegraIntegrationService:
             )
         elif action == 'swap':
             msg = (
-                f'Se intercambiaron los enlaces y este pago quedó con id {bill_id}. '
-                'Ya puedes enviarlo.'
+                f'Se intercambiaron los enlaces: este quedó con {bill_id}'
+                + (f' y el otro con {swap_to_other}' if swap_to_other else '')
+                + '. Ya puedes enviarlo.'
             )
         else:
             msg = 'Enlace actualizado y pago armado de nuevo. Ya puedes enviarlo.'
@@ -3047,6 +3071,7 @@ class AlegraIntegrationService:
             'status': doc.status,
             'conflict_action': action,
             'other_factura_id': other_factura.pk if other_factura else None,
+            'swapped_bill_id': swap_to_other,
             'message': msg,
             'document': summary or self._document_summary(doc),
         }

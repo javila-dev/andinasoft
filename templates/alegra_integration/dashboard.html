@@ -1507,6 +1507,8 @@ function expBillSetLoading(on, text) {
   } else {
     $('#expBillLoading').hide();
     $('#expBillContent').css('opacity', 1);
+    // Consultar debe volver a habilitarse; Apply/Release/Swap los ajusta refresh.
+    $('#expBillBtnConsult').prop('disabled', false);
   }
 }
 
@@ -1548,7 +1550,14 @@ function expBillLoadReview(extraBillId) {
   if (!expBillState || !expBillState.document_id) return;
   const payload = { document_id: expBillState.document_id };
   const typed = (extraBillId != null ? extraBillId : $('#expBillInput').val() || '').toString().trim();
-  if (typed) payload.bill_id = typed;
+  if (typed) {
+    if (!/^\d+$/.test(typed)) {
+      expBillShowAlert('warning', 'Indica un id numérico de factura en Alegra.');
+      return;
+    }
+    payload.bill_id = typed;
+    $('#expBillInput').val(typed);
+  }
   expBillShowAlert();
   expBillSetLoading(true, 'Consultando Alegra…');
   $.ajax({
@@ -1559,6 +1568,7 @@ function expBillLoadReview(extraBillId) {
     data: JSON.stringify(payload),
   }).done(function(data) {
     expBillState = data;
+    if (typed) data._focus_bill_id = typed;
     renderExpBillModal(data);
   }).fail(function(xhr) {
     const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
@@ -1643,7 +1653,9 @@ function renderExpBillModal(data) {
   } else {
     $('#expBillFacturaHint').hide();
   }
-  if (!$('#expBillInput').val() && data.suggested_bill_id) {
+  if (data._focus_bill_id) {
+    $('#expBillInput').val(data._focus_bill_id);
+  } else if (!$('#expBillInput').val() && data.suggested_bill_id) {
     $('#expBillInput').val(data.suggested_bill_id);
   }
   const tbody = $('#expBillBody').empty();
@@ -1678,9 +1690,24 @@ function renderExpBillModal(data) {
         <td>${other}</td>
       </tr>`);
     });
-    const preferred = ($('#expBillInput').val() || data.suggested_bill_id || '').toString();
-    const selected = bills.find(b => String(b.id) === preferred) || bills[0];
-    renderExpBillDetail(selected);
+    const preferred = (
+      data._focus_bill_id
+      || $('#expBillInput').val()
+      || data.suggested_bill_id
+      || ''
+    ).toString();
+    const selected = bills.find(b => String(b.id) === preferred) || null;
+    if (selected) {
+      renderExpBillDetail(selected);
+    } else if (preferred) {
+      $('#expBillDetailId').text('Id ' + preferred);
+      $('#expBillDetailBody').html(
+        '<div class="col-12 text-muted">Este id no está en la lista. Pulsa Consultar para traerlo de Alegra.</div>'
+      );
+      $('#expBillDetail').show();
+    } else {
+      renderExpBillDetail(bills[0]);
+    }
   }
   expBillRefreshApplyEnabled();
 }
@@ -1724,8 +1751,19 @@ function expBillRefreshApplyEnabled() {
 
 function expBillConsult() {
   const typed = ($('#expBillInput').val() || '').trim();
+  if (!typed) {
+    expBillShowAlert('warning', 'Escribe el id de factura en Alegra y pulsa Consultar.');
+    return;
+  }
   expBillLoadReview(typed);
 }
+
+$(document).on('keydown', '#expBillInput', function(ev) {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    expBillConsult();
+  }
+});
 
 function expBillApply(conflictAction) {
   if (!expBillState || !expBillState.document_id) return;
