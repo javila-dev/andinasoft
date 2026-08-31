@@ -1920,6 +1920,7 @@ def expense_payment_bill_apply(request):
         data = AlegraIntegrationService(user=request.user).apply_expense_payment_bill(
             document_id=payload.get('document_id'),
             bill_id=payload.get('bill_id'),
+            conflict_action=payload.get('conflict_action'),
         )
         return JsonResponse(data)
     except json.JSONDecodeError:

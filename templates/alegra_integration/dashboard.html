@@ -832,62 +832,80 @@
 <!-- ─────────── Revisar factura del pago (bill id) ─────────── -->
 <div class="modal fade" id="expBillModal" tabindex="-1" role="dialog">
   <div class="modal-dialog modal-lg" role="document">
-    <div class="modal-content">
-      <div class="modal-header" style="background:#2d4a42;color:white;border:none">
-        <h6 class="modal-title mb-0">
+    <div class="modal-content" style="font-size:12px">
+      <div class="modal-header py-2" style="background:#2d4a42;color:white;border:none">
+        <h6 class="modal-title mb-0" style="font-size:13px">
           <i class="fas fa-link mr-2"></i>Revisar factura en Alegra
         </h6>
         <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
       </div>
-      <div class="modal-body">
-        <p class="small text-muted mb-2" id="expBillMsg">—</p>
-        <div class="row small mb-3" id="expBillSources" style="display:none">
-          <div class="col-md-4"><strong>Id en el pago:</strong> <code id="expBillSrcPayload">—</code></div>
-          <div class="col-md-4"><strong>Id en el enlace:</strong> <code id="expBillSrcMapping">—</code></div>
-          <div class="col-md-4"><strong>Id en el radicado:</strong> <code id="expBillSrcFactura">—</code></div>
+      <div class="modal-body position-relative py-2">
+        <div id="expBillLoading" class="text-center text-muted py-4" style="display:none">
+          <i class="fas fa-spinner fa-spin mr-2"></i><span id="expBillLoadingText">Consultando Alegra…</span>
         </div>
-        <p class="small text-muted mb-2" id="expBillFacturaHint" style="display:none"></p>
-        <div class="form-row align-items-end mb-3">
-          <div class="col-sm-6">
-            <label class="small mb-1" for="expBillInput">Id de factura en Alegra</label>
-            <input type="text" class="form-control form-control-sm" id="expBillInput"
-              placeholder="Ej. 330" inputmode="numeric" autocomplete="off">
+        <div id="expBillAlert" class="alert py-2 mb-2" style="display:none;font-size:12px"></div>
+        <div id="expBillContent">
+          <p class="text-muted mb-2" id="expBillMsg" style="font-size:12px">—</p>
+          <div class="row mb-2" id="expBillSources" style="display:none;font-size:11px">
+            <div class="col-md-4"><strong>Id en el pago:</strong> <code id="expBillSrcPayload">—</code></div>
+            <div class="col-md-4"><strong>Id en el enlace:</strong> <code id="expBillSrcMapping">—</code></div>
+            <div class="col-md-4"><strong>Id en el radicado:</strong> <code id="expBillSrcFactura">—</code></div>
           </div>
-          <div class="col-sm-6">
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="expBillBtnConsult"
-              onclick="expBillConsult()">
-              <i class="fas fa-search mr-1"></i>Consultar
-            </button>
+          <p class="text-muted mb-2" id="expBillFacturaHint" style="display:none;font-size:11px"></p>
+          <div class="form-row align-items-end mb-2">
+            <div class="col-sm-5">
+              <label class="mb-1" for="expBillInput" style="font-size:11px">Id de factura en Alegra</label>
+              <input type="text" class="form-control form-control-sm" id="expBillInput"
+                placeholder="Ej. 330" inputmode="numeric" autocomplete="off" style="font-size:12px">
+            </div>
+            <div class="col-sm-7">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="expBillBtnConsult"
+                onclick="expBillConsult()" style="font-size:12px">
+                <i class="fas fa-search mr-1"></i>Consultar
+              </button>
+            </div>
           </div>
-        </div>
-        <div class="table-responsive" style="max-height:240px;overflow-y:auto">
-          <table class="table table-sm table-hover mb-0">
-            <thead class="thead-light">
-              <tr>
-                <th>Id</th>
-                <th>En Alegra</th>
-                <th>Nro</th>
-                <th>Fecha</th>
-                <th>Proveedor</th>
-                <th class="text-right">Total</th>
-                <th class="text-right">Saldo</th>
-                <th>Otro radicado</th>
-              </tr>
-            </thead>
-            <tbody id="expBillBody"></tbody>
-          </table>
-        </div>
-        <div id="expBillDetail" class="border rounded p-3 mt-3 bg-light" style="display:none">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <strong class="small mb-0">Detalle en Alegra</strong>
-            <span class="badge badge-secondary" id="expBillDetailId">—</span>
+          <div id="expBillConflictBox" class="alert alert-warning py-2 mb-2" style="display:none;font-size:11px">
+            <div id="expBillConflictText"></div>
           </div>
-          <div class="row small" id="expBillDetailBody"></div>
+          <div class="table-responsive" style="max-height:200px;overflow-y:auto">
+            <table class="table table-sm table-hover mb-0" style="font-size:11px">
+              <thead class="thead-light">
+                <tr>
+                  <th>Id</th>
+                  <th>En Alegra</th>
+                  <th>Nro</th>
+                  <th>Fecha</th>
+                  <th>Proveedor</th>
+                  <th class="text-right">Total</th>
+                  <th class="text-right">Saldo</th>
+                  <th>Otro radicado</th>
+                </tr>
+              </thead>
+              <tbody id="expBillBody"></tbody>
+            </table>
+          </div>
+          <div id="expBillDetail" class="border rounded p-2 mt-2 bg-light" style="display:none;font-size:11px">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong class="mb-0">Detalle en Alegra</strong>
+              <span class="badge badge-secondary" id="expBillDetailId">—</span>
+            </div>
+            <div class="row" id="expBillDetailBody"></div>
+          </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-        <button type="button" class="btn btn-success" id="expBillBtnApply" onclick="expBillApply()" disabled>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal" style="font-size:12px">Cerrar</button>
+        <button type="button" class="btn btn-sm btn-outline-warning" id="expBillBtnRelease"
+          onclick="expBillApply('release')" style="display:none;font-size:12px" disabled>
+          Liberar y aplicar
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-info" id="expBillBtnSwap"
+          onclick="expBillApply('swap')" style="display:none;font-size:12px" disabled>
+          Intercambiar y aplicar
+        </button>
+        <button type="button" class="btn btn-sm btn-success" id="expBillBtnApply"
+          onclick="expBillApply()" style="font-size:12px" disabled>
           Aplicar y armar de nuevo
         </button>
       </div>
@@ -1480,15 +1498,48 @@ function buildDocActionButtons(doc, globalIdx) {
 let cajaDupState = null;
 let expBillState = null;
 
+function expBillSetLoading(on, text) {
+  if (on) {
+    $('#expBillLoadingText').text(text || 'Consultando Alegra…');
+    $('#expBillLoading').show();
+    $('#expBillContent').css('opacity', 0.35);
+    $('#expBillBtnConsult, #expBillBtnApply, #expBillBtnRelease, #expBillBtnSwap').prop('disabled', true);
+  } else {
+    $('#expBillLoading').hide();
+    $('#expBillContent').css('opacity', 1);
+  }
+}
+
+function expBillShowAlert(kind, message) {
+  const $a = $('#expBillAlert');
+  if (!message) {
+    $a.hide().removeClass('alert-success alert-danger alert-warning alert-info').text('');
+    return;
+  }
+  const cls = {
+    success: 'alert-success',
+    error: 'alert-danger',
+    warning: 'alert-warning',
+    info: 'alert-info',
+  }[kind] || 'alert-info';
+  $a.removeClass('alert-success alert-danger alert-warning alert-info')
+    .addClass(cls)
+    .html(escHtml(message))
+    .show();
+}
+
 function reviewExpensePaymentBill(documentId) {
   expBillState = { document_id: documentId };
+  expBillShowAlert();
   $('#expBillMsg').text('Consultando…');
   $('#expBillSources').hide();
   $('#expBillFacturaHint').hide().text('');
+  $('#expBillConflictBox').hide();
   $('#expBillInput').val('');
-  $('#expBillBody').html('<tr><td colspan="8" class="text-center text-muted py-3">Consultando Alegra…</td></tr>');
+  $('#expBillBody').html('<tr><td colspan="8" class="text-center text-muted py-3">—</td></tr>');
   $('#expBillDetail').hide();
-  $('#expBillBtnApply').prop('disabled', true);
+  $('#expBillBtnApply, #expBillBtnRelease, #expBillBtnSwap').prop('disabled', true).hide();
+  $('#expBillBtnApply').show();
   $('#expBillModal').modal('show');
   expBillLoadReview();
 }
@@ -1498,7 +1549,8 @@ function expBillLoadReview(extraBillId) {
   const payload = { document_id: expBillState.document_id };
   const typed = (extraBillId != null ? extraBillId : $('#expBillInput').val() || '').toString().trim();
   if (typed) payload.bill_id = typed;
-  $('#expBillBtnConsult').prop('disabled', true);
+  expBillShowAlert();
+  expBillSetLoading(true, 'Consultando Alegra…');
   $.ajax({
     url: API.expBillReview,
     method: 'POST',
@@ -1513,9 +1565,12 @@ function expBillLoadReview(extraBillId) {
     $('#expBillMsg').text(msg || 'No se pudo revisar la factura.');
     $('#expBillBody').html(`<tr><td colspan="8" class="text-center text-danger py-3">${escHtml(msg)}</td></tr>`);
     $('#expBillDetail').hide();
-    $('#expBillBtnApply').prop('disabled', true);
+    $('#expBillConflictBox').hide();
+    expBillShowAlert('error', msg || 'No se pudo revisar la factura.');
+    $('#expBillBtnApply, #expBillBtnRelease, #expBillBtnSwap').prop('disabled', true);
   }).always(function() {
-    $('#expBillBtnConsult').prop('disabled', false);
+    expBillSetLoading(false);
+    expBillRefreshApplyEnabled();
   });
 }
 
@@ -1550,18 +1605,26 @@ function renderExpBillDetail(bill) {
     ['Saldo por pagar', bill.saldo != null ? formatMoneyCop(bill.saldo) : '—'],
   ];
   let html = rows.map(function(pair) {
-    return `<div class="col-md-6 mb-2"><span class="text-muted">${escHtml(pair[0])}:</span> <strong>${escHtml(pair[1])}</strong></div>`;
+    return `<div class="col-md-6 mb-1"><span class="text-muted">${escHtml(pair[0])}:</span> <strong>${escHtml(pair[1])}</strong></div>`;
   }).join('');
   if (bill.observaciones) {
     html += `<div class="col-12 mt-1"><span class="text-muted">Observaciones:</span> ${escHtml(bill.observaciones)}</div>`;
   }
   if (bill.used_by_other && (bill.owners || []).length) {
     const o = bill.owners[0];
-    html += `<div class="col-12 mt-2 text-danger">Ya usado en radicado #${escHtml(o.factura_id)}`
-      + (o.nrofactura ? ` (${escHtml(o.nrofactura)})` : '') + '</div>';
+    const sentHint = o.payment_sent ? ' (pago ya enviado)' : ' (sin pago enviado)';
+    html += `<div class="col-12 mt-1 text-danger">Ya usado en radicado #${escHtml(o.factura_id)}`
+      + (o.nrofactura ? ` (${escHtml(o.nrofactura)})` : '')
+      + escHtml(sentHint) + '</div>';
   }
   $('#expBillDetailBody').html(html);
   $('#expBillDetail').show();
+}
+
+function expBillSelectedBill() {
+  const id = ($('#expBillInput').val() || '').trim();
+  const bills = (expBillState && expBillState.bills) || [];
+  return bills.find(b => String(b.id) === id) || null;
 }
 
 function renderExpBillModal(data) {
@@ -1602,7 +1665,7 @@ function renderExpBillModal(data) {
       const total = b.total != null ? formatMoneyCop(b.total) : '—';
       const safeId = String(b.id || '').replace(/[^0-9]/g, '');
       const pick = safeId
-        ? `<button type="button" class="btn btn-link btn-sm p-0" onclick="expBillPick('${safeId}')" title="Ver detalle y usar este id">${escHtml(safeId)}</button>`
+        ? `<button type="button" class="btn btn-link btn-sm p-0" style="font-size:11px" onclick="expBillPick('${safeId}')" title="Ver detalle y usar este id">${escHtml(safeId)}</button>`
         : '—';
       tbody.append(`<tr style="cursor:pointer" onclick="expBillPick('${safeId}')">
         <td>${pick}</td>
@@ -1632,39 +1695,71 @@ function expBillPick(billId) {
 
 function expBillRefreshApplyEnabled() {
   const id = ($('#expBillInput').val() || '').trim();
-  const ok = !!(expBillState && expBillState.can_apply && /^\d+$/.test(id));
-  $('#expBillBtnApply').prop('disabled', !ok);
+  const okDigits = /^\d+$/.test(id);
+  const selected = expBillSelectedBill();
+  const conflict = !!(selected && selected.used_by_other);
+  const canRelease = !!(selected && selected.can_release);
+  const canSwap = !!(selected && selected.can_swap);
+  const baseOk = !!(expBillState && expBillState.can_apply && okDigits);
+
+  $('#expBillBtnApply').toggle(!conflict).prop('disabled', !baseOk || conflict);
+  $('#expBillBtnRelease').toggle(conflict && canRelease).prop('disabled', !baseOk || !canRelease);
+  $('#expBillBtnSwap').toggle(conflict && canSwap).prop('disabled', !baseOk || !canSwap);
+
+  if (conflict && selected && (selected.owners || []).length) {
+    const o = selected.owners[0];
+    let text = `El id ${escHtml(id)} está en el radicado #${escHtml(o.factura_id)}`
+      + (o.nrofactura ? ` (${escHtml(o.nrofactura)})` : '') + '. ';
+    if (o.payment_sent) {
+      text += 'Ese pago ya fue enviado a Alegra; no se puede liberar ni intercambiar.';
+    } else {
+      text += 'Puedes liberarlo (queda sin enlace) o intercambiarlo con el id de este radicado.';
+    }
+    $('#expBillConflictText').html(text);
+    $('#expBillConflictBox').show();
+  } else {
+    $('#expBillConflictBox').hide();
+  }
 }
 
 function expBillConsult() {
   const typed = ($('#expBillInput').val() || '').trim();
-  $('#expBillBody').html('<tr><td colspan="8" class="text-center text-muted py-3">Consultando Alegra…</td></tr>');
-  $('#expBillDetail').hide();
   expBillLoadReview(typed);
 }
 
-function expBillApply() {
+function expBillApply(conflictAction) {
   if (!expBillState || !expBillState.document_id) return;
   const billId = ($('#expBillInput').val() || '').trim();
   if (!/^\d+$/.test(billId)) {
-    log('warning', 'Indica un id numérico de factura en Alegra.');
+    expBillShowAlert('warning', 'Indica un id numérico de factura en Alegra.');
     return;
   }
-  if (!window.confirm(
-    `¿Usar el id ${billId} en el radicado y armar de nuevo este pago?`
-  )) return;
-  const $btn = $('#expBillBtnApply').prop('disabled', true);
+  let confirmMsg = `¿Usar el id ${billId} en este radicado y armar de nuevo el pago?`;
+  if (conflictAction === 'release') {
+    confirmMsg = `¿Liberar el id ${billId} del otro radicado y aplicarlo aquí?`;
+  } else if (conflictAction === 'swap') {
+    confirmMsg = `¿Intercambiar enlaces con el otro radicado y dejar este con id ${billId}?`;
+  }
+  if (!window.confirm(confirmMsg)) return;
+
+  expBillShowAlert('info', 'Aplicando enlace…');
+  expBillSetLoading(true, 'Aplicando enlace…');
+  const body = {
+    document_id: expBillState.document_id,
+    bill_id: billId,
+  };
+  if (conflictAction) body.conflict_action = conflictAction;
+
   $.ajax({
     url: API.expBillApply,
     method: 'POST',
     contentType: 'application/json',
     headers: { 'X-CSRFToken': CSRF },
-    data: JSON.stringify({
-      document_id: expBillState.document_id,
-      bill_id: billId,
-    }),
+    data: JSON.stringify(body),
   }).done(function(data) {
-    log('success', escHtml(data.message || 'Enlace actualizado.'));
+    const msg = data.message || 'Enlace actualizado.';
+    expBillShowAlert('success', msg);
+    log('success', escHtml(msg));
     const summary = data.document;
     if (summary && summary.id) {
       const idx = allDocs.findIndex(d => d.id === summary.id);
@@ -1673,11 +1768,14 @@ function expBillApply() {
         renderDocsPage();
       }
     }
-    $('#expBillModal').modal('hide');
+    setTimeout(function() { $('#expBillModal').modal('hide'); }, 900);
   }).fail(function(xhr) {
-    const msg = (xhr.responseJSON || {}).detail || xhr.statusText;
+    const msg = (xhr.responseJSON || {}).detail || xhr.statusText || 'No se pudo aplicar.';
+    expBillShowAlert('error', msg);
     log('error', `No se pudo aplicar: ${escHtml(msg)}`);
-    $btn.prop('disabled', false);
+  }).always(function() {
+    expBillSetLoading(false);
+    expBillRefreshApplyEnabled();
   });
 }
 

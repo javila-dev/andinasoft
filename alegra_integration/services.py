@@ -24,6 +24,7 @@ from alegra_integration.bill_mapping import (
     bill_saldo_por_pagar,
     cxp_category_id_from_bill,
     cxp_category_id_from_contact,
+    deactivate_alegra_bill_mapping,
     parse_alegra_bill_id_for_api,
     sync_alegra_bill_mapping,
 )
@@ -2632,8 +2633,117 @@ class AlegraIntegrationService:
         return owners
 
     @staticmethod
+    def _factura_has_sent_expense_payment(empresa, factura_pk):
+        """True si algún pago del radicado ya fue enviado a Alegra."""
+        empresa_pk = str(getattr(empresa, 'pk', empresa) or '').strip()
+        pagos = Pagos.objects.filter(nroradicado_id=factura_pk).only('pk', 'alegra_payment_id')
+        pago_pks = []
+        for p in pagos:
+            pago_pks.append(str(p.pk))
+            if str(getattr(p, 'alegra_payment_id', None) or '').strip():
+                return True
+        if not pago_pks:
+            return False
+        return AlegraDocument.objects.filter(
+            empresa_id=empresa_pk,
+            document_type='expense_payment',
+            source_model='accounting.Pagos',
+            source_pk__in=pago_pks,
+            status=AlegraDocument.STATUS_SENT,
+        ).exists()
+
+    def _enrich_bill_owners(self, empresa, owners):
+        out = []
+        for o in owners or []:
+            fac_pk = o.get('factura_id')
+            sent = self._factura_has_sent_expense_payment(empresa, fac_pk) if fac_pk else True
+            row = dict(o)
+            row['payment_sent'] = bool(sent)
+            row['can_release'] = not sent
+            row['can_swap'] = not sent
+            out.append(row)
+        return out
+
+    @staticmethod
+    def _clear_factura_bill_link(empresa, factura):
+        empresa_pk = str(getattr(empresa, 'pk', empresa) or '').strip()
+        factura.alegra_bill_id = None
+        update_fields = ['alegra_bill_id']
+        if (getattr(factura, 'alegra_document_type', None) or '') == ALEGRA_DOC_BILL:
+            factura.alegra_document_type = ''
+            update_fields.append('alegra_document_type')
+        factura.save(update_fields=update_fields)
+        deactivate_alegra_bill_mapping(empresa_pk, factura.pk)
+
+    @staticmethod
+    def _set_factura_bill_link(empresa, factura, bill_id):
+        empresa_pk = str(getattr(empresa, 'pk', empresa) or '').strip()
+        bill_id = str(bill_id or '').strip()
+        factura.alegra_bill_id = f'{empresa_pk}:{bill_id}'
+        factura.alegra_document_type = ALEGRA_DOC_BILL
+        factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
+        sync_alegra_bill_mapping(empresa, factura, bill_id)
+
+    def _rebuild_open_expense_docs_for_factura(self, empresa, factura, *, prefer_doc=None):
+        """
+        Regenera payloads de expense_payment no enviados ligados a pagos del radicado.
+        Retorna el resumen del prefer_doc si se actualizó.
+        """
+        pago_pks = [
+            str(pk) for pk in Pagos.objects.filter(nroradicado_id=factura.pk).values_list('pk', flat=True)
+        ]
+        if not pago_pks:
+            return None
+        docs = list(
+            AlegraDocument.objects.filter(
+                empresa_id=str(getattr(empresa, 'pk', empresa) or '').strip(),
+                document_type='expense_payment',
+                source_model='accounting.Pagos',
+                source_pk__in=pago_pks,
+                status__in=self._EXPENSE_PAYMENT_BILL_EDITABLE,
+            )
+        )
+        if prefer_doc and prefer_doc.pk not in {d.pk for d in docs}:
+            docs.append(prefer_doc)
+
+        preferred_summary = None
+        builder = ExpensePaymentBuilder(empresa)
+        for doc in docs:
+            try:
+                pago = Pagos.objects.select_related('nroradicado', 'cuenta').get(pk=int(doc.source_pk))
+            except (TypeError, ValueError, Pagos.DoesNotExist):
+                continue
+            try:
+                built = builder.build(pago)
+            except AlegraBuildError as exc:
+                doc.status = AlegraDocument.STATUS_INVALID
+                doc.error = str(exc)[:500]
+                doc.save(update_fields=['status', 'error', 'updated_at'])
+                continue
+            built_list = built if isinstance(built, list) else [built]
+            match = next((b for b in built_list if b.local_key == doc.local_key), None)
+            if match is None and len(built_list) == 1:
+                match = built_list[0]
+            if match is None:
+                continue
+            doc.payload = match.payload
+            doc.alegra_operation = match.operation or doc.alegra_operation
+            doc.transport = match.transport or doc.transport
+            doc.status = AlegraDocument.STATUS_VALID
+            doc.error = ''
+            doc.save(update_fields=[
+                'payload', 'alegra_operation', 'transport', 'status', 'error', 'updated_at',
+            ])
+            if prefer_doc and doc.pk == prefer_doc.pk:
+                preferred_summary = self._document_summary(doc)
+        return preferred_summary
+
+    @staticmethod
     def _summarize_alegra_bill(bill_id, bill=None, *, error=None, owners=None):
         bill_id = str(bill_id or '').strip()
+        owners = owners or []
+        can_release = bool(owners) and all(o.get('can_release') for o in owners)
+        can_swap = bool(owners) and all(o.get('can_swap') for o in owners)
         row = {
             'id': bill_id,
             'exists_in_alegra': False,
@@ -2646,8 +2756,10 @@ class AlegraIntegrationService:
             'observaciones': '',
             'saldo': None,
             'total': None,
-            'owners': owners or [],
+            'owners': owners,
             'used_by_other': bool(owners),
+            'can_release': can_release,
+            'can_swap': can_swap,
         }
         if not isinstance(bill, dict):
             return row
@@ -2675,8 +2787,11 @@ class AlegraIntegrationService:
 
     def _fetch_bill_summary(self, client, empresa, bill_id, *, exclude_factura_pk=None):
         bill_id = str(bill_id or '').strip()
-        owners = self._factura_bill_owners(
-            empresa, bill_id, exclude_factura_pk=exclude_factura_pk,
+        owners = self._enrich_bill_owners(
+            empresa,
+            self._factura_bill_owners(
+                empresa, bill_id, exclude_factura_pk=exclude_factura_pk,
+            ),
         )
         if not bill_id or not re.fullmatch(r'\d+', bill_id):
             return self._summarize_alegra_bill(
@@ -2738,14 +2853,34 @@ class AlegraIntegrationService:
 
         used_elsewhere = [b for b in bills if b.get('used_by_other')]
         missing = [b for b in bills if b.get('id') and not b.get('exists_in_alegra')]
+        conflict_bill = next(
+            (b for b in bills if b.get('id') == suggested and b.get('used_by_other')),
+            used_elsewhere[0] if used_elsewhere else None,
+        )
+        can_release = bool(conflict_bill and conflict_bill.get('can_release'))
+        can_swap = bool(conflict_bill and conflict_bill.get('can_swap'))
 
-        if mismatch:
+        if mismatch and used_elsewhere:
+            message = (
+                'Hay IDs cruzados y este id ya está en otro radicado. '
+                'Puedes liberarlo o intercambiarlo si ese pago aún no se envió.'
+            )
+        elif used_elsewhere:
+            if can_release or can_swap:
+                message = (
+                    'Este id ya está en otro radicado. '
+                    'Puedes liberarlo o intercambiarlo si ese pago aún no se envió.'
+                )
+            else:
+                message = (
+                    'Este id ya está en otro radicado y ese pago ya fue enviado a Alegra. '
+                    'No se puede liberar ni intercambiar desde aquí.'
+                )
+        elif mismatch:
             message = (
                 'Hay IDs distintos entre el pago, el enlace y el radicado. '
                 'Revisa cuál corresponde en Alegra y aplícalo.'
             )
-        elif used_elsewhere:
-            message = 'Alguno de estos IDs ya está asociado a otro radicado.'
         elif missing:
             message = 'Uno o más IDs no existen en Alegra. Corrige el id antes de enviar.'
         elif not ids:
@@ -2766,28 +2901,62 @@ class AlegraIntegrationService:
             'suggested_bill_id': suggested,
             'bills': bills,
             'can_apply': True,
+            'can_release': can_release,
+            'can_swap': can_swap,
+            'conflict_owner': (conflict_bill or {}).get('owners', [None])[0] if conflict_bill else None,
             'message': message,
         }
 
-    def apply_expense_payment_bill(self, *, document_id, bill_id):
+    def apply_expense_payment_bill(self, *, document_id, bill_id, conflict_action=None):
         """
         Alinea radicado + AlegraMapping al bill id, regenera payload del documento
         y lo deja en estado válido para reenviar.
+
+        conflict_action:
+          - None: falla si el id pertenece a otro radicado
+          - 'release': libera el otro (si no tiene pago enviado) y aplica aquí
+          - 'swap': intercambia ids con el otro (si no tiene pago enviado) y aplica aquí
         """
         doc, pago, factura = self._expense_payment_context(document_id)
         bill_id = str(bill_id or '').strip()
         if not bill_id or not re.fullmatch(r'\d+', bill_id):
             raise AlegraIntegrationError('Indica un id numérico de factura en Alegra.')
 
-        owners = self._factura_bill_owners(
-            doc.empresa, bill_id, exclude_factura_pk=factura.pk,
+        action = (conflict_action or '').strip().lower() or None
+        if action and action not in ('release', 'swap'):
+            raise AlegraIntegrationError('Acción de conflicto no válida.')
+
+        owners = self._enrich_bill_owners(
+            doc.empresa,
+            self._factura_bill_owners(
+                doc.empresa, bill_id, exclude_factura_pk=factura.pk,
+            ),
         )
+        other_factura = None
         if owners:
+            if len(owners) > 1:
+                raise AlegraIntegrationError(
+                    f'El id {bill_id} está en varios radicados. '
+                    'Resuelve el enlace manualmente en cada uno.'
+                )
             other = owners[0]
-            raise AlegraIntegrationError(
-                f'El id {bill_id} ya está asociado al radicado '
-                f'{other.get("factura_id")} ({other.get("nrofactura") or "sin número"}).'
-            )
+            if not action:
+                raise AlegraIntegrationError(
+                    f'El id {bill_id} ya está asociado al radicado '
+                    f'{other.get("factura_id")} ({other.get("nrofactura") or "sin número"}). '
+                    'Usa liberar o intercambiar si ese pago aún no se envió.'
+                )
+            if other.get('payment_sent'):
+                raise AlegraIntegrationError(
+                    f'El radicado {other.get("factura_id")} ya tiene un pago enviado a Alegra. '
+                    'No se puede liberar ni intercambiar ese enlace.'
+                )
+            try:
+                other_factura = Facturas.objects.get(pk=other['factura_id'])
+            except Facturas.DoesNotExist as exc:
+                raise AlegraIntegrationError(
+                    f'No se encontró el radicado {other.get("factura_id")}.'
+                ) from exc
 
         client = AlegraMCPClient(doc.empresa)
         try:
@@ -2799,52 +2968,87 @@ class AlegraIntegrationService:
         if not isinstance(bill, dict) or not str(bill.get('id') or '').strip():
             raise AlegraIntegrationError(f'El id {bill_id} no existe en Alegra.')
 
-        empresa_pk = str(doc.empresa_id)
-        factura.alegra_bill_id = f'{empresa_pk}:{bill_id}'
-        factura.alegra_document_type = ALEGRA_DOC_BILL
-        factura.save(update_fields=['alegra_bill_id', 'alegra_document_type'])
-        sync_alegra_bill_mapping(doc.empresa, factura, bill_id)
+        _, current_bill_id = parse_alegra_bill_id_for_api(getattr(factura, 'alegra_bill_id', None))
+        current_bill_id = str(current_bill_id or '').strip() or self._mapping_bill_id(
+            doc.empresa, factura.pk,
+        )
 
-        builder = ExpensePaymentBuilder(doc.empresa)
-        try:
-            built = builder.build(pago)
-        except AlegraBuildError as exc:
-            raise AlegraIntegrationError(
-                f'Se actualizó el enlace, pero no se pudo armar de nuevo el pago: {exc}'
-            ) from exc
+        with transaction.atomic():
+            if other_factura is not None:
+                # Liberar unique de alegra_bill_id antes de reasignar.
+                self._clear_factura_bill_link(doc.empresa, other_factura)
+                self._clear_factura_bill_link(doc.empresa, factura)
+                if action == 'swap' and current_bill_id and current_bill_id != bill_id:
+                    self._set_factura_bill_link(doc.empresa, other_factura, current_bill_id)
+                self._set_factura_bill_link(doc.empresa, factura, bill_id)
+            else:
+                self._set_factura_bill_link(doc.empresa, factura, bill_id)
 
-        built_list = built if isinstance(built, list) else [built]
-        match = next((b for b in built_list if b.local_key == doc.local_key), None)
-        if match is None and len(built_list) == 1:
-            match = built_list[0]
-        if match is None:
-            raise AlegraIntegrationError(
-                'Se actualizó el enlace, pero no hay un payload que coincida con este documento.'
+        if other_factura is not None:
+            self._rebuild_open_expense_docs_for_factura(doc.empresa, other_factura)
+
+        # Refrescar factura/pago por si quedaron stale en memoria
+        factura.refresh_from_db()
+        summary = self._rebuild_open_expense_docs_for_factura(
+            doc.empresa, factura, prefer_doc=doc,
+        )
+        doc.refresh_from_db()
+        if summary is None:
+            # Rebuild falló o no tocó este doc: intentar directo
+            summary = self._rebuild_open_expense_docs_for_factura(
+                doc.empresa, factura, prefer_doc=doc,
             )
+            doc.refresh_from_db()
 
-        new_bill_id = self._payload_bill_id(match.payload)
-        if new_bill_id and new_bill_id != bill_id:
-            raise AlegraIntegrationError(
-                f'El armado del pago sigue usando id {new_bill_id} en lugar de {bill_id}. '
-                'Revisa el enlace del radicado.'
+        if doc.status != AlegraDocument.STATUS_VALID or self._payload_bill_id(doc.payload) != bill_id:
+            # último intento explícito sobre este doc
+            builder = ExpensePaymentBuilder(doc.empresa)
+            try:
+                built = builder.build(pago)
+            except AlegraBuildError as exc:
+                raise AlegraIntegrationError(
+                    f'Se actualizó el enlace, pero no se pudo armar de nuevo el pago: {exc}'
+                ) from exc
+            built_list = built if isinstance(built, list) else [built]
+            match = next((b for b in built_list if b.local_key == doc.local_key), None)
+            if match is None and len(built_list) == 1:
+                match = built_list[0]
+            if match is None:
+                raise AlegraIntegrationError(
+                    'Se actualizó el enlace, pero no hay un payload que coincida con este documento.'
+                )
+            doc.payload = match.payload
+            doc.alegra_operation = match.operation or doc.alegra_operation
+            doc.transport = match.transport or doc.transport
+            doc.status = AlegraDocument.STATUS_VALID
+            doc.error = ''
+            doc.save(update_fields=[
+                'payload', 'alegra_operation', 'transport', 'status', 'error', 'updated_at',
+            ])
+            summary = self._document_summary(doc)
+
+        if action == 'release':
+            msg = (
+                f'Se liberó el otro radicado y este pago quedó con id {bill_id}. '
+                'Ya puedes enviarlo.'
             )
-
-        doc.payload = match.payload
-        doc.alegra_operation = match.operation or doc.alegra_operation
-        doc.transport = match.transport or doc.transport
-        doc.status = AlegraDocument.STATUS_VALID
-        doc.error = ''
-        doc.save(update_fields=[
-            'payload', 'alegra_operation', 'transport', 'status', 'error', 'updated_at',
-        ])
+        elif action == 'swap':
+            msg = (
+                f'Se intercambiaron los enlaces y este pago quedó con id {bill_id}. '
+                'Ya puedes enviarlo.'
+            )
+        else:
+            msg = 'Enlace actualizado y pago armado de nuevo. Ya puedes enviarlo.'
 
         return {
             'document_id': doc.pk,
             'factura_id': factura.pk,
             'bill_id': bill_id,
             'status': doc.status,
-            'message': 'Enlace actualizado y pago armado de nuevo. Ya puedes enviarlo.',
-            'document': self._document_summary(doc),
+            'conflict_action': action,
+            'other_factura_id': other_factura.pk if other_factura else None,
+            'message': msg,
+            'document': summary or self._document_summary(doc),
         }
 
     def _fetch_bill_cxp_category_id(self, client, *, bill_data, alegra_id):
