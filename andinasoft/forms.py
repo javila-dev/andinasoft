@@ -213,8 +213,6 @@ class documentos_contrato(forms.Form):
         ('Peticion','Peticion'),
         ('Respuesta Peticion','Respuesta Peticion'),
         ('Comunicados','Comunicados'),
-        ('Otros','Otros'),
-        ('Carga Inicial','Carga Inicial'),
     )
     tipo_doc=forms.ChoiceField(choices=tipos_docs)
     documento_cargar.widget.attrs.update(id='nombredoc')

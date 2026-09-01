@@ -498,8 +498,6 @@ class form_buscar_mvto_pago(forms.Form):
         self.helper = FormHelper()
         self.helper.form_id = 'formNuevoIngreso'
         self.helper.layout = Layout(
-            PrependedText('oficina','Oficina'),
-            PrependedText('empresa','Empresa'),
             Row(
                 Column(
                     Field('empresa_mvtos'), css_class='col-md-5'
@@ -513,9 +511,6 @@ class form_buscar_mvto_pago(forms.Form):
                 Column(StrictButton('<i class="fas fa-search"></i>',id="btnbuscarmvtos",css_class='btn btn-primary btn-circle mt-4 pt-1 ml-3')
                        , css_class='col-md-1')
             ),
-                
-            
-            
         )
    
 class form_asociar_gtt(forms.Form):

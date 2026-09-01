@@ -5789,23 +5789,26 @@ def reestructuraciones(request,proyecto,adj):
                         elif tipo=='CO': ultimacta_co = nrocta_ajustar
                 
                 if pendiente_ci == 0:
-                    ctas_vigentes_ci = obj_saldos.filter(tipocta='CI',saldocuota__gt=0).order_by('nrocta')
+                    # Sin CI pendiente: conservar lo ya pagado de la primera CI
+                    # vigente y borrar el resto del plan CI (ajuste va al valor del contrato).
+                    ctas_vigentes_ci = obj_saldos.filter(tipocta='CI', saldocuota__gt=0).order_by('nrocta')
                     if ctas_vigentes_ci.exists():
                         cta_modificar = ctas_vigentes_ci.first()
-                        nrocta_ci_ajustar = cta_modificar.nrocta
+                        nrocta_ci_ajustar = int(cta_modificar.nrocta)
                         if cta_modificar.saldocuota != cta_modificar.cuota:
-                            capcta=cta_modificar.rcdocapital
-                            intcta=cta_modificar.rcdointcte
-                            cta_ajustar=PlanPagos.objects.using(proyecto).get(adj=adj,tipocta='CI',nrocta=nrocta_ci_ajustar)
-                                
-                            cta_ajustar.capital=capcta
-                            cta_ajustar.intcte=intcta
-                            cta_ajustar.cuota=capcta+intcta
+                            capcta = cta_modificar.rcdocapital
+                            intcta = cta_modificar.rcdointcte
+                            cta_ajustar = PlanPagos.objects.using(proyecto).get(
+                                adj=adj, tipocta='CI', nrocta=nrocta_ci_ajustar,
+                            )
+                            cta_ajustar.capital = capcta
+                            cta_ajustar.intcte = intcta
+                            cta_ajustar.cuota = capcta + intcta
                             cta_ajustar.save()
-                            nrocta_ajustar +=1
-                            
+                            nrocta_ci_ajustar += 1
+
                         for cuota in obj_planpagos.filter(tipocta='CI'):
-                            if int(cuota.nrocta) >= nrocta_ajustar:
+                            if int(cuota.nrocta) >= nrocta_ci_ajustar:
                                 cuota.delete()
                 #saldo
                 cantidad=cant_fn
