@@ -504,19 +504,23 @@ class egresos_banco(models.Model):
         verbose_name_plural = 'Egresos banco'
         
     def tipo_pago(self):
-        tipo = None
-        objeto = None
-        if self.pago_asociado != "" and self.pago_asociado != None:
-            tipo = 'Pago'
-            objeto = self.pago_asociado
-        elif self.anticipo_asociado != "" and self.anticipo_asociado != None:
-            tipo = 'Anticipo'
-            objeto = self.anticipo_asociado
-        elif self.transferencia_asociada != "" and self.transferencia_asociada != None:
-            tipo = 'Transferencia'
-            objeto = self.transferencia_asociada
-        
-        return tipo, objeto
+        """
+        Retorna (tipo, objeto) del vínculo de egreso.
+        Usa *_id para no disparar el fetch; si la FK apunta a un registro
+        borrado, trata el movimiento como sin pago asociado.
+        """
+        from django.core.exceptions import ObjectDoesNotExist
+
+        try:
+            if self.pago_asociado_id:
+                return 'Pago', self.pago_asociado
+            if self.anticipo_asociado_id:
+                return 'Anticipo', self.anticipo_asociado
+            if self.transferencia_asociada_id:
+                return 'Transferencia', self.transferencia_asociada
+        except ObjectDoesNotExist:
+            return None, None
+        return None, None
     
     
 class saldos_banco(models.Model):
