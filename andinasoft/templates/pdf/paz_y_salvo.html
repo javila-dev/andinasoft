@@ -1,0 +1,198 @@
+{% load l10n humanize static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/Ubuntu-Regular.ttf' %}");
+  }
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/Ubuntu-Medium.ttf' %}");
+    font-weight: 500;
+  }
+  @font-face {
+    font-family: Ubuntu;
+    src: url("{% static 'fonts/Ubuntu/UbuntuBold.ttf' %}");
+    font-weight: bold;
+  }
+
+  @page {
+    size: Letter;
+    margin: 2.2cm 2.2cm 2.5cm 2.2cm;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: Ubuntu, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    color: #2a2a2a;
+    line-height: 1.65;
+  }
+  .header {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 52pt 0;
+  }
+  .header td {
+    vertical-align: middle;
+    padding: 0;
+  }
+  .doc-title {
+    font-size: 15pt;
+    font-weight: bold;
+    color: {{ paleta.principal }};
+    letter-spacing: 0.6pt;
+    text-transform: uppercase;
+    line-height: 1.25;
+    margin: 0;
+  }
+  .header-logos {
+    text-align: right;
+    width: 38%;
+    white-space: nowrap;
+  }
+  .header-logos img {
+    height: 48pt;
+    width: auto;
+    max-width: 120pt;
+    margin-left: 8pt;
+    vertical-align: middle;
+  }
+  .cuerpo {
+    text-align: justify;
+    margin: 0 0 14pt 0;
+  }
+  .cierre {
+    text-align: justify;
+    margin: 28pt 0 0 0;
+  }
+  .cuerpo strong,
+  .cierre strong {
+    font-weight: 500;
+    color: {{ paleta.principal }};
+  }
+  .firma {
+    margin-top: 36pt;
+    text-align: left;
+    page-break-inside: avoid;
+  }
+  .firma .cordialmente {
+    margin: 0 0 58pt 0;
+  }
+  .firma .linea {
+    width: 210pt;
+    border: 0;
+    border-top: 0.6pt solid {{ paleta.principal }};
+    margin: 0 0 2pt 0;
+  }
+  .firma .responsable {
+    font-weight: bold;
+    font-size: 11pt;
+    color: {{ paleta.principal }};
+    margin: 0;
+    line-height: 1.25;
+  }
+  .firma .cargo {
+    font-size: 10pt;
+    color: #555;
+    margin: 0;
+    line-height: 1.25;
+  }
+  .pie-banner {
+    position: fixed;
+    left: -2.2cm;
+    bottom: -2.5cm;
+    width: 8.5in;
+    margin: 0;
+    padding: 0;
+  }
+  .pie-accent {
+    height: 3pt;
+    background: {{ paleta.acento }};
+  }
+  .pie-bar {
+    background: {{ paleta.principal }};
+    color: #fff;
+  }
+  .pie-inner {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .pie-inner td {
+    color: #fff;
+    font-size: 8pt;
+    line-height: 1.25;
+    vertical-align: middle;
+    padding-top: 10pt;
+    padding-bottom: 10pt;
+    text-align: center;
+  }
+  .pie-left {
+    text-align: center;
+    padding-left: 2.2cm;
+    padding-right: 2.2cm;
+  }
+</style>
+</head>
+<body>
+  <div class="pie-banner">
+    <div class="pie-accent"></div>
+    <div class="pie-bar">
+      <table class="pie-inner">
+        <tr>
+          <td class="pie-left">
+            <strong>{{ empresa_nombre }}</strong>
+            &nbsp;&middot;&nbsp; NIT {{ empresa_nit }}
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="header">
+    <tr>
+      <td class="header-title">
+        <p class="doc-title">Certificado de paz y salvo</p>
+      </td>
+      <td class="header-logos">
+        {% for logo in logos %}
+        <img src="{% static logo %}" alt="">
+        {% endfor %}
+      </td>
+    </tr>
+  </table>
+
+  <p class="cuerpo">
+    <strong>{{ empresa_nombre }}</strong>, identificada con NIT {{ empresa_nit }},
+    certifica que
+    {% spaceless %}
+    {% for titular in titulares %}
+      <strong>{{ titular.nombre }}</strong>, identificado(a) con {{ titular.tipo }} No. <strong>{{ titular.numero }}</strong>{% if not forloop.last %}{% if forloop.revcounter0 == 1 %} y {% else %}, {% endif %}{% endif %}
+    {% endfor %}
+    {% endspaceless %}{% if titulares|length == 1 %},
+    se encuentra{% else %},
+    se encuentran{% endif %} a la fecha a paz y salvo
+    por las obligaciones de cartera correspondientes al precio de venta pactado en el
+    Contrato de Promesa de Compraventa No. <strong>{{ numero_contrato }}</strong>,
+    por valor de <strong>{{ valor_contrato_letras }} PESOS M/CTE
+    ($&nbsp;{{ valor_contrato|default_if_none:0|floatformat:0|intcomma }})</strong>,
+    correspondiente al inmueble <strong>{{ inmueble|default_if_none:""|upper }}</strong>
+    del proyecto <strong>{{ proyecto|upper }}</strong>.
+  </p>
+
+  <p class="cierre">
+    Se expide el presente certificado a solicitud del interesado, en Medell&iacute;n,
+    el <strong>{{ fecha_expedicion }}</strong>.
+  </p>
+
+  <div class="firma">
+    <p class="cordialmente">Cordialmente,</p>
+    <hr class="linea">
+    <p class="responsable">{{ nombre_responsable }}</p>
+    <p class="cargo">{{ cargo_responsable }}</p>
+  </div>
+</body>
+</html>

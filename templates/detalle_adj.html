@@ -74,13 +74,22 @@
               <input type='submit' class='dropdown-item' name='impEstadodeCuenta' value='Estado de Cuenta'>
               <input type='submit' class='dropdown-item' name='impResumenPagos' value='Resumen de Pagos'>
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalCertificadoTributario">Certificado tributario</a>
-              <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true">Paz y Salvo</a>
+              {% if puede_paz_y_salvo %}
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalPazYSalvo">Paz y salvo</a>
+              {% else %}
+              <a class="dropdown-item disabled" href="#" tabindex="-1" aria-disabled="true" title="Solo disponible cuando la adjudicación está pagada">Paz y salvo</a>
+              {% endif %}
             </div>
           </div>
           <input type="hidden" name="impCertificadoTributario" id="impCertificadoTributario" value="">
           <input type="hidden" name="cert_titular" id="cert_titular" value="">
           <input type="hidden" name="cert_empresa" id="cert_empresa" value="">
           <input type="hidden" name="cert_anio" id="cert_anio" value="">
+          <input type="hidden" name="impPazYSalvo" id="impPazYSalvo" value="">
+          <input type="hidden" name="pys_empresa" id="pys_empresa" value="">
+          <input type="hidden" name="pys_responsable" id="pys_responsable" value="">
+          <input type="hidden" name="pys_cargo" id="pys_cargo" value="">
+          <input type="hidden" name="pys_titulares" id="pys_titulares" value="">
         </div>
       </form>
     </div>
@@ -356,6 +365,60 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
           <button type="button" class="btn btn-primary" id="btn-generar-cert-tributario">Generar PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="modalPazYSalvo" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="modalPazYSalvoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalPazYSalvoLabel">Paz y salvo de cartera</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted">Seleccione el titular o los titulares que desea incluir en el certificado e indique quien lo firma.</p>
+          {% if saldo_capital and saldo_capital > 0 %}
+          <div class="alert alert-warning py-2">
+            Esta adjudicación tiene saldo pendiente de $ {{ saldo_capital|floatformat:0|intcomma }}. El documento declara que el cliente está a paz y salvo.
+          </div>
+          {% endif %}
+          <div class="form-group">
+            <label>Titulares a certificar</label>
+            {% for titular in titulares_certificado %}
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox" class="custom-control-input js-pys-titular" id="pys_tit_{{ titular.pk }}" value="{{ titular.pk }}" checked>
+              <label class="custom-control-label" for="pys_tit_{{ titular.pk }}">
+                {{ titular.nombrecompleto|upper }} - {{ titular.pk }}
+              </label>
+            </div>
+            {% empty %}
+            <p class="text-muted mb-0">No hay titulares registrados.</p>
+            {% endfor %}
+          </div>
+          <div class="form-group">
+            <label for="sel_pys_empresa">Empresa que expide</label>
+            <select class="form-control" id="sel_pys_empresa" required>
+              <option value="">Seleccione empresa...</option>
+              {% for empresa in empresas_certificado %}
+              <option value="{{ empresa.Nit }}"{% if '900993044' in empresa.Nit %} selected{% endif %}>{{ empresa.nombre|upper }} - NIT {{ empresa.Nit }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="inp_pys_responsable">Nombre de quien firma</label>
+            <input type="text" class="form-control" id="inp_pys_responsable" maxlength="120" placeholder="Ej. Ana Maria Restrepo" required>
+          </div>
+          <div class="form-group mb-0">
+            <label for="inp_pys_cargo">Cargo</label>
+            <input type="text" class="form-control" id="inp_pys_cargo" maxlength="80" placeholder="Ej. Directora de Cartera" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="btn-generar-paz-y-salvo">Generar PDF</button>
         </div>
       </div>
     </div>
@@ -867,6 +930,30 @@
       $('#cert_anio').val(anio);
       $('#impCertificadoTributario').val('1');
       $('#modalCertificadoTributario').modal('hide');
+      $('#modal-cargando').modal('show');
+      $('#form-documentos').submit();
+    });
+
+    $('#btn-generar-paz-y-salvo').on('click', function(){
+      const empresa = $('#sel_pys_empresa').val();
+      const responsable = ($('#inp_pys_responsable').val() || '').trim();
+      const cargo = ($('#inp_pys_cargo').val() || '').trim();
+      const titulares = $('.js-pys-titular:checked').map(function(){ return $(this).val(); }).get();
+      if (!titulares.length) {
+        alert('Seleccione al menos un titular.');
+        return;
+      }
+      if (!empresa || !responsable || !cargo) {
+        alert('Indique la empresa, el nombre y el cargo de quien firma.');
+        return;
+      }
+      $('#pys_titulares').val(titulares.join(','));
+      $('#pys_empresa').val(empresa);
+      $('#pys_responsable').val(responsable);
+      $('#pys_cargo').val(cargo);
+      $('#impCertificadoTributario').val('');
+      $('#impPazYSalvo').val('1');
+      $('#modalPazYSalvo').modal('hide');
       $('#modal-cargando').modal('show');
       $('#form-documentos').submit();
     });

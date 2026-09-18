@@ -63,6 +63,7 @@ from andinasoft.certificado_tributario_service import (
     build_certificado_tributario_context,
     titulares_para_certificado,
 )
+from andinasoft.paz_y_salvo_service import build_paz_y_salvo_context
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import cargar_gastos_informe
@@ -3594,6 +3595,8 @@ def detalle_adjudicacion(request,proyecto,adj):
         detalle_recaudos=Recaudos.objects.using(proyecto).filter(idadjudicacion=adj)
         total_recaudo=Recaudos_general.objects.using(proyecto).filter(idadjudicacion=adj).aggregate(Sum('valor'))
         vista_adj=Vista_Adjudicacion.objects.using(proyecto).get(IdAdjudicacion=adj)
+        estado_adj = ((obj_adj.estado or vista_adj.Estado or '')).strip().lower()
+        puede_paz_y_salvo = estado_adj == 'pagado'
         lista_docs=documentos_contratos.objects.using(proyecto).filter(adj=adj)
         saldo_cuotas=saldos_adj.objects.using(proyecto).filter(adj=adj)
         titulares=titulares_por_adj.objects.using(proyecto).get(adj=adj)
@@ -3654,6 +3657,51 @@ def detalle_adjudicacion(request,proyecto,adj):
                             alerta = True
                             titulo = 'Error'
                             mensaje = 'No se pudo generar el PDF del certificado.'
+                        else:
+                            ruta_link = pdf.get('url')
+                            dir_link = ruta_link
+                            alerta = True
+                            titulo = 'Ya puedes descargar tu documento'
+                            mensaje = 'Puedes descargarlo aqui'
+                            link = True
+
+            if request.POST.get('impPazYSalvo'):
+                if not puede_paz_y_salvo:
+                    alerta = True
+                    titulo = 'Error'
+                    mensaje = 'El paz y salvo solo se puede generar cuando la adjudicación está pagada.'
+                else:
+                    empresa_nit = (request.POST.get('pys_empresa') or '').strip()
+                    nombre_responsable = (request.POST.get('pys_responsable') or '').strip()
+                    cargo_responsable = (request.POST.get('pys_cargo') or '').strip()
+                    titular_ids = [
+                        tid.strip()
+                        for tid in (request.POST.get('pys_titulares') or '').split(',')
+                        if tid.strip()
+                    ]
+                    context_pys, err_pys = build_paz_y_salvo_context(
+                        proyecto,
+                        adj,
+                        empresa_nit,
+                        nombre_responsable,
+                        cargo_responsable,
+                        request.user,
+                        titular_ids=titular_ids,
+                    )
+                    if err_pys:
+                        alerta = True
+                        titulo = 'Error'
+                        mensaje = err_pys
+                    else:
+                        filename = f'Paz_y_salvo_{adj}_{proyecto}.pdf'.replace(' ', '_')
+                        try:
+                            pdf = pdf_gen_weasy('pdf/paz_y_salvo.html', context_pys, filename)
+                        except Exception:
+                            pdf = pdf_gen('pdf/paz_y_salvo.html', context_pys, filename)
+                        if isinstance(pdf, HttpResponse):
+                            alerta = True
+                            titulo = 'Error'
+                            mensaje = 'No se pudo generar el PDF del paz y salvo.'
                         else:
                             ruta_link = pdf.get('url')
                             dir_link = ruta_link
@@ -3858,6 +3906,7 @@ def detalle_adjudicacion(request,proyecto,adj):
             'empresas_certificado': empresas.objects.all().order_by('nombre'),
             'anios_certificado': anios_disponibles_certificado(proyecto, adj),
             'titulares_certificado': titulares_para_certificado(obj_adj),
+            'puede_paz_y_salvo': puede_paz_y_salvo,
         }
         return render(request,'detalle_adj.html',context)
     
