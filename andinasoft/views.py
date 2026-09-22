@@ -44,6 +44,7 @@ from andinasoft.promesa_pdf import (
     forma_pago_es_manual,
     get_config_documento,
     generar_documento_pdf,
+    aplicar_texto_forma_pago_pdf,
 )
 from andinasoft.shared_models import Adjudicacion, Vista_Adjudicacion, documentos_contratos, fractales_ventas,saldos_adj,titulares_por_adj, fractales_ventas
 from andinasoft.shared_models import Recaudos, consecutivos, Recaudos_general, AsignacionComisiones, CargosFijos, InfoCartera, Cargos_comisiones
@@ -4670,10 +4671,9 @@ def acciones_venta(request,proyecto,contrato):
                         # Un POST vacio (p.ej. clone de textarea) dejaba el PDF en blanco.
                         if posted_ci:
                             formaCI = posted_ci
-                            obj_ctr._fp_ci_override = posted_ci
                         if posted_saldo:
                             formaFN = posted_saldo
-                            obj_ctr._fp_saldo_override = posted_saldo
+                        aplicar_texto_forma_pago_pdf(obj_ctr, formaCI, formaFN)
 
                     try:
                         cfg = get_config_documento(proyecto, ORIGEN_VENTA)
@@ -7289,6 +7289,8 @@ def promesas(request,proyecto):
         ESTADO_POR_VENCER,
         ESTADO_VENCIDO,
         _boolish,
+        resolver_forma_pago_impresion,
+        aplicar_forma_pago_impresion,
     )
 
     check_project(request, proyecto)
@@ -7335,17 +7337,25 @@ def promesas(request,proyecto):
             forma = ('', '', 'x')
         else:
             forma = ('', '', '')
-        formaci = promesa.formaci or ''
-        formasaldo = promesa.formasaldo or ''
-        if forma_pago_es_manual(proyecto, ORIGEN_MODULO):
-            posted_ci = (request.POST.get('formaci') or '').strip()
-            posted_saldo = (request.POST.get('formasaldo') or '').strip()
-            if posted_ci:
-                formaci = posted_ci
-                promesa._fp_ci_override = posted_ci
-            if posted_saldo:
-                formasaldo = posted_saldo
-                promesa._fp_saldo_override = posted_saldo
+        formaci, formasaldo = resolver_forma_pago_impresion(
+            proyecto,
+            promesa,
+            adj=adj,
+            override_ci=request.POST.get('formaci'),
+            override_saldo=request.POST.get('formasaldo'),
+        )
+        aplicar_forma_pago_impresion(
+            promesa,
+            formaci,
+            formasaldo,
+            general_info={
+                'valor': obj_adj.valor,
+                'inmueble': obj_inmueble,
+                'valor_en_letras': valor_letras,
+                'ci': cuota_inicial,
+                'saldo': saldo,
+            },
+        )
         obs = promesa.observaciones or ''
         ciudad = promesa.ciudad or ''
         fecha_prom = promesa.fechapromesa or datetime.date.today()
@@ -7487,6 +7497,7 @@ def promesas(request,proyecto):
                 except Adjudicacion.DoesNotExist:
                     return JsonResponse({'passed': False, 'msj': 'No existe adjudicacion para este negocio'}, status=404)
                 fp = obj_adj.fechacontrato.strftime('%Y-%m-%d') if obj_adj.fechacontrato else ''
+                formaci, formasaldo = resolver_forma_pago_impresion(proyecto, None, adj=adj)
                 return JsonResponse({
                     'passed': True,
                     'escriturado': False,
@@ -7498,9 +7509,12 @@ def promesas(request,proyecto):
                     'fecha_escritura_real': fecha_escritura_real,
                     'nropromesa': obj_adj.contrato or '',
                     'observaciones': '',
+                    'formaci': formaci,
+                    'formasaldo': formasaldo,
                     'datos_promesa': '[]',
                 })
             p = obj_promesa[0]
+            formaci, formasaldo = resolver_forma_pago_impresion(proyecto, p, adj=adj)
             return JsonResponse({
                 'passed': True,
                 'escriturado': _boolish(p.escriturado),
@@ -7512,6 +7526,8 @@ def promesas(request,proyecto):
                 'fecha_escritura_real': fecha_escritura_real,
                 'nropromesa': p.nropromesa or '',
                 'observaciones': p.observaciones or '',
+                'formaci': formaci,
+                'formasaldo': formasaldo,
                 'datos_promesa': serializers.serialize('json', obj_promesa),
             })
 

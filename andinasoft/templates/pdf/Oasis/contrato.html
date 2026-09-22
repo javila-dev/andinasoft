@@ -416,7 +416,7 @@
           <div style="font-size:8pt; font-weight:bold; color:#1A4A4A; text-transform:uppercase; margin-bottom:4pt;">1. Cuota Inicial</div>
           <div class="clause-body">
             La suma de $&nbsp;<u><strong>{{ ctr.general_info.ci|floatformat:"-3g" }}</strong></u>
-            a pagar así: <u>&nbsp;{{ ctr.general_info.fp_ci }}&nbsp;</u>
+            a pagar así: <u>&nbsp;{{ formaCI|default:ctr.general_info.fp_ci }}&nbsp;</u>
           </div>
         </div>
         <div style="display:table-cell; width:45%; vertical-align:top; padding-left:10pt;">
@@ -430,7 +430,7 @@
               {% if ctr.forma_pago == 'Amortizacion' %}
                 (El valor de las cuotas mensuales incluye los intereses corrientes)
               {% endif %}
-              así: <u>&nbsp;{{ ctr.general_info.fp_saldo }}&nbsp;</u>
+              así: <u>&nbsp;{{ formaFN|default:ctr.general_info.fp_saldo }}&nbsp;</u>
             {% endif %}
           </div>
         </div>

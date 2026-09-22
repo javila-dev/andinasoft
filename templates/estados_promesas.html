@@ -261,14 +261,14 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h4 class="modal-title">Digita la forma de pago manual</h4>
+                <h4 class="modal-title">Forma de pago de la promesa</h4>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
             <div class="modal-body">
-                <p class="text-justify">Estas viendo esta ventana porque el parametro de formas de pago
-                    manual esta activo. Esta forma de pago es solo para impresion, no se guarda ni afecta el plan de pagos.</p>
+                <p class="text-justify mb-3">Puede ajustar el texto de forma de pago solo para esta impresion.
+                    No se guarda y no modifica el plan de pagos.</p>
                 <div class="input-group">
                     <div class="input-group-prepend">
                         <span class="input-group-text" style="padding-right: 3.2rem;">Forma CI</span>
@@ -316,7 +316,6 @@
     var urlBase = '/operaciones/promesas/{{proyecto}}';
     var csrf = '{{csrf_token}}';
     var tablasPromesas = {};
-    var formaPagoManualModulo = '{{forma_pago_manual_modulo|yesno:"true,false"}}' === 'true';
 
     function initPromesaTables(){
         $('.promesa-table').each(function(){
@@ -427,15 +426,18 @@
         });
     }
     function reimprimir(adj){
-        if (!confirm('Reimprimir la promesa de ' + adj + '?')) return;
         $('#reimp_adj').val(adj);
-        if (formaPagoManualModulo) {
-            $('#formaci').val('');
-            $('#formasaldo').val('');
+        $('#formaci').val('');
+        $('#formasaldo').val('');
+        $.get(urlBase, {adj: adj}, function(r){
+            if (r && r.passed) {
+                $('#formaci').val(r.formaci || '');
+                $('#formasaldo').val(r.formasaldo || '');
+            }
             $('#ModalformaManual').modal('show');
-            return;
-        }
-        $('#formReimp').submit();
+        }).fail(function(){
+            $('#ModalformaManual').modal('show');
+        });
     }
 
     $('#btnContinuarFormaManual').on('click', function(){

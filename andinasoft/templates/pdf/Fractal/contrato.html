@@ -213,7 +213,7 @@
                         <b>1. CUOTA INICIAL:</b> la suma de {{ctr.general_info.ci|nombre_numero}}
                          ($ <u><b>{{ctr.general_info.ci|floatformat:"-3g"}})</b>&nbsp;</u> pesos, 
                          que serán pagados de la siguiente manera: 
-                        <u>{{ctr.general_info.fp_ci}}&nbsp;</u>.<br>
+                        <u>{{formaCI|default:ctr.general_info.fp_ci}}&nbsp;</u>.<br>
                     </td>
                     <td style="width:5%"></td>
                     <td style="text-align:justify;vertical-align: top;">
@@ -221,7 +221,7 @@
                         la suma de {{ctr.general_info.saldo|nombre_numero}}
                          ($ <u><b>{{ctr.general_info.saldo|floatformat:"-3g"}})&nbsp;</b></u> pesos, 
                          que serán pagados de la siguiente manera: 
-                        <u>{{ctr.general_info.fp_saldo}}&nbsp;</u>.{%endif%}<br>
+                        <u>{{formaFN|default:ctr.general_info.fp_saldo}}&nbsp;</u>.{%endif%}<br>
                     </td>
                     <td style="width:2%"></td>
                 </tr>

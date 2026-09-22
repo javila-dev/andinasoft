@@ -7,7 +7,7 @@ operativos; si falta, se crea al primer cambio (ensure_promesa).
 """
 import datetime
 from andinasoft.models import clientes, PromesaCumplimiento
-from andinasoft.shared_models import Adjudicacion, Promesas
+from andinasoft.shared_models import Adjudicacion, Promesas, ventas_nuevas
 
 DIAS_POR_VENCER = 30
 
@@ -75,6 +75,54 @@ def _boolish(value):
     if value is False or value == 0 or value == '0' or value is None:
         return False
     return bool(value)
+
+
+def texto_forma_pago_venta(proyecto, contrato):
+    """Texto automatico de forma CI / saldo, igual que en la impresion de venta."""
+    if not contrato:
+        return '', ''
+    try:
+        venta = ventas_nuevas.objects.using(proyecto).get(pk=contrato)
+    except (ventas_nuevas.DoesNotExist, ValueError, TypeError):
+        return '', ''
+    try:
+        fci, fsaldo = venta.fp()
+    except Exception:
+        return '', ''
+    return (fci or ''), (fsaldo or '')
+
+
+def resolver_forma_pago_impresion(proyecto, promesa, adj=None, override_ci='', override_saldo=''):
+    """
+    Texto de forma de pago para el PDF de promesa.
+
+    Prioridad: override de impresion (no se guarda) > texto en promesa >
+    texto automatico de la venta original.
+    """
+    posted_ci = (override_ci or '').strip()
+    posted_saldo = (override_saldo or '').strip()
+    stored_ci = ((getattr(promesa, 'formaci', None) or '') if promesa else '').strip()
+    stored_saldo = ((getattr(promesa, 'formasaldo', None) or '') if promesa else '').strip()
+
+    contrato = None
+    adj_id = adj or getattr(promesa, 'idadjudicacion', None)
+    if adj_id:
+        try:
+            obj_adj = Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj_id)
+            contrato = obj_adj.contrato
+        except Adjudicacion.DoesNotExist:
+            contrato = None
+    auto_ci, auto_saldo = texto_forma_pago_venta(proyecto, contrato)
+    return posted_ci or stored_ci or auto_ci, posted_saldo or stored_saldo or auto_saldo
+
+
+def aplicar_forma_pago_impresion(promesa, formaci, formasaldo, general_info=None):
+    """Pisa el texto en memoria para plantillas HTML (ctr.general_info). No persiste."""
+    from andinasoft.promesa_pdf import aplicar_texto_forma_pago_pdf
+
+    return aplicar_texto_forma_pago_pdf(
+        promesa, formaci, formasaldo, general_info=general_info,
+    )
 
 
 def ensure_promesa(proyecto, adj, usuario=None):

@@ -158,7 +158,7 @@
                     <td style="width:2%"></td>
                     <td style="text-align:justify;vertical-align: top;">
                         <b>1. CUOTA INICIAL:</b> la suma de $ <u><b>{{ctr.general_info.ci|floatformat:"-3g"}}</b> </u> a pagar así, 
-                        <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                        <u>{{formaCI|default:ctr.general_info.fp_ci}}</u>.<br>
                     </td>
                     <td style="width:5%"></td>
                     <td style="text-align:justify;vertical-align: top;">
@@ -167,7 +167,7 @@
                         {%if ctr.formapago == 'Amortizacion'%} (El valor de las cuotas mensuales incluye los intereses
                         corrientes) {%endif%}
                         así,
-                        <u>{{ctr.general_info.fp_saldo}}</u>.<br>
+                        <u>{{formaFN|default:ctr.general_info.fp_saldo}}</u>.<br>
                     </td>
                     <td style="width:2%"></td>
                 </tr>
@@ -701,9 +701,9 @@
                 <li>
                     La forma de pago del lote adquirido es:<br>
                     a) <b>Cuota inicial:</b> $<u>{{ctr.general_info.ci|floatformat:"-3g"}} </u>, que serán cancelados así:
-                    <u>{{ctr.general_info.fp_ci}}</u>.<br>
+                    <u>{{formaCI|default:ctr.general_info.fp_ci}}</u>.<br>
                     b) <b>Saldo a pagar</b> $<u>{{ctr.general_info.saldo|floatformat:"-3g"}}</u>{%if ctr.general_info.saldo > 0 %}, que serán cancelados
-                    así: <u>{{ctr.general_info.fp_saldo}}</u>{%endif%}.
+                    así: <u>{{formaFN|default:ctr.general_info.fp_saldo}}</u>{%endif%}.
                 </li>
                 <li>Que, el pago de la cuota inicial, en caso de pagarlo en mensualidades, estas se pagan sin intereses
                     corrientes.</li>

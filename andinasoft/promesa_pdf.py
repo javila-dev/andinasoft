@@ -133,6 +133,42 @@ def generar_documento_pdf_directo(
     }
 
 
+def aplicar_texto_forma_pago_pdf(ctr, formaci, formasaldo, general_info=None):
+    """
+    Deja el texto final de forma de pago en el objeto de impresion.
+
+    Las plantillas HTML (xhtml2pdf / weasyprint) leen ctr.general_info.fp_ci
+    y ctr.general_info.fp_saldo, no las variables sueltas formaCI/formaFN.
+    Congelar general_info como dict evita que el metodo vuelva a leer
+    formaci/formasaldo guardados en BD y pise el override.
+    No persiste: solo afecta esta generacion del PDF.
+    """
+    if ctr is None:
+        return None
+    texto_ci = formaci or ''
+    texto_saldo = formasaldo or ''
+    ctr._fp_ci_override = texto_ci
+    ctr._fp_saldo_override = texto_saldo
+    if hasattr(ctr, 'formaci'):
+        ctr.formaci = texto_ci
+    if hasattr(ctr, 'formasaldo'):
+        ctr.formasaldo = texto_saldo
+
+    info = dict(general_info) if general_info else None
+    if info is None:
+        gi = getattr(ctr, 'general_info', None)
+        if callable(gi):
+            info = gi() or {}
+        elif isinstance(gi, dict):
+            info = dict(gi)
+        else:
+            info = {}
+    info['fp_ci'] = texto_ci
+    info['fp_saldo'] = texto_saldo
+    ctr.general_info = info
+    return info
+
+
 def generar_documento_pdf(
     proyecto,
     origen,
@@ -270,6 +306,8 @@ def build_preview_sample_payload(proyecto, origen, motor, plantilla):
         'meses_entrega': 6,
         'oficina': 'Medellin',
         'es_promesa': origen == ORIGEN_MODULO,
+        'formaCI': general_info['fp_ci'],
+        'formaFN': general_info['fp_saldo'],
     }
     return {
         'reportlab_kwargs': None,
