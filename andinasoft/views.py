@@ -3842,31 +3842,23 @@ def detalle_adjudicacion(request,proyecto,adj):
                 titulo='¡Ya puedes descargar tu documento!'
                 mensaje='Puedes descargarlo aqui'
                 link=True
-            if request.POST.get('impPortada'):
-                check_perms(request,('andinasoft.view_pagocomision',))
-                planpagos='Regular'
-                if saldo_fn>0 and saldo_ce>0:
-                    planpagos='Extraordinario'
-                ruta=settings.DIR_EXPORT+f'{proyecto}_portada_{adj}.pdf'
-                fecha=datetime.datetime.strftime(datetime.datetime.today(),'%d-%m-%Y')
-                escala=AsignacionComisiones.objects.using(proyecto).raw(f'CALL portadacomisiones("{adj}")')
-                if info_tit2==[]: nombret2=''
-                else:nombret2=info_tit2.nombrecompleto
-                if info_tit3==[]: nombret3=''
-                else:nombret3=info_tit3.nombrecompleto
-                if info_tit4==[]: nombret4=''
-                else:nombret4=info_tit4.nombrecompleto
-                GenerarPDF().portada_adj(ruta,proyecto,adj,fecha,inmueble,tipodoc,nrocontrato,
-                                         info_tit1.nombrecompleto,nombret2,nombret3,nombret4,
-                                         valor_inmueble,valor_ci,saldo_fn+saldo_ce+saldo_co,formapago,planpagos,
-                                         vr_cta_fn,vr_cta_ce,escala)
-                dir_link=settings.DIR_DOWNLOADS+f'{proyecto}_portada_{adj}.pdf'
-                alerta=True
-                titulo='¡Ya puedes descargar tu documento!'
-                mensaje='Puedes descargarlo aqui'
-                link=True
-        
-        
+        escala_comisiones = []
+        for asignacion in AsignacionComisiones.objects.using(proyecto).filter(idadjudicacion=adj):
+            try:
+                nombrecargo = Cargos_comisiones.objects.using(proyecto).get(
+                    pk=asignacion.idcargo
+                ).nombrecargo or ''
+            except Cargos_comisiones.DoesNotExist:
+                nombrecargo = ''
+            try:
+                nombre_asesor = asesores.objects.get(pk=asignacion.idgestor).nombre.upper()
+            except asesores.DoesNotExist:
+                nombre_asesor = asignacion.idgestor or ''
+            escala_comisiones.append({
+                'asesor': nombre_asesor,
+                'cargo': nombrecargo,
+            })
+
         context={
             'alerta':alerta,
             'mensaje':mensaje,
@@ -3908,6 +3900,7 @@ def detalle_adjudicacion(request,proyecto,adj):
             'anios_certificado': anios_disponibles_certificado(proyecto, adj),
             'titulares_certificado': titulares_para_certificado(obj_adj),
             'puede_paz_y_salvo': puede_paz_y_salvo,
+            'escala_comisiones': escala_comisiones,
         }
         return render(request,'detalle_adj.html',context)
     

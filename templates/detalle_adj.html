@@ -70,7 +70,7 @@
               <i class="far fa-file-pdf"></i>&nbsp;Documentos
             </button>
             <div class="dropdown-menu" aria-labelledby="btnGroupDrop1">
-              <input type='submit' class='dropdown-item' name='impPortada' value='Portada Adj'>
+              <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalEscalaComisiones">Escala de comisiones</a>
               <input type='submit' class='dropdown-item' name='impEstadodeCuenta' value='Estado de Cuenta'>
               <input type='submit' class='dropdown-item' name='impResumenPagos' value='Resumen de Pagos'>
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalCertificadoTributario">Certificado tributario</a>
@@ -195,6 +195,46 @@
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Ok</button>
         </div>
         {%endif%}
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalEscalaComisiones" tabindex="-1" role="dialog" aria-labelledby="modalEscalaComisionesLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalEscalaComisionesLabel">Escala de comisiones</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          {% if escala_comisiones %}
+          <div class="table-responsive">
+            <table class="table table-sm table-striped mb-0">
+              <thead class="thead-light">
+                <tr>
+                  <th>Asesor</th>
+                  <th>Cargo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for linea in escala_comisiones %}
+                <tr>
+                  <td>{{ linea.asesor }}</td>
+                  <td>{{ linea.cargo }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="mb-0 text-muted">Esta adjudicación no tiene escala de comisiones asignada.</p>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+        </div>
       </div>
     </div>
   </div>
