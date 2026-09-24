@@ -138,7 +138,7 @@
             </div>
             <div class="modal-body">
                 <p class="text-justify mb-3">Puede ajustar el texto de forma de pago solo para esta impresion.
-                    No se guarda y no modifica el plan de pagos.</p>
+                    No modifica el plan de pagos. Este navegador recuerda el texto por proyecto y ADJ.</p>
                 <div class="input-group">
                     <div class="input-group-prepend">
                         <span class="input-group-text" style="padding-right: 3.2rem;">Forma CI</span>
@@ -185,7 +185,34 @@
 (function(){
     var urlBase = '/operaciones/promesas/{{proyecto}}';
     var csrf = '{{csrf_token}}';
+    var proyectoPromesa = '{{ proyecto|escapejs }}';
     var tablasPromesas = {};
+
+    function formaManualKey(adj){
+        return 'promesaFormaManual:' + proyectoPromesa + ':' + adj;
+    }
+    function loadFormaManual(adj){
+        try {
+            var raw = localStorage.getItem(formaManualKey(adj));
+            if (!raw) return null;
+            var data = JSON.parse(raw);
+            if (!data || typeof data !== 'object') return null;
+            return {
+                formaci: data.formaci || '',
+                formasaldo: data.formasaldo || ''
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+    function saveFormaManual(adj, formaci, formasaldo){
+        try {
+            localStorage.setItem(formaManualKey(adj), JSON.stringify({
+                formaci: formaci || '',
+                formasaldo: formasaldo || ''
+            }));
+        } catch (e) {}
+    }
 
     function initPromesaTables(){
         $('.promesa-table').each(function(){
@@ -258,8 +285,13 @@
     }
     function reimprimir(adj){
         $('#reimp_adj').val(adj);
-        $('#formaci').val('');
-        $('#formasaldo').val('');
+        var stored = loadFormaManual(adj);
+        $('#formaci').val(stored ? stored.formaci : '');
+        $('#formasaldo').val(stored ? stored.formasaldo : '');
+        if (stored) {
+            $('#ModalformaManual').modal('show');
+            return;
+        }
         $.get(urlBase, {adj: adj}, function(r){
             if (r && r.passed) {
                 $('#formaci').val(r.formaci || '');
@@ -272,9 +304,13 @@
     }
 
     $('#btnContinuarFormaManual').on('click', function(){
+        var adj = $('#reimp_adj').val();
+        var formaci = $('#formaci').val() || '';
+        var formasaldo = $('#formasaldo').val() || '';
+        saveFormaManual(adj, formaci, formasaldo);
         $('#formReimp').find('input[name="formaci"], input[name="formasaldo"]').remove();
-        $('<input>', {type: 'hidden', name: 'formaci', value: $('#formaci').val() || ''}).appendTo('#formReimp');
-        $('<input>', {type: 'hidden', name: 'formasaldo', value: $('#formasaldo').val() || ''}).appendTo('#formReimp');
+        $('<input>', {type: 'hidden', name: 'formaci', value: formaci}).appendTo('#formReimp');
+        $('<input>', {type: 'hidden', name: 'formasaldo', value: formasaldo}).appendTo('#formReimp');
         $('#ModalformaManual').modal('hide');
         $('#formReimp').submit();
     });

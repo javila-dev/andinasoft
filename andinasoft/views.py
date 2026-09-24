@@ -7287,6 +7287,11 @@ def promesas(request,proyecto):
         serialize_steps,
         resolver_forma_pago_impresion,
         aplicar_forma_pago_impresion,
+        marcar_entrega,
+        marcar_hito_escritura,
+        nombre_documento_paso,
+        registrar_fechas_firmadas,
+        registrar_otrosi,
     )
 
     check_project(request, proyecto)
@@ -7432,8 +7437,16 @@ def promesas(request,proyecto):
             filename=filename_rl if cfg.motor == MOTOR_REPORTLAB else filename_html,
         )
 
-    # ---- AJAX ----
-    if request.is_ajax() or request.headers.get('x-requested-with') == 'XMLHttpRequest':
+    WRITE_TIPOS = (
+        'cambiar_fechas', 'marcar_entregado', 'marcar_hito',
+        'marcar_escriturado', 'registrar_otrosi',
+    )
+    # ---- AJAX / POST de hitos: siempre JSON, aunque falte el header X-Requested-With ----
+    if (
+        request.is_ajax()
+        or request.headers.get('x-requested-with') == 'XMLHttpRequest'
+        or (request.method == 'POST' and request.POST.get('tipo') in WRITE_TIPOS)
+    ):
         if request.method == 'GET':
             adj = request.GET.get('adj')
             tipo = request.GET.get('tipo')
@@ -7550,15 +7563,148 @@ def promesas(request,proyecto):
 
         if request.method == 'POST':
             tipo = request.POST.get('tipo')
-            if tipo in (
-                'cambiar_fechas', 'marcar_entregado', 'marcar_hito',
-                'marcar_escriturado', 'registrar_otrosi',
-            ):
+            adj = request.POST.get('adj')
+            try:
+                if not check_perms(request, ('andinasoft.change_promesas',), raise_exception=False):
+                    return JsonResponse({
+                        'passed': False,
+                        'msj': 'No tiene permiso para actualizar promesas (change_promesas).',
+                    }, status=403)
+                if not adj:
+                    return JsonResponse({'passed': False, 'msj': 'Falta el negocio'}, status=400)
+                try:
+                    Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
+                except Adjudicacion.DoesNotExist:
+                    return JsonResponse({'passed': False, 'msj': 'No existe adjudicacion para este negocio'}, status=404)
+
+                if tipo == 'cambiar_fechas':
+                    registrar_fechas_firmadas(
+                        proyecto, adj,
+                        request.POST.get('fecha_promesa'),
+                        request.POST.get('fecha_entrega'),
+                        request.POST.get('fecha_escritura'),
+                        request.user,
+                    )
+                    return JsonResponse({'passed': True, 'msj': 'Fechas actualizadas'})
+
+                if tipo == 'marcar_entregado':
+                    entregado = request.POST.get('entregado') in ('true', 'True', '1', 'on')
+                    archivo = request.FILES.get('documento')
+                    doc_name = ''
+                    if archivo:
+                        if not str(archivo.name).lower().endswith('.pdf'):
+                            return JsonResponse({'passed': False, 'msj': 'El acta debe ser PDF'}, status=400)
+                        doc_name = f"Acta de entrega_{datetime.datetime.today()}"
+                        upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                        documentos_contratos.objects.using(proyecto).create(
+                            adj=adj, descripcion_doc=doc_name,
+                            fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                        )
+                    marcar_entrega(
+                        proyecto, adj, entregado, request.POST.get('fecha_entrega_real'),
+                        request.user, documento=doc_name,
+                    )
+                    return JsonResponse({'passed': True, 'msj': 'Estado de entrega actualizado'})
+
+                if tipo == 'marcar_hito':
+                    paso = request.POST.get('paso')
+                    fecha = _parse_date(request.POST.get('fecha'))
+                    archivo = request.FILES.get('documento')
+                    doc_name = nombre_documento_paso(paso, archivo)
+                    if doc_name:
+                        upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                        documentos_contratos.objects.using(proyecto).create(
+                            adj=adj, descripcion_doc=doc_name,
+                            fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                        )
+                    marcar_hito_escritura(
+                        proyecto, adj, paso, fecha, request.user,
+                        nota=request.POST.get('nota') or '',
+                        documento=doc_name,
+                        es_superuser=request.user.is_superuser,
+                    )
+                    timeline.objects.using(proyecto).create(
+                        adj=adj, fecha=datetime.date.today(), usuario=request.user,
+                        accion=f'Marco paso de escritura: {PASO_LABEL.get(paso, paso)}',
+                    )
+                    return JsonResponse({'passed': True, 'msj': 'Paso de escritura registrado'})
+
+                if tipo == 'marcar_escriturado':
+                    escriturado = request.POST.get('escriturado') in ('true', 'True', '1', 'on')
+                    fecha_real = _parse_date(request.POST.get('fecha_escritura_real'))
+                    archivo = request.FILES.get('documento')
+                    if escriturado and not fecha_real:
+                        return JsonResponse({
+                            'passed': False,
+                            'msj': 'Indique la fecha real de escritura',
+                        }, status=400)
+                    if escriturado and not archivo:
+                        return JsonResponse({
+                            'passed': False,
+                            'msj': 'Para marcar escriturado debe cargar el PDF de la escritura',
+                        }, status=400)
+                    doc_name = ''
+                    if archivo:
+                        if not str(archivo.name).lower().endswith('.pdf'):
+                            return JsonResponse({'passed': False, 'msj': 'La escritura debe ser PDF'}, status=400)
+                        doc_name = f"Escritura_{datetime.datetime.today()}"
+                        upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                        documentos_contratos.objects.using(proyecto).create(
+                            adj=adj, descripcion_doc=doc_name,
+                            fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                        )
+                    obj_promesa = ensure_promesa(proyecto, adj, usuario=request.user)
+                    obj_promesa.escriturado = escriturado
+                    obj_promesa.save()
+                    from andinasoft.promesas_service import ensure_cumplimiento
+                    cumplimiento = ensure_cumplimiento(proyecto, adj)
+                    if escriturado:
+                        cumplimiento.fecha_escritura_real = fecha_real
+                        cumplimiento.usuario_escritura = str(request.user)
+                    else:
+                        cumplimiento.fecha_escritura_real = None
+                        cumplimiento.usuario_escritura = ''
+                    cumplimiento.save()
+                    accion = (
+                        f'Marco la promesa como escriturada el {fecha_real.isoformat()}'
+                        if escriturado else 'Marco la promesa como no escriturada'
+                    )
+                    if doc_name:
+                        accion += ' y cargo la escritura'
+                    timeline.objects.using(proyecto).create(
+                        adj=adj, fecha=datetime.date.today(), usuario=request.user, accion=accion,
+                    )
+                    return JsonResponse({'passed': True, 'msj': 'Estado de escritura actualizado'})
+
+                if tipo == 'registrar_otrosi':
+                    archivo = request.FILES.get('documento')
+                    if not archivo or not str(archivo.name).lower().endswith('.pdf'):
+                        return JsonResponse({'passed': False, 'msj': 'Debe cargar el PDF del otrosi'}, status=400)
+                    doc_name = f"Otrosi_{datetime.datetime.today()}"
+                    upload_docs_contratos(archivo, adj, proyecto, doc_name)
+                    documentos_contratos.objects.using(proyecto).create(
+                        adj=adj, descripcion_doc=doc_name,
+                        fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
+                    )
+                    registrar_otrosi(
+                        proyecto, adj, request.POST.get('tipo_otrosi'), request.user,
+                        fecha_entrega_nueva=request.POST.get('fecha_entrega_nueva'),
+                        fecha_escritura_nueva=request.POST.get('fecha_escritura_nueva'),
+                        observaciones=request.POST.get('observaciones') or '',
+                        documento=doc_name,
+                    )
+                    return JsonResponse({'passed': True, 'msj': 'Otrosi registrado'})
+
+                return JsonResponse({'passed': False, 'msj': 'Accion no reconocida'}, status=400)
+            except PermissionDenied:
                 return JsonResponse({
                     'passed': False,
-                    'msj': 'Estas actualizaciones se hacen en la ficha del cliente.',
-                }, status=400)
-            return JsonResponse({'passed': False, 'msj': 'Accion no reconocida'}, status=400)
+                    'msj': 'No tiene permiso para actualizar promesas (change_promesas).',
+                }, status=403)
+            except ValueError as exc:
+                return JsonResponse({'passed': False, 'msj': str(exc)}, status=400)
+            except Exception as exc:
+                return JsonResponse({'passed': False, 'msj': str(exc)}, status=400)
 
     # ---- POST no AJAX: reimpresion ----
     if request.method == 'POST' and request.POST.get('btnReimpPromesa'):
