@@ -1,0 +1,117 @@
+{%extends 'base.html'%}
+
+{%block title%}PQRS #{{ row.id }}{%endblock%}
+
+{%block content%}
+<div class="container-fluid py-3">
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="d-flex flex-wrap justify-content-between mb-3">
+    <div>
+      <h4 class="mb-1">{{ row.asunto }} <span class="badge badge-secondary">#{{ row.id }}</span></h4>
+      <p class="text-muted mb-0">{{ row.tipo }} · {{ row.estado }} · {{ row.plazo.label }}
+        {% if row.relevante_juridica %}<span class="badge badge-dark">Relevante juridica</span>{% endif %}
+      </p>
+    </div>
+    <div>
+      <a class="btn btn-sm btn-outline-secondary" href="/servicio_cliente/pqrs/{{ proyecto }}">Listado</a>
+      {% if row.cliente_id %}<a class="btn btn-sm btn-outline-primary" href="{{ ficha_url }}">Ficha cliente</a>{% endif %}
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-7">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6 class="text-uppercase text-muted">Expediente</h6>
+          <p><strong>Cliente:</strong> {{ row.titular }} · Adj {{ row.adj }} · {{ row.inmueble }}</p>
+          <p><strong>Radicado:</strong> {{ row.fecha_radicado }} · <strong>Vence:</strong> {{ row.fecha_vencimiento }}</p>
+          <p><strong>Canal:</strong> {{ row.canal|default:'—' }} · <strong>Origen:</strong> {{ row.origen }}</p>
+          {% if row.resumen %}<p>{{ row.resumen|linebreaksbr }}</p>{% endif %}
+          {% if row.resumen_respuesta %}<p><strong>Resumen de respuesta:</strong><br>{{ row.resumen_respuesta|linebreaksbr }}</p>{% endif %}
+          <div class="d-flex flex-wrap">
+            {% if row.doc_peticion_url %}<a class="btn btn-sm btn-outline-primary mr-2 mb-2" href="{{ row.doc_peticion_url }}" target="_blank">PDF peticion</a>{% endif %}
+            {% if row.doc_respuesta_url %}<a class="btn btn-sm btn-outline-secondary mr-2 mb-2" href="{{ row.doc_respuesta_url }}" target="_blank">PDF respuesta</a>{% endif %}
+            {% if row.doc_envio_url %}<a class="btn btn-sm btn-outline-secondary mr-2 mb-2" href="{{ row.doc_envio_url }}" target="_blank">Constancia envio</a>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if row.estado != 'Cerrado' %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6>Cerrar radicado</h6>
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="form-row">
+              <div class="col-md-6 mb-2">
+                <label>Fecha respuesta</label>
+                <input type="date" name="fecha_respuesta" class="form-control" value="{{ today|date:'Y-m-d' }}" required>
+              </div>
+              <div class="col-md-6 mb-2">
+                <label>Medio</label>
+                <select name="forma_respuesta" class="form-control">
+                  <option>Correo</option>
+                  <option>Carta</option>
+                  <option>Presencial</option>
+                  <option>WhatsApp</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Resumen de la respuesta</label>
+              <textarea name="resumen_respuesta" class="form-control" rows="3" required></textarea>
+            </div>
+            <div class="form-group">
+              <label>PDF respuesta</label>
+              <input type="file" name="respuesta" class="form-control-file" accept="application/pdf">
+            </div>
+            <div class="form-group">
+              <label>Constancia de envio</label>
+              <input type="file" name="envio" class="form-control-file" accept="application/pdf">
+              <small class="text-muted">No se exige si el medio es presencial o si no requiere respuesta.</small>
+            </div>
+            <button class="btn btn-primary" name="cerrar_pqrs" value="1">Cerrar</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="col-lg-5">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6>Bitacora</h6>
+          <p class="small text-muted mb-2">Radico {{ row.usuario_radica }}{% if row.usuario_cierra %} · Cerro {{ row.usuario_cierra }}{% endif %}</p>
+          {% for nota in row.notas %}
+          <div class="border rounded p-2 mb-2 small">
+            <strong>{{ nota.usuario }}</strong> · {{ nota.created_at }}
+            <div>{{ nota.comentario }}</div>
+          </div>
+          {% empty %}
+          <p class="text-muted">Sin notas.</p>
+          {% endfor %}
+          <form method="post">
+            {% csrf_token %}
+            <textarea name="comentario" class="form-control mb-2" rows="2" placeholder="Agregar nota" required></textarea>
+            <button class="btn btn-sm btn-outline-primary" name="agregar_nota" value="1">Guardar nota</button>
+          </form>
+          <form method="post" class="mt-3">
+            {% csrf_token %}
+            {% if row.relevante_juridica %}
+            <input type="hidden" name="relevante" value="0">
+            <button class="btn btn-sm btn-outline-dark" name="marcar_juridica" value="1">Quitar de juridica</button>
+            {% else %}
+            <input type="hidden" name="relevante" value="1">
+            <button class="btn btn-sm btn-dark" name="marcar_juridica" value="1">Marcar para juridica</button>
+            {% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{%endblock%}

@@ -26,6 +26,11 @@
       </p>
     </div>
     <div class="d-flex align-items-center mt-3 mt-md-0 flex-shrink-0">
+      {% if acta.cliente_id %}
+      <a href="/servicio_cliente/cliente/{{ acta.cliente_id }}{% if acta.proyecto_id %}?proyecto={{ acta.proyecto_id }}{% if acta.adj %}&adj={{ acta.adj }}{% endif %}{% endif %}" class="btn btn-outline-info btn-sm mr-2">
+        Ficha cliente
+      </a>
+      {% endif %}
       <a href="/crm/actas/{{ acta.pk }}/editar" class="btn btn-outline-primary btn-sm mr-2">
         <i class="fas fa-pen mr-1"></i> Editar
       </a>
@@ -42,6 +47,10 @@
         <div class="card-body py-3">
           <h6 class="text-uppercase text-muted font-weight-bold mb-3" style="font-size:0.7rem;letter-spacing:.08em;">Programacion</h6>
           <div class="row no-gutters">
+            <div class="col-6 col-sm-4 mb-2">
+              <small class="text-muted d-block">Adjudicacion</small>
+              <span>{{ acta.adj|default:'—' }}</span>
+            </div>
             <div class="col-6 col-sm-4 mb-2">
               <small class="text-muted d-block">Proyecto</small>
               <span class="font-weight-medium">{{ acta.proyecto|default:'—' }}</span>
@@ -197,7 +206,11 @@
           {% for compromiso in compromisos %}
           <div class="mb-3 pl-3" style="border-left:3px solid {% if compromiso.estado == 'Cumplido' %}#28a745{% elif compromiso.estado == 'Vencido' %}#dc3545{% else %}#ffc107{% endif %};" id="compromiso-{{ compromiso.pk }}">
             <div class="d-flex justify-content-between align-items-start">
-              <strong style="font-size:0.9rem;">{{ compromiso.titulo }}</strong>
+              <div>
+                <span class="badge badge-info mb-1">{{ compromiso.tipo_label }}</span>
+                <strong class="d-block" style="font-size:0.9rem;">{{ compromiso.titulo }}</strong>
+                <small class="text-muted">{{ compromiso.resumen_linea }}</small>
+              </div>
               <span class="badge {% if compromiso.estado == 'Cumplido' %}badge-success{% elif compromiso.estado == 'Vencido' %}badge-danger{% else %}badge-warning{% endif %} ml-2 flex-shrink-0">{{ compromiso.estado }}</span>
             </div>
             <small class="text-muted d-block mb-1">
@@ -300,6 +313,9 @@
             <a href="{{ detalle_proyecto.estado_cuenta_url }}" target="_blank" class="btn btn-outline-primary btn-sm mr-2 mb-2">
               <i class="fas fa-file-download mr-1"></i> Estado de cuenta
             </a>
+            {% if detalle_proyecto.ficha_cliente_url %}
+            <a href="{{ detalle_proyecto.ficha_cliente_url }}" class="btn btn-outline-info btn-sm mr-2 mb-2">Ficha cliente</a>
+            {% endif %}
             <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="btn-historial-adj" data-url="/crm/ajax/actas/{{ acta.pk }}/adjudicacion-historial">
               <i class="fas fa-history mr-1"></i> Ver historial
             </button>
@@ -337,9 +353,42 @@
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h6 class="text-uppercase text-muted font-weight-bold mb-3" style="font-size:0.7rem;letter-spacing:.08em;">Nuevo compromiso</h6>
-          <form method="post">
+          <form method="post" id="form-compromiso">
             {% csrf_token %}
-            {{ compromiso_form|crispy }}
+            {{ compromiso_form.tipo|as_crispy_field }}
+            <div class="js-tipo-block" data-tipo="cambio_proyecto">
+              {{ compromiso_form.proyecto_destino|as_crispy_field }}
+              {{ compromiso_form.lotes_prospecto|as_crispy_field }}
+              {{ compromiso_form.fecha_estimada_entrega|as_crispy_field }}
+              {{ compromiso_form.observaciones_cambio|as_crispy_field }}
+              {{ compromiso_form.expectativa_cliente|as_crispy_field }}
+            </div>
+            <div class="js-tipo-block" data-tipo="envio_informacion">
+              {{ compromiso_form.items|as_crispy_field }}
+              {{ compromiso_form.items_otro|as_crispy_field }}
+              {{ compromiso_form.canal_envio|as_crispy_field }}
+            </div>
+            <div class="js-tipo-block" data-tipo="cita_visita">
+              {{ compromiso_form.lugar_tipo|as_crispy_field }}
+              {{ compromiso_form.lugar|as_crispy_field }}
+              {{ compromiso_form.hora_cita|as_crispy_field }}
+            </div>
+            <div class="js-tipo-block" data-tipo="respuesta_formal">
+              {{ compromiso_form.canal_respuesta|as_crispy_field }}
+              {{ compromiso_form.id_pqrs|as_crispy_field }}
+            </div>
+            <div class="js-tipo-block" data-tipo="gestion_interna">
+              {{ compromiso_form.area_gestion|as_crispy_field }}
+              {{ compromiso_form.que_se_pide|as_crispy_field }}
+            </div>
+            <div class="js-tipo-block" data-tipo="otro">
+              {{ compromiso_form.titulo|as_crispy_field }}
+            </div>
+            {{ compromiso_form.descripcion|as_crispy_field }}
+            {{ compromiso_form.responsable|as_crispy_field }}
+            {{ compromiso_form.fecha_compromiso|as_crispy_field }}
+            {{ compromiso_form.prioridad|as_crispy_field }}
+            {{ compromiso_form.estado|as_crispy_field }}
             <button class="btn btn-success btn-sm" name="guardar_compromiso" value="1">
               <i class="fas fa-plus mr-1"></i> Agregar compromiso
             </button>
@@ -635,6 +684,20 @@
         saveButton.disabled = false;
       }
     });
+  })();
+</script>
+<script>
+  (function() {
+    const tipoSelect = document.getElementById('id_compromiso-tipo');
+    if (!tipoSelect) return;
+    function syncTipo() {
+      const tipo = tipoSelect.value || 'otro';
+      document.querySelectorAll('.js-tipo-block').forEach(function(block) {
+        block.style.display = block.getAttribute('data-tipo') === tipo ? '' : 'none';
+      });
+    }
+    tipoSelect.addEventListener('change', syncTipo);
+    syncTipo();
   })();
 </script>
 {% endblock %}

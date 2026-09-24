@@ -84,6 +84,12 @@ class UsuarioPerfilForm(forms.Form):
         label='Fecha de nacimiento',
         widget=forms.DateInput(attrs={'type': 'date'}),
     )
+    telefono = forms.CharField(
+        max_length=32,
+        required=False,
+        label='Telefono WhatsApp',
+        help_text='Formato 573001234567, sin +.',
+    )
     sexo = forms.ChoiceField(
         choices=(('', 'Sin definir'), ('F', 'Femenino'), ('M', 'Masculino')),
         required=False,

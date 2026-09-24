@@ -1,0 +1,23 @@
+{% if rama %}
+<div class="hito-flow{% if compact %} compact{% endif %}">
+  <div class="hito-flow-trunk">
+    {% for s in steps %}
+      {% if not forloop.first %}<div class="hito-conn {{ s.estado }}"></div>{% endif %}
+      {% include 'partials/stepper_hitos_node.html' with s=s %}
+    {% endfor %}
+  </div>
+  <div class="hito-flow-fork" aria-hidden="true">
+    <svg viewBox="0 0 40 160" preserveAspectRatio="none">
+      <path d="M0 80 H18 M18 16 V144 M18 16 H40 M18 80 H40 M18 144 H40"
+            fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="hito-flow-arms">
+    {% for s in rama %}
+      {% include 'partials/stepper_hitos_node.html' with s=s %}
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+  {% include 'partials/stepper_hitos_row.html' with steps=steps compact=compact %}
+{% endif %}

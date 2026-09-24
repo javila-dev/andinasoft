@@ -40,15 +40,18 @@
         <div class="card-body">
           <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
+              <span class="badge badge-info">{{ compromiso.tipo_label }}</span>
               <h5 class="mb-1">{{ compromiso.titulo }}</h5>
-              <small class="text-muted">{{ compromiso.acta.asunto }}</small>
+              <small class="text-muted">{{ compromiso.resumen_linea }} · {{ compromiso.acta.asunto }}</small>
             </div>
             <span class="badge badge-info">{{ compromiso.estado }}</span>
           </div>
           <p class="mb-2"><strong>Fecha:</strong> {{ compromiso.fecha_compromiso }}</p>
           <p class="mb-2"><strong>Cliente:</strong> {{ compromiso.acta.cliente.nombrecompleto|default:'Sin cliente' }}</p>
           <p class="mb-2"><strong>Proyecto:</strong> {{ compromiso.acta.proyecto|default:'Sin proyecto' }}</p>
-          <p class="text-muted mb-3">{{ compromiso.descripcion|truncatechars:180 }}</p>
+          {% if compromiso.acta.cliente_id %}
+          <a class="btn btn-outline-info btn-sm mr-1" href="/servicio_cliente/cliente/{{ compromiso.acta.cliente_id }}{% if compromiso.acta.proyecto_id %}?proyecto={{ compromiso.acta.proyecto_id }}{% if compromiso.acta.adj %}&adj={{ compromiso.acta.adj }}{% endif %}{% endif %}">Ficha</a>
+          {% endif %}
           <a class="btn btn-outline-primary btn-sm" href="/crm/actas/{{ compromiso.acta.pk }}#compromiso-{{ compromiso.pk }}">Abrir acta</a>
         </div>
       </div>

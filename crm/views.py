@@ -61,12 +61,18 @@ def _build_reunion_contexto(acta):
         contexto['detalle_proyecto_error'] = 'No se encontraron adjudicaciones de este cliente en el proyecto seleccionado.'
         return contexto
 
-    if len(adjudicaciones) > 1:
-        contexto['detalle_proyecto_warning'] = 'Este cliente tiene varias adjudicaciones en el proyecto. Se requiere asociar la reunión a una adjudicación específica para mostrar cartera exacta.'
+    if acta.adj:
+        adj_id = acta.adj
+        if adj_id not in adjudicaciones:
+            contexto['detalle_proyecto_warning'] = f'La adjudicacion {adj_id} no coincide con los negocios actuales del cliente.'
+            contexto['adjudicaciones_relacionadas'] = adjudicaciones
+    elif len(adjudicaciones) > 1:
+        contexto['detalle_proyecto_warning'] = 'Este cliente tiene varias adjudicaciones en el proyecto. Asocie la reunion a una adjudicacion para mostrar cartera exacta.'
         contexto['adjudicaciones_relacionadas'] = adjudicaciones
+        contexto['ficha_cliente_url'] = f'/servicio_cliente/cliente/{cliente_id}?proyecto={proyecto_alias}'
         return contexto
-
-    adj_id = adjudicaciones[0]
+    else:
+        adj_id = adjudicaciones[0]
     vista_adj = Vista_Adjudicacion.objects.using(proyecto_alias).filter(IdAdjudicacion=adj_id).first()
     obj_adj = Adjudicacion.objects.using(proyecto_alias).filter(pk=adj_id).first()
     saldos = saldos_adj.objects.using(proyecto_alias).filter(adj=adj_id)
@@ -100,6 +106,7 @@ def _build_reunion_contexto(acta):
         'fecha_contrato': getattr(vista_adj, 'FechaContrato', None),
         'proyecto_alias': proyecto_alias,
         'estado_cuenta_url': f'/andinasoftajx/estadodecuenta?proyecto={proyecto_alias}&adj={adj_id}',
+        'ficha_cliente_url': f'/servicio_cliente/cliente/{cliente_id}?proyecto={proyecto_alias}&adj={adj_id}',
     }
     return contexto
 
@@ -737,6 +744,29 @@ def ajax_clientes_proyecto(request):
 
         return JsonResponse({'terceros': terceros})
 
+
+@group_perm_required(('crm.view_actareunion',), raise_exception=True)
+def ajax_adjudicaciones_cliente(request):
+    proyecto_alias = request.GET.get('proyecto')
+    cliente_id = request.GET.get('cliente')
+    if not proyecto_alias or not cliente_id:
+        return JsonResponse({'adjudicaciones': []})
+    rows = titulares_por_adj.objects.using(proyecto_alias).filter(
+        Q(IdTercero1=cliente_id) |
+        Q(IdTercero2=cliente_id) |
+        Q(IdTercero3=cliente_id) |
+        Q(IdTercero4=cliente_id)
+    ).values_list('adj', flat=True)
+    items = []
+    for adj in rows:
+        vista = Vista_Adjudicacion.objects.using(proyecto_alias).filter(IdAdjudicacion=adj).first()
+        items.append({
+            'adj': adj,
+            'inmueble': getattr(vista, 'Inmueble', None) or '',
+            'estado': getattr(vista, 'Estado', None) or '',
+        })
+    return JsonResponse({'adjudicaciones': items})
+
 def ajax_adminEventos(request):
     if request.method == 'GET':
         if request.is_ajax():
@@ -830,15 +860,21 @@ def acta_edit(request, acta_id):
 def acta_detail(request, acta_id):
     acta = ActaReunion.objects.select_related('cliente', 'proyecto', 'lider_reunion', 'creado_por').get(pk=acta_id)
     resultado_form = crm_forms.ActaResultadoForm(instance=acta, prefix='resultado')
-    compromiso_form = crm_forms.CompromisoActaForm(prefix='compromiso')
+    compromiso_form = crm_forms.CompromisoActaForm(prefix='compromiso', acta=acta)
     seguimiento_form = crm_forms.SeguimientoCompromisoForm(prefix='seguimiento')
     participante_form = crm_forms.ActaParticipanteForm(prefix='participante')
     adjunto_form = crm_forms.AdjuntoActaForm(prefix='adjunto')
 
     if request.method == 'POST':
+        if request.POST.get('guardar_resultado'):
+            check_perms(request, ('crm.change_actareunion',))
+            resultado_form = crm_forms.ActaResultadoForm(request.POST, instance=acta, prefix='resultado')
+            if resultado_form.is_valid():
+                resultado_form.save()
+                return HttpResponseRedirect(f'/crm/actas/{acta.pk}')
         if request.POST.get('guardar_compromiso'):
             check_perms(request, ('crm.add_compromisoacta',))
-            compromiso_form = crm_forms.CompromisoActaForm(request.POST, prefix='compromiso')
+            compromiso_form = crm_forms.CompromisoActaForm(request.POST, prefix='compromiso', acta=acta)
             if compromiso_form.is_valid():
                 compromiso = compromiso_form.save(commit=False)
                 compromiso.acta = acta
@@ -847,6 +883,8 @@ def acta_detail(request, acta_id):
                     acta.estado = 'En curso'
                     acta.save(update_fields=['estado'])
                 compromiso.save()
+                from andinasoft.sac_n8n_notify import notify_compromiso
+                notify_compromiso(compromiso, event='sac.compromiso.creado', trigger='alta')
                 return HttpResponseRedirect(f'/crm/actas/{acta.pk}')
         if request.POST.get('guardar_seguimiento'):
             check_perms(request, ('crm.add_seguimientocompromiso',))
@@ -1059,6 +1097,7 @@ urls=[
     path('compromisos/mios', mis_compromisos, name='crm_mis_compromisos'),
     path('ajax/leads',ajax_leads),
     path('ajax/clientes-proyecto', ajax_clientes_proyecto, name='crm_ajax_clientes_proyecto'),
+    path('ajax/adjudicaciones-cliente', ajax_adjudicaciones_cliente, name='crm_ajax_adjudicaciones_cliente'),
     path('ajax/reuniones-calendario', ajax_reuniones_calendario, name='crm_ajax_reuniones_calendario'),
     path('ajax/actas/<int:acta_id>/adjudicacion-historial', ajax_adjudicacion_historial, name='crm_ajax_adjudicacion_historial'),
     path('ajax/actas/<int:acta_id>/subir-audio', ajax_subir_audio_acta, name='crm_ajax_subir_audio_acta'),

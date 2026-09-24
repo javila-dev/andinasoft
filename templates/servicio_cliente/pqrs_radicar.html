@@ -1,0 +1,78 @@
+{%extends 'base.html'%}
+
+{%block title%}Radicar PQRS {{ proyecto }}{%endblock%}
+
+{%block content%}
+<div class="container py-4">
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h4 class="mb-3">Radicar PQRS · {{ proyecto }}</h4>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-row">
+          <div class="col-md-4 mb-2">
+            <label>Adjudicacion</label>
+            <input class="form-control" name="adj" value="{{ adj }}" required>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label>Tipo</label>
+            <select name="tipo" class="form-control">
+              {% for t in tipos %}<option>{{ t }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label>Canal</label>
+            <select name="canal" class="form-control">
+              <option value="ventanilla">Ventanilla</option>
+              <option value="correo">Correo</option>
+              <option value="reunion">Reunion</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Asunto</label>
+          <input class="form-control" name="asunto" required maxlength="255">
+        </div>
+        <div class="form-group">
+          <label>Resumen</label>
+          <textarea class="form-control" name="resumen" rows="3"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="col-md-4 mb-2">
+            <label>Fecha recibido</label>
+            <input type="date" class="form-control" name="fecha_recibido" value="{{ today|date:'Y-m-d' }}" required>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label>Fecha vencimiento</label>
+            <input type="date" class="form-control" name="fecha_vencimiento" value="{{ fecha_ven_sugerida|date:'Y-m-d' }}" required>
+            <small class="text-muted">Sugerido: 15 dias calendario.</small>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label>Requiere respuesta</label>
+            <select name="req_respuesta" class="form-control">
+              <option value="Si">Si</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>PDF de la peticion</label>
+          <input type="file" name="peticion" class="form-control-file" accept="application/pdf" required>
+        </div>
+        <div class="form-group form-check">
+          <input type="checkbox" class="form-check-input" name="relevante_juridica" id="juridica">
+          <label class="form-check-label" for="juridica">Relevante para juridica</label>
+        </div>
+        <button class="btn btn-success">Radicar</button>
+        <a class="btn btn-link" href="/servicio_cliente/pqrs/{{ proyecto }}">Cancelar</a>
+      </form>
+    </div>
+  </div>
+</div>
+{%endblock%}

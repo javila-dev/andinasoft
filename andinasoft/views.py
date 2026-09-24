@@ -3432,29 +3432,28 @@ def detalle_adjudicacion(request,proyecto,adj):
                         mensaje=f'Este adj tiene saldos pendientes, por favor verificalo y vuelve a intentar'
             if request.POST.get('btnRadicarPQRS'):
                 check_perms(request,('andinasoft.add_pqrs',))
-                tipo=request.POST.get('tipoPQRS')
-                req_rta=request.POST.get('reqRespuesta')
-                archivo=request.FILES.get('peticion')
-                fecha_rad = request.POST.get('fecha_recibido')
-                fecha_ven = request.POST.get('fecha_vencimiento')
-                nombre_archivo = f'{tipo}_{datetime.datetime.now()}'.replace(':','.')
-                Pqrs.objects.using(proyecto).create(idadjudicacion=adj,estado='Abierta',tipo=tipo,
-                                                    fecha_radicado=fecha_rad,fecha_vencimiento=fecha_ven,
-                                                    doc_peticion=nombre_archivo+'.pdf',usuario_radica=str(request.user))
-                ruta =f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{adj}/'
-                upload_docs(archivo,ruta,nombre_archivo)
-                documentos_contratos.objects.using(proyecto).create(adj=adj,descripcion_doc=nombre_archivo,
-                                                                    fecha_carga=datetime.date.today(),usuario_carga=str(request.user))
-                pqrs=Pqrs.objects.using(proyecto).last()
-                obj_timeline=timeline.objects.using(proyecto)
-                accion=f'Radicó una {tipo} del {fecha_rad} (Radicado #{pqrs.pk})'
-                obj_timeline.create(adj=adj,
-                            fecha=datetime.date.today(),
-                            usuario=request.user,
-                            accion=accion)
-                alerta=True
-                titulo='PQRS Radicada'
-                mensaje=f'La {tipo} fue radicada con el id = {pqrs.pk}'
+                from andinasoft.pqrs_service import radicar_pqrs
+                try:
+                    rad, _gestion = radicar_pqrs(
+                        proyecto, adj,
+                        tipo=request.POST.get('tipoPQRS'),
+                        asunto=request.POST.get('asuntoPQRS') or request.POST.get('tipoPQRS') or 'PQRS',
+                        fecha_rad=request.POST.get('fecha_recibido'),
+                        fecha_ven=request.POST.get('fecha_vencimiento'),
+                        req_respuesta=request.POST.get('reqRespuesta') or 'Si',
+                        archivo=request.FILES.get('peticion'),
+                        usuario=request.user,
+                        canal=request.POST.get('canalPQRS') or '',
+                        relevante_juridica=request.POST.get('relevante_juridica') == 'on',
+                        resumen=request.POST.get('resumenPQRS') or '',
+                    )
+                    alerta=True
+                    titulo='PQRS Radicada'
+                    mensaje=f'La {rad.tipo} fue radicada con el id = {rad.pk}'
+                except ValueError as exc:
+                    alerta=True
+                    titulo='Error'
+                    mensaje=str(exc)
             if request.POST.get('btnCambiarLote'):
                 check_perms(request,('andinasoft.change_adjudicacion',))
                 nuevo_lote = (request.POST.get('lotecambiar') or '').strip()
@@ -7282,6 +7281,10 @@ def promesas(request,proyecto):
         ESTADO_POR_VENCER,
         ESTADO_VENCIDO,
         _boolish,
+        PASO_LABEL,
+        pipeline_escritura,
+        entrega_ui,
+        serialize_steps,
         resolver_forma_pago_impresion,
         aplicar_forma_pago_impresion,
     )
@@ -7351,7 +7354,8 @@ def promesas(request,proyecto):
         )
         obs = promesa.observaciones or ''
         ciudad = promesa.ciudad or ''
-        fecha_prom = promesa.fechapromesa or datetime.date.today()
+        fecha_prom = datetime.date.today()
+        promesa.fechapromesa = fecha_prom
         fecha_entrega = promesa.fechaentrega
         fecha_escritura = promesa.fechaescritura
         diacontrato = fecha_prom.day
@@ -7482,15 +7486,30 @@ def promesas(request,proyecto):
                 cumplimiento.fecha_escritura_real.strftime('%Y-%m-%d')
                 if cumplimiento and cumplimiento.fecha_escritura_real else ''
             )
-
             obj_promesa = Promesas.objects.using(proyecto).filter(idadjudicacion=adj)
-            if not obj_promesa.exists():
+            p = obj_promesa[0] if obj_promesa.exists() else None
+            pipe = pipeline_escritura(cumplimiento)
+            pasos_json = {
+                'paso_escritura': pipe['paso'],
+                'paso_escritura_label': PASO_LABEL.get(pipe['paso'], pipe['paso']),
+                'paso_siguiente': pipe['paso_siguiente'] or '',
+                'paso_siguiente_label': pipe['paso_siguiente_label'],
+                'pasos_siguientes': pipe['siguientes'],
+                'pasos_ui': serialize_steps(pipe['pasos_ui']),
+                'pasos_linea': serialize_steps(pipe['pasos_linea']),
+                'pasos_rama': serialize_steps(pipe['pasos_rama']),
+                'pipeline_completo': pipe['completa'],
+                'carga_pendiente': pipe['carga_pendiente'],
+                'factura_pendiente': pipe['factura_pendiente'],
+            }
+
+            formaci, formasaldo = resolver_forma_pago_impresion(proyecto, p, adj=adj)
+            if p is None:
                 try:
                     obj_adj = Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
                 except Adjudicacion.DoesNotExist:
                     return JsonResponse({'passed': False, 'msj': 'No existe adjudicacion para este negocio'}, status=404)
                 fp = obj_adj.fechacontrato.strftime('%Y-%m-%d') if obj_adj.fechacontrato else ''
-                formaci, formasaldo = resolver_forma_pago_impresion(proyecto, None, adj=adj)
                 return JsonResponse({
                     'passed': True,
                     'escriturado': False,
@@ -7500,14 +7519,14 @@ def promesas(request,proyecto):
                     'fechaescritura': '',
                     'fecha_entrega_real': fecha_entrega_real,
                     'fecha_escritura_real': fecha_escritura_real,
+                    **pasos_json,
+                    'entrega_ui': serialize_steps(entrega_ui(None, False, None)),
                     'nropromesa': obj_adj.contrato or '',
                     'observaciones': '',
                     'formaci': formaci,
                     'formasaldo': formasaldo,
                     'datos_promesa': '[]',
                 })
-            p = obj_promesa[0]
-            formaci, formasaldo = resolver_forma_pago_impresion(proyecto, p, adj=adj)
             return JsonResponse({
                 'passed': True,
                 'escriturado': _boolish(p.escriturado),
@@ -7517,6 +7536,11 @@ def promesas(request,proyecto):
                 'fechaescritura': p.fechaescritura.strftime('%Y-%m-%d') if p.fechaescritura else '',
                 'fecha_entrega_real': fecha_entrega_real,
                 'fecha_escritura_real': fecha_escritura_real,
+                **pasos_json,
+                'entrega_ui': serialize_steps(entrega_ui(
+                    p.fechaentrega, _boolish(p.entregado),
+                    cumplimiento.fecha_entrega_real if cumplimiento else None,
+                )),
                 'nropromesa': p.nropromesa or '',
                 'observaciones': p.observaciones or '',
                 'formaci': formaci,
@@ -7525,175 +7549,15 @@ def promesas(request,proyecto):
             })
 
         if request.method == 'POST':
-            check_perms(request, ('andinasoft.change_promesas',), raise_exception=True)
             tipo = request.POST.get('tipo')
-            adj = request.POST.get('adj')
-            if not adj:
-                return JsonResponse({'passed': False, 'msj': 'Falta el negocio'}, status=400)
-            try:
-                Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
-            except Adjudicacion.DoesNotExist:
-                return JsonResponse({'passed': False, 'msj': 'No existe adjudicacion para este negocio'}, status=404)
-            obj_promesa = ensure_promesa(proyecto, adj, usuario=request.user)
-
-            if tipo == 'cambiar_fechas':
-                if obj_promesa.fechaentrega or obj_promesa.fechaescritura:
-                    return JsonResponse({
-                        'passed': False,
-                        'msj': 'Las fechas ya estan registradas. Para modificarlas use un otrosi',
-                    }, status=400)
-                obj_promesa.fechapromesa = _parse_date(request.POST.get('fecha_promesa'))
-                obj_promesa.fechaentrega = _parse_date(request.POST.get('fecha_entrega'))
-                obj_promesa.fechaescritura = _parse_date(request.POST.get('fecha_escritura'))
-                obj_promesa.save()
-                timeline.objects.using(proyecto).create(
-                    adj=adj, fecha=datetime.date.today(), usuario=request.user,
-                    accion='Registro las fechas firmadas de la promesa',
-                )
-                return JsonResponse({'passed': True, 'msj': 'Fechas actualizadas'})
-
-            if tipo == 'marcar_entregado':
-                entregado = request.POST.get('entregado') in ('true', 'True', '1', 'on')
-                fecha_real = _parse_date(request.POST.get('fecha_entrega_real'))
-                if entregado and not fecha_real:
-                    return JsonResponse({
-                        'passed': False,
-                        'msj': 'Indique la fecha real de entrega',
-                    }, status=400)
-                obj_promesa.entregado = entregado
-                obj_promesa.save()
-                archivo = request.FILES.get('documento')
-                doc_name = ''
-                if archivo:
-                    if not str(archivo.name).lower().endswith('.pdf'):
-                        return JsonResponse({'passed': False, 'msj': 'El acta debe ser PDF'}, status=400)
-                    doc_name = f"Acta de entrega_{datetime.datetime.today()}"
-                    upload_docs_contratos(archivo, adj, proyecto, doc_name)
-                    documentos_contratos.objects.using(proyecto).create(
-                        adj=adj, descripcion_doc=doc_name,
-                        fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
-                    )
-                proy, _ = proyectos.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
-                cumplimiento, _ = PromesaCumplimiento.objects.get_or_create(proyecto=proy, adj=adj)
-                if entregado:
-                    cumplimiento.fecha_entrega_real = fecha_real
-                    cumplimiento.usuario_entrega = str(request.user)
-                else:
-                    cumplimiento.fecha_entrega_real = None
-                    cumplimiento.usuario_entrega = ''
-                cumplimiento.save()
-                accion = (
-                    f'Marco la promesa como entregada el {fecha_real.isoformat()}'
-                    if entregado else 'Marco la promesa como no entregada'
-                )
-                if doc_name:
-                    accion += ' y cargo acta de entrega'
-                timeline.objects.using(proyecto).create(
-                    adj=adj, fecha=datetime.date.today(), usuario=request.user, accion=accion,
-                )
-                return JsonResponse({'passed': True, 'msj': 'Estado de entrega actualizado'})
-
-            if tipo == 'marcar_escriturado':
-                escriturado = request.POST.get('escriturado') in ('true', 'True', '1', 'on')
-                fecha_real = _parse_date(request.POST.get('fecha_escritura_real'))
-                archivo = request.FILES.get('documento')
-                if escriturado and not fecha_real:
-                    return JsonResponse({
-                        'passed': False,
-                        'msj': 'Indique la fecha real de escritura',
-                    }, status=400)
-                if escriturado and not archivo:
-                    return JsonResponse({
-                        'passed': False,
-                        'msj': 'Para marcar escriturado debe cargar el PDF de la escritura',
-                    }, status=400)
-                doc_name = ''
-                if archivo:
-                    if not str(archivo.name).lower().endswith('.pdf'):
-                        return JsonResponse({'passed': False, 'msj': 'La escritura debe ser PDF'}, status=400)
-                    doc_name = f"Escritura_{datetime.datetime.today()}"
-                    upload_docs_contratos(archivo, adj, proyecto, doc_name)
-                    documentos_contratos.objects.using(proyecto).create(
-                        adj=adj, descripcion_doc=doc_name,
-                        fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
-                    )
-                obj_promesa.escriturado = escriturado
-                obj_promesa.save()
-                proy, _ = proyectos.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
-                cumplimiento, _ = PromesaCumplimiento.objects.get_or_create(proyecto=proy, adj=adj)
-                if escriturado:
-                    cumplimiento.fecha_escritura_real = fecha_real
-                    cumplimiento.usuario_escritura = str(request.user)
-                else:
-                    cumplimiento.fecha_escritura_real = None
-                    cumplimiento.usuario_escritura = ''
-                cumplimiento.save()
-                accion = (
-                    f'Marco la promesa como escriturada el {fecha_real.isoformat()}'
-                    if escriturado else 'Marco la promesa como no escriturada'
-                )
-                if doc_name:
-                    accion += ' y cargo la escritura'
-                timeline.objects.using(proyecto).create(
-                    adj=adj, fecha=datetime.date.today(), usuario=request.user, accion=accion,
-                )
-                return JsonResponse({'passed': True, 'msj': 'Estado de escritura actualizado'})
-
-            if tipo == 'registrar_otrosi':
-                tipo_otrosi = request.POST.get('tipo_otrosi')
-                if tipo_otrosi not in (
-                    PromesaOtrosi.TIPO_ENTREGA,
-                    PromesaOtrosi.TIPO_ESCRITURA,
-                    PromesaOtrosi.TIPO_AMBOS,
-                ):
-                    return JsonResponse({'passed': False, 'msj': 'Tipo de otrosi invalido'}, status=400)
-                archivo = request.FILES.get('documento')
-                if not archivo or not str(archivo.name).lower().endswith('.pdf'):
-                    return JsonResponse({'passed': False, 'msj': 'Debe cargar el PDF del otrosi'}, status=400)
-
-                fecha_entrega_nueva = _parse_date(request.POST.get('fecha_entrega_nueva'))
-                fecha_escritura_nueva = _parse_date(request.POST.get('fecha_escritura_nueva'))
-                if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS) and not fecha_entrega_nueva:
-                    return JsonResponse({'passed': False, 'msj': 'Indique la nueva fecha de entrega'}, status=400)
-                if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS) and not fecha_escritura_nueva:
-                    return JsonResponse({'passed': False, 'msj': 'Indique la nueva fecha de escritura'}, status=400)
-
-                obs = request.POST.get('observaciones') or ''
-                fe_ant = obj_promesa.fechaentrega
-                fs_ant = obj_promesa.fechaescritura
-                if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS):
-                    obj_promesa.fechaentrega = fecha_entrega_nueva
-                    obj_promesa.entregado = False
-                if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS):
-                    obj_promesa.fechaescritura = fecha_escritura_nueva
-                    obj_promesa.escriturado = False
-                obj_promesa.save()
-
-                doc_name = f"Otrosi_{datetime.datetime.today()}"
-                upload_docs_contratos(archivo, adj, proyecto, doc_name)
-                documentos_contratos.objects.using(proyecto).create(
-                    adj=adj, descripcion_doc=doc_name,
-                    fecha_carga=str(datetime.datetime.today()), usuario_carga=str(request.user),
-                )
-                proy, _ = proyectos.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})
-                PromesaOtrosi.objects.create(
-                    proyecto=proy,
-                    adj=adj,
-                    tipo=tipo_otrosi,
-                    fecha_entrega_anterior=fe_ant if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS) else None,
-                    fecha_entrega_nueva=fecha_entrega_nueva if tipo_otrosi in (PromesaOtrosi.TIPO_ENTREGA, PromesaOtrosi.TIPO_AMBOS) else None,
-                    fecha_escritura_anterior=fs_ant if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS) else None,
-                    fecha_escritura_nueva=fecha_escritura_nueva if tipo_otrosi in (PromesaOtrosi.TIPO_ESCRITURA, PromesaOtrosi.TIPO_AMBOS) else None,
-                    observaciones=obs,
-                    documento=doc_name,
-                    usuario=str(request.user),
-                )
-                timeline.objects.using(proyecto).create(
-                    adj=adj, fecha=datetime.date.today(), usuario=request.user,
-                    accion=f'Registro otrosi de {tipo_otrosi}',
-                )
-                return JsonResponse({'passed': True, 'msj': 'Otrosi registrado'})
-
+            if tipo in (
+                'cambiar_fechas', 'marcar_entregado', 'marcar_hito',
+                'marcar_escriturado', 'registrar_otrosi',
+            ):
+                return JsonResponse({
+                    'passed': False,
+                    'msj': 'Estas actualizaciones se hacen en la ficha del cliente.',
+                }, status=400)
             return JsonResponse({'passed': False, 'msj': 'Accion no reconocida'}, status=400)
 
     # ---- POST no AJAX: reimpresion ----
@@ -8682,9 +8546,10 @@ def ajax_imprimir_promesa(request):
                 forma=('','x','')
             elif formapago=='Amortizacion':
                 forma=('','','x')
-            diacontrato = obj_promesa.fechapromesa.day
-            mescontrato = obj_promesa.fechapromesa.month
-            añocontrato = obj_promesa.fechapromesa.year
+            fecha_prom = datetime.date.today()
+            diacontrato = fecha_prom.day
+            mescontrato = fecha_prom.month
+            añocontrato = fecha_prom.year
             
             filename = f'Promesa_{proyecto}_{adj}.pdf'
             ruta = settings.MEDIA_ROOT+f'/tmp/pdf/{filename}'

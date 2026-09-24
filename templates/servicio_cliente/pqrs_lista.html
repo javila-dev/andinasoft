@@ -1,0 +1,90 @@
+{%extends 'base.html'%}
+
+{%block title%}PQRS {{ proyecto }}{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow p-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">PQRS {{ proyecto }}</h4>
+    <div>
+      <a class="btn btn-sm btn-outline-secondary" href="/servicio_cliente/dashboard?proyecto={{ proyecto|urlencode }}">Dashboard</a>
+      <a class="btn btn-sm btn-success" href="/servicio_cliente/pqrs/{{ proyecto }}/nueva">Radicar</a>
+    </div>
+  </div>
+
+  <div class="row mb-3 text-center">
+    <div class="col"><a href="?vencimiento=abiertas" class="text-dark"><div class="h4 mb-0">{{ kpis.abiertas }}</div><small>Abiertas</small></a></div>
+    <div class="col"><a href="?vencimiento=hoy" class="text-dark"><div class="h4 mb-0 text-warning">{{ kpis.hoy }}</div><small>Vencen hoy</small></a></div>
+    <div class="col"><a href="?vencimiento=vencidas" class="text-dark"><div class="h4 mb-0 text-danger">{{ kpis.vencidas }}</div><small>Vencidas</small></a></div>
+    <div class="col"><a href="?estado=Cerrado" class="text-dark"><div class="h4 mb-0">{{ kpis.cerradas }}</div><small>Cerradas</small></a></div>
+    <div class="col"><a href="?juridica=1" class="text-dark"><div class="h4 mb-0">{{ kpis.juridica }}</div><small>Juridica</small></a></div>
+  </div>
+
+  <form method="get" class="form-row mb-3">
+    <div class="col-md-2 mb-2">
+      <select name="estado" class="form-control">
+        <option value="">Estado</option>
+        <option value="Abierta" {% if filtros.estado == 'Abierta' %}selected{% endif %}>Abierta</option>
+        <option value="Cerrado" {% if filtros.estado == 'Cerrado' %}selected{% endif %}>Cerrado</option>
+      </select>
+    </div>
+    <div class="col-md-2 mb-2">
+      <select name="tipo" class="form-control">
+        <option value="">Tipo</option>
+        {% for t in tipos %}
+        <option value="{{ t }}" {% if filtros.tipo == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2 mb-2">
+      <select name="vencimiento" class="form-control">
+        <option value="">Plazo</option>
+        <option value="hoy" {% if filtros.vencimiento == 'hoy' %}selected{% endif %}>Vence hoy</option>
+        <option value="vencidas" {% if filtros.vencimiento == 'vencidas' %}selected{% endif %}>Vencidas</option>
+        <option value="abiertas" {% if filtros.vencimiento == 'abiertas' %}selected{% endif %}>Abiertas</option>
+      </select>
+    </div>
+    <div class="col-md-3 mb-2">
+      <input class="form-control" name="q" value="{{ filtros.q }}" placeholder="Asunto, cliente o radicado">
+    </div>
+    <div class="col-md-2 mb-2 d-flex align-items-center">
+      <label class="mb-0 mr-2"><input type="checkbox" name="juridica" value="1" {% if filtros.juridica %}checked{% endif %}> Juridica</label>
+    </div>
+    <div class="col-md-1 mb-2"><button class="btn btn-primary btn-block">Filtrar</button></div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <thead class="thead-light">
+        <tr>
+          <th>Radicado</th>
+          <th>Asunto</th>
+          <th>Cliente</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Plazo</th>
+          <th>Adj</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><a href="/servicio_cliente/pqrs/{{ proyecto }}/{{ r.id }}">#{{ r.id }}</a></td>
+          <td>{{ r.asunto }}{% if r.relevante_juridica %} <span class="badge badge-dark">Juridica</span>{% endif %}</td>
+          <td>
+            {% if r.cliente_id %}<a href="/servicio_cliente/cliente/{{ r.cliente_id }}?proyecto={{ proyecto|urlencode }}&adj={{ r.adj }}">{{ r.titular }}</a>
+            {% else %}{{ r.titular }}{% endif %}
+          </td>
+          <td>{{ r.tipo }}</td>
+          <td>{{ r.estado }}</td>
+          <td><span class="badge {% if r.plazo.codigo == 'vencida' %}badge-danger{% elif r.plazo.codigo == 'hoy' %}badge-warning{% elif r.plazo.codigo == 'cerrado' %}badge-secondary{% else %}badge-success{% endif %}">{{ r.plazo.label }}</span></td>
+          <td>{{ r.adj }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">Sin radicados para este filtro.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{%endblock%}

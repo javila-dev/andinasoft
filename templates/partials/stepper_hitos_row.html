@@ -1,0 +1,10 @@
+{% if steps %}
+<div class="hito-stepper{% if compact %} compact{% endif %}">
+  {% for s in steps %}
+    {% if not forloop.first %}
+    <div class="hito-conn {{ s.estado }}"></div>
+    {% endif %}
+    {% include 'partials/stepper_hitos_node.html' with s=s %}
+  {% endfor %}
+</div>
+{% endif %}

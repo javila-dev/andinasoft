@@ -92,6 +92,12 @@ class Profiles(models.Model):
     )
     sexo=models.CharField(max_length=255,choices=sexo_choices)
     avatar=models.ForeignKey(Avatars,on_delete=models.PROTECT,default=9999999)
+    telefono=models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        help_text='WhatsApp / SMS para n8n (ej. 573001234567, sin +).',
+    )
     
     def __str__(self):
         return self.user.first_name+" "+self.user.last_name
@@ -542,6 +548,34 @@ class PromesaOtrosi(models.Model):
 class PromesaCumplimiento(models.Model):
     """Fechas reales de entrega y/o escritura (distintas de las fechas pactadas)."""
 
+    PASO_PENDIENTE = 'pendiente'
+    PASO_FIRMA_CLIENTE = 'firma_cliente'
+    PASO_FACTURA_NOTARIA = 'factura_notaria'
+    PASO_FIRMA_EMPRESA = 'firma_empresa'
+    PASO_CARGA = 'carga_escritura'
+    PASO_REGISTRO = 'registro'
+    PASO_FACTURADO = 'facturado'
+    PASO_CHOICES = (
+        (PASO_PENDIENTE, 'Pendiente'),
+        (PASO_FIRMA_CLIENTE, 'Firma cliente'),
+        (PASO_FACTURA_NOTARIA, 'Factura notaria'),
+        (PASO_FIRMA_EMPRESA, 'Firma empresa'),
+        (PASO_CARGA, 'Carga escritura'),
+        (PASO_REGISTRO, 'Registro'),
+        (PASO_FACTURADO, 'Facturado'),
+    )
+    PASO_ORDEN = (
+        PASO_PENDIENTE,
+        PASO_FIRMA_CLIENTE,
+        PASO_FACTURA_NOTARIA,
+        PASO_FIRMA_EMPRESA,
+        PASO_CARGA,
+        PASO_REGISTRO,
+        PASO_FACTURADO,
+    )
+    PASOS_SECUENCIALES = (PASO_FIRMA_CLIENTE, PASO_FACTURA_NOTARIA, PASO_FIRMA_EMPRESA)
+    PASOS_PARALELOS = (PASO_CARGA, PASO_REGISTRO, PASO_FACTURADO)
+
     proyecto = models.ForeignKey(
         proyectos,
         on_delete=models.CASCADE,
@@ -553,6 +587,20 @@ class PromesaCumplimiento(models.Model):
     fecha_escritura_real = models.DateField(null=True, blank=True)
     usuario_entrega = models.CharField(max_length=255, blank=True, default='')
     usuario_escritura = models.CharField(max_length=255, blank=True, default='')
+    paso_escritura_actual = models.CharField(
+        max_length=32,
+        choices=PASO_CHOICES,
+        default=PASO_PENDIENTE,
+        db_index=True,
+    )
+    fecha_firma_cliente = models.DateField(null=True, blank=True)
+    fecha_factura_notaria = models.DateField(null=True, blank=True)
+    documento_factura_notaria = models.CharField(max_length=500, blank=True, default='')
+    fecha_firma_empresa = models.DateField(null=True, blank=True)
+    fecha_carga_escritura = models.DateField(null=True, blank=True)
+    documento_escritura = models.CharField(max_length=500, blank=True, default='')
+    fecha_registro = models.DateField(null=True, blank=True)
+    fecha_facturado = models.DateField(null=True, blank=True)
     actualizado = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -562,6 +610,107 @@ class PromesaCumplimiento(models.Model):
 
     def __str__(self):
         return f'{self.proyecto_id} {self.adj}'
+
+
+class PromesaHito(models.Model):
+    """Historial de pasos de escritura (append-only)."""
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='promesa_hitos',
+        db_constraint=False,
+    )
+    adj = models.CharField(max_length=255, db_index=True)
+    paso = models.CharField(max_length=32, choices=PromesaCumplimiento.PASO_CHOICES)
+    fecha = models.DateField()
+    usuario = models.CharField(max_length=255)
+    documento = models.CharField(max_length=500, blank=True, default='')
+    nota = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Hito de escritura'
+        verbose_name_plural = 'Hitos de escritura'
+        indexes = [
+            models.Index(fields=['proyecto', 'adj', 'paso']),
+        ]
+
+    def __str__(self):
+        return f'{self.proyecto_id} {self.adj} {self.paso}'
+
+
+class PqrsGestion(models.Model):
+    """Datos extra de PQRS (asunto, origen, notas) sin alterar la tabla por proyecto."""
+
+    ORIGEN_CHOICES = (
+        ('interno', 'Interno'),
+        ('portal', 'Portal'),
+        ('correo', 'Correo'),
+        ('whatsapp', 'WhatsApp'),
+        ('reunion', 'Reunion'),
+        ('ventanilla', 'Ventanilla'),
+    )
+    CANAL_CHOICES = (
+        ('ventanilla', 'Ventanilla'),
+        ('correo', 'Correo'),
+        ('reunion', 'Reunion'),
+        ('whatsapp', 'WhatsApp'),
+        ('portal', 'Portal'),
+    )
+
+    proyecto = models.ForeignKey(
+        proyectos,
+        on_delete=models.CASCADE,
+        related_name='pqrs_gestion',
+        db_constraint=False,
+    )
+    id_pqrs = models.IntegerField(db_index=True)
+    adj = models.CharField(max_length=255, blank=True, default='')
+    asunto = models.CharField(max_length=255)
+    resumen = models.TextField(blank=True, default='')
+    resumen_respuesta = models.TextField(blank=True, default='')
+    origen = models.CharField(max_length=32, choices=ORIGEN_CHOICES, default='interno')
+    canal = models.CharField(max_length=32, choices=CANAL_CHOICES, blank=True, default='')
+    relevante_juridica = models.BooleanField(default=False)
+    responsable = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='pqrs_asignadas',
+        db_constraint=False,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('proyecto', 'id_pqrs')
+        verbose_name = 'Gestion PQRS'
+        verbose_name_plural = 'Gestiones PQRS'
+        indexes = [
+            models.Index(fields=['proyecto', 'adj']),
+            models.Index(fields=['relevante_juridica', 'proyecto']),
+        ]
+
+    def __str__(self):
+        return f'{self.proyecto_id} #{self.id_pqrs} {self.asunto}'
+
+
+class PqrsNota(models.Model):
+    gestion = models.ForeignKey(PqrsGestion, on_delete=models.CASCADE, related_name='notas')
+    usuario = models.CharField(max_length=255)
+    comentario = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Nota PQRS'
+        verbose_name_plural = 'Notas PQRS'
+
+    def __str__(self):
+        return f'Nota {self.gestion_id} {self.created_at:%Y-%m-%d}'
 
 
 class IntegrationCredential(models.Model):

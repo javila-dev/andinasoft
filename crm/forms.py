@@ -10,6 +10,7 @@ from crispy_forms.layout import Layout, Fieldset, ButtonHolder, Submit, Row, Col
 from crispy_forms.bootstrap import FieldWithButtons, StrictButton, FormActions, PrependedText, PrependedAppendedText, Tab, TabHolder
 from andina import customfields
 from crm import models as crm_models
+from crm import compromiso_tipos
 from andinasoft import models as andinasoft_models
 from andinasoft.shared_models import titulares_por_adj
 
@@ -125,7 +126,7 @@ class ProgramarReunionForm(forms.ModelForm):
         model = crm_models.ActaReunion
         fields = [
             'fecha_reunion', 'hora_reunion', 'duracion_minutos', 'tipo_reunion', 'canal', 'cliente',
-            'proyecto', 'lider_reunion', 'asunto'
+            'proyecto', 'adj', 'lider_reunion', 'asunto'
         ]
         widgets = {
             'fecha_reunion': forms.DateInput(attrs={'type': 'date'}),
@@ -136,6 +137,9 @@ class ProgramarReunionForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['proyecto'].required = False
         self.fields['hora_reunion'].required = True
+        self.fields['adj'].required = False
+        self.fields['adj'].label = 'Adjudicacion'
+        self.fields['adj'].help_text = 'Si el cliente tiene varios negocios, elija cual aplica a esta reunion.'
         self.fields['duracion_minutos'].help_text = 'Duracion estimada en minutos.'
         self.fields['fecha_reunion'].widget.attrs['min'] = timezone.localdate().isoformat()
         self.fields['cliente'].label_from_instance = lambda obj: f'{obj.nombrecompleto} ({obj.idTercero})'
@@ -205,6 +209,19 @@ class ProgramarReunionForm(forms.ModelForm):
             ).exists()
             if not existe:
                 raise ValidationError('El cliente seleccionado no esta asociado al proyecto elegido.')
+            adj = (cleaned_data.get('adj') or '').strip()
+            if adj:
+                adj_ok = titulares_por_adj.objects.using(proyecto.pk).filter(
+                    adj=adj
+                ).filter(
+                    Q(IdTercero1=cliente.pk) |
+                    Q(IdTercero2=cliente.pk) |
+                    Q(IdTercero3=cliente.pk) |
+                    Q(IdTercero4=cliente.pk)
+                ).exists()
+                if not adj_ok:
+                    raise ValidationError('La adjudicacion no corresponde a este cliente en el proyecto.')
+            cleaned_data['adj'] = adj
 
         inicio, fin = self._calcular_rango_reunion(cleaned_data)
         if lider and inicio and fin:
@@ -258,23 +275,177 @@ class ActaResultadoForm(forms.ModelForm):
 
 
 class CompromisoActaForm(forms.ModelForm):
+    proyecto_destino = forms.CharField(required=False, label='Proyecto destino')
+    lotes_prospecto = forms.CharField(required=False, label='Lotes prospecto')
+    fecha_estimada_entrega = forms.DateField(
+        required=False,
+        label='Fecha estimada de entrega',
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+    observaciones_cambio = forms.CharField(
+        required=False,
+        label='Observaciones',
+        widget=forms.Textarea(attrs={'rows': 2}),
+    )
+    expectativa_cliente = forms.CharField(
+        required=False,
+        label='Que espera el cliente',
+        widget=forms.Textarea(attrs={'rows': 2}),
+    )
+    items = forms.MultipleChoiceField(
+        required=False,
+        choices=compromiso_tipos.ITEMS_ENVIO,
+        widget=forms.CheckboxSelectMultiple,
+        label='Que se envia',
+    )
+    items_otro = forms.CharField(required=False, label='Otro documento')
+    canal_envio = forms.ChoiceField(
+        required=False,
+        choices=(('', '---------'),) + compromiso_tipos.CANALES_ENVIO,
+        label='Canal de envio',
+    )
+    lugar_tipo = forms.ChoiceField(
+        required=False,
+        choices=(('', '---------'),) + compromiso_tipos.LUGARES_CITA,
+        label='Tipo de cita',
+    )
+    lugar = forms.CharField(required=False, label='Lugar / direccion')
+    hora_cita = forms.TimeField(
+        required=False,
+        label='Hora',
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    canal_respuesta = forms.ChoiceField(
+        required=False,
+        choices=(('', '---------'),) + compromiso_tipos.CANALES_RESPUESTA,
+        label='Canal de respuesta',
+    )
+    id_pqrs = forms.CharField(required=False, label='Radicado PQRS')
+    area_gestion = forms.ChoiceField(
+        required=False,
+        choices=(('', '---------'),) + compromiso_tipos.AREAS_GESTION,
+        label='Area',
+    )
+    que_se_pide = forms.CharField(
+        required=False,
+        label='Que se pide',
+        widget=forms.Textarea(attrs={'rows': 2}),
+    )
+
     class Meta:
         model = crm_models.CompromisoActa
-        fields = ['titulo', 'descripcion', 'responsable', 'fecha_compromiso', 'prioridad', 'estado']
+        fields = ['tipo', 'titulo', 'descripcion', 'responsable', 'fecha_compromiso', 'prioridad', 'estado']
         widgets = {
             'fecha_compromiso': forms.DateInput(attrs={'type': 'date'}),
-            'descripcion': forms.Textarea(attrs={'rows': 3}),
+            'descripcion': forms.Textarea(attrs={'rows': 2}),
         }
 
     def __init__(self, *args, **kwargs):
+        acta = kwargs.pop('acta', None)
         super().__init__(*args, **kwargs)
+        self.acta = acta
         self.fields['fecha_compromiso'].widget.attrs['min'] = timezone.localdate().isoformat()
+        self.fields['titulo'].required = False
+        self.fields['descripcion'].required = False
+        self.fields['tipo'].initial = compromiso_tipos.TIPO_OTRO
+        proyectos_qs = andinasoft_models.proyectos.objects.filter(activo=True).order_by('proyecto')
+        if acta and acta.proyecto_id:
+            proyectos_qs = proyectos_qs.exclude(pk=acta.proyecto_id)
+        self.fields['proyecto_destino'] = forms.ChoiceField(
+            required=False,
+            label='Proyecto destino',
+            choices=[('', '---------')] + [(p.pk, str(p)) for p in proyectos_qs],
+        )
+        detalle = {}
+        if self.instance and self.instance.pk:
+            detalle = self.instance.detalle or {}
+        elif self.is_bound:
+            detalle = {}
+        if detalle:
+            self.fields['proyecto_destino'].initial = detalle.get('proyecto_destino')
+            self.fields['lotes_prospecto'].initial = detalle.get('lotes_prospecto')
+            self.fields['fecha_estimada_entrega'].initial = detalle.get('fecha_estimada_entrega')
+            self.fields['observaciones_cambio'].initial = detalle.get('observaciones')
+            self.fields['expectativa_cliente'].initial = detalle.get('expectativa_cliente')
+            self.fields['items'].initial = detalle.get('items')
+            self.fields['items_otro'].initial = detalle.get('items_otro')
+            self.fields['canal_envio'].initial = detalle.get('canal')
+            self.fields['lugar_tipo'].initial = detalle.get('lugar_tipo')
+            self.fields['lugar'].initial = detalle.get('lugar')
+            self.fields['hora_cita'].initial = detalle.get('hora')
+            self.fields['canal_respuesta'].initial = detalle.get('canal')
+            self.fields['id_pqrs'].initial = detalle.get('id_pqrs')
+            self.fields['area_gestion'].initial = detalle.get('area')
+            self.fields['que_se_pide'].initial = detalle.get('que_se_pide')
 
     def clean_fecha_compromiso(self):
         fecha = self.cleaned_data.get('fecha_compromiso')
         if fecha and fecha < timezone.localdate():
             raise ValidationError('La fecha del compromiso no puede ser menor a hoy.')
         return fecha
+
+    def _detalle_from_cleaned(self, tipo):
+        raw = {
+            'proyecto_destino': self.cleaned_data.get('proyecto_destino'),
+            'lotes_prospecto': self.cleaned_data.get('lotes_prospecto'),
+            'fecha_estimada_entrega': '',
+            'observaciones': self.cleaned_data.get('observaciones_cambio'),
+            'expectativa_cliente': self.cleaned_data.get('expectativa_cliente'),
+            'items': self.cleaned_data.get('items') or [],
+            'items_otro': self.cleaned_data.get('items_otro'),
+            'canal': self.cleaned_data.get('canal_envio') or self.cleaned_data.get('canal_respuesta'),
+            'lugar_tipo': self.cleaned_data.get('lugar_tipo'),
+            'lugar': self.cleaned_data.get('lugar'),
+            'hora': '',
+            'id_pqrs': self.cleaned_data.get('id_pqrs'),
+            'area': self.cleaned_data.get('area_gestion'),
+            'que_se_pide': self.cleaned_data.get('que_se_pide'),
+        }
+        fecha_est = self.cleaned_data.get('fecha_estimada_entrega')
+        if fecha_est:
+            raw['fecha_estimada_entrega'] = fecha_est.isoformat()
+        hora = self.cleaned_data.get('hora_cita')
+        if hora:
+            raw['hora'] = hora.strftime('%H:%M')
+        if tipo == compromiso_tipos.TIPO_RESPUESTA_FORMAL:
+            raw['canal'] = self.cleaned_data.get('canal_respuesta')
+        elif tipo == compromiso_tipos.TIPO_ENVIO_INFORMACION:
+            raw['canal'] = self.cleaned_data.get('canal_envio')
+        return compromiso_tipos.normalizar_detalle(tipo, raw)
+
+    def clean(self):
+        cleaned = super().clean()
+        tipo = cleaned.get('tipo') or compromiso_tipos.TIPO_OTRO
+        detalle = self._detalle_from_cleaned(tipo)
+        for field, message in compromiso_tipos.errores_detalle(tipo, detalle).items():
+            form_field = {
+                'proyecto_destino': 'proyecto_destino',
+                'expectativa_cliente': 'expectativa_cliente',
+                'items': 'items',
+                'items_otro': 'items_otro',
+                'canal': 'canal_envio' if tipo == compromiso_tipos.TIPO_ENVIO_INFORMACION else 'canal_respuesta',
+                'lugar_tipo': 'lugar_tipo',
+                'lugar': 'lugar',
+                'area': 'area_gestion',
+                'que_se_pide': 'que_se_pide',
+            }.get(field, field)
+            self.add_error(form_field, message)
+        if tipo == compromiso_tipos.TIPO_OTRO and not (cleaned.get('titulo') or '').strip():
+            self.add_error('titulo', 'Indique un titulo.')
+        cleaned['detalle'] = detalle
+        cleaned['titulo'] = compromiso_tipos.titulo_por_tipo(
+            tipo, detalle, cleaned.get('titulo') or ''
+        )
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.tipo = self.cleaned_data.get('tipo') or compromiso_tipos.TIPO_OTRO
+        instance.detalle = self.cleaned_data.get('detalle') or {}
+        instance.titulo = self.cleaned_data.get('titulo') or instance.titulo
+        if commit:
+            instance.save()
+        return instance
 
 
 class SeguimientoCompromisoForm(forms.ModelForm):

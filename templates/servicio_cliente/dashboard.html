@@ -1,0 +1,115 @@
+{%extends 'base.html'%}
+{%load humanize%}
+
+{%block title%}Servicio al cliente{%endblock%}
+
+{%block style%}
+<style>
+  .cg-kpi { border-radius: 8px; padding: 1rem 1.25rem; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); height: 100%; }
+  .cg-kpi .label { font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+  .cg-kpi .value { font-size: 1.45rem; font-weight: 700; margin-top: .2rem; text-align: center; }
+  .cg-badge-filter { display: inline-block; padding: .35rem .7rem; margin: 0 .35rem .35rem 0; border-radius: 999px; font-size: .8rem; background: #eef2f5; color: #334; text-decoration: none; }
+  .cg-badge-filter.active { background: #2c3e50; color: #fff; }
+  .cg-card-alert { border: 1px solid #e5e8eb; border-radius: 8px; background: #fff; padding: .75rem 1rem; height: 100%; }
+  .cg-card-alert h6 { font-size: .85rem; margin: 0 0 .5rem; }
+  .cg-item { font-size: .78rem; line-height: 1.25; padding: .4rem 0; border-bottom: 1px solid #f0f2f4; }
+  .cg-item:last-child { border-bottom: 0; }
+  .tag-chip { display: inline-block; font-size: .65rem; padding: .1rem .35rem; border-radius: 4px; background: #eef2f5; color: #445; margin-right: .2rem; }
+</style>
+{% include 'partials/stepper_hitos_css.html' %}
+{%endblock%}
+
+{%block content%}
+<div class="principal-container bg-white rounded shadow-lg p-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+    <div>
+      <h3 class="section-title text-white mb-1">Servicio al cliente</h3>
+      <small class="text-muted">Cola del gestor · {{ today }}{% if proyecto %} · {{ proyecto }}{% endif %}</small>
+    </div>
+    <div>
+      <a class="btn btn-sm btn-outline-primary" href="/crm/actas"><i class="fas fa-comments"></i> Actas</a>
+      <a class="btn btn-sm btn-outline-secondary" href="/projectselector/pqrs"><i class="fas fa-mail-bulk"></i> PQRS</a>
+      <a class="btn btn-sm btn-outline-secondary" href="/projectselector/promesas"><i class="fas fa-file-signature"></i> Promesas</a>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <a class="cg-badge-filter {% if not proyecto %}active{% endif %}" href="/servicio_cliente/dashboard{% if tipo %}?tipo={{ tipo }}{% endif %}">Todos</a>
+    {% for p in proyectos %}
+    <a class="cg-badge-filter {% if proyecto == p %}active{% endif %}" href="/servicio_cliente/dashboard?proyecto={{ p|urlencode }}{% if tipo %}&tipo={{ tipo }}{% endif %}">{{ p }}</a>
+    {% endfor %}
+  </div>
+  <div class="mb-3">
+    <a class="cg-badge-filter {% if not tipo %}active{% endif %}" href="/servicio_cliente/dashboard{% if proyecto %}?proyecto={{ proyecto|urlencode }}{% endif %}">Todos los tipos</a>
+    {% for value, label in tipos %}
+    <a class="cg-badge-filter {% if tipo == value %}active{% endif %}" href="/servicio_cliente/dashboard?{% if proyecto %}proyecto={{ proyecto|urlencode }}&{% endif %}tipo={{ value }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Reuniones hoy</div><div class="value">{{ kpis.reuniones_hoy }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Reuniones semana</div><div class="value">{{ kpis.reuniones_semana }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Compromisos hoy</div><div class="value text-warning">{{ kpis.compromisos_hoy }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Compromisos vencidos</div><div class="value text-danger">{{ kpis.compromisos_vencidos }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">PQRS abiertas</div><div class="value">{{ kpis.pqrs_abiertas }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">PQRS vencidas</div><div class="value text-danger">{{ kpis.pqrs_vencidas }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Juridica</div><div class="value">{{ kpis.pqrs_juridica }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Entregas vencidas</div><div class="value text-danger">{{ kpis.entregas_vencidas }}</div></div></div>
+    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Escrituras en tramite</div><div class="value">{{ kpis.escrituras_pendientes }}</div></div></div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-4 mb-3">
+      <div class="cg-card-alert">
+        <h6>Hoy</h6>
+        {% for item in hoy %}
+        <div class="cg-item">
+          <span class="tag-chip">{{ item.chip }}</span>
+          <a href="{{ item.href }}">{{ item.titulo }}</a>
+          <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }} · {{ item.fecha }}</div>
+        </div>
+        {% empty %}
+        <div class="text-muted">Nada para hoy.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="cg-card-alert">
+        <h6>Atrasados</h6>
+        {% for item in atrasados %}
+        <div class="cg-item">
+          <span class="tag-chip">{{ item.chip }}</span>
+          <a href="{{ item.href }}">{{ item.titulo }}</a>
+          <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }} · {{ item.fecha }}</div>
+          {% if item.entrega_ui %}
+          {% include 'partials/stepper_hitos.html' with steps=item.entrega_ui compact=True %}
+          {% endif %}
+        </div>
+        {% empty %}
+        <div class="text-muted">Sin atrasos.</div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="cg-card-alert">
+        <h6>En tramite de escritura</h6>
+        {% for item in escrituras %}
+        <div class="cg-item">
+          <span class="tag-chip">{{ item.chip }}</span>
+          <a href="{{ item.href }}">{{ item.titulo }}</a>
+          <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }}</div>
+          {% if item.pasos_linea %}
+          {% include 'partials/stepper_hitos.html' with steps=item.pasos_linea rama=item.pasos_rama compact=True %}
+          {% elif item.pasos_ui %}
+          {% include 'partials/stepper_hitos.html' with steps=item.pasos_ui compact=True %}
+          {% endif %}
+          <div class="hito-date">Pactada: {{ item.fecha|default:'sin fecha' }}</div>
+        </div>
+        {% empty %}
+        <div class="text-muted">Sin escrituras en tramite.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{%endblock%}

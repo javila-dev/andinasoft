@@ -23,6 +23,7 @@ from andinasoft import views, ajax_request
 from andinasoft import views_usuarios
 from andinasoft import cartera_gestor_views
 from andinasoft import documento_fechas_views
+from andinasoft import servicio_cliente_views
 from buildingcontrol import views as building_views, pdf as building_pdf
 from crm import views as crm_views
 from accounting import views as account_views
@@ -121,7 +122,13 @@ urlpatterns = [
     path('graphs/cartera/year/<proyecto>',views.graph_cartera_anual),
     path('operaciones/buscar_cliente',views.buscar_cliente,name='buscar cliente'),
     path('blank_request',views.blank_request),
-    path('servicio_cliente/pqrs/<proyecto>',views.lista_pqrs),
+    path('servicio_cliente/dashboard', servicio_cliente_views.sac_dashboard, name='sac dashboard'),
+    path('servicio_cliente/cliente/<str:cliente_id>', servicio_cliente_views.sac_ficha_cliente, name='sac ficha cliente'),
+    path('servicio_cliente/pqrs/<proyecto>', servicio_cliente_views.pqrs_lista, name='lista pqrs'),
+    path('servicio_cliente/pqrs/<proyecto>/nueva', servicio_cliente_views.pqrs_radicar, name='pqrs radicar'),
+    path('servicio_cliente/pqrs/<proyecto>/<int:radicado_id>', servicio_cliente_views.pqrs_detalle, name='pqrs detalle'),
+    path('servicio_cliente/escritura/<proyecto>/<adj>', servicio_cliente_views.marcar_hito_view, name='sac marcar hito'),
+    path('servicio_cliente/promesa/<proyecto>/<adj>', servicio_cliente_views.actualizar_promesa_view, name='sac actualizar promesa'),
     path('tesoreria/adjudicaciones/<proyecto>',views.lista_adj_recaudos),
     path('tesoreria/interfaces_tesoreria',views.interfaces_bancarias),
     path('cartera/reporte_year/<proyecto>/<año>',views.reporte_cartera),

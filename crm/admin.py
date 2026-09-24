@@ -10,7 +10,7 @@ class ActaParticipanteInline(admin.TabularInline):
 class CompromisoActaInline(admin.TabularInline):
     model = models.CompromisoActa
     extra = 0
-    fields = ['titulo', 'responsable', 'fecha_compromiso', 'prioridad', 'estado']
+    fields = ['tipo', 'titulo', 'responsable', 'fecha_compromiso', 'prioridad', 'estado']
 
 
 class SeguimientoCompromisoInline(admin.TabularInline):
@@ -52,7 +52,7 @@ class adminLeads(admin.ModelAdmin):
 
 @admin.register(models.ActaReunion)
 class adminActaReunion(admin.ModelAdmin):
-    list_display = ['id_acta', 'fecha_reunion', 'hora_reunion', 'duracion_minutos', 'tipo_reunion', 'cliente', 'proyecto', 'lider_reunion', 'estado']
+    list_display = ['id_acta', 'fecha_reunion', 'hora_reunion', 'duracion_minutos', 'tipo_reunion', 'cliente', 'proyecto', 'adj', 'lider_reunion', 'estado']
     list_filter = ['tipo_reunion', 'canal', 'estado', 'proyecto', 'fecha_reunion']
     search_fields = ['asunto', 'cliente__nombrecompleto', 'cliente__idTercero', 'lider_reunion__username']
     autocomplete_fields = ['cliente', 'proyecto', 'creado_por', 'lider_reunion']
@@ -62,8 +62,8 @@ class adminActaReunion(admin.ModelAdmin):
 
 @admin.register(models.CompromisoActa)
 class adminCompromisoActa(admin.ModelAdmin):
-    list_display = ['id_compromiso', 'titulo', 'acta', 'responsable', 'fecha_compromiso', 'prioridad', 'estado']
-    list_filter = ['estado', 'prioridad', 'fecha_compromiso', 'acta__proyecto']
+    list_display = ['id_compromiso', 'tipo', 'titulo', 'acta', 'responsable', 'fecha_compromiso', 'prioridad', 'estado']
+    list_filter = ['tipo', 'estado', 'prioridad', 'fecha_compromiso', 'acta__proyecto']
     search_fields = ['titulo', 'descripcion', 'responsable__username', 'responsable__first_name', 'responsable__last_name']
     autocomplete_fields = ['acta', 'responsable', 'creado_por']
     inlines = [SeguimientoCompromisoInline]

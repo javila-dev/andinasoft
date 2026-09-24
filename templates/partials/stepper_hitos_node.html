@@ -1,0 +1,13 @@
+<div class="hito-card {{ s.estado }}{% if s.interno %} interno{% endif %}" title="{{ s.label }}{% if s.interno %} (interno){% endif %}{% if s.fecha %} · {% if s.fecha.year %}{{ s.fecha|date:'Y-m-d' }}{% else %}{{ s.fecha }}{% endif %}{% endif %}">
+  <div class="hito-card-icon"><i class="fas {{ s.icon }}"></i></div>
+  <div class="hito-card-body">
+    <div class="hito-card-title">{{ s.label }}</div>
+    <div class="hito-card-meta">
+      {% if s.interno %}<span class="hito-chip">Interno</span>{% endif %}
+      {% if s.fecha %}{% if s.fecha.year %}{{ s.fecha|date:'Y-m-d' }}{% else %}{{ s.fecha }}{% endif %}
+      {% elif s.estado == 'next' %}Pendiente
+      {% elif s.estado == 'done' %}Hecho
+      {% else %}Bloqueado{% endif %}
+    </div>
+  </div>
+</div>

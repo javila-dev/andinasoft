@@ -3,6 +3,7 @@
 {%block title%}Estados de Promesas{%endblock%}
 
 {%block content%}
+{% include 'partials/stepper_hitos_css.html' %}
 <style>
     .promesa-table td, .promesa-table th { vertical-align: middle; font-size: 0.75rem; }
     .promesa-table .badge-estado { min-width: 4.5rem; font-size: 0.7rem; }
@@ -10,18 +11,30 @@
     .dataTables_wrapper { padding: 0.5rem; font-size: 0.8rem; }
     #tablaTodas th:nth-child(3),
     .promesa-table th:nth-child(3) { min-width: 14rem; }
-    .promesa-table th:nth-child(10),
-    .promesa-table td:nth-child(10) { width: 2.5rem; max-width: 2.5rem; white-space: nowrap; }
+    .promesa-table th:nth-child(7),
+    .promesa-table td:nth-child(7),
+    .promesa-table th:nth-child(9),
+    .promesa-table td:nth-child(9) { min-width: 11rem; }
+    .promesa-table th:nth-child(11),
+    .promesa-table td:nth-child(11) { width: 2.5rem; max-width: 2.5rem; white-space: nowrap; }
 </style>
 
 <div class="bg-white rounded shadow p-3 mb-3">
     <div class="d-flex flex-wrap align-items-center justify-content-between">
         <h4 class="mb-0">Promesas — {{proyecto}}</h4>
         <div class="text-muted small">
+            Consulta de estados. Fechas, entrega, escritura y otrosí se actualizan en la ficha del cliente.
+            <span class="d-block mt-1">
             Semaforo: <span class="badge badge-success">Al dia</span>
             <span class="badge badge-warning">Por vencer (30 dias)</span>
             <span class="badge badge-danger">Vencido</span>
             <span class="badge badge-secondary">Cumplido</span>
+            <span class="ml-3 hito-legend text-muted">
+              Pasos: <span class="dot" style="background:#1e8449"></span>hecho
+              <span class="dot ml-1" style="background:#fff;border:2px solid #90a4ae"></span>activo
+              <span class="dot ml-1" style="background:#cfd8dc"></span>bloqueado
+            </span>
+            </span>
         </div>
     </div>
 </div>
@@ -52,150 +65,7 @@
     </div>
 </div>
 
-{# ---- Modales ---- #}
-<div class="modal fade" id="modalFechas" tabindex="-1" data-backdrop="static">
-    <form id="formFechas">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Registrar fechas firmadas</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="fechas_adj" name="adj">
-                    <div class="form-group">
-                        <label>Fecha promesa</label>
-                        <input type="date" class="form-control" id="fecha_promesa" name="fecha_promesa" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha entrega</label>
-                        <input type="date" class="form-control" id="fecha_entrega" name="fecha_entrega" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha escritura</label>
-                        <input type="date" class="form-control" id="fecha_escritura" name="fecha_escritura" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
-                </div>
-            </div>
-        </div>
-    </form>
-</div>
-
-<div class="modal fade" id="modalEntrega" tabindex="-1" data-backdrop="static">
-    <form id="formEntrega" enctype="multipart/form-data">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Entrega</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="entrega_adj" name="adj">
-                    <div class="custom-control custom-switch mb-3">
-                        <input type="checkbox" class="custom-control-input" id="entregado" name="entregado">
-                        <label class="custom-control-label" for="entregado">Ya se entrego</label>
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha real de entrega</label>
-                        <input type="date" class="form-control" id="fecha_entrega_real" name="fecha_entrega_real">
-                        <small class="text-muted">Obligatoria si marca como entregado.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Acta de entrega (PDF, opcional)</label>
-                        <input type="file" class="form-control-file" id="entrega_doc" name="documento" accept="application/pdf">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
-                </div>
-            </div>
-        </div>
-    </form>
-</div>
-
-<div class="modal fade" id="modalEscritura" tabindex="-1" data-backdrop="static">
-    <form id="formEscritura" enctype="multipart/form-data">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Escritura</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="escritura_adj" name="adj">
-                    <div class="custom-control custom-switch mb-3">
-                        <input type="checkbox" class="custom-control-input" id="escriturado" name="escriturado">
-                        <label class="custom-control-label" for="escriturado">Ya se escrituro</label>
-                    </div>
-                    <div class="form-group">
-                        <label>Fecha real de escritura</label>
-                        <input type="date" class="form-control" id="fecha_escritura_real" name="fecha_escritura_real">
-                        <small class="text-muted">Obligatoria si marca como escriturado.</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Escritura (PDF)</label>
-                        <input type="file" class="form-control-file" id="escritura_doc" name="documento" accept="application/pdf">
-                        <small class="text-muted">Obligatorio si marca como escriturado.</small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
-                </div>
-            </div>
-        </div>
-    </form>
-</div>
-
-<div class="modal fade" id="modalOtrosi" tabindex="-1" data-backdrop="static">
-    <form id="formOtrosi" enctype="multipart/form-data">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Registrar otrosi</h5>
-                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="otrosi_adj" name="adj">
-                    <div class="form-group">
-                        <label>Tipo</label>
-                        <select class="form-control" id="tipo_otrosi" name="tipo_otrosi" required>
-                            <option value="entrega">Entrega</option>
-                            <option value="escritura">Escritura</option>
-                            <option value="ambos">Entrega y escritura</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="wrapEntregaNueva">
-                        <label>Nueva fecha de entrega</label>
-                        <input type="date" class="form-control" id="fecha_entrega_nueva" name="fecha_entrega_nueva">
-                    </div>
-                    <div class="form-group" id="wrapEscrituraNueva" style="display:none;">
-                        <label>Nueva fecha de escritura</label>
-                        <input type="date" class="form-control" id="fecha_escritura_nueva" name="fecha_escritura_nueva">
-                    </div>
-                    <div class="form-group">
-                        <label>Observaciones</label>
-                        <textarea class="form-control" name="observaciones" id="otrosi_obs" rows="2"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>PDF del otrosi</label>
-                        <input type="file" class="form-control-file" name="documento" id="otrosi_doc" accept="application/pdf" required>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
-                    <button type="submit" class="btn btn-primary">Registrar</button>
-                </div>
-            </div>
-        </div>
-    </form>
-</div>
-
+{# ---- Modales de consulta ---- #}
 <div class="modal fade" id="modalHistorialOtrosi" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -327,7 +197,7 @@
                 lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']],
                 language: { url: '/ajax_request/datatable_spanish' },
                 columnDefs: [
-                    { orderable: false, targets: [9] }
+                    { orderable: false, targets: [6, 8, 10] }
                 ],
                 autoWidth: false
             });
@@ -344,45 +214,6 @@
         }
     });
 
-    function openFechas(adj){
-        $.get(urlBase, {adj: adj}, function(r){
-            if (!r.passed){ alert(r.msj || 'No se pudo cargar'); return; }
-            $('#fechas_adj').val(adj);
-            $('#fecha_promesa').val(r.fechapromesa);
-            $('#fecha_entrega').val(r.fechaentrega);
-            $('#fecha_escritura').val(r.fechaescritura);
-            $('#modalFechas').modal('show');
-        });
-    }
-    function openEntrega(adj){
-        $.get(urlBase, {adj: adj}, function(r){
-            if (!r.passed){ alert(r.msj || 'No se pudo cargar'); return; }
-            $('#entrega_adj').val(adj);
-            $('#entregado').prop('checked', !!r.entregado);
-            $('#fecha_entrega_real').val(r.fecha_entrega_real || '');
-            $('#entrega_doc').val('');
-            $('#modalEntrega').modal('show');
-        });
-    }
-    function openEscritura(adj){
-        $.get(urlBase, {adj: adj}, function(r){
-            if (!r.passed){ alert(r.msj || 'No se pudo cargar'); return; }
-            $('#escritura_adj').val(adj);
-            $('#escriturado').prop('checked', !!r.escriturado);
-            $('#fecha_escritura_real').val(r.fecha_escritura_real || '');
-            $('#escritura_doc').val('');
-            $('#modalEscritura').modal('show');
-        });
-    }
-    function openOtrosi(adj){
-        $('#otrosi_adj').val(adj);
-        $('#tipo_otrosi').val('entrega').trigger('change');
-        $('#fecha_entrega_nueva').val('');
-        $('#fecha_escritura_nueva').val('');
-        $('#otrosi_obs').val('');
-        $('#otrosi_doc').val('');
-        $('#modalOtrosi').modal('show');
-    }
     function openHistorial(adj){
         $.get(urlBase, {adj: adj, tipo: 'historial_otrosi'}, function(r){
             var body = $('#historialOtrosiBody').empty();
@@ -452,78 +283,9 @@
         e.preventDefault();
         var accion = $(this).data('accion');
         var adj = $(this).data('adj');
-        if (accion === 'fechas') openFechas(adj);
-        else if (accion === 'entrega') openEntrega(adj);
-        else if (accion === 'escritura') openEscritura(adj);
-        else if (accion === 'otrosi') openOtrosi(adj);
-        else if (accion === 'historial') openHistorial(adj);
+        if (accion === 'historial') openHistorial(adj);
         else if (accion === 'documentos') openDocumentos(adj);
         else if (accion === 'reimprimir') reimprimir(adj);
-    });
-
-    $('#tipo_otrosi').on('change', function(){
-        var t = $(this).val();
-        $('#wrapEntregaNueva').toggle(t === 'entrega' || t === 'ambos');
-        $('#wrapEscrituraNueva').toggle(t === 'escritura' || t === 'ambos');
-    });
-
-    $('#formFechas').on('submit', function(e){
-        e.preventDefault();
-        $.post(urlBase, {
-            csrfmiddlewaretoken: csrf,
-            tipo: 'cambiar_fechas',
-            adj: $('#fechas_adj').val(),
-            fecha_promesa: $('#fecha_promesa').val(),
-            fecha_entrega: $('#fecha_entrega').val(),
-            fecha_escritura: $('#fecha_escritura').val()
-        }, function(r){
-            if (r.passed){ location.reload(); }
-            else alert(r.msj || 'Error');
-        }).fail(function(xhr){
-            alert((xhr.responseJSON && xhr.responseJSON.msj) || 'Error al guardar');
-        });
-    });
-
-    function postMultipart(formSelector, tipo){
-        var fd = new FormData($(formSelector)[0]);
-        fd.append('csrfmiddlewaretoken', csrf);
-        fd.append('tipo', tipo);
-        if (tipo === 'marcar_entregado'){
-            fd.set('entregado', $('#entregado').is(':checked') ? 'true' : 'false');
-            fd.set('fecha_entrega_real', $('#fecha_entrega_real').val() || '');
-        }
-        if (tipo === 'marcar_escriturado'){
-            fd.set('escriturado', $('#escriturado').is(':checked') ? 'true' : 'false');
-            fd.set('fecha_escritura_real', $('#fecha_escritura_real').val() || '');
-        }
-        if (tipo === 'registrar_otrosi'){
-            fd.set('tipo_otrosi', $('#tipo_otrosi').val());
-        }
-        return fetch(urlBase, {
-            method: 'POST',
-            headers: {'X-Requested-With': 'XMLHttpRequest'},
-            body: fd
-        }).then(async function(resp){
-            var data = await resp.json();
-            if (!resp.ok || !data.passed) throw new Error(data.msj || 'Error');
-            return data;
-        });
-    }
-
-    $('#formEntrega').on('submit', function(e){
-        e.preventDefault();
-        postMultipart('#formEntrega', 'marcar_entregado').then(function(){ location.reload(); })
-            .catch(function(err){ alert(err.message); });
-    });
-    $('#formEscritura').on('submit', function(e){
-        e.preventDefault();
-        postMultipart('#formEscritura', 'marcar_escriturado').then(function(){ location.reload(); })
-            .catch(function(err){ alert(err.message); });
-    });
-    $('#formOtrosi').on('submit', function(e){
-        e.preventDefault();
-        postMultipart('#formOtrosi', 'registrar_otrosi').then(function(){ location.reload(); })
-            .catch(function(err){ alert(err.message); });
     });
 })();
 </script>

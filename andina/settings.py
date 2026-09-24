@@ -273,6 +273,11 @@ N8N_WEBHOOK_ALEGRA_GASTO_PENDIENTE_APROBACION = os.getenv(
 N8N_ALEGRA_NOTIFICATIONS_ENABLED = env_bool('N8N_ALEGRA_NOTIFICATIONS_ENABLED', LIVE)
 # Si True, intenta GET Alegra /bills/{id} antes del POST n8n para incluir soporte_pdf_url (más lento).
 N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY = env_bool('N8N_ALEGRA_ENSURE_SOPORTE_BEFORE_NOTIFY', False)
+N8N_WEBHOOK_SAC_COMPROMISO = os.getenv(
+    'N8N_WEBHOOK_SAC_COMPROMISO',
+    f'{N8N_BASE_URL}/webhook/sac-compromiso',
+)
+N8N_SAC_NOTIFICATIONS_ENABLED = env_bool('N8N_SAC_NOTIFICATIONS_ENABLED', LIVE)
 ANDINA_PUBLIC_BASE_URL = os.getenv('ANDINA_PUBLIC_BASE_URL', '').rstrip('/')
 # Token para llamar webhooks n8n (upload movimientos, gastos Alegra, etc.): header Authorization
 N8N_WEBHOOK_AUTH_TOKEN = os.getenv('N8N_WEBHOOK_AUTH_TOKEN', os.getenv('N8N_API_TOKEN', '')).strip()

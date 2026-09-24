@@ -167,6 +167,7 @@ def usuarios_detalle(request, user_id):
             'fecha_nacimiento': profile.fecha_nacimiento,
             'sexo': profile.sexo or '',
             'avatar': profile.avatar_id,
+            'telefono': profile.telefono or '',
         }
     )
     form_proyectos = UsuarioProyectosForm(initial={'proyectos': rel.proyecto.all()})
@@ -218,6 +219,7 @@ def usuarios_detalle(request, user_id):
                     profile.avatar = data['avatar']
                 elif not profile.avatar_id:
                     profile.avatar_id = 9999999
+                profile.telefono = (data.get('telefono') or '').strip()
                 profile.save()
                 messages.success(request, 'Perfil actualizado.')
                 return redirect(f'/configuracion/usuarios/{user.pk}/?tab=perfil')

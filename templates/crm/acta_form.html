@@ -49,6 +49,17 @@
               <div id="cliente-search-results" class="list-group position-absolute w-100 shadow-sm" style="z-index: 20;"></div>
             </div>
 
+            <div class="form-group">
+              <label for="id_adj">Adjudicacion</label>
+              <select name="adj" id="id_adj" class="form-control" {% if not form.instance.cliente_id and not form.is_bound %}disabled{% endif %}>
+                <option value="">---------</option>
+                {% if form.instance.adj %}
+                <option value="{{ form.instance.adj }}" selected>{{ form.instance.adj }}</option>
+                {% endif %}
+              </select>
+              <small class="form-text text-muted">Si el cliente tiene varios negocios, elija cual aplica a esta reunion.</small>
+            </div>
+
             {{ form.asunto|as_crispy_field }}
             <div class="text-right mt-3">
               <button class="btn btn-success">Guardar programacion</button>
@@ -69,8 +80,35 @@
     const resultsBox = document.getElementById('cliente-search-results');
     let debounceTimer = null;
 
+    const adjSelect = document.getElementById('id_adj');
+    const initialAdj = adjSelect ? adjSelect.value : '';
+
     function clearResults() {
       resultsBox.innerHTML = '';
+    }
+
+    async function loadAdjudicaciones(clienteId, selectedAdj) {
+      if (!adjSelect) return;
+      const proyecto = proyectoInput.value;
+      adjSelect.innerHTML = '<option value="">---------</option>';
+      if (!proyecto || !clienteId) {
+        adjSelect.disabled = true;
+        return;
+      }
+      adjSelect.disabled = false;
+      const response = await fetch('/crm/ajax/adjudicaciones-cliente?proyecto=' + encodeURIComponent(proyecto) + '&cliente=' + encodeURIComponent(clienteId), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      (data.adjudicaciones || []).forEach(function(item) {
+        const opt = document.createElement('option');
+        opt.value = item.adj;
+        opt.textContent = item.adj + (item.inmueble ? ' · ' + item.inmueble : '') + (item.estado ? ' (' + item.estado + ')' : '');
+        if (selectedAdj && selectedAdj === item.adj) opt.selected = true;
+        adjSelect.appendChild(opt);
+      });
     }
 
     function syncClienteAvailability(resetValue) {
@@ -104,6 +142,7 @@
           hiddenClienteInput.value = item.id;
           searchInput.value = item.nombre_completo + ' (' + item.id + ')';
           clearResults();
+          loadAdjudicaciones(item.id, '');
         });
         resultsBox.appendChild(button);
       });
@@ -131,6 +170,7 @@
 
     proyectoInput.addEventListener('change', function() {
       syncClienteAvailability(true);
+      loadAdjudicaciones('', '');
     });
 
     searchInput.addEventListener('input', function() {
@@ -161,6 +201,9 @@
     });
 
     syncClienteAvailability(false);
+    if (hiddenClienteInput.value) {
+      loadAdjudicaciones(hiddenClienteInput.value, initialAdj);
+    }
   })();
 </script>
 {% endblock %}

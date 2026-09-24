@@ -5,7 +5,8 @@ from django.utils.http import urlencode
 from django.core.exceptions import PermissionDenied
 from andinasoft.models import (asesores, clientes, Facturas, Pagos, timeline_radicados, Usuarios_Proyectos, 
                                 Avatars, Profiles, empresas,notificaciones_correo, parametros, proyectos, ConfigDocumento,
-                                PromesaOtrosi, PromesaCumplimiento, CarteraCheckpoint, CarteraCartaPlantilla,
+                                PromesaOtrosi, PromesaCumplimiento, PromesaHito, PqrsGestion, PqrsNota,
+                                CarteraCheckpoint, CarteraCartaPlantilla,
                                 CarteraCartaEnvio, CarteraCartaGeneracion, CarteraCartaConfig,
                                 IntegrationCredential, IntegrationPurposeMapping, AdjFechaDocumentoExtraccion)
 from andinasoft.shared_models import Inmuebles, ventas_nuevas, Parametros_Operaciones
@@ -52,7 +53,8 @@ class adminAvatars(admin.ModelAdmin):
     list_display=['name','image']
 
 class adminProfiles(admin.ModelAdmin):
-    list_display=['user']
+    list_display=['user', 'telefono']
+    search_fields=['user__username', 'user__first_name', 'telefono']
 
 class adminEmpresas(admin.ModelAdmin):
     list_display=['Nit','nombre','alegra_enabled','alegra_gasto_max_sin_aprobador','logo']
@@ -249,6 +251,9 @@ admin.site.register(proyectos,adminProyecto)
 admin.site.register(ConfigDocumento)
 admin.site.register(PromesaOtrosi)
 admin.site.register(PromesaCumplimiento)
+admin.site.register(PromesaHito)
+admin.site.register(PqrsGestion)
+admin.site.register(PqrsNota)
 admin.site.register(IntegrationCredential)
 admin.site.register(IntegrationPurposeMapping)
 admin.site.register(AdjFechaDocumentoExtraccion)

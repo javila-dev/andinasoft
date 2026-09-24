@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 #------Otros modelos---------
 from andinasoft.models import clientes, proyectos, empresas, Pagos, asesores
+from crm.compromiso_tipos import TIPO_CHOICES, TIPO_OTRO
 #Universal packages
 import datetime
 
@@ -149,6 +150,7 @@ class ActaReunion(models.Model):
     canal = models.CharField(max_length=255, choices=CANALES)
     cliente = models.ForeignKey(clientes, on_delete=models.PROTECT, null=True, blank=True, db_constraint=False)
     proyecto = models.ForeignKey(proyectos, on_delete=models.PROTECT, null=True, blank=True, db_constraint=False)
+    adj = models.CharField(max_length=255, blank=True, default='')
     creado_por = models.ForeignKey(User, on_delete=models.PROTECT, related_name='actas_creadas', db_constraint=False)
     lider_reunion = models.ForeignKey(User, on_delete=models.PROTECT, related_name='actas_lideradas', db_constraint=False)
     asunto = models.CharField(max_length=255)
@@ -223,11 +225,14 @@ class CompromisoActa(models.Model):
         ('Vencido', 'Vencido'),
         ('Cancelado', 'Cancelado'),
     )
+    TIPOS = TIPO_CHOICES
 
     id_compromiso = models.AutoField(primary_key=True)
     acta = models.ForeignKey(ActaReunion, on_delete=models.CASCADE, related_name='compromisos')
+    tipo = models.CharField(max_length=40, choices=TIPO_CHOICES, default=TIPO_OTRO, db_index=True)
+    detalle = models.JSONField(default=dict, blank=True)
     titulo = models.CharField(max_length=255)
-    descripcion = models.TextField()
+    descripcion = models.TextField(blank=True, default='')
     responsable = models.ForeignKey(User, on_delete=models.PROTECT, related_name='compromisos_asignados', db_constraint=False)
     fecha_compromiso = models.DateField()
     prioridad = models.CharField(max_length=255, choices=PRIORIDADES, default='Media')
@@ -245,10 +250,19 @@ class CompromisoActa(models.Model):
         indexes = [
             models.Index(fields=['responsable', 'estado', 'fecha_compromiso']),
             models.Index(fields=['estado', 'fecha_compromiso']),
+            models.Index(fields=['tipo', 'estado', 'fecha_compromiso']),
         ]
 
     def __str__(self):
         return f'{self.titulo} - {self.responsable}'
+
+    def tipo_label(self):
+        from crm.compromiso_tipos import tipo_label
+        return tipo_label(self.tipo)
+
+    def resumen_linea(self):
+        from crm.compromiso_tipos import resumen_linea
+        return resumen_linea(self.tipo, self.detalle, self.titulo)
 
 
 class SeguimientoCompromiso(models.Model):
