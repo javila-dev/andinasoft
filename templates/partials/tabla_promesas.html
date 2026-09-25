@@ -10,7 +10,6 @@
                 <th>F. entrega</th>
                 <th>Estado entrega</th>
                 <th>F. escritura</th>
-                <th>Paso escritura</th>
                 <th>Estado escritura</th>
                 <th style="width: 2.5rem;"></th>
             </tr>
@@ -26,15 +25,13 @@
                 <td class="text-center" data-order="{%if r.fechaentrega%}{{r.fechaentrega|date:'Ymd'}}{%else%}0{%endif%}">{%if r.fechaentrega%}{{r.fechaentrega|date:'Y-m-d'}}{%else%}—{%endif%}</td>
                 <td class="text-center" data-order="{{r.estado_entrega}}">
                     <span class="badge badge-estado {{r.estado_entrega_badge}}">{{r.estado_entrega_label}}</span>
-                    {% include 'partials/stepper_hitos.html' with steps=r.entrega_ui compact=True %}
                 </td>
                 <td class="text-center" data-order="{%if r.fechaescritura%}{{r.fechaescritura|date:'Ymd'}}{%else%}0{%endif%}">{%if r.fechaescritura%}{{r.fechaescritura|date:'Y-m-d'}}{%else%}—{%endif%}</td>
-                <td class="text-center" data-order="{{ r.paso_escritura_idx }}">
-                    {% include 'partials/stepper_hitos.html' with steps=r.pasos_linea rama=r.pasos_rama compact=True %}
-                </td>
                 <td class="text-center" data-order="{{r.estado_escritura}}">
                     <span class="badge badge-estado {{r.estado_escritura_badge}}">{{r.estado_escritura_label}}</span>
-                    {%if r.fecha_escritura_real%}<div class="text-muted" style="font-size:0.65rem;">{{r.fecha_escritura_real|date:'Y-m-d'}}</div>{%endif%}
+                    {% if r.paso_escritura_label %}
+                    <div class="text-muted" style="font-size:0.65rem;">{{ r.paso_escritura_label }}</div>
+                    {% endif %}
                 </td>
                 <td class="text-center">
                     <div class="btn-group btn-group-sm">

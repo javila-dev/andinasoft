@@ -3,7 +3,6 @@
 {%block title%}Estados de Promesas{%endblock%}
 
 {%block content%}
-{% include 'partials/stepper_hitos_css.html' %}
 <style>
     .promesa-table td, .promesa-table th { vertical-align: middle; font-size: 0.75rem; }
     .promesa-table .badge-estado { min-width: 4.5rem; font-size: 0.7rem; }
@@ -11,12 +10,8 @@
     .dataTables_wrapper { padding: 0.5rem; font-size: 0.8rem; }
     #tablaTodas th:nth-child(3),
     .promesa-table th:nth-child(3) { min-width: 14rem; }
-    .promesa-table th:nth-child(7),
-    .promesa-table td:nth-child(7),
-    .promesa-table th:nth-child(9),
-    .promesa-table td:nth-child(9) { min-width: 11rem; }
-    .promesa-table th:nth-child(11),
-    .promesa-table td:nth-child(11) { width: 2.5rem; max-width: 2.5rem; white-space: nowrap; }
+    .promesa-table th:nth-child(10),
+    .promesa-table td:nth-child(10) { width: 2.5rem; max-width: 2.5rem; white-space: nowrap; }
 </style>
 
 <div class="bg-white rounded shadow p-3 mb-3">
@@ -29,11 +24,6 @@
             <span class="badge badge-warning">Por vencer (30 dias)</span>
             <span class="badge badge-danger">Vencido</span>
             <span class="badge badge-secondary">Cumplido</span>
-            <span class="ml-3 hito-legend text-muted">
-              Pasos: <span class="dot" style="background:#1e8449"></span>hecho
-              <span class="dot ml-1" style="background:#fff;border:2px solid #90a4ae"></span>activo
-              <span class="dot ml-1" style="background:#cfd8dc"></span>bloqueado
-            </span>
             </span>
         </div>
     </div>
@@ -224,7 +214,7 @@
                 lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Todos']],
                 language: { url: '/ajax_request/datatable_spanish' },
                 columnDefs: [
-                    { orderable: false, targets: [6, 8, 10] }
+                    { orderable: false, targets: [6, 8, 9] }
                 ],
                 autoWidth: false
             });
