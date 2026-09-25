@@ -26,10 +26,6 @@
   }
   details.titular-item[open] summary::before { transform: rotate(90deg); }
   details.titular-item .titular-extra { font-size: .75rem; color: #78909c; padding: .2rem 0 .35rem 1rem; }
-  @media (min-width: 992px) {
-    .ficha-col-escritura { flex: 0 0 65%; max-width: 65%; }
-    .ficha-col-side { flex: 0 0 35%; max-width: 35%; }
-  }
 </style>
 <div class="container-fluid py-3">
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
@@ -86,7 +82,7 @@
     </div>
 
     <div class="col-lg-6 mb-3">
-      <div class="card shadow-sm h-100">
+      <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h6 class="text-uppercase text-muted font-weight-bold">Atencion</h6>
           {% for c in compromisos %}
@@ -110,12 +106,44 @@
           {% endfor %}
         </div>
       </div>
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <h6 class="text-uppercase text-muted font-weight-bold mb-0">PQRS</h6>
+            {% if proyecto and adj %}
+            <a class="btn btn-sm btn-outline-primary" href="/servicio_cliente/pqrs/{{ proyecto }}/nueva?adj={{ adj }}">Radicar</a>
+            {% endif %}
+          </div>
+          {% for r in pqrs %}
+          <div class="mt-2">
+            <a href="/servicio_cliente/pqrs/{{ proyecto }}/{{ r.id }}">#{{ r.id }} {{ r.asunto }}</a>
+            <span class="badge {% if r.plazo.codigo == 'vencida' %}badge-danger{% elif r.plazo.codigo == 'hoy' %}badge-warning{% elif r.estado == 'Cerrado' %}badge-secondary{% else %}badge-success{% endif %}">{{ r.plazo.label }}</span>
+            <small class="text-muted d-block">{{ r.tipo }} · {{ r.estado }}</small>
+          </div>
+          {% empty %}
+          <p class="text-muted mb-0 mt-2">Sin PQRS en este negocio.</p>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h6 class="text-uppercase text-muted font-weight-bold">Historial</h6>
+          {% for h in historial %}
+          <div class="small mb-2">
+            <strong>{{ h.fecha }}</strong> · {{ h.usuario }}
+            <div>{{ h.texto }}</div>
+          </div>
+          {% empty %}
+          <p class="text-muted mb-0">Sin eventos recientes.</p>
+          {% endfor %}
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="row">
-    <div class="col-12 col-lg-8 ficha-col-escritura mb-3">
-      <div class="card shadow-sm h-100">
+    <div class="col-12 mb-3">
+      <div class="card shadow-sm">
         <div class="card-body">
           <h6 class="text-uppercase text-muted font-weight-bold">Entrega y escritura</h6>
           {% if messages %}
@@ -308,41 +336,6 @@
           {% else %}
           <p class="text-muted mb-0">Sin datos de promesa para este negocio.</p>
           {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="col-12 col-lg-4 ficha-col-side mb-3">
-      <div class="card shadow-sm mb-3">
-        <div class="card-body">
-          <div class="d-flex justify-content-between">
-            <h6 class="text-uppercase text-muted font-weight-bold mb-0">PQRS</h6>
-            {% if proyecto and adj %}
-            <a class="btn btn-sm btn-outline-primary" href="/servicio_cliente/pqrs/{{ proyecto }}/nueva?adj={{ adj }}">Radicar</a>
-            {% endif %}
-          </div>
-          {% for r in pqrs %}
-          <div class="mt-2">
-            <a href="/servicio_cliente/pqrs/{{ proyecto }}/{{ r.id }}">#{{ r.id }} {{ r.asunto }}</a>
-            <span class="badge {% if r.plazo.codigo == 'vencida' %}badge-danger{% elif r.plazo.codigo == 'hoy' %}badge-warning{% elif r.estado == 'Cerrado' %}badge-secondary{% else %}badge-success{% endif %}">{{ r.plazo.label }}</span>
-            <small class="text-muted d-block">{{ r.tipo }} · {{ r.estado }}</small>
-          </div>
-          {% empty %}
-          <p class="text-muted mb-0 mt-2">Sin PQRS en este negocio.</p>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h6 class="text-uppercase text-muted font-weight-bold">Historial</h6>
-          {% for h in historial %}
-          <div class="small mb-2">
-            <strong>{{ h.fecha }}</strong> · {{ h.usuario }}
-            <div>{{ h.texto }}</div>
-          </div>
-          {% empty %}
-          <p class="text-muted mb-0">Sin eventos recientes.</p>
-          {% endfor %}
         </div>
       </div>
     </div>
