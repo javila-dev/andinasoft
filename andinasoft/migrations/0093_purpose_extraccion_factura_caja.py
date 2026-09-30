@@ -22,7 +22,7 @@ def seed_factura_caja_purpose(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('andinasoft', '0089_carteracartaconfig'),
+        ('andinasoft', '0092_factura_notaria'),
     ]
 
     operations = [
