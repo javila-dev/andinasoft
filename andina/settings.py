@@ -23,7 +23,7 @@ def env_list(name, default=''):
 
 SECRET_KEY = os.getenv('SECRET_KEY')
 
-DEBUG = True
+DEBUG = env_bool('DEBUG', False)
 LIVE = env_bool('LIVE', False)
 USE_S3_MEDIA = env_bool('USE_S3_MEDIA', False)
 MAINTENANCE_MODE = env_bool('MAINTENANCE_MODE', False)

@@ -12,7 +12,10 @@ services:
     volumes:
       - media_data:/code/static_media
     networks:
-      - andina_backend
+      andina_backend:
+        # "web" a secas choca con alttumsoft-web en dokploy-network.
+        aliases:
+          - andinasoft-web
 
   nginx:
     image: nginx:alpine
