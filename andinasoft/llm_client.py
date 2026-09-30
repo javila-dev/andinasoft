@@ -34,6 +34,7 @@ class LlmResolvedConfig:
 
 PURPOSE_EXTRACCION_FECHAS = 'extraccion_fechas_contrato'
 PURPOSE_EXTRACCION_FECHAS_ESCANEADO = 'extraccion_fechas_escaneado'
+PURPOSE_EXTRACCION_FACTURA_CAJA = 'extraccion_factura_caja'
 
 MAX_VISION_PAGES = 8
 MAX_PDF_BYTES = 18 * 1024 * 1024

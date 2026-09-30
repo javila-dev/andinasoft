@@ -1002,11 +1002,65 @@ class gastos_caja(models.Model):
         return False
     
     def subtotal(self):
+        """Base sin impuestos. Si hay líneas, es la suma de sus bases."""
+        if self.pk:
+            prefetched = getattr(self, '_prefetched_objects_cache', {}).get('lineas')
+            if prefetched is not None:
+                if prefetched:
+                    return float(sum((row.base or 0) for row in prefetched))
+            elif self.lineas.exists():
+                total = self.lineas.aggregate(total=Sum('base')).get('total') or 0
+                return float(total)
         vr_iva = 0 if self.valor_iva is None else self.valor_iva
         vr_rte = 0 if self.valor_rte is None else self.valor_rte
         sbt = self.valor - vr_iva + vr_rte
-        if self.rte_asumida: sbt -= vr_rte
+        if self.rte_asumida:
+            sbt -= vr_rte
         return sbt
+
+class gastos_caja_linea(models.Model):
+    """Línea de compra del gasto. Cada una lleva su base y, si aplica, un impuesto."""
+    gasto = models.ForeignKey(
+        gastos_caja, on_delete=models.CASCADE, related_name='lineas',
+    )
+    orden = models.PositiveIntegerField(default=1)
+    descripcion = models.CharField(max_length=255, blank=True, default='')
+    base = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    impuesto = models.ForeignKey(
+        impuestos_legalizacion, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='lineas_gasto_caja',
+    )
+    valor_impuesto = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name = 'Línea de gasto de caja'
+        verbose_name_plural = 'Líneas de gasto de caja'
+        ordering = ['orden', 'pk']
+
+    def __str__(self):
+        return f'{self.gasto_id} · {self.descripcion or self.orden}'
+
+
+class gastos_caja_retencion(models.Model):
+    """Retención del documento. Alegra la recibe en el bill, no en la línea."""
+    gasto = models.ForeignKey(
+        gastos_caja, on_delete=models.CASCADE, related_name='retenciones',
+    )
+    impuesto = models.ForeignKey(
+        impuestos_legalizacion, on_delete=models.PROTECT,
+        related_name='retenciones_gasto_caja',
+    )
+    valor = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    asumida = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Retención de gasto de caja'
+        verbose_name_plural = 'Retenciones de gasto de caja'
+        ordering = ['pk']
+
+    def __str__(self):
+        return f'{self.gasto_id} · {self.impuesto_id}'
+
 
 def upload_to(instance, filename):
     extension = filename.split('.')[-1]

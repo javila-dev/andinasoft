@@ -1516,9 +1516,13 @@ def _partner_display_name(partner):
 class CajaGastoBillBuilder:
     """POST /bills por gasto legalizado de caja efectivo."""
 
-    def __init__(self, empresa, resolver=None):
+    TAX_AMOUNT_TOLERANCE = 1.0
+
+    def __init__(self, empresa, resolver=None, tax_catalog=None):
         self.empresa = empresa
         self.resolver = resolver or MappingResolver(empresa)
+        # id Alegra -> {percentage, name}. None omite la comparación con el catálogo.
+        self.tax_catalog = tax_catalog
 
     def _expense_category_id(self, gasto):
         concepto = gasto.concepto
@@ -1551,6 +1555,122 @@ class CajaGastoBillBuilder:
             return int(sid)
         return sid
 
+    @staticmethod
+    def _related_rows(gasto, name):
+        rel = getattr(gasto, name, None)
+        if rel is not None and hasattr(rel, 'all'):
+            return list(rel.all())
+        return None
+
+    def _assert_tax_matches_catalog(self, *, gasto_pk, label, base, valor, impuesto_id):
+        if self.tax_catalog is None or not impuesto_id:
+            return
+        tax_id = self.resolver.tax_for_impuesto(impuesto_id, required=True)
+        row = None
+        if isinstance(self.tax_catalog, dict):
+            row = self.tax_catalog.get(str(tax_id))
+            if row is None:
+                row = self.tax_catalog.get(tax_id)
+        if not isinstance(row, dict):
+            return
+        try:
+            pct = float(row.get('percentage') or 0)
+        except (TypeError, ValueError):
+            return
+        expected = float(base) * pct / 100.0
+        amount = float(valor or 0)
+        if abs(expected - amount) > self.TAX_AMOUNT_TOLERANCE:
+            name = row.get('name') or label
+            raise AlegraBuildError(
+                f'El gasto {gasto_pk} ({label}): el {name} digitado ({amount:.0f}) '
+                f'no coincide con el {pct:g}% que calcularía Alegra ({expected:.0f}) '
+                f'sobre la base {float(base):.0f}.'
+            )
+
+    def _purchase_categories(self, gasto, expense_category, vr_iva, vr_rte):
+        """
+        Una categoría Alegra por línea de compra.
+        Si el gasto no tiene detalle, conserva el bill de un solo IVA y una rete.
+        El tercer valor es None en el camino legado (las retenciones se arman después).
+        """
+        lineas = self._related_rows(gasto, 'lineas')
+        if lineas is None:
+            subtotal = float(gasto.subtotal())
+            base_line = {
+                'id': expense_category,
+                'quantity': 1,
+                'price': subtotal,
+                'observations': (gasto.descripcion or '')[:255],
+            }
+            if vr_iva:
+                if not gasto.cuenta_iva_id:
+                    raise AlegraBuildError(
+                        f'El gasto {gasto.pk} tiene valor de IVA pero no tiene tipo de IVA configurado.'
+                    )
+                self._assert_tax_matches_catalog(
+                    gasto_pk=gasto.pk,
+                    label='IVA',
+                    base=subtotal,
+                    valor=vr_iva,
+                    impuesto_id=gasto.cuenta_iva_id,
+                )
+                tax_id = self.resolver.tax_for_impuesto(gasto.cuenta_iva_id, required=True)
+                base_line['tax'] = [{'id': self._alegra_resource_id(tax_id)}]
+            return [base_line], subtotal, None, vr_iva, vr_rte
+
+        if not lineas:
+            raise AlegraBuildError(
+                f'El gasto {gasto.pk} no tiene líneas de factura para armar el bill.'
+            )
+
+        categories = []
+        subtotal = 0.0
+        iva_sum = 0.0
+        for row in lineas:
+            price = _money(getattr(row, 'base', 0))
+            subtotal += price
+            label = (getattr(row, 'descripcion', None) or gasto.descripcion or 'línea')[:80]
+            line = {
+                'id': expense_category,
+                'quantity': 1,
+                'price': price,
+                'observations': label[:255],
+            }
+            impuesto_id = getattr(row, 'impuesto_id', None)
+            valor_impuesto = _money(getattr(row, 'valor_impuesto', 0))
+            if impuesto_id and valor_impuesto:
+                self._assert_tax_matches_catalog(
+                    gasto_pk=gasto.pk,
+                    label=label,
+                    base=price,
+                    valor=valor_impuesto,
+                    impuesto_id=impuesto_id,
+                )
+                tax_id = self.resolver.tax_for_impuesto(impuesto_id, required=True)
+                line['tax'] = [{'id': self._alegra_resource_id(tax_id)}]
+                iva_sum += valor_impuesto
+            categories.append(line)
+
+        retentions = []
+        rte_sum = 0.0
+        for row in self._related_rows(gasto, 'retenciones') or []:
+            valor = _money(getattr(row, 'valor', 0))
+            if not valor:
+                continue
+            rte_sum += valor
+            if getattr(row, 'asumida', False):
+                continue
+            if not getattr(row, 'impuesto_id', None):
+                raise AlegraBuildError(
+                    f'El gasto {gasto.pk} tiene una retención sin tipo configurado.'
+                )
+            retention_id = self.resolver.retention_for_impuesto(row.impuesto_id, required=True)
+            retentions.append({
+                'id': self._alegra_resource_id(retention_id),
+                'amount': valor,
+            })
+        return categories, subtotal, retentions, iva_sum, rte_sum
+
     def build(self, gasto):
         estado = (gasto.estado or '').strip()
         if estado not in gastos_caja.ESTADOS_ELEGIBLES_ALEGRA_BILL:
@@ -1569,25 +1689,10 @@ class CajaGastoBillBuilder:
 
         vr_iva = 0 if gasto.valor_iva is None else float(gasto.valor_iva)
         vr_rte = 0 if gasto.valor_rte is None else float(gasto.valor_rte)
-        subtotal = float(gasto.subtotal())
         valor_esperado = _money(gasto.valor)
-
-        base_line = {
-            'id': expense_category,
-            'quantity': 1,
-            'price': subtotal,
-            'observations': (gasto.descripcion or '')[:255],
-        }
-
-        if vr_iva:
-            if not gasto.cuenta_iva_id:
-                raise AlegraBuildError(
-                    f'El gasto {gasto.pk} tiene valor de IVA pero no tiene tipo de IVA configurado.'
-                )
-            tax_id = self.resolver.tax_for_impuesto(gasto.cuenta_iva_id, required=True)
-            base_line['tax'] = [{'id': self._alegra_resource_id(tax_id)}]
-
-        categories = [base_line]
+        categories, subtotal, retentions, vr_iva, vr_rte = self._purchase_categories(
+            gasto, expense_category, vr_iva, vr_rte,
+        )
 
         marker = f'[caja-gasto:{gasto.pk}]'
         # Marker al inicio: no se pierde si Alegra o Facturas.descripcion truncan a 255.
@@ -1611,16 +1716,19 @@ class CajaGastoBillBuilder:
             payload['paymentMethod'] = 'CASH'
             payload['paymentType'] = 'CASH'
 
-        if vr_rte and not gasto.rte_asumida:
-            if not gasto.cuenta_rte_id:
-                raise AlegraBuildError(
-                    f'El gasto {gasto.pk} tiene retencion pero no tiene tipo de retencion configurado.'
-                )
-            retention_id = self.resolver.retention_for_impuesto(gasto.cuenta_rte_id, required=True)
-            payload['retentions'] = [{
-                'id': self._alegra_resource_id(retention_id),
-                'amount': _money(vr_rte),
-            }]
+        if retentions is None:
+            if vr_rte and not gasto.rte_asumida:
+                if not gasto.cuenta_rte_id:
+                    raise AlegraBuildError(
+                        f'El gasto {gasto.pk} tiene retencion pero no tiene tipo de retencion configurado.'
+                    )
+                retention_id = self.resolver.retention_for_impuesto(gasto.cuenta_rte_id, required=True)
+                payload['retentions'] = [{
+                    'id': self._alegra_resource_id(retention_id),
+                    'amount': _money(vr_rte),
+                }]
+        elif retentions:
+            payload['retentions'] = retentions
 
         caja_id = getattr(gasto, 'forma_pago_id', None) or getattr(getattr(gasto, 'forma_pago', None), 'pk', None)
         cost_center_id = self.resolver.cost_center_for_caja(caja_id, required=False)

@@ -25,6 +25,15 @@ from andinasoft.shared_models import (Pagocomision, Recaudos_general,
                                       Inmuebles, Adjudicacion)
 from andina.decorators import group_perm_required, check_project, check_perms, check_groups
 from andinasoft.create_pdf import GenerarPDF
+from accounting.caja_factura_lectura import FacturaLecturaError, leer_factura_pdf
+from accounting.caja_gasto_detalle import (
+    DetalleGastoError,
+    catalogo_impuestos_formulario,
+    detalle_para_api,
+    parse_detalle,
+    replace_detalle,
+    validar_cuadre,
+)
 from accounting.models import (distribucion_centros_costos, egresos_contable, egresos_banco, conciliaciones, 
                                Facturas, Pagos, gastos_caja, history_facturas, impuestos_legalizacion,info_interfaces,
                                Anticipos, otros_ingresos, parametros, reembolsos_caja, transferencias_companias,
@@ -5959,6 +5968,43 @@ def _estado_destino_tras_correccion(gasto):
     return previo or gastos_caja.ESTADO_PENDIENTE
 
 
+def _puc_empresa(cuenta, empresa):
+    if cuenta is None:
+        return ""
+    if empresa == "Promotora Sandville":
+        return cuenta.cuenta_andina or ""
+    if empresa == "Status Comercializadora":
+        return cuenta.cuenta_status or ""
+    if empresa == "Quadrata Constructores":
+        return cuenta.cuenta_quadrata or ""
+    return ""
+
+
+def _cuentas_siigo_caja(gasto, rte_asumida):
+    empresa = gasto.forma_pago.empresa
+    return _puc_empresa(gasto.concepto, empresa), _puc_empresa(rte_asumida, empresa)
+
+
+def _fila_siigo(sheet, row, cuenta, naturaleza, valor, fecha, tercero_pk, descripcion):
+    sheet.cell(row, 4, cuenta)
+    sheet.cell(row, 5, naturaleza)
+    sheet.cell(row, 6, valor)
+    sheet.cell(row, 7, fecha.year)
+    sheet.cell(row, 8, fecha.month)
+    sheet.cell(row, 9, fecha.day)
+    sheet.cell(row, 16, tercero_pk)
+    sheet.cell(row, 18, descripcion)
+
+
+def _detalle_desde_post(post, valor_pagado):
+    try:
+        lineas, retenciones = parse_detalle(post.get('lineas_json'), post.get('retenciones_json'))
+        validar_cuadre(valor_pagado, lineas, retenciones)
+    except DetalleGastoError as exc:
+        return None, None, exc.message
+    return lineas, retenciones, None
+
+
 def _volver_gasto_a_reembolso(gasto):
     """Restaura estado Reembolso y el total del reembolso al que pertenece."""
     if not gasto.reembolso_id:
@@ -6011,15 +6057,34 @@ def cajas_efectivo(request):
 
                     obj_gastos = obj_gastos.select_related(
                         'tercero', 'concepto', 'cuenta_iva', 'cuenta_rte', 'usuario_aprueba',
-                    )
+                    ).prefetch_related('lineas', 'retenciones')
                         
                     for i in obj_gastos:
                         id_iva = i.cuenta_iva.id if i.cuenta_iva is not None else None
                         vr_iva = 0 if i.valor_iva is None else i.valor_iva
                         id_rte = i.cuenta_rte.id if i.cuenta_rte is not None else None
                         vr_rte = 0 if i.valor_rte is None else i.valor_rte
-                        subtotal = i.valor - vr_iva + vr_rte
-                        if i.rte_asumida is True: subtotal -= vr_rte
+                        lineas_api, retenciones_api = detalle_para_api(i)
+                        if lineas_api:
+                            subtotal = sum(row['base'] for row in lineas_api)
+                            vr_iva = sum(row['valor_impuesto'] for row in lineas_api)
+                            vr_rte = sum(row['valor'] for row in retenciones_api)
+                        else:
+                            subtotal = i.valor - vr_iva + vr_rte
+                            if i.rte_asumida is True:
+                                subtotal -= vr_rte
+                            lineas_api = [{
+                                'descripcion': i.descripcion or '',
+                                'base': subtotal,
+                                'impuesto_id': id_iva,
+                                'valor_impuesto': vr_iva,
+                            }]
+                            if id_rte and vr_rte:
+                                retenciones_api = [{
+                                    'impuesto_id': id_rte,
+                                    'valor': vr_rte,
+                                    'asumida': bool(i.rte_asumida),
+                                }]
                         aprob = "" if i.usuario_aprueba is None else i.usuario_aprueba.username
                         reemb = 'Si' if i.has_reemb() else 'No'
                         movements.append({
@@ -6048,6 +6113,8 @@ def cajas_efectivo(request):
                             'iva':vr_iva,
                             'rte': vr_rte,
                             'subtotal':subtotal,
+                            'lineas': lineas_api,
+                            'retenciones': retenciones_api,
                             'concepto':i.concepto.descripcion,
                             'concepto_id': i.concepto_id,
                             'tipo_documento_soporte': i.tipo_documento_soporte or '',
@@ -6246,7 +6313,9 @@ def cajas_efectivo(request):
                 id_reemb = request.GET.get('id_reemb')
                 
                 reembolso = reembolsos_caja.objects.get(pk=id_reemb)
-                gastos = gastos_caja.objects.filter(reembolso=id_reemb)
+                gastos = gastos_caja.objects.filter(reembolso=id_reemb).prefetch_related(
+                    'lineas__impuesto', 'retenciones__impuesto',
+                ).select_related('concepto', 'forma_pago', 'tercero', 'cuenta_iva', 'cuenta_rte')
                 
                 rte_asumida = impuestos_legalizacion.objects.get(descripcion__icontains ="retefte asumida")
                 
@@ -6255,76 +6324,64 @@ def cajas_efectivo(request):
                 sheet=book.active
                 row=6
                 for i in gastos:
-                    vr_iva = 0 if i.valor_iva is None else i.valor_iva
-                    vr_rte = 0 if i.valor_rte is None else i.valor_rte
-                    
-                    if i.forma_pago.empresa == "Promotora Sandville":
-                        cuenta = i.concepto.cuenta_andina
-                        cta_iva = i.cuenta_iva.cuenta_andina if vr_iva != 0 else ""
-                        cta_rte = i.cuenta_rte.cuenta_andina if vr_rte != 0 else ""
-                        cta_rte_asum = rte_asumida.cuenta_andina
-                        
-                    elif i.forma_pago.empresa == "Status Comercializadora":
-                        cuenta = i.concepto.cuenta_status
-                        cta_iva = i.cuenta_iva.cuenta_status if vr_iva != 0 else ""
-                        cta_rte = i.cuenta_rte.cuenta_status if vr_rte != 0 else ""
-                        cta_rte_asum = rte_asumida.cuenta_status
-                        
-                    elif i.forma_pago.empresa == "Quadrata Constructores":
-                        cuenta = i.concepto.cuenta_quadrata
-                        cta_iva = i.cuenta_iva.cuenta_quadrata if vr_iva != 0 else ""
-                        cta_rte = i.cuenta_rte.cuenta_quadrata if vr_rte != 0 else ""
-                        cta_rte_asum = rte_asumida.cuenta_quadrata
-                        
+                    cuenta, cta_rte_asum = _cuentas_siigo_caja(i, rte_asumida)
+                    lineas = list(i.lineas.all())
+                    if lineas:
+                        sbt = float(sum((linea.base or 0) for linea in lineas))
                     else:
-                        cuenta = ""
-                        cta_iva = ""
-                        cta_rte = ""
-                        cta_rte_asum = ""
-                    sbt = i.valor -vr_iva + vr_rte
-                    if i.rte_asumida: sbt -= vr_rte
-                    sheet.cell(row,4,cuenta)
-                    sheet.cell(row,5,"D")
-                    sheet.cell(row,6,sbt)
-                    sheet.cell(row,7,i.fecha_gasto.year)
-                    sheet.cell(row,8,i.fecha_gasto.month)
-                    sheet.cell(row,9,i.fecha_gasto.day)
-                    sheet.cell(row,16,i.tercero.pk)
-                    sheet.cell(row,18,i.descripcion.upper())
-                    row+=1
-                    
-                    if cta_iva != "":
-                        sheet.cell(row,4,cta_iva)
-                        sheet.cell(row,5,"D")
-                        sheet.cell(row,6, vr_iva)
-                        sheet.cell(row,7, i.fecha_gasto.year)
-                        sheet.cell(row,8, i.fecha_gasto.month)
-                        sheet.cell(row,9, i.fecha_gasto.day)
-                        sheet.cell(row,16, i.tercero.pk)
-                        sheet.cell(row,18, "IVA - "+i.descripcion.upper())
-                        row+=1
+                        vr_iva = 0 if i.valor_iva is None else i.valor_iva
+                        vr_rte = 0 if i.valor_rte is None else i.valor_rte
+                        sbt = i.valor - vr_iva + vr_rte
+                        if i.rte_asumida:
+                            sbt -= vr_rte
+                    _fila_siigo(sheet, row, cuenta, "D", sbt, i.fecha_gasto, i.tercero.pk, i.descripcion.upper())
+                    row += 1
 
-                    if cta_rte != "":
-                        sheet.cell(row,4,cta_rte)
-                        sheet.cell(row,5,"C")
-                        sheet.cell(row,6, vr_rte)
-                        sheet.cell(row,7, i.fecha_gasto.year)
-                        sheet.cell(row,8, i.fecha_gasto.month)
-                        sheet.cell(row,9, i.fecha_gasto.day)
-                        sheet.cell(row,16, i.tercero.pk)
-                        sheet.cell(row,18, "RETEFTE - "+i.descripcion.upper())
-                        row+=1
-                    
-                        if i.rte_asumida is True:
-                            sheet.cell(row,4,cta_rte_asum)
-                            sheet.cell(row,5,"D")
-                            sheet.cell(row,6, vr_rte)
-                            sheet.cell(row,7, i.fecha_gasto.year)
-                            sheet.cell(row,8, i.fecha_gasto.month)
-                            sheet.cell(row,9, i.fecha_gasto.day)
-                            sheet.cell(row,16, i.tercero.pk)
-                            sheet.cell(row,18, "RETEFTE ASUMIDA- "+i.descripcion.upper())
-                            row+=1
+                    if lineas:
+                        impuestos = {}
+                        for linea in lineas:
+                            if not linea.impuesto_id or not linea.valor_impuesto:
+                                continue
+                            slot = impuestos.setdefault(linea.impuesto_id, {'valor': 0, 'imp': linea.impuesto})
+                            slot['valor'] += float(linea.valor_impuesto)
+                        for slot in impuestos.values():
+                            cta_iva = _puc_empresa(slot['imp'], i.forma_pago.empresa)
+                            if not cta_iva:
+                                continue
+                            _fila_siigo(
+                                sheet, row, cta_iva, "D", slot['valor'], i.fecha_gasto, i.tercero.pk,
+                                "IVA - " + i.descripcion.upper(),
+                            )
+                            row += 1
+                        for ret in i.retenciones.all():
+                            cta_rte = _puc_empresa(ret.impuesto, i.forma_pago.empresa)
+                            if not cta_rte:
+                                continue
+                            _fila_siigo(
+                                sheet, row, cta_rte, "C", float(ret.valor or 0), i.fecha_gasto, i.tercero.pk,
+                                "RETEFTE - " + i.descripcion.upper(),
+                            )
+                            row += 1
+                            if ret.asumida and cta_rte_asum:
+                                _fila_siigo(
+                                    sheet, row, cta_rte_asum, "D", float(ret.valor or 0), i.fecha_gasto,
+                                    i.tercero.pk, "RETEFTE ASUMIDA- " + i.descripcion.upper(),
+                                )
+                                row += 1
+                    else:
+                        vr_iva = 0 if i.valor_iva is None else i.valor_iva
+                        vr_rte = 0 if i.valor_rte is None else i.valor_rte
+                        cta_iva = _puc_empresa(i.cuenta_iva, i.forma_pago.empresa) if vr_iva else ""
+                        cta_rte = _puc_empresa(i.cuenta_rte, i.forma_pago.empresa) if vr_rte else ""
+                        if cta_iva:
+                            _fila_siigo(sheet, row, cta_iva, "D", vr_iva, i.fecha_gasto, i.tercero.pk, "IVA - "+i.descripcion.upper())
+                            row += 1
+                        if cta_rte:
+                            _fila_siigo(sheet, row, cta_rte, "C", vr_rte, i.fecha_gasto, i.tercero.pk, "RETEFTE - "+i.descripcion.upper())
+                            row += 1
+                            if i.rte_asumida is True and cta_rte_asum:
+                                _fila_siigo(sheet, row, cta_rte_asum, "D", vr_rte, i.fecha_gasto, i.tercero.pk, "RETEFTE ASUMIDA- "+i.descripcion.upper())
+                                row += 1
                             
                 responsable = Profiles.objects.get(user=reembolso.caja.usuario_responsable.pk)
                 valor_credito = sum(int(i.valor or 0) for i in gastos)
@@ -6383,6 +6440,33 @@ def cajas_efectivo(request):
         elif request.method == 'POST':
             todo = request.POST.get('to_do')
             
+            if todo == 'prefill_factura':
+                soporte = request.FILES.get('soporte')
+                if not soporte:
+                    return JsonResponse({
+                        'ok': False,
+                        'msj': 'Adjunta el PDF de la factura.',
+                        'lineas': [],
+                        'retenciones': [],
+                    })
+                if not (soporte.name or '').lower().endswith('.pdf'):
+                    return JsonResponse({
+                        'ok': False,
+                        'msj': 'El soporte debe ser un PDF.',
+                        'lineas': [],
+                        'retenciones': [],
+                    })
+                try:
+                    data = leer_factura_pdf(soporte.read())
+                except FacturaLecturaError as exc:
+                    return JsonResponse({
+                        'ok': False,
+                        'msj': exc.message,
+                        'lineas': [],
+                        'retenciones': [],
+                    })
+                return JsonResponse(data)
+
             if todo == 'nuevogasto':
                 id_caja = request.POST.get('id_caja')
                 cuenta = cuentas_pagos.objects.get(pk=id_caja)
@@ -6475,6 +6559,13 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
 
+                lineas, retenciones, detalle_err = _detalle_desde_post(request.POST, valor_int)
+                if detalle_err:
+                    return JsonResponse({
+                        'msj': detalle_err,
+                        'class': 'alert-danger',
+                    })
+
                 if not _confirm_soft_duplicate_flag(request):
                     soft = _gastos_soft_duplicados(
                         caja=cuenta,
@@ -6499,14 +6590,16 @@ def cajas_efectivo(request):
                             ],
                         })
                 
-                gasto = gastos_caja.objects.create(
-                    fecha_gasto = fecha_gasto, concepto = obj_concepto,
-                    descripcion = descripcion.upper(),  tercero = partner,
-                    valor = valor_int, soporte = soporte,
-                    soporte_hash = soporte_hash or None,
-                    usuario_carga = request.user, forma_pago = cuenta,
-                    tipo_documento_soporte = tipo_documento_soporte,
-                )
+                with transaction.atomic():
+                    gasto = gastos_caja.objects.create(
+                        fecha_gasto = fecha_gasto, concepto = obj_concepto,
+                        descripcion = descripcion.upper(),  tercero = partner,
+                        valor = valor_int, soporte = soporte,
+                        soporte_hash = soporte_hash or None,
+                        usuario_carga = request.user, forma_pago = cuenta,
+                        tipo_documento_soporte = tipo_documento_soporte,
+                    )
+                    replace_detalle(gasto, lineas, retenciones)
                 
                 data = {
                     'msj': 'El gasto fue registrado',
@@ -7002,9 +7095,16 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
 
-                if obj_gasto.estado != gastos_caja.ESTADO_DEVUELTO:
+                estados_editables = {
+                    gastos_caja.ESTADO_PENDIENTE,
+                    gastos_caja.ESTADO_DEVUELTO,
+                    gastos_caja.ESTADO_APROBADO,
+                    gastos_caja.ESTADO_REVISADO,
+                    gastos_caja.ESTADO_REEMBOLSO,
+                }
+                if obj_gasto.estado not in estados_editables:
                     return JsonResponse({
-                        'msj': f'Solo se pueden editar gastos en estado Devuelto (actual: {obj_gasto.estado}).',
+                        'msj': f'No se puede editar un gasto en estado {obj_gasto.estado}.',
                         'class': 'alert-danger',
                     })
 
@@ -7112,52 +7212,18 @@ def cajas_efectivo(request):
                             ],
                         })
 
-                tipo_iva = request.POST.get('tipo_iva')
-                tipo_rte = request.POST.get('tipo_rte')
-                valor_iva_raw = (request.POST.get('valor_iva') or '0').replace(',', '')
-                valor_rte_raw = (request.POST.get('valor_rte') or '0').replace(',', '')
-                rte_asumida = request.POST.get('rte_asumida')
-
-                try:
-                    valor_iva = float(valor_iva_raw or 0)
-                    valor_rte = float(valor_rte_raw or 0)
-                except (TypeError, ValueError):
+                lineas, retenciones, detalle_err = _detalle_desde_post(request.POST, valor_int)
+                if detalle_err:
                     return JsonResponse({
-                        'msj': 'Valores de IVA/Rte inválidos.',
+                        'msj': detalle_err,
                         'class': 'alert-danger',
                     })
 
-                cuenta_iva = None
-                if tipo_iva:
-                    try:
-                        cuenta_iva = impuestos_legalizacion.objects.get(pk=tipo_iva)
-                    except impuestos_legalizacion.DoesNotExist:
-                        return JsonResponse({
-                            'msj': 'Tipo de IVA inválido.',
-                            'class': 'alert-danger',
-                        })
-                cuenta_rte = None
-                if tipo_rte:
-                    try:
-                        cuenta_rte = impuestos_legalizacion.objects.get(pk=tipo_rte)
-                    except impuestos_legalizacion.DoesNotExist:
-                        return JsonResponse({
-                            'msj': 'Tipo de retención inválido.',
-                            'class': 'alert-danger',
-                        })
-
-                valor_esperado = valor_int
-                subtotal = valor_int - valor_iva + valor_rte
-                if rte_asumida == 'on':
-                    subtotal -= valor_rte
-                total_calc = subtotal + valor_iva - (0 if rte_asumida == 'on' else valor_rte)
-                if abs(total_calc - valor_esperado) > 0.5:
-                    return JsonResponse({
-                        'msj': 'El total calculado (subtotal + IVA - Rte) no coincide con el valor del gasto.',
-                        'class': 'alert-danger',
-                    })
-
-                estado_previo = _estado_destino_tras_correccion(obj_gasto)
+                venia_devuelto = obj_gasto.estado == gastos_caja.ESTADO_DEVUELTO
+                estado_previo = (
+                    _estado_destino_tras_correccion(obj_gasto)
+                    if venia_devuelto else obj_gasto.estado
+                )
                 reembolso = obj_gasto.reembolso
 
                 obj_gasto.fecha_gasto = fecha_gasto
@@ -7166,20 +7232,22 @@ def cajas_efectivo(request):
                 obj_gasto.valor = valor_int
                 obj_gasto.concepto = obj_concepto
                 obj_gasto.tipo_documento_soporte = tipo_documento_soporte
-                obj_gasto.cuenta_iva = cuenta_iva
-                obj_gasto.valor_iva = valor_iva
-                obj_gasto.cuenta_rte = cuenta_rte
-                obj_gasto.valor_rte = valor_rte
-                obj_gasto.rte_asumida = True if rte_asumida == 'on' else False
-                obj_gasto.estado = estado_previo
-                obj_gasto.estado_antes_devolver = ''
-                obj_gasto.save()
+                if venia_devuelto:
+                    obj_gasto.estado = estado_previo
+                    obj_gasto.estado_antes_devolver = ''
+                with transaction.atomic():
+                    obj_gasto.save()
+                    replace_detalle(obj_gasto, lineas, retenciones)
 
                 if reembolso is not None:
                     _recalcular_valor_reembolso(reembolso)
 
+                if venia_devuelto:
+                    msj = f'Se actualizó el gasto y volvió a estado {estado_previo}.'
+                else:
+                    msj = 'Se actualizó el gasto.'
                 return JsonResponse({
-                    'msj': f'Se actualizó el gasto y volvió a estado {estado_previo}.',
+                    'msj': msj,
                     'class': 'alert-success',
                 })
             
@@ -7208,8 +7276,8 @@ def cajas_efectivo(request):
         'formCaja': forms.form_cajas(user=request.user.pk,user_type=usertype),
         'form_leg_anticipo':forms.form_legalizar_anticipo,
         'form_partners':forms.form_partners,
-        'form_taxes':forms.form_taxes,
         'form_transf':forms.form_transferencias,
+        'impuestos_caja_json': json.dumps(catalogo_impuestos_formulario()),
         'form_reg_legaliz': forms.form_reg_legaliz,
         'abrir_mes_anterior':parametros.objects.get(descripcion='abrir_mes_anterior'),
         'es_contabilidad': contabilidad or superuser,

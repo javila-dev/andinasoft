@@ -759,9 +759,11 @@ class IntegrationPurposeMapping(models.Model):
 
     PURPOSE_EXTRACCION_FECHAS = 'extraccion_fechas_contrato'
     PURPOSE_EXTRACCION_FECHAS_ESCANEADO = 'extraccion_fechas_escaneado'
+    PURPOSE_EXTRACCION_FACTURA_CAJA = 'extraccion_factura_caja'
     PURPOSE_CHOICES = (
         (PURPOSE_EXTRACCION_FECHAS, 'Extraccion fechas — PDF con texto'),
         (PURPOSE_EXTRACCION_FECHAS_ESCANEADO, 'Extraccion fechas — PDF escaneado (vision)'),
+        (PURPOSE_EXTRACCION_FACTURA_CAJA, 'Extraccion factura de caja (PDF)'),
     )
 
     purpose = models.CharField(max_length=64, unique=True, choices=PURPOSE_CHOICES)

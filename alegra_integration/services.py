@@ -1760,6 +1760,25 @@ class AlegraIntegrationService:
 
         return empresa, proyecto, desde, hasta, validated_caja_id
 
+    def _caja_tax_catalog(self, empresa):
+        """Impuestos Alegra por id. None si no se pudo consultar: no invalida el preview."""
+        empresa_id = getattr(empresa, 'pk', empresa)
+        cache_key = f'alegra:caja-tax-catalog:{empresa_id}'
+        cached = cache.get(cache_key)
+        if isinstance(cached, dict):
+            return cached
+        try:
+            rows = AlegraMCPClient(empresa)._rest_taxes() or []
+        except Exception:
+            logger.warning('No se pudo leer GET /taxes para validar impuestos de caja', exc_info=True)
+            return None
+        catalog = {}
+        for row in rows:
+            if isinstance(row, dict) and row.get('id') is not None:
+                catalog[str(row['id'])] = row
+        cache.set(cache_key, catalog, timeout=60 * 10)
+        return catalog
+
     def _build_documents(self, empresa, proyecto, document_type, desde, hasta, caja_id=None, batch=None):
         if document_type == AlegraSyncBatch.DOC_RECEIPT:
             builder = ReceiptPaymentBuilder(empresa, proyecto)
@@ -1811,7 +1830,10 @@ class AlegraIntegrationService:
             return results
 
         if document_type == AlegraSyncBatch.DOC_CAJA:
-            bill_builder = CajaGastoBillBuilder(empresa)
+            bill_builder = CajaGastoBillBuilder(
+                empresa,
+                tax_catalog=self._caja_tax_catalog(empresa),
+            )
 
             gastos_bill_qs = gastos_caja.objects.filter(
                 estado__in=gastos_caja.ESTADOS_ELEGIBLES_ALEGRA_BILL,
@@ -1826,6 +1848,9 @@ class AlegraIntegrationService:
                 'forma_pago',
                 'cuenta_iva',
                 'cuenta_rte',
+            ).prefetch_related(
+                'lineas',
+                'retenciones',
             ).order_by('fecha_gasto', 'pk')
 
             results = []

@@ -1589,6 +1589,72 @@ class CajaBuilderTests(SimpleTestCase):
         self.assertEqual(built.payload['retentions'], [{'id': 'ret-imp-5', 'amount': 3000.0}])
         self.assertNotIn('tax', built.payload['purchases']['categories'][0])
 
+    def _rows(self, items):
+        class _Rel:
+            def all(self_inner):
+                return list(items)
+        return _Rel()
+
+    def test_caja_bill_two_lines_keep_their_own_tax(self):
+        gasto, _ = self._gasto(valor=173000, subtotal_val=150000)
+        gasto.lineas = self._rows([
+            SimpleNamespace(descripcion='Papel', base=100000, impuesto_id=12, valor_impuesto=19000),
+            SimpleNamespace(descripcion='Bolsas', base=50000, impuesto_id=8, valor_impuesto=4000),
+        ])
+        gasto.retenciones = self._rows([])
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        cats = built.payload['purchases']['categories']
+        self.assertEqual(len(cats), 2)
+        self.assertEqual(cats[0]['price'], 100000.0)
+        self.assertEqual(cats[0]['tax'], [{'id': 'tax-imp-12'}])
+        self.assertEqual(cats[1]['price'], 50000.0)
+        self.assertEqual(cats[1]['tax'], [{'id': 'tax-imp-8'}])
+        self.assertNotIn('retentions', built.payload)
+        self.assertEqual(built.payload['__local']['subtotal'], 150000.0)
+
+    def test_caja_bill_exempt_line_and_retentions(self):
+        gasto, _ = self._gasto(valor=116500, subtotal_val=100000)
+        gasto.lineas = self._rows([
+            SimpleNamespace(descripcion='Exento', base=100000, impuesto_id=None, valor_impuesto=0),
+        ])
+        gasto.retenciones = self._rows([
+            SimpleNamespace(impuesto_id=5, valor=3000, asumida=False),
+            SimpleNamespace(impuesto_id=6, valor=800, asumida=True),
+        ])
+        built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
+        line = built.payload['purchases']['categories'][0]
+        self.assertNotIn('tax', line)
+        self.assertEqual(built.payload['retentions'], [{'id': 'ret-imp-5', 'amount': 3000.0}])
+
+    def test_caja_bill_tax_percentage_mismatch_is_invalid(self):
+        gasto, _ = self._gasto(valor=120000, subtotal_val=100000)
+        gasto.lineas = self._rows([
+            SimpleNamespace(descripcion='Papel', base=100000, impuesto_id=12, valor_impuesto=20000),
+        ])
+        gasto.retenciones = self._rows([])
+        builder = CajaGastoBillBuilder(
+            self.empresa,
+            self.resolver,
+            tax_catalog={'tax-imp-12': {'name': 'IVA 19%', 'percentage': 19}},
+        )
+        with self.assertRaises(AlegraBuildError) as ctx:
+            builder.build(gasto)
+        self.assertIn('IVA 19%', str(ctx.exception))
+
+    def test_caja_bill_tax_percentage_match_is_sent(self):
+        gasto, _ = self._gasto(valor=119000, subtotal_val=100000)
+        gasto.lineas = self._rows([
+            SimpleNamespace(descripcion='Papel', base=100000, impuesto_id=12, valor_impuesto=19000),
+        ])
+        gasto.retenciones = self._rows([])
+        builder = CajaGastoBillBuilder(
+            self.empresa,
+            self.resolver,
+            tax_catalog={'tax-imp-12': {'name': 'IVA 19%', 'percentage': 19}},
+        )
+        built = builder.build(gasto)
+        self.assertEqual(built.payload['purchases']['categories'][0]['tax'], [{'id': 'tax-imp-12'}])
+
     def test_caja_bill_with_cost_center(self):
         gasto, _ = self._gasto(tipo='fe')
         built = CajaGastoBillBuilder(self.empresa, self.resolver).build(gasto)
