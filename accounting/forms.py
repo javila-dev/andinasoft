@@ -911,7 +911,7 @@ class form_solicitar_anticipos(forms.Form):
         )
 
 class NitPartnerChoiceField(forms.ModelChoiceField):
-    """El valor es el NIT. La búsqueda del desplegable usa ese valor, no el nombre."""
+    """El valor es el NIT. El desplegable busca por ese NIT o por el nombre."""
 
     def label_from_instance(self, obj):
         return f'{obj.pk} — {obj.nombre_completo()}'
@@ -932,7 +932,7 @@ class form_legalizar_anticipo(forms.Form):
         label='NIT tercero',
         widget=forms.Select(attrs={
             'data-search': 'nit',
-            'data-placeholder': 'Buscar por NIT',
+            'data-placeholder': 'Buscar por NIT o nombre',
             'data-add-option': 'Agregar tercero',
         }),
     )

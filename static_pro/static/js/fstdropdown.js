@@ -172,7 +172,9 @@ function setFstDropdown() {
             if (!needle) show = true;
             else if (byNit) {
                 var nit = (ddList[div].dataset.value || "").replace(/\D/g, "");
-                show = nitNeedle.length > 0 && nit.indexOf(nitNeedle) !== -1;
+                var text = ddList[div].textContent.trim().toLowerCase();
+                var matchNit = nitNeedle.length > 0 && nit.indexOf(nitNeedle) !== -1;
+                show = matchNit || text.indexOf(needle) !== -1;
             } else {
                 show = ddList[div].textContent.trim().toLowerCase().indexOf(needle) !== -1;
             }
