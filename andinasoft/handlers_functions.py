@@ -1,4 +1,5 @@
 import os
+import re
 import traceback
 import datetime
 import base64
@@ -30,10 +31,98 @@ def upload_docs_asesores(file,id_asesor,name_doc):
     file_path = f'{file_dir}/{name_doc}.pdf'
     media_service.save_private(_to_storage_key(file_path), file)
             
+_COPIA_STORAGE = re.compile(r'^[A-Za-z0-9]{7}$')
+
+
+def _nombre_doc_seguro(name_doc):
+    name = str(name_doc or '').strip()
+    if not name or name in ('.', '..') or '/' in name or '\\' in name or '\x00' in name:
+        raise ValueError('Nombre de documento no valido')
+    return name
+
+
+def _directorio_doc_contrato(proyecto, adj):
+    file_dir = f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{adj}/'
+    return _to_storage_key(file_dir).rstrip('/')
+
+
+def _clave_doc_contrato(proyecto, adj, name_doc):
+    return f'{_directorio_doc_contrato(proyecto, adj)}/{name_doc}.pdf'
+
+
+def _es_copia_generada(canonical_filename, filename):
+    """True para el archivo canonico o el sufijo que agrega el storage si no puede pisar."""
+    if filename == canonical_filename:
+        return True
+    stem, ext = os.path.splitext(canonical_filename)
+    other_stem, other_ext = os.path.splitext(filename)
+    if other_ext.lower() != ext.lower():
+        return False
+    prefix = stem + '_'
+    if not other_stem.startswith(prefix):
+        return False
+    return bool(_COPIA_STORAGE.match(other_stem[len(prefix):]))
+
+
+def _borrar_archivo_contrato(proyecto, adj, descripcion_doc):
+    descripcion_doc = _nombre_doc_seguro(descripcion_doc)
+    directory = _directorio_doc_contrato(proyecto, adj)
+    canonical = f'{descripcion_doc}.pdf'
+    nombres = {canonical}
+    for filename in media_service.list_private_filenames(directory):
+        if _es_copia_generada(canonical, filename):
+            nombres.add(filename)
+    for nombre in nombres:
+        media_service.delete_private(f'{directory}/{nombre}')
+
+
 def upload_docs_contratos(file,adj,proyecto,name_doc):
-    file_dir=f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{adj}/'
-    file_path = f'{file_dir}{name_doc}.pdf'
-    media_service.save_private(_to_storage_key(file_path), file)
+    name_doc = _nombre_doc_seguro(name_doc)
+    _borrar_archivo_contrato(proyecto, adj, name_doc)
+    return media_service.save_private(_clave_doc_contrato(proyecto, adj, name_doc), file)
+
+
+def guardar_documento_contrato(proyecto, adj, descripcion_doc, archivo, usuario):
+    """Guarda el PDF en la ruta del tipo y actualiza la fila. Si ya existia, lo reemplaza."""
+    descripcion_doc = _nombre_doc_seguro(descripcion_doc)
+    upload_docs_contratos(archivo, adj, proyecto, descripcion_doc)
+    qs = sm.documentos_contratos.objects.using(proyecto).filter(
+        adj=adj, descripcion_doc=descripcion_doc,
+    )
+    ahora = datetime.datetime.today()
+    usuario_txt = str(usuario)
+    existente = qs.order_by('id_model').first()
+    if existente:
+        existente.fecha_carga = ahora
+        existente.usuario_carga = usuario_txt
+        existente.save()
+        qs.exclude(pk=existente.pk).delete()
+        return 'reemplazado'
+    sm.documentos_contratos.objects.using(proyecto).create(
+        adj=adj,
+        descripcion_doc=descripcion_doc,
+        fecha_carga=ahora,
+        usuario_carga=usuario_txt,
+    )
+    return 'creado'
+
+
+def eliminar_documento_contrato(proyecto, adj, descripcion_doc):
+    """Borra la fila y el PDF en storage, incluidas copias con sufijo del mismo nombre."""
+    descripcion_doc = _nombre_doc_seguro(descripcion_doc)
+    _borrar_archivo_contrato(proyecto, adj, descripcion_doc)
+    sm.documentos_contratos.objects.using(proyecto).filter(
+        adj=adj, descripcion_doc=descripcion_doc,
+    ).delete()
+
+
+def url_documento_contrato(proyecto, adj, descripcion_doc):
+    descripcion_doc = _nombre_doc_seguro(descripcion_doc)
+    return media_service.url_media(
+        _clave_doc_contrato(proyecto, adj, descripcion_doc),
+        private=True,
+        check_exists=False,
+    )
             
 def upload_docs_radicados(file,tipo,name_doc):
     file_dir=f'{settings.DIR_DOCS}/docs_radicados/{tipo}/'

@@ -117,9 +117,48 @@ def url_media(path, private=True, *, check_exists=True):
     return LocalMediaStorage().url(path)
 
 
+def _private_backends():
+    backends = []
+    if _read_from_s3() or _write_to_s3():
+        backends.append(PrivateMediaStorage())
+    backends.append(LocalMediaStorage())
+    return backends
+
+
 def delete_media(path, private=True):
+    if private:
+        delete_private(path)
+        return
     if _write_to_s3():
-        storage = PrivateMediaStorage() if private else PublicMediaStorage()
+        storage = PublicMediaStorage()
     else:
         storage = LocalMediaStorage()
     storage.delete(path)
+
+
+def delete_private(path):
+    """Quita el objeto en S3 y en disco. Borrar uno que no existe no falla."""
+    for backend in _private_backends():
+        try:
+            backend.delete(path)
+        except Exception:
+            continue
+
+
+def list_private_filenames(directory):
+    """Nombres de archivo (sin ruta) en un directorio privado, S3 y disco."""
+    found = []
+    seen = set()
+    folder = (directory or '').strip().rstrip('/')
+    if not folder:
+        return found
+    for backend in _private_backends():
+        try:
+            _dirs, files = backend.listdir(folder)
+        except Exception:
+            continue
+        for name in files:
+            if name not in seen:
+                seen.add(name)
+                found.append(name)
+    return found

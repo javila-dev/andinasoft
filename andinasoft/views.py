@@ -67,7 +67,10 @@ from andinasoft.certificado_tributario_service import (
 from andinasoft.paz_y_salvo_service import build_paz_y_salvo_context
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
-from andinasoft.handlers_functions import cargar_gastos_informe
+from andinasoft.handlers_functions import (
+    cargar_gastos_informe, guardar_documento_contrato,
+    eliminar_documento_contrato, url_documento_contrato,
+)
 from andinasoft.saldo_favor import (
     plan_tiene_deuda_pendiente,
     registrar_saldo_favor,
@@ -3408,9 +3411,17 @@ def detalle_adjudicacion(request,proyecto,adj):
                                                                 usuario=request.user)
             if request.POST.get('eliminar_docs'):
                 check_perms(request,('andinasoft.delete_documentos_contratos',))
-                doc_eliminar=request.POST.get('docAccion')
-                obj_documento=documentos_contratos.objects.using(proyecto).get(adj=adj,descripcion_doc=doc_eliminar)
-                obj_documento.delete()
+                doc_eliminar=(request.POST.get('docAccion') or '').strip()
+                try:
+                    eliminar_documento_contrato(proyecto, adj, doc_eliminar)
+                except ValueError:
+                    alerta=True
+                    titulo='Error'
+                    mensaje='No se pudo eliminar el documento'
+                else:
+                    alerta=True
+                    titulo='Listo'
+                    mensaje='El documento fue eliminado'
             if request.POST.get('btnVerifPagado'):
                 estado=obj_adj.estado
                 if estado=='Desistido':
@@ -4286,14 +4297,32 @@ def acciones_venta(request,proyecto,contrato):
                     mensaje='La Escala fue modificada de forma correcta'
                     titulo='¡Todo salio a la perfeccion!'
 
-            form_docs=form_docs_contratos(request.POST,request.FILES)
-            if form_docs.is_valid():
-                descrip_doc=f"{form_docs.cleaned_data.get('tipo_doc')}_{datetime.date.today()}"
-                fecha_carga=datetime.datetime.today()
-                usuario_carga=request.user
-                upload_docs_contratos(request.FILES['documento_cargar'],contrato,proyecto,descrip_doc)
-                documentos_contratos.objects.using(proyecto).create(adj=contrato,descripcion_doc=descrip_doc,
-                                                        fecha_carga=fecha_carga,usuario_carga=usuario_carga)
+            if request.POST.get('eliminar_docs'):
+                doc_eliminar=(request.POST.get('docAccion') or '').strip()
+                try:
+                    eliminar_documento_contrato(proyecto, contrato, doc_eliminar)
+                except ValueError:
+                    alerta=True
+                    titulo='Error'
+                    mensaje='No se pudo eliminar el documento'
+                else:
+                    alerta=True
+                    titulo='Listo'
+                    mensaje='El documento fue eliminado'
+            elif request.POST.get('cargar_docs'):
+                form_docs=form_docs_contratos(request.POST,request.FILES)
+                if form_docs.is_valid():
+                    descrip_doc=f"{form_docs.cleaned_data.get('tipo_doc')}_{datetime.date.today()}"
+                    resultado=guardar_documento_contrato(
+                        proyecto, contrato, descrip_doc,
+                        request.FILES['documento_cargar'], request.user,
+                    )
+                    alerta=True
+                    titulo='Listo'
+                    if resultado=='reemplazado':
+                        mensaje='Se reemplazo el documento de este tipo cargado hoy'
+                    else:
+                        mensaje='El documento fue cargado'
                 
         lista_clientes=clientes.objects.using('default').all()
         datos_venta=ventas_nuevas.objects.using(proyecto).get(id_venta=contrato)
@@ -5456,16 +5485,34 @@ def adjudicar_venta(request,proyecto,contrato):
             redireccion=True
             dir_redirect=f'/adjudicaciones/{proyecto}/{adj}'
         
-        form_docs=form_docs_contratos(request.POST,request.FILES)
-        if form_docs.is_valid():
-            descrip_doc=f"{form_docs.cleaned_data.get('tipo_doc')}_{datetime.date.today()}"
-            fecha_carga=datetime.datetime.today()
-            usuario_carga=request.user
-            upload_docs_contratos(request.FILES['documento_cargar'],contrato,proyecto,descrip_doc)
-            documentos_contratos.objects.using(proyecto).create(adj=contrato,descripcion_doc=descrip_doc,
-                                                        fecha_carga=fecha_carga,usuario_carga=usuario_carga)
-            obj_docs=documentos_contratos.objects.using(proyecto).filter(adj=contrato)
-            context['lista_documentos']=obj_docs
+        if request.POST.get('eliminar_docs'):
+            doc_eliminar=(request.POST.get('docAccion') or '').strip()
+            try:
+                eliminar_documento_contrato(proyecto, contrato, doc_eliminar)
+            except ValueError:
+                alerta=True
+                titulo='Error'
+                mensaje='No se pudo eliminar el documento'
+            else:
+                alerta=True
+                titulo='Listo'
+                mensaje='El documento fue eliminado'
+            context['lista_documentos']=documentos_contratos.objects.using(proyecto).filter(adj=contrato)
+        elif request.POST.get('cargar_docs'):
+            form_docs=form_docs_contratos(request.POST,request.FILES)
+            if form_docs.is_valid():
+                descrip_doc=f"{form_docs.cleaned_data.get('tipo_doc')}_{datetime.date.today()}"
+                resultado=guardar_documento_contrato(
+                    proyecto, contrato, descrip_doc,
+                    request.FILES['documento_cargar'], request.user,
+                )
+                alerta=True
+                titulo='Listo'
+                if resultado=='reemplazado':
+                    mensaje='Se reemplazo el documento de este tipo cargado hoy'
+                else:
+                    mensaje='El documento fue cargado'
+                context['lista_documentos']=documentos_contratos.objects.using(proyecto).filter(adj=contrato)
     context['alerta']=alerta
     context['titulo_alerta']=titulo       
     context['mensaje']=mensaje
@@ -9497,21 +9544,30 @@ def acciones_venta_fractal(request):
                 input_name = descrip_doc.lower() + '_upload'
                 documento = request.FILES.get(input_name)
                 
-                doc = documentos_contratos.objects.using(proyecto).filter(
-                    adj=contrato,descripcion_doc=descrip_doc,
-                )
-                
-                if doc.exists(): 
-                    for i in doc: 
-                        doc.delete()
-                                
-                upload_docs_contratos(documento,contrato,proyecto,descrip_doc)
-                documentos_contratos.objects.using(proyecto).create(
-                    adj=contrato,descripcion_doc=descrip_doc,
-                    fecha_carga=datetime.date.today(),usuario_carga=request.user.username
-                )
-                doc_path = f"docs_andinasoft/doc_contratos/{proyecto}/{idventa}/{descrip_doc}.pdf"
-                href = default_storage.url(doc_path)
+                if not documento:
+                    return JsonResponse({
+                        'status': 'error',
+                        'data': {'href': ''},
+                        'message': {
+                            'class': 'error',
+                            'text': 'Selecciona un archivo PDF',
+                        },
+                    }, status=400)
+
+                try:
+                    guardar_documento_contrato(
+                        proyecto, contrato, descrip_doc, documento, request.user,
+                    )
+                    href = url_documento_contrato(proyecto, contrato, descrip_doc)
+                except ValueError:
+                    return JsonResponse({
+                        'status': 'error',
+                        'data': {'href': ''},
+                        'message': {
+                            'class': 'error',
+                            'text': 'No se pudo cargar el documento',
+                        },
+                    }, status=400)
                 data = {
                         'status':'success',
                         'data':{
