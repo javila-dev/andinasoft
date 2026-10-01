@@ -258,7 +258,42 @@ def _openai_vision(
         raise LlmRequestError(f'Respuesta OpenAI vision inesperada: {body!r}') from exc
 
 
-def _gemini_generate(api_key: str, model: str, system: str, user: str, timeout: float = 90.0) -> str:
+def _gemini_generation_config(model: str, thinking_budget):
+    config = {
+        'temperature': 0,
+        'responseMimeType': 'application/json',
+    }
+    name = (model or '').lower()
+    # 2.5 Flash razona antes de responder. En una extracción eso alarga la espera.
+    if thinking_budget is not None and '2.5' in name and 'pro' not in name:
+        config['thinkingConfig'] = {'thinkingBudget': int(thinking_budget)}
+    return config
+
+
+def _gemini_response_text(body) -> str:
+    try:
+        parts = body['candidates'][0]['content']['parts']
+    except (KeyError, IndexError, TypeError) as exc:
+        raise LlmRequestError(f'Respuesta Gemini inesperada: {body!r}') from exc
+    texts = []
+    for part in parts:
+        if not isinstance(part, dict) or part.get('thought'):
+            continue
+        texts.append(part.get('text') or '')
+    text = ''.join(texts).strip()
+    if not text:
+        raise LlmRequestError(f'Respuesta Gemini inesperada: {body!r}')
+    return text
+
+
+def _gemini_generate(
+    api_key: str,
+    model: str,
+    system: str,
+    user: str,
+    timeout: float = 90.0,
+    thinking_budget=None,
+) -> str:
     model_id = model.replace('models/', '') if model.startswith('models/') else model
     url = (
         f'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -267,10 +302,7 @@ def _gemini_generate(api_key: str, model: str, system: str, user: str, timeout: 
     payload = {
         'system_instruction': {'parts': [{'text': system}]},
         'contents': [{'role': 'user', 'parts': [{'text': user}]}],
-        'generationConfig': {
-            'temperature': 0,
-            'responseMimeType': 'application/json',
-        },
+        'generationConfig': _gemini_generation_config(model, thinking_budget),
     }
     try:
         with httpx.Client(timeout=timeout) as client:
@@ -279,12 +311,7 @@ def _gemini_generate(api_key: str, model: str, system: str, user: str, timeout: 
         raise LlmRequestError(f'Error de red Gemini: {exc}') from exc
     if resp.status_code >= 400:
         raise LlmRequestError(f'Gemini HTTP {resp.status_code}: {resp.text[:500]}')
-    body = resp.json()
-    try:
-        parts = body['candidates'][0]['content']['parts']
-        return ''.join(p.get('text', '') for p in parts)
-    except (KeyError, IndexError, TypeError) as exc:
-        raise LlmRequestError(f'Respuesta Gemini inesperada: {body!r}') from exc
+    return _gemini_response_text(resp.json())
 
 
 def _gemini_vision_pdf(
@@ -294,6 +321,7 @@ def _gemini_vision_pdf(
     user: str,
     pdf_bytes: bytes,
     timeout: float = 120.0,
+    thinking_budget=None,
 ) -> str:
     if not pdf_bytes:
         raise LlmRequestError('PDF vacio para Gemini vision.')
@@ -320,10 +348,7 @@ def _gemini_vision_pdf(
                 },
             ],
         }],
-        'generationConfig': {
-            'temperature': 0,
-            'responseMimeType': 'application/json',
-        },
+        'generationConfig': _gemini_generation_config(model, thinking_budget),
     }
     try:
         with httpx.Client(timeout=timeout) as client:
@@ -332,12 +357,7 @@ def _gemini_vision_pdf(
         raise LlmRequestError(f'Error de red Gemini vision: {exc}') from exc
     if resp.status_code >= 400:
         raise LlmRequestError(f'Gemini vision HTTP {resp.status_code}: {resp.text[:500]}')
-    body = resp.json()
-    try:
-        parts = body['candidates'][0]['content']['parts']
-        return ''.join(p.get('text', '') for p in parts)
-    except (KeyError, IndexError, TypeError) as exc:
-        raise LlmRequestError(f'Respuesta Gemini vision inesperada: {body!r}') from exc
+    return _gemini_response_text(resp.json())
 
 
 def _anthropic_messages(api_key: str, model: str, system: str, user: str, timeout: float = 90.0) -> str:
@@ -467,6 +487,7 @@ def extract_json(
     user: str,
     purpose: str = PURPOSE_EXTRACCION_FECHAS,
     config: LlmResolvedConfig | None = None,
+    thinking_budget=None,
 ) -> tuple[dict, LlmResolvedConfig]:
     """Llama al LLM de texto y devuelve (dict_json, config_usada)."""
     cfg = config or resolve_purpose_config(purpose)
@@ -474,7 +495,9 @@ def extract_json(
     if provider == 'openai':
         content = _openai_chat(cfg.api_key, cfg.model, system, user)
     elif provider == 'gemini':
-        content = _gemini_generate(cfg.api_key, cfg.model, system, user)
+        content = _gemini_generate(
+            cfg.api_key, cfg.model, system, user, thinking_budget=thinking_budget,
+        )
     elif provider == 'anthropic':
         content = _anthropic_messages(cfg.api_key, cfg.model, system, user)
     else:
@@ -489,6 +512,7 @@ def extract_json_from_pdf(
     pdf_bytes: bytes,
     purpose: str = PURPOSE_EXTRACCION_FECHAS_ESCANEADO,
     config: LlmResolvedConfig | None = None,
+    thinking_budget=None,
 ) -> tuple[dict, LlmResolvedConfig]:
     """
     Flujo vision para PDF escaneado.
@@ -497,7 +521,9 @@ def extract_json_from_pdf(
     cfg = config or resolve_purpose_config(purpose)
     provider = (cfg.provider or '').lower().strip()
     if provider == 'gemini':
-        content = _gemini_vision_pdf(cfg.api_key, cfg.model, system, user, pdf_bytes)
+        content = _gemini_vision_pdf(
+            cfg.api_key, cfg.model, system, user, pdf_bytes, thinking_budget=thinking_budget,
+        )
     elif provider == 'anthropic':
         content = _anthropic_vision_pdf(cfg.api_key, cfg.model, system, user, pdf_bytes)
     elif provider == 'openai':

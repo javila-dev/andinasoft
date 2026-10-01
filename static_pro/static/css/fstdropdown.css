@@ -1,4 +1,4 @@
-﻿.fstdiv {
+.fstdiv {
     position: relative;
     min-height: 34px;
     width: 100%;
@@ -70,6 +70,26 @@
 
     .fstdropdown.open > .fstlist {
         display: block
+    }
+
+    .fstdropdown > .fst-add-option {
+        display: none;
+        padding: 6px 12px;
+        cursor: pointer;
+        color: #337ab7;
+        font-weight: 600;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e5e5e5;
+        user-select: none;
+    }
+
+    .fstdropdown.open > .fst-add-option {
+        display: block;
+    }
+
+    .fstdropdown > .fst-add-option:hover {
+        background: #337ab7;
+        color: #fff;
     }
 
 .fstlist > div {

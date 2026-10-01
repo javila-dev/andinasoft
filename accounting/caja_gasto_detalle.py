@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import json
-from decimal import Decimal, InvalidOperation
+import re
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.db import transaction
 
@@ -61,16 +62,14 @@ def parse_detalle(lineas_raw, retenciones_raw):
         if not isinstance(row, dict):
             raise DetalleGastoError(f'La línea {index} no tiene un formato válido.')
         base = _decimal(row.get('base'))
-        valor_impuesto = _decimal(row.get('valor_impuesto'))
         if base <= 0:
-            raise DetalleGastoError(f'La línea {index} debe tener una base mayor que cero.')
-        if valor_impuesto < 0:
-            raise DetalleGastoError(f'El impuesto de la línea {index} no puede ser negativo.')
+            raise DetalleGastoError(f'La línea {index} debe tener subtotal.')
         impuesto = _impuesto(impuestos, row.get('impuesto_id'), f'línea {index}')
-        if valor_impuesto > 0 and impuesto is None:
-            raise DetalleGastoError(f'La línea {index} tiene valor de impuesto pero no tiene tipo.')
-        if impuesto is not None and valor_impuesto <= 0:
-            raise DetalleGastoError(f'La línea {index} tiene tipo de impuesto pero el valor es cero.')
+        calculado = valor_impuesto_calculado(base, impuesto)
+        valor_impuesto = (
+            calculado if impuesto is None
+            else _valor_con_tolerancia_redondeo(calculado, row.get('valor_impuesto'))
+        )
         parsed_lineas.append({
             'orden': index,
             'descripcion': str(row.get('descripcion') or '')[:255],
@@ -179,12 +178,51 @@ def catalogo_impuestos_formulario():
     for row in impuestos_legalizacion.objects.filter(activo=True).order_by('descripcion'):
         desc = (row.descripcion or '').strip()
         low = desc.lower()
-        item = {'id': row.pk, 'descripcion': desc}
+        item = {
+            'id': row.pk,
+            'descripcion': desc,
+            'porcentaje': _porcentaje_desde_descripcion(desc),
+        }
         if 'rte' in low or 'rete' in low:
             retentions.append(item)
-        elif 'iva' in low or 'impuesto' in low:
+        elif 'servicio' in low:
+            continue
+        elif 'iva' in low or low.startswith('ico') or low.startswith('icui') or 'impuesto' in low:
             taxes.append(item)
     return {'taxes': taxes, 'retentions': retentions}
+
+
+def _valor_con_tolerancia_redondeo(calculado, posteado):
+    """El IVA incluido puede quedar a $1 del cálculo exclusivo. Se conserva el de la pantalla."""
+    posted = _decimal(posteado).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+    if abs(posted - calculado) <= 1:
+        return posted
+    return calculado
+
+
+def valor_impuesto_calculado(base, impuesto):
+    """El valor del impuesto sale del porcentaje. No se acepta un monto digitado."""
+    if impuesto is None:
+        return Decimal('0')
+    pct = _porcentaje_desde_descripcion(impuesto.descripcion)
+    if pct is None:
+        raise DetalleGastoError(
+            f'El impuesto {impuesto.descripcion} no tiene porcentaje. '
+            'El valor del impuesto se calcula y no se digita.'
+        )
+    tasa = Decimal(str(pct))
+    return (base * tasa / Decimal('100')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+
+
+def _porcentaje_desde_descripcion(desc):
+    """Saca 19 de 'IVA 19%' o 'Impuesto al consumo 8%'. Sin % no hay tasa segura."""
+    match = re.search(r'(\d+(?:[.,]\d+)?)\s*%', desc or '')
+    if not match:
+        return None
+    try:
+        return float(match.group(1).replace(',', '.'))
+    except ValueError:
+        return None
 
 
 def _load_json_list(raw, etiqueta):

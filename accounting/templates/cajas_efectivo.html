@@ -2,15 +2,7 @@
 {%block title%}Tesoreria | Caja efectivo{%endblock%}
 {%block content%}
 <div class='principal-container bg-light shadow-lg rounded pb-2'>
-    <div class="mx-auto" style="width: 160px;">
-        <lord-icon
-            src="https://cdn.lordicon.com/wyqtxzeh.json"
-            trigger="loop"
-            delay="2000"
-            style="width:100px;height:100px">
-        </lord-icon>
-      </div>
-      <h3 class="text-center">Libro de caja</h3>
+      <h3 class="text-center" style="margin-top: 0; padding-top: 1.5rem;">Libro de caja</h3>
       <div class="container mt-3 text-center">
         {%crispy formCaja%}
       </div>
@@ -54,12 +46,11 @@
                 <thead>
                     <tr>
                         <th style="width:10%">Fecha</th>
-                        <th style="width:23%">Tercero</th>
-                        <th style="width:28%">Descripcion</th>
+                        <th style="width:28%">Tercero</th>
                         <th>Concepto</th>
                         <th style="width:8%">Tipo doc.</th>
                         <th style="text-align: right;">Subtotal</th>
-                        <th style="text-align: right;">IVA</th>
+                        <th style="text-align: right;">Impuestos</th>
                         <th style="text-align: right;">Rte</th>
                         <th style="text-align: right;">Total</th>
                         <th style="width:10%">Estado</th>
@@ -67,7 +58,10 @@
                 </thead>
                 <tfoot>
                   <tr>
-                      <th colspan="8" style="text-align: right;">Saldo final</th>
+                      <th colspan="4" style="text-align: right;">Totales</th>
+                      <th style="text-align: right;"></th>
+                      <th style="text-align: right;"></th>
+                      <th style="text-align: right;"></th>
                       <th style="text-align: right;"></th>
                       <th></th>
                   </tr>
@@ -264,10 +258,7 @@
     <a class="dropdown-item dropdown-toggle" href="#" tabindex="-1"><i class="fas fa-pen fa-fw"></i>Editar</a>
     <div class="dropdown-menu ctx-menu-compact">
       <a class="dropdown-item disabled" data-action="editar_gasto" id="editar_gasto" href="#">Gasto completo</a>
-      <a class="dropdown-item disabled" data-action="change_support" id="change_support" href="#">Soporte</a>
-      <a class="dropdown-item disabled" data-action="change_concept" id="change_concept" href="#">Concepto</a>
       <a class="dropdown-item disabled" data-action="change_tipo_doc" id="change_tipo_doc" href="#">Tipo doc.</a>
-      <a class="dropdown-item disabled" data-action="include_taxes" id="include_taxes" href="#">Líneas</a>
     </div>
   </div>
   {% if es_contabilidad %}
@@ -309,8 +300,15 @@
   <a class="dropdown-item disabled text-danger" data-action="eliminar_reemb" id="eliminar_reemb" href="#"><i class="fas fa-trash fa-fw"></i>Eliminar</a>
   {% endif %}
 </div>
+<style>
+  #form-legalizar-anticipo.prefill-locked .fstdropdown,
+  #form-legalizar-anticipo.prefill-locked .custom-file {
+    pointer-events: none;
+    opacity: 0.65;
+  }
+</style>
 <div class="modal fade" id="modalNuevaLegalizacion" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-xl">
       <div class="modal-content">
       <div class="modal-header">
           <h5 class="modal-title" id="modalAnticip">Registrar gasto</h5>
@@ -383,31 +381,6 @@
       </div>
   </div>
 </div>  
-<div class="modal fade" id="modalchangesupport" style="z-index:1070" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
-  <div class="modal-dialog modal-sm">
-      <div class="modal-content">
-      <div class="modal-header">
-          <h5 class="modal-title" id="modalAnticip">Cambiar soporte</h5>
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-          </button>
-      </div>
-      <div class="modal-body">
-        <form method="POST" enctype="multipart/form-data" id="form_change_support">{%csrf_token%}
-          <div class="custom-file">
-            <input type="file" name="nuevo_soporte" class="clearablefileinput custom-file-input" required="" id="id_nuevo_soporte">
-            <label class="custom-file-label" for="nuevo_soporte" data-browse="Buscar">Nuevo soporte</label>
-          </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button id="btn-change-support" class="btn btn-circle btn-success">
-          <i class="fas fa-check"></i>
-        </button>
-      </div>
-      </div>
-  </div>
-</div> 
 <div class="modal fade" id="modalchangeconcept" data-backdrop="static"
   style="z-index:1070" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
   <div class="modal-dialog">
@@ -479,12 +452,11 @@
             <table id="tabla_movimientos_reembolso" style="width: 100%;" class="table table-sm table-hover">
                 <thead>
                     <tr>
-                        <th style="width:10%">Fecha</th>
-                        <th style="width:25%">Tercero</th>
-                        <th style="width:35%">Descripcion</th>
+                        <th style="width:12%">Fecha</th>
+                        <th style="width:32%">Tercero</th>
                         <th style="width:8%">Tipo doc.</th>
                         <th style="text-align: right;">Subtotal</th>
-                        <th style="text-align: right;">IVA</th>
+                        <th style="text-align: right;">Impuestos</th>
                         <th style="text-align: right;">Rte</th>
                         <th style="text-align: right;">Valor</th>
                         <th style="width:10%">Aprobado por</th>
@@ -492,7 +464,10 @@
                 </thead>
                 <tfoot>
                   <tr>
-                      <th colspan="7" style="text-align: right;">Total</th>
+                      <th colspan="3" style="text-align: right;">Totales</th>
+                      <th style="text-align: right;"></th>
+                      <th style="text-align: right;"></th>
+                      <th style="text-align: right;"></th>
                       <th style="text-align: right;"></th>
                       <th></th>
                   </tr>
@@ -633,11 +608,13 @@
     });
   }
 
+  const ES_CONTABILIDAD = {{ es_contabilidad|yesno:"true,false" }};
+
   function setGastoMenuItems(line) {
     const $menu = $('#contextMenuLegal');
     const enable = (sel) => $menu.find(sel).removeClass('disabled');
     const disable = (sel) => $menu.find(sel).addClass('disabled');
-    const allEdit = '#change_support, #change_concept, #change_tipo_doc, #include_taxes';
+    const allEdit = '#change_tipo_doc';
     const contab = '#marcar_revisado, #devolver_gasto';
 
     disable('#approve_gasto, #eliminar_leg, #editar_gasto');
@@ -645,14 +622,15 @@
     disable(contab);
 
     if (line.estado === 'Pendiente') {
-      enable('#approve_gasto, #eliminar_leg');
+      enable('#approve_gasto, #eliminar_leg, #editar_gasto');
       enable(allEdit);
     } else if (line.estado === 'Aprobado') {
-      enable('#change_tipo_doc');
+      enable('#editar_gasto, #change_tipo_doc');
       enable('#marcar_revisado, #devolver_gasto');
     } else if (line.estado === 'Revisado') {
       enable('#change_tipo_doc');
       enable('#devolver_gasto');
+      if (ES_CONTABILIDAD) enable('#editar_gasto');
     } else if (line.estado === 'Devuelto') {
       enable('#editar_gasto');
     } else if (line.estado === 'Reembolso') {
@@ -672,14 +650,15 @@
 
   function fmtMoney(val) {
     if (val == null || val === '') return '—';
-    return '$' + new Intl.NumberFormat('en-EN').format(val);
+    const n = Math.round(Number(val) || 0);
+    return '$' + new Intl.NumberFormat('en-US', {maximumFractionDigits: 0}).format(n);
   }
 
   function showGastoDetalle(line) {
     if (!line || line.tipo !== 'gasto') return;
     const lineasTxt = (line.lineas || []).map(row => {
       const imp = impuestoLabel('taxes', row.impuesto_id);
-      return (row.descripcion || 'Línea') + ' · base ' + fmtMoney(row.base) +
+      return (row.descripcion || 'Línea') + ' · subtotal ' + fmtMoney(row.base) +
         (row.valor_impuesto ? ' · ' + imp + ' ' + fmtMoney(row.valor_impuesto) : '');
     }).join(' | ') || '—';
     const retsTxt = (line.retenciones || []).map(row => {
@@ -695,7 +674,7 @@
       ['Tipo doc. soporte', labelTipoSoporte(line.tipo_documento_soporte)],
       ['Líneas', lineasTxt],
       ['Retenciones', retsTxt],
-      ['Base', fmtMoney(line.subtotal)],
+      ['Subtotal', fmtMoney(line.subtotal)],
       ['Total', fmtMoney(line.valor != null ? Math.abs(line.valor) : null)],
       ['Estado', line.estado || '—'],
       ['Aprobado por', line.usuario_aprueba || '—'],
@@ -711,11 +690,36 @@
   }
 
   function moneyNum(value) {
-    return Number(String(value == null ? '0' : value).replace(/[$,\s]/g, '')) || 0;
+    let text = String(value == null ? '0' : value).replace(/[$\s]/g, '');
+    if (!text) return 0;
+    const lastComma = text.lastIndexOf(',');
+    const lastDot = text.lastIndexOf('.');
+    if (lastComma >= 0 && lastDot >= 0) {
+      text = lastComma > lastDot
+        ? text.replace(/\./g, '').replace(',', '.')
+        : text.replace(/,/g, '');
+    } else if (lastComma >= 0) {
+      const parts = text.split(',');
+      text = parts.every(part => /^\d+$/.test(part)) && parts[parts.length - 1].length === 3
+        ? parts.join('')
+        : text.replace(',', '.');
+    } else if (lastDot >= 0) {
+      const parts = text.split('.');
+      if (parts.every(part => /^\d+$/.test(part))) {
+        if (parts[parts.length - 1].length === 2) {
+          text = parts.slice(0, -1).join('') + '.' + parts[parts.length - 1];
+        } else if (parts[parts.length - 1].length === 3 && parts.slice(1).every(part => part.length === 3)) {
+          text = parts.join('');
+        }
+      }
+    }
+    const n = Number(text);
+    return Number.isFinite(n) ? Math.round(n) : 0;
   }
 
   function fmtInputMoney(value) {
-    return new Intl.NumberFormat('en-EN').format(value || 0);
+    const n = Math.round(Number(value) || 0);
+    return new Intl.NumberFormat('en-US', {maximumFractionDigits: 0}).format(n);
   }
 
   function impuestoLabel(kind, id) {
@@ -736,20 +740,111 @@
     return html;
   }
 
+  function porcentajeImpuesto(id) {
+    if (id == null || id === '') return null;
+    const list = ((window.CAJA_IMPUESTOS || {}).taxes) || [];
+    const found = list.find(row => String(row.id) === String(id));
+    if (!found || found.porcentaje == null || found.porcentaje === '') return null;
+    const pct = Number(found.porcentaje);
+    return Number.isFinite(pct) ? pct : null;
+  }
+
+  function precioIncluyeIva() {
+    return $('#precio-incluye-iva').prop('checked');
+  }
+
+  function syncBotonGuardarGasto() {
+    const boton = document.getElementById('submit-id-registrar-leg');
+    if (!boton || boton.value === 'Cargando...') return;
+    const editando = precioIncluyeIva() && document.activeElement &&
+      document.activeElement.classList.contains('linea-base');
+    boton.disabled = !!editando;
+  }
+
+  function ponerMonto($input, valor) {
+    $input.val(valor ? fmtInputMoney(valor) : '');
+  }
+
+  function recalcLineaImpuesto($tr) {
+    const $iva = $tr.find('.linea-iva');
+    const $total = $tr.find('.linea-total');
+    const $base = $tr.find('.linea-base');
+    const pct = porcentajeImpuesto($tr.find('.linea-imp').val());
+    const typed = moneyNum($base.val());
+    const escribiendo = document.activeElement === $base[0];
+    if (pct == null || pct <= 0) {
+      $tr.data('iva', 0).removeData('base-neta').removeData('bruto');
+      $iva.val('').prop('readonly', true).addClass('bg-light').attr('title', 'Se calcula con el impuesto');
+      ponerMonto($total, typed);
+      return;
+    }
+    let bruto;
+    let neta;
+    let tax;
+    if (precioIncluyeIva()) {
+      const guardado = Number($tr.data('bruto') || 0);
+      const netaGuardada = Number($tr.data('base-neta') || 0);
+      bruto = (!escribiendo && guardado && typed === netaGuardada) ? guardado : typed;
+      tax = Math.round(bruto * pct / (100 + pct));
+      neta = bruto - tax;
+      $tr.data('bruto', bruto);
+      $tr.data('base-neta', neta);
+      if (!escribiendo && typed !== neta) {
+        $tr.data('ajustando', true);
+        $base.val(neta ? fmtInputMoney(neta) : '');
+        $tr.removeData('ajustando');
+      }
+    } else {
+      neta = typed;
+      tax = Math.round(neta * pct / 100);
+      bruto = neta + tax;
+      $tr.removeData('bruto');
+      $tr.removeData('base-neta');
+    }
+    $tr.data('iva', tax);
+    ponerMonto($iva, tax);
+    $iva.prop('readonly', true).addClass('bg-light').attr('title', 'Se calcula con el impuesto');
+    ponerMonto($total, bruto);
+  }
+
+  function baseNetaSiIvaYaIncluido(base, valor, pct) {
+    if (!pct || pct <= 0 || !base || !valor) return null;
+    const exclusivo = Math.round(base * pct / 100);
+    const incluido = Math.round(base * pct / (100 + pct));
+    if (Math.abs(valor - incluido) <= 1 && Math.abs(valor - exclusivo) > 1) return base - incluido;
+    return null;
+  }
+
   function addLineaRow(row) {
     row = row || {};
+    let base = row.base || 0;
+    const ivaLeido = row.valor_impuesto || 0;
+    const pctLinea = porcentajeImpuesto(row.impuesto_id);
+    if (!base && ivaLeido && !pctLinea) base = ivaLeido;
+    if (!precioIncluyeIva()) {
+      const neta = baseNetaSiIvaYaIncluido(base, ivaLeido, pctLinea);
+      if (neta != null) base = neta;
+    }
     const $tr = $('<tr class="linea-gasto"></tr>');
     $tr.append('<td><input type="text" class="form-control form-control-sm linea-desc" value="' +
       $('<div>').text(row.descripcion || '').html() + '"></td>');
     $tr.append('<td><input type="text" class="form-control form-control-sm text-right linea-base" value="' +
-      (row.base ? fmtInputMoney(row.base) : '') + '"></td>');
+      (base ? fmtInputMoney(base) : '') + '"></td>');
     $tr.append('<td><select class="form-control form-control-sm linea-imp">' +
       optionsImpuesto('taxes', row.impuesto_id, 'Sin impuesto') + '</select></td>');
-    $tr.append('<td><input type="text" class="form-control form-control-sm text-right linea-valor" value="' +
-      (row.valor_impuesto ? fmtInputMoney(row.valor_impuesto) : '') + '"></td>');
-    $tr.append('<td><button type="button" class="btn btn-sm btn-link text-danger btn-quitar-fila" title="Quitar">&times;</button></td>');
+    $tr.append('<td><input type="text" class="form-control form-control-sm text-right linea-iva bg-light" readonly tabindex="-1" value="" title="Se calcula con el impuesto"></td>');
+    $tr.append('<td><input type="text" class="form-control form-control-sm text-right linea-total bg-light" readonly value=""></td>');
+    $tr.append('<td class="p-0 text-center align-middle"><button type="button" class="btn btn-link text-danger btn-quitar-fila p-0" title="Quitar">&times;</button></td>');
+    if (precioIncluyeIva() && row.bruto && base && Number(row.bruto) > Number(base)) {
+      const taxIncl = pctLinea ? Math.round(Number(row.bruto) * pctLinea / (100 + pctLinea)) : 0;
+      if (!pctLinea || Math.abs(Number(row.bruto) - Number(base) - taxIncl) <= 1) {
+        $tr.data('bruto', Number(row.bruto));
+        $tr.data('base-neta', Number(base));
+      }
+    }
     $('#tabla-lineas-gasto tbody').append($tr);
-    if ($.fn.mask) $tr.find('.linea-base, .linea-valor').mask('#,##0', {reverse: true});
+    if ($.fn.mask) $tr.find('.linea-base').mask('#,##0', {reverse: true});
+    recalcLineaImpuesto($tr);
   }
 
   function addRetencionRow(row) {
@@ -769,11 +864,13 @@
   function collectGastoDetalle() {
     const lineas = [];
     $('#tabla-lineas-gasto tbody tr').each(function() {
-      const base = moneyNum($(this).find('.linea-base').val());
-      const valor = moneyNum($(this).find('.linea-valor').val());
+      const typed = moneyNum($(this).find('.linea-base').val());
+      const neta = $(this).data('base-neta');
+      const base = precioIncluyeIva() && neta != null ? Number(neta) : typed;
+      const valor = Number($(this).data('iva') || 0);
       const desc = ($(this).find('.linea-desc').val() || '').trim();
       const impuesto = $(this).find('.linea-imp').val() || null;
-      if (!base && !valor && !desc && !impuesto) return;
+      if (!base && !valor && !desc && !impuesto && !typed) return;
       lineas.push({
         descripcion: desc,
         base: base,
@@ -817,14 +914,20 @@
   }
 
   function syncGastoDetalleInputs() {
+    $('#tabla-lineas-gasto tbody tr').each(function() {
+      recalcLineaImpuesto($(this));
+    });
     const detalle = collectGastoDetalle();
     $('#id_lineas_json').val(JSON.stringify(detalle.lineas));
     $('#id_retenciones_json').val(JSON.stringify(detalle.retenciones));
     const resumen = gastoDetalleResumen();
     const pagado = moneyNum($('#id_valor').val());
     const ok = Math.abs(pagado - resumen.total) <= 1;
+    $('#sum-subtotal').text(fmtMoney(resumen.base));
+    $('#sum-iva').text(fmtMoney(resumen.impuestos));
+    $('#sum-total').text(fmtMoney(resumen.base + resumen.impuestos));
     $('#gasto-totales-resumen').html(
-      'Base ' + fmtMoney(resumen.base) +
+      'Subtotal ' + fmtMoney(resumen.base) +
       ' + impuestos ' + fmtMoney(resumen.impuestos) +
       ' − retenciones ' + fmtMoney(resumen.rete) +
       ' = <strong>' + fmtMoney(resumen.total) + '</strong>' +
@@ -834,7 +937,18 @@
     return resumen;
   }
 
-  function fillGastoDetalle(lineas, retenciones) {
+  function setNitTercero(id) {
+    const select = document.querySelector('#id_nit_tercero');
+    if (!select) return;
+    select.value = id == null ? '' : String(id);
+    if (select.fstdropdown) select.fstdropdown.rebind();
+  }
+
+  function fillGastoDetalle(lineas, retenciones, opciones) {
+    opciones = opciones || {};
+    if (opciones.precioIncluyeIva != null) {
+      $('#precio-incluye-iva').prop('checked', !!opciones.precioIncluyeIva);
+    }
     $('#tabla-lineas-gasto tbody').empty();
     $('#tabla-rte-gasto tbody').empty();
     (lineas || []).forEach(addLineaRow);
@@ -843,10 +957,46 @@
     syncGastoDetalleInputs();
   }
 
+  function setGastoCamposLectura(bloqueado) {
+    const $form = $('#form-legalizar-anticipo');
+    if (!$form.length) return;
+    const nit = document.querySelector('#id_nit_tercero');
+    if (bloqueado) {
+      $form.addClass('prefill-locked');
+      $form.find('input, select, textarea, button').each(function() {
+        const $el = $(this);
+        if ($el.attr('type') === 'hidden' || $el.is('#id_soporte') || $el.data('prefill-lock')) return;
+        $el.data('prefill-lock', {
+          readonly: $el.prop('readonly'),
+          disabled: $el.prop('disabled'),
+        });
+        if ($el.is('select, button, :checkbox, :file') || $el.attr('type') === 'date') {
+          $el.prop('disabled', true);
+        } else {
+          $el.prop('readonly', true);
+        }
+      });
+    } else {
+      $form.removeClass('prefill-locked');
+      $form.find('input, select, textarea, button').each(function() {
+        const prev = $(this).data('prefill-lock');
+        if (!prev) return;
+        $(this).prop('readonly', prev.readonly);
+        $(this).prop('disabled', prev.disabled);
+        $(this).removeData('prefill-lock');
+      });
+    }
+    if (nit && nit.fstdropdown && nit.fstdropdown.dd) {
+      nit.fstdropdown.dd.style.pointerEvents = bloqueado ? 'none' : '';
+      nit.fstdropdown.dd.style.opacity = bloqueado ? '0.65' : '';
+    }
+  }
+
   function resetGastoModalCreateMode() {
+    setGastoCamposLectura(false);
     $('#id_gasto_edit').val('');
     $('#modalAnticip').text('Registrar gasto');
-    $('#submit-id-registrar-leg').val('Registrar').removeClass('disabled');
+    $('#submit-id-registrar-leg').val('Registrar').removeClass('disabled').prop('disabled', false);
     $('#id_soporte').prop('required', true);
     $('#prefill-status').text('');
     window.CAJA_SKIP_PREFILL = true;
@@ -877,6 +1027,7 @@
     $('#id_concepto').val(line.concepto_id || '');
     $('#id_tipo_documento_soporte').val(line.tipo_documento_soporte || '');
     $('#id_descripcion').val(line.descripcion || '');
+    $('#precio-incluye-iva').prop('checked', false);
     fillGastoDetalle(line.lineas || [], line.retenciones || []);
     if (window.bsCustomFileInput && typeof window.bsCustomFileInput.init === 'function') {
       window.bsCustomFileInput.init();
@@ -994,7 +1145,6 @@
           columns:[
               {'data':'fecha'},
               {'data':'tercero'},
-              {'data':'descripcion'},
               {'data':'concepto'},
               {'data':'tipo_documento_soporte',
                render: function(data, type) {
@@ -1012,30 +1162,29 @@
               {'data':'estado'},
           ],
           columnDefs: [
-              {targets: [5,6,7,8],type: 'num-fmt'},
+              {targets: [4,5,6,7],type: 'num-fmt'},
               {targets:[1,2],"className":"dt-body-left"},
-              {targets:[4],"className":"dt-body-center text-nowrap"},
-              {targets:[5,6,7,8],"className":"dt-body-right"},
+              {targets:[3],"className":"dt-body-center text-nowrap"},
+              {targets:[4,5,6,7],"className":"dt-body-right"},
               { type: 'date-uk', targets: 0 },
           ],
+          createdRow: function (row, data) {
+            const texto = (data && data.descripcion || '').trim();
+            if (texto) row.setAttribute('title', texto);
+          },
           order: [[ 0, "asc" ]],
           footerCallback: function (row, data, start, end, display) {
             var api = this.api();
-
-            // Remove the formatting to get integer data for summation
             var intVal = function (i) {
                 return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
             };
-
-            // Total over all pages
-            var columnData = api.column(8).data();
-            total = columnData.length > 0 ? columnData.reduce(function (a, b) {
+            [4, 5, 6, 7].forEach(function (col) {
+              var columnData = api.column(col).data();
+              var total = columnData.length > 0 ? columnData.reduce(function (a, b) {
                 return intVal(a) + intVal(b);
-            }, 0) : 0;
-
-            fmt_total = new Intl.NumberFormat('en-EN').format(total)
-            // Update footer
-            $(api.column(8).footer()).html('$' + fmt_total );
+              }, 0) : 0;
+              $(api.column(col).footer()).html('$' + new Intl.NumberFormat('en-US').format(Math.round(total)));
+            });
         }
       })
     var tabla_movimientos_reemb = $("#tabla_movimientos_reembolso").DataTable({
@@ -1056,7 +1205,6 @@
           columns:[
               {'data':'fecha'},
               {'data':'tercero'},
-              {'data':'descripcion'},
               {'data':'tipo_documento_soporte',
                render: function(data, type) {
                  if (type === 'sort' || type === 'type') return data || '';
@@ -1073,30 +1221,29 @@
               {'data':'usuario_aprueba'},
           ],
           columnDefs: [
-              {targets: [4,5,6,7],type: 'num-fmt'},
-              {targets:[1,2],"className":"dt-body-left"},
-              {targets:[3],"className":"dt-body-center text-nowrap"},
-              {targets:[4,5,6,7],"className":"dt-body-right"},
+              {targets: [3,4,5,6],type: 'num-fmt'},
+              {targets:[1],"className":"dt-body-left"},
+              {targets:[2],"className":"dt-body-center text-nowrap"},
+              {targets:[3,4,5,6],"className":"dt-body-right"},
               { type: 'date-uk', targets: 0 },
           ],
+          createdRow: function (row, data) {
+            const texto = (data && data.descripcion || '').trim();
+            if (texto) row.setAttribute('title', texto);
+          },
           order: [[ 0, "asc" ]],
           footerCallback: function (row, data, start, end, display) {
             var api = this.api();
-
-            // Remove the formatting to get integer data for summation
             var intVal = function (i) {
                 return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
             };
-
-            // Total over all pages
-            var columnData = api.column(7).data();
-            total = columnData.length > 0 ? columnData.reduce(function (a, b) {
+            [3, 4, 5, 6].forEach(function (col) {
+              var columnData = api.column(col).data();
+              var total = columnData.length > 0 ? columnData.reduce(function (a, b) {
                 return intVal(a) + intVal(b);
-            }, 0) : 0;
-
-            fmt_total = new Intl.NumberFormat('en-EN').format(total)
-            // Update footer
-            $(api.column(7).footer()).html('$' + fmt_total );
+              }, 0) : 0;
+              $(api.column(col).footer()).html('$' + new Intl.NumberFormat('en-US').format(Math.round(total)));
+            });
         }
       })
     var tabla_reembolsos = $("#tabla_reembolsos").DataTable({
@@ -1326,10 +1473,6 @@
             window.open(ruta,'Soporte idenficacion proveedor',params)
             break;    
 
-          case "change_concept":
-            $('#modalchangeconcept').modal('show')
-            break;
-
           case "change_tipo_doc":
             {
               const actual = line.tipo_documento_soporte || ''
@@ -1362,10 +1505,6 @@
             }
             break;
             
-          case "include_taxes":
-            openEditarGastoDevuelto(line);
-            break;
-
           case 'eliminar_leg':
           if (line.estado!='Pendiente'){
             $('#alert-title').text('Andinasoft dice:')
@@ -1409,10 +1548,6 @@
               })
           }
               break;
-          
-          case "change_support":
-            $('#modalchangesupport').modal('show')
-            break;
           
           case "approve_gasto":
             if (line.estado!='Pendiente'){
@@ -1718,7 +1853,12 @@
     })
     $('#form-legalizar-anticipo').submit(function(e){
       e.preventDefault();
+      const activo = document.activeElement;
+      if (activo && $(activo).is('#tabla-lineas-gasto .linea-base')) {
+        activo.blur();
+      }
       const resumen = syncGastoDetalleInputs();
+      syncBotonGuardarGasto();
       let data = new FormData(this);
       let caja = $('#id_caja').val()
       let fechaGasto = $('#id_fecha').val()
@@ -1742,6 +1882,12 @@
         $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
         return;
       }
+      if (resumen.lineas.some(row => !row.base || row.base <= 0)) {
+        $('#alert-title').text('Andinasoft dice:')
+        $('#alert-data').text('Cada línea debe tener subtotal.')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
       let valorGasto = moneyNum($('#id_valor').val())
       if (Math.abs(valorGasto - resumen.total) > 1) {
         $('#alert-title').text('Andinasoft dice:')
@@ -1750,6 +1896,12 @@
         return;
       }
       const tipoSoporte = ($('#id_tipo_documento_soporte').val() || '').trim()
+      if (!tipoSoporte) {
+        $('#alert-title').text('Andinasoft dice:')
+        $('#alert-data').text('Selecciona el tipo de soporte.')
+        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
+        return;
+      }
       const nitTercero = $('#id_nit_tercero').val()
       if (tipoSoporte === 'cuenta_cobro' && terceroEsPersonaJuridica(nitTercero)) {
         alertCuentaCobroPersonaJuridica()
@@ -1803,9 +1955,9 @@
           },
           complete: (xhr) => {
             if ($('#id_gasto_edit').val()) {
-              $('#submit-id-registrar-leg').removeClass('disabled').val('Guardar')
+              $('#submit-id-registrar-leg').removeClass('disabled').prop('disabled', false).val('Guardar')
             } else {
-              $('#submit-id-registrar-leg').removeClass('disabled').val('Registrar')
+              $('#submit-id-registrar-leg').removeClass('disabled').prop('disabled', false).val('Registrar')
             }
           }
         })
@@ -1815,6 +1967,10 @@
     $('#modalNuevaLegalizacion').on('hidden.bs.modal', function(){
       resetGastoModalCreateMode()
     })
+    $('#precio-incluye-iva').on('change', function(){
+      syncGastoDetalleInputs();
+      syncBotonGuardarGasto();
+    })
     $('#btn-add-linea').on('click', function(){ addLineaRow(); syncGastoDetalleInputs(); })
     $('#btn-add-rte').on('click', function(){ addRetencionRow(); syncGastoDetalleInputs(); })
     $(document).on('click', '#gasto-detalle-block .btn-quitar-fila', function(){
@@ -1823,12 +1979,38 @@
       syncGastoDetalleInputs();
     })
     $(document).on('input change', '#tabla-lineas-gasto input, #tabla-lineas-gasto select, #tabla-rte-gasto input, #tabla-rte-gasto select, #id_valor', function(){
+      if ($(this).closest('tr').data('ajustando')) return;
       syncGastoDetalleInputs();
     })
-    $('#id_soporte').on('change', function(){
-      if (window.CAJA_SKIP_PREFILL) return;
-      const file = this.files && this.files[0];
-      if (!file) return;
+    $(document).on('focusin', '#tabla-lineas-gasto .linea-base', function(){
+      syncBotonGuardarGasto();
+    })
+    $(document).on('blur', '#tabla-lineas-gasto .linea-base', function(){
+      if ($(this).closest('tr').data('ajustando')) return;
+      syncGastoDetalleInputs();
+      const boton = document.getElementById('submit-id-registrar-leg');
+      if (boton && boton.value !== 'Cargando...') boton.disabled = false;
+    })
+    document.addEventListener('pointerdown', function(e) {
+      const btn = document.getElementById('submit-id-registrar-leg');
+      if (!btn || !btn.disabled) return;
+      const rect = btn.getBoundingClientRect();
+      const dentro = e.clientX >= rect.left && e.clientX <= rect.right &&
+        e.clientY >= rect.top && e.clientY <= rect.bottom;
+      if (!dentro) return;
+      const activo = document.activeElement;
+      if (!activo || !activo.classList.contains('linea-base')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      activo.blur();
+      btn.disabled = false;
+      btn.click();
+    }, true);
+    function leerPdfGasto(file) {
+      if (!file) {
+        $('#prefill-status').text('Carga primero el PDF.');
+        return;
+      }
       const yaHayLineas = gastoDetalleResumen().lineas.some(row => row.base || row.valor_impuesto || row.descripcion);
       if (yaHayLineas && !confirm('¿Reemplazar las líneas con lo que se lea del PDF?')) return;
       const fd = new FormData();
@@ -1836,6 +2018,8 @@
       fd.append('soporte', file);
       fd.append('csrfmiddlewaretoken', $('#form-legalizar-anticipo input[name=csrfmiddlewaretoken]').val());
       $('#prefill-status').text('Leyendo el PDF…');
+      $('#btn-analizar-pdf').html('<i class="fas fa-spinner fa-pulse"></i>');
+      setGastoCamposLectura(true);
       $.ajax({
         type: 'POST',
         url: '/accounting/cajasefectivo',
@@ -1851,21 +2035,32 @@
           if (xhr.fecha) $('#id_fecha').val(xhr.fecha);
           if (xhr.descripcion) $('#id_descripcion').val(xhr.descripcion);
           if (xhr.total) $('#id_valor').val(fmtInputMoney(xhr.total));
-          if (xhr.tercero_id) {
-            $('#id_nit_tercero').val(xhr.tercero_id);
-            if (document.querySelector('#id_nit_tercero') && document.querySelector('#id_nit_tercero').fstdropdown) {
-              document.querySelector('#id_nit_tercero').fstdropdown.rebind();
-            }
-          }
-          fillGastoDetalle(xhr.lineas || [], xhr.retenciones || []);
+          if (xhr.tercero_id) setNitTercero(xhr.tercero_id);
+          fillGastoDetalle(xhr.lineas || [], xhr.retenciones || [], {
+            precioIncluyeIva: !!xhr.precio_incluye_iva,
+          });
           const aviso = xhr.aviso || 'Revisa los datos leídos del PDF antes de guardar.';
-          const extra = xhr.tercero_id ? '' : (xhr.nit ? ' No encontré el tercero ' + xhr.nit + '.' : '');
+          let extra = '';
+          if (xhr.tercero_id) {
+            extra = ' Tercero: ' + (xhr.tercero_nombre || xhr.tercero_id) + '.';
+          } else if (xhr.nit) {
+            const quien = xhr.nombre ? xhr.nombre + ' (' + xhr.nit + ')' : xhr.nit;
+            extra = ' No encontré el tercero ' + quien + '. Créalo con + si hace falta.';
+          }
           $('#prefill-status').text(aviso + extra);
         },
         error: function(){
           $('#prefill-status').text('No se pudo leer el PDF. Completa la tabla a mano.');
+        },
+        complete: function(){
+          setGastoCamposLectura(false);
+          $('#btn-analizar-pdf').html('<i class="fas fa-wand-magic-sparkles"></i>');
         }
       });
+    }
+    $('#btn-analizar-pdf').on('click', function(){
+      const input = document.getElementById('id_soporte');
+      leerPdfGasto(input && input.files && input.files[0]);
     })
     $('#form-partners').submit(function(e){
       e.preventDefault();
@@ -1885,7 +2080,7 @@
           $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
           if (xhr.status_response == 'success') {
             $("#modalcreatepartner").modal('hide')
-            $("#id_nit_tercero").append(`<option value="${xhr.partner.idTercero}">${xhr.partner.full_name}</option>`)
+            $("#id_nit_tercero").append(`<option value="${xhr.partner.idTercero}">${xhr.partner.idTercero} — ${xhr.partner.full_name}</option>`)
             document.querySelector("#id_nit_tercero").fstdropdown.rebind()
             if (xhr.partner.es_persona_juridica) {
               partnersJuridicaIds.add(String(xhr.partner.idTercero))
@@ -2047,9 +2242,8 @@
                 }
             })
         })
-    $("#btn-open-add-partner").click(function(e){
-      /* $("#modalNuevaLegalizacion").modal('hide') */
-      $("#modalcreatepartner").modal('show')
+    $('#id_nit_tercero').on('fstadd', function(){
+      $('#modalcreatepartner').modal('show')
     })
     $('#btn-change-concept').click(function(e){
         let row = tabla_movimientos.row('.selected').data()
@@ -2086,43 +2280,6 @@
             },
         })
       })
-    $('#btn-change-support').click(function(e){
-      let row = tabla_movimientos.row('.selected').data()
-      let new_support = $('#id_nuevo_soporte').val()
-      if (new_support == ""){
-      $('#alert-title').text('Andinasoft dice:')
-        $('#alert-data').text('Debes cargar un archivo PDF.')
-        $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-        return;
-      }
-      $(this).addClass('disabled')
-          .html('<i class="fas fa-spinner fa-pulse">')
-      
-      let data = new FormData($('#form_change_support')[0])
-      data.append('to_do','change_support_gasto')
-      data.append('gasto',row.pk)
-
-
-      $.ajax({
-          type:'POST',
-          url:'/accounting/cajasefectivo',
-          data:data,
-          contentType: false,
-          processData: false,
-          success: (xhr) => {
-              $('#alert-data').text('')
-              $('#alert-title').text('Andinasoft dice:')
-              $('#alert-data').html(xhr.msj)
-              $('#general-right-alert').toggleClass('show').toggleClass(xhr.class)
-              tabla_movimientos.ajax.reload()
-              $('#modalchangesupport').modal('hide')
-          },
-          complete: (xhr) => {
-              $('#btn-change-support').html('<i class="fas fa-check"></i>')
-              .removeClass('disabled')
-          },
-      })
-    })
     $('#btn-solicitar-reemb').click(function(){
       $(this).addClass('disabled').html('<i class="fas fa-spinner fa-pulse">')
       let data = {

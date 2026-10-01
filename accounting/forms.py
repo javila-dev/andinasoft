@@ -910,6 +910,13 @@ class form_solicitar_anticipos(forms.Form):
             Submit('btn-solicitar','Solicitar',css_class='btn-info float-right')
         )
 
+class NitPartnerChoiceField(forms.ModelChoiceField):
+    """El valor es el NIT. La búsqueda del desplegable usa ese valor, no el nombre."""
+
+    def label_from_instance(self, obj):
+        return f'{obj.pk} — {obj.nombre_completo()}'
+
+
 class form_legalizar_anticipo(forms.Form):
     fecha = forms.DateField(
         input_formats=['%Y-%m-%d'],
@@ -919,15 +926,24 @@ class form_legalizar_anticipo(forms.Form):
         )
     )
     descripcion = forms.CharField(max_length=255, widget=forms.Textarea({'rows':3}))
-    nit_tercero = forms.ModelChoiceField(Partners.objects.all().order_by('nombres'), empty_label="Selecciona...")
-    valor = forms.CharField(max_length=255)
+    nit_tercero = NitPartnerChoiceField(
+        Partners.objects.exclude(pk='0').order_by('pk'),
+        empty_label="Selecciona...",
+        label='NIT tercero',
+        widget=forms.Select(attrs={
+            'data-search': 'nit',
+            'data-placeholder': 'Buscar por NIT',
+            'data-add-option': 'Agregar tercero',
+        }),
+    )
+    valor = forms.CharField(max_length=255, label='Valor pagado')
     # Required enforced in view for create; optional when editing Devuelto.
-    soporte = forms.FileField(required=False)
+    soporte = forms.FileField(required=False, label='Selecciona el PDF')
     concepto = forms.ModelChoiceField(conceptos_legalizacion.objects.filter(activo=True),
                                       empty_label="Seleciona...")
     tipo_documento_soporte = forms.ChoiceField(
         choices=gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES,
-        required=False,
+        required=True,
         label='Tipo de soporte',
     )
 
@@ -939,34 +955,58 @@ class form_legalizar_anticipo(forms.Form):
             HTML('<input type="hidden" name="id_gasto" id="id_gasto_edit" value="">'),
             HTML('<div class="card" id="leg_block"><div class="card-body">'),
             Row(
-                Column(Field('fecha'),
-                   css_class='col-md-6'), 
-                Column(PrependedText('valor','$',css_class='text-center money'),
-                   css_class='col-md-6'),    
+                Column(
+                    HTML('<label class="d-block">Soporte</label>'),
+                    HTML('<div class="d-flex align-items-center">'),
+                    HTML('<div class="flex-grow-1" style="min-width:0">'),
+                    customfields.filepicker('soporte'),
+                    HTML('</div>'),
+                    HTML(
+                        '<button type="button" class="btn btn-outline-primary ml-2" '
+                        'id="btn-analizar-pdf" title="Analizar el PDF con IA">'
+                        '<i class="fas fa-wand-magic-sparkles"></i>'
+                        '</button>'
+                    ),
+                    HTML('</div>'),
+                    css_class='col-md-8',
+                ),
+                Column(Field('tipo_documento_soporte'), css_class='col-md-4'),
             ),
+            HTML('<div id="prefill-status" class="small text-muted mb-2"></div>'),
             Row(
-                Column(Field('nit_tercero', css_class='fstdropdown-select'),
-                   css_class='col-md-10'),
-                Column(StrictButton('+',id='btn-open-add-partner',css_class='btn-circle btn-primary ml-3 mt-4'),
-                   css_class='col-md-2'),    
-            ),     
-            customfields.customSelectField('concepto'),
-            Field('tipo_documento_soporte'),
+                Column(Field('nit_tercero', css_class='fstdropdown-select'), css_class='col-md-4'),
+                Column(Field('fecha'), css_class='col-md-2'),
+                Column(PrependedText('valor', '$', css_class='text-center money'), css_class='col-md-2'),
+                Column(Field('concepto'), css_class='col-md-4'),
+            ),
             Field('descripcion'),
-            customfields.filepicker('soporte'),
             HTML(
                 '<div class="mt-3" id="gasto-detalle-block">'
-                '<div id="prefill-status" class="small text-muted mb-2"></div>'
                 '<div class="d-flex justify-content-between align-items-center mb-1">'
                 '<strong>Líneas de la factura</strong>'
                 '<button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-linea">'
                 'Agregar línea</button></div>'
+                '<label class="small d-block mb-2">'
+                '<input type="checkbox" id="precio-incluye-iva"> '
+                'El valor de la línea es el total (IVA incluido). '
+                'Con esto, en todas las líneas se calcula el subtotal a partir de ese total y del impuesto.'
+                '</label>'
                 '<div class="table-responsive">'
-                '<table class="table table-sm mb-2" id="tabla-lineas-gasto">'
+                '<table class="table table-sm mb-2" id="tabla-lineas-gasto" style="table-layout:fixed">'
                 '<thead><tr>'
-                '<th>Descripción</th><th style="width:7rem">Base</th>'
-                '<th style="width:11rem">Impuesto</th><th style="width:7rem">Valor</th><th></th>'
-                '</tr></thead><tbody></tbody></table></div>'
+                '<th style="width:40%">Descripción</th>'
+                '<th class="text-right" style="width:14%">Subtotal</th>'
+                '<th style="width:18%">Impuesto</th>'
+                '<th class="text-right" style="width:13%">Valor impuesto</th>'
+                '<th class="text-right" style="width:13%">Total</th>'
+                '<th style="width:1.75rem"></th>'
+                '</tr></thead><tbody></tbody>'
+                '<tfoot><tr class="font-weight-bold" style="font-size:1.05rem">'
+                '<td>Totales</td>'
+                '<td class="text-right" id="sum-subtotal"></td><td></td>'
+                '<td class="text-right" id="sum-iva"></td>'
+                '<td class="text-right" id="sum-total"></td><td></td>'
+                '</tr></tfoot></table></div>'
                 '<div class="d-flex justify-content-between align-items-center mb-1 mt-2">'
                 '<strong>Retenciones del documento</strong>'
                 '<button type="button" class="btn btn-sm btn-outline-secondary" id="btn-add-rte">'
@@ -977,7 +1017,7 @@ class form_legalizar_anticipo(forms.Form):
                 '<th>Tipo</th><th style="width:7rem">Valor</th>'
                 '<th style="width:6rem">Asumida</th><th></th>'
                 '</tr></thead><tbody></tbody></table></div>'
-                '<div class="border rounded p-2 bg-light small" id="gasto-totales-resumen"></div>'
+                '<div class="border rounded p-2 bg-light" id="gasto-totales-resumen" style="font-size:1rem"></div>'
                 '<input type="hidden" name="lineas_json" id="id_lineas_json" value="[]">'
                 '<input type="hidden" name="retenciones_json" id="id_retenciones_json" value="[]">'
                 '</div>'

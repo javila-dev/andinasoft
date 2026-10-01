@@ -35,6 +35,18 @@ function setFstDropdown() {
             selectAll.type = "button";
             selectAll.selected = false;
         }
+        var addLabel = select.dataset.addOption;
+        if (addLabel) {
+            var addEl = createFstElement("div", "fst-add-option", dropdown, null);
+            addEl.textContent = addLabel;
+            addEl.addEventListener("click", function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                dropdown.classList.remove("open");
+                if (dropdown.parentNode) dropdown.parentNode.classList.remove("open");
+                select.dispatchEvent(new CustomEvent("fstadd", { bubbles: true }));
+            });
+        }
         createFstElement("div", "fstlist", dropdown, null);
         select.fstdropdown = { dd: dropdown, rebind: function () { rebindDropdown(select); }, setValue: function(value){setValue(dropdown, value)} };
         rebindDropdown(select);
@@ -150,13 +162,23 @@ function setFstDropdown() {
             window.clipboardData.getData("Text") : event.clipboardData.getData("text/plain");
         var val = event.type != "paste" ? event.target.value : pasteText;
         var dd = event.target.closest(".fstdropdown");
+        var byNit = dd.select && dd.select.dataset.search === "nit";
+        var needle = val.trim().toLowerCase();
+        var nitNeedle = needle.replace(/\D/g, "");
         var ddList = dd.querySelectorAll(".fstlist>div");
-        for (var div in ddList)
-            if (ddList.hasOwnProperty(div))
-                if (ddList[div].textContent.trim().toLowerCase().indexOf(val.trim().toLowerCase()) != -1)
-                    ddList[div].classList.remove("hideFst");
-                else
-                    ddList[div].classList.add("hideFst");
+        for (var div in ddList) {
+            if (!ddList.hasOwnProperty(div)) continue;
+            var show;
+            if (!needle) show = true;
+            else if (byNit) {
+                var nit = (ddList[div].dataset.value || "").replace(/\D/g, "");
+                show = nitNeedle.length > 0 && nit.indexOf(nitNeedle) !== -1;
+            } else {
+                show = ddList[div].textContent.trim().toLowerCase().indexOf(needle) !== -1;
+            }
+            if (show) ddList[div].classList.remove("hideFst");
+            else ddList[div].classList.add("hideFst");
+        }
     }
 
     function createFstElement(type, className, parent, eventListener) {

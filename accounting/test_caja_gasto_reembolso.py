@@ -3,10 +3,11 @@
 Tras corregir y re-aprobar (o revisar a mano) debe volver a estado Reembolso,
 no quedarse en Aprobado bloqueado por el FK.
 """
+import json
 from datetime import date
 from types import SimpleNamespace
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, SimpleTestCase, TestCase
 
@@ -103,8 +104,29 @@ class CajaGastoReembolsoViewTests(TestCase):
             reembolso=self.reembolso,
             estado_antes_devolver=gastos_caja.ESTADO_REEMBOLSO,
         )
+        self.contabilidad = User.objects.create_user('caja_cont', password='x')
+        Group.objects.get_or_create(name='Contabilidad')[0].user_set.add(self.contabilidad)
         self.client = Client()
         self.client.force_login(self.admin)
+
+    def _editar(self, descripcion='GASTO EDITADO'):
+        return self._post({
+            'to_do': 'editar_gasto_devuelto',
+            'id_gasto': self.gasto.pk,
+            'fecha': date.today().isoformat(),
+            'descripcion': descripcion,
+            'nit_tercero': self.tercero.pk,
+            'valor': '50000',
+            'concepto': self.concepto.pk,
+            'tipo_documento_soporte': 'fe',
+            'lineas_json': json.dumps([{
+                'descripcion': 'Papel',
+                'base': 50000,
+                'impuesto_id': None,
+                'valor_impuesto': 999,
+            }]),
+            'retenciones_json': '[]',
+        })
 
     def _post(self, data):
         return self.client.post(
@@ -134,6 +156,40 @@ class CajaGastoReembolsoViewTests(TestCase):
         self.gasto.refresh_from_db()
         self.assertEqual(self.gasto.estado, gastos_caja.ESTADO_REEMBOLSO)
         self.assertEqual(self.gasto.reembolso_id, self.reembolso.pk)
+
+    def test_responsable_no_edita_gasto_revisado(self):
+        self.gasto.reembolso = None
+        self.gasto.estado = gastos_caja.ESTADO_REVISADO
+        self.gasto.save(update_fields=['reembolso', 'estado'])
+        self.client.force_login(self.responsable)
+        resp = self._editar()
+        self.assertEqual(resp.json()['class'], 'alert-danger')
+        self.assertIn('Contabilidad', resp.json()['msj'])
+        self.gasto.refresh_from_db()
+        self.assertEqual(self.gasto.estado, gastos_caja.ESTADO_REVISADO)
+        self.assertEqual(self.gasto.descripcion, 'GASTO TEST REEMBOLSO')
+
+    def test_contabilidad_edita_gasto_revisado_y_conserva_estado(self):
+        self.gasto.reembolso = None
+        self.gasto.estado = gastos_caja.ESTADO_REVISADO
+        self.gasto.save(update_fields=['reembolso', 'estado'])
+        self.client.force_login(self.contabilidad)
+        resp = self._editar('corregido en revisado')
+        self.assertEqual(resp.json()['class'], 'alert-success', resp.json())
+        self.gasto.refresh_from_db()
+        self.assertEqual(self.gasto.estado, gastos_caja.ESTADO_REVISADO)
+        self.assertEqual(self.gasto.descripcion, 'CORREGIDO EN REVISADO')
+        self.assertEqual(self.gasto.lineas.get().valor_impuesto, 0)
+
+    def test_responsable_edita_gasto_pendiente(self):
+        self.gasto.reembolso = None
+        self.gasto.estado = gastos_caja.ESTADO_PENDIENTE
+        self.gasto.save(update_fields=['reembolso', 'estado'])
+        self.client.force_login(self.responsable)
+        resp = self._editar('ajuste pendiente')
+        self.assertEqual(resp.json()['class'], 'alert-success', resp.json())
+        self.gasto.refresh_from_db()
+        self.assertEqual(self.gasto.estado, gastos_caja.ESTADO_PENDIENTE)
 
     def test_volver_helper_recalcula_valor_reembolso(self):
         self.gasto.valor = 75000

@@ -6486,6 +6486,14 @@ def cajas_efectivo(request):
                 soporte = request.FILES.get('soporte')
                 concepto = request.POST.get('concepto')
                 tipo_documento_soporte = (request.POST.get('tipo_documento_soporte') or '').strip()
+                tipos_soporte_validos = {
+                    codigo for codigo, _nombre in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES if codigo
+                }
+                if tipo_documento_soporte not in tipos_soporte_validos:
+                    return JsonResponse({
+                        'msj': 'Selecciona el tipo de soporte.',
+                        'class': 'alert-danger',
+                    })
 
                 try:
                     fecha_gasto = datetime.datetime.strptime(fecha, '%Y-%m-%d').date()
@@ -6639,7 +6647,7 @@ def cajas_efectivo(request):
             elif todo == 'change_tipo_documento':
                 gasto_id = request.POST.get('id_gasto')
                 tipo = (request.POST.get('tipo_documento_soporte') or '').strip()
-                valid = {c[0] for c in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES}
+                valid = {c[0] for c in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES if c[0]}
                 if tipo not in valid:
                     return JsonResponse({
                         'msj': 'Tipo de soporte invalido.',
@@ -7113,7 +7121,13 @@ def cajas_efectivo(request):
                     and obj_gasto.forma_pago.usuario_responsable.pk == request.user.pk
                 )
                 is_cont = check_groups(request, ('Contabilidad',), raise_exception=False)
-                if not owner and not is_cont and not request.user.is_superuser:
+                if obj_gasto.estado == gastos_caja.ESTADO_REVISADO:
+                    if not is_cont and not request.user.is_superuser:
+                        return JsonResponse({
+                            'msj': 'Solo Contabilidad puede editar un gasto revisado.',
+                            'class': 'alert-danger',
+                        })
+                elif not owner and not is_cont and not request.user.is_superuser:
                     return JsonResponse({
                         'msj': 'No tienes permiso de realizar cambios sobre un gasto.',
                         'class': 'alert-danger',
@@ -7142,10 +7156,10 @@ def cajas_efectivo(request):
                         'class': 'alert-danger',
                     })
 
-                valid_tipos = {c[0] for c in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES}
+                valid_tipos = {c[0] for c in gastos_caja.TIPO_DOCUMENTO_SOPORTE_CHOICES if c[0]}
                 if tipo_documento_soporte not in valid_tipos:
                     return JsonResponse({
-                        'msj': 'Tipo de soporte invalido.',
+                        'msj': 'Selecciona el tipo de soporte.',
                         'class': 'alert-danger',
                     })
 
