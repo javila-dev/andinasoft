@@ -1,0 +1,46 @@
+{% load static %}
+<!doctype html>
+<html lang="es" data-theme="andina">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Portal de clientes{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'client_portal/css/portal.css' %}">
+</head>
+<body>
+  {% if request.session.portal_client_id %}
+  <header class="portal-header">
+    <div class="portal-shell flex h-13 items-center justify-between py-2.5">
+      <div class="flex items-center gap-2.5">
+        <div class="portal-logo-badge">A</div>
+        <span class="text-sm font-semibold leading-none">Área de clientes</span>
+      </div>
+      <nav class="flex items-center gap-0.5">
+        <a class="btn btn-ghost btn-sm rounded-lg text-xs font-medium" href="/portal/mis-negocios">Mis negocios</a>
+        <a class="btn btn-ghost btn-sm rounded-lg text-xs font-medium text-error/70 hover:text-error" href="/portal/logout">Salir</a>
+      </nav>
+    </div>
+  </header>
+  {% endif %}
+
+  {% block outer %}
+  <div class="portal-shell py-5">
+    {% block subnav %}{% endblock %}
+    <main class="{% block main_class %}mt-4 grid gap-4{% endblock %}">
+      {% if messages %}
+      <div class="grid gap-2">
+        {% for message in messages %}
+        <div class="alert rounded-xl py-2.5 text-sm {% if 'error' in message.tags %}alert-error{% elif 'success' in message.tags %}alert-success{% else %}alert-info{% endif %}">
+          <span>{{ message }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% endblock %}
+
+  <script src="{% static 'client_portal/js/portal.js' %}"></script>
+</body>
+</html>

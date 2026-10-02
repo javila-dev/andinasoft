@@ -1,0 +1,34 @@
+{% extends 'client_portal/base_portal.html' %}
+
+{% block title %}PQRS — {{ business.inmueble }}{% endblock %}
+
+{% block subnav %}
+<nav class="portal-breadcrumb mb-3">
+  <a href="/portal/mis-negocios">Mis negocios</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <a href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">{{ business.inmueble }}</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <span class="portal-breadcrumb-current">PQRS</span>
+</nav>
+<nav class="portal-tab-nav">
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">Resumen</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/plan-pagos">Plan de pagos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/documentos">Documentos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/perfil">Mis datos</a>
+  <a class="portal-tab portal-tab-active" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/pqrs">PQRS</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between">
+  <div>
+    <h1 class="portal-page-title">PQRS</h1>
+    <p class="mt-0.5 text-sm text-base-content/50">Solicitudes de soporte para {{ business.inmueble }}</p>
+  </div>
+  <a class="btn btn-primary btn-sm rounded-lg" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/pqrs/nueva">Nueva solicitud</a>
+</div>
+
+<div class="portal-panel p-6 text-center text-sm text-base-content/45">
+  Próximamente podrás ver y hacer seguimiento a tus solicitudes desde aquí.
+</div>
+{% endblock %}

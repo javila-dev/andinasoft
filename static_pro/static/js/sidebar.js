@@ -28,6 +28,15 @@ $(document).ready(function () {
     $(function () {
         $('[data-toggle="tooltip"]').tooltip()
       })
+    // Scrollbar del menú visible solo mientras se hace scroll (ver .is-scrolling en sidebar.css).
+    $('.sidebarItems').each(function () {
+        var el = this, timer;
+        el.addEventListener('scroll', function () {
+            el.classList.add('is-scrolling');
+            clearTimeout(timer);
+            timer = setTimeout(function () { el.classList.remove('is-scrolling'); }, 900);
+        }, {passive: true});
+    });
     RevisarImagenesRotas();
     var mediaqueryList = window.matchMedia("(min-width: 768px)");
     $('.collapsebutton').on('click', function () {

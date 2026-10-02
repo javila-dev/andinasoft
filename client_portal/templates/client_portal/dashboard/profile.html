@@ -1,0 +1,41 @@
+{% extends 'client_portal/base_portal.html' %}
+
+{% block title %}Mis datos — {{ business.inmueble }}{% endblock %}
+
+{% block subnav %}
+<nav class="portal-breadcrumb mb-3">
+  <a href="/portal/mis-negocios">Mis negocios</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <a href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">{{ business.inmueble }}</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <span class="portal-breadcrumb-current">Mis datos</span>
+</nav>
+<nav class="portal-tab-nav">
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">Resumen</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/plan-pagos">Plan de pagos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/documentos">Documentos</a>
+  <a class="portal-tab portal-tab-active" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/perfil">Mis datos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/pqrs">PQRS</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div>
+  <h1 class="portal-page-title">{{ client.nombrecompleto }}</h1>
+  <p class="mt-0.5 text-sm text-base-content/50">Información de contacto registrada</p>
+</div>
+
+<div class="portal-panel max-w-lg p-5">
+  <p class="portal-kicker mb-3">Contacto</p>
+  <div class="divide-y divide-base-300/50 text-sm">
+    <div class="flex items-center justify-between py-2.5">
+      <span class="text-base-content/55">Correo</span>
+      <span class="font-medium">{{ client.email|default:'—' }}</span>
+    </div>
+    <div class="flex items-center justify-between py-2.5">
+      <span class="text-base-content/55">Celular</span>
+      <span class="font-medium">{{ client.celular1|default:'—' }}</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

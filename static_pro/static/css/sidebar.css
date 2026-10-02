@@ -88,6 +88,27 @@ a:focus {
 .sidebarItems{
     height: calc(100vh - 200px);
     overflow-y: auto;
+    /* Scrollbar delgado e invisible; aparece solo mientras se hace scroll
+       (sidebar.js pone .is-scrolling y la quita al detenerse). */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+.sidebarItems.is-scrolling{
+    scrollbar-color: rgba(255, 255, 255, .35) transparent;
+}
+/* Safari / navegadores sin scrollbar-color */
+.sidebarItems::-webkit-scrollbar{
+    width: 6px;
+}
+.sidebarItems::-webkit-scrollbar-track{
+    background: transparent;
+}
+.sidebarItems::-webkit-scrollbar-thumb{
+    background: transparent;
+    border-radius: 3px;
+}
+.sidebarItems.is-scrolling::-webkit-scrollbar-thumb{
+    background: rgba(255, 255, 255, .35);
 }
 
 #sidebar.minimal .sidebarItems{

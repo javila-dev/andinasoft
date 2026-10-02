@@ -1,9 +1,9 @@
 {% if rama %}
-<div class="hito-flow{% if compact %} compact{% endif %}">
+<div class="hito-flow{% if compact %} compact{% endif %}" style="--trunk: {{ steps|length }}">
   <div class="hito-flow-trunk">
     {% for s in steps %}
       {% if not forloop.first %}<div class="hito-conn {{ s.estado }}"></div>{% endif %}
-      {% include 'partials/stepper_hitos_node.html' with s=s %}
+      {% include 'partials/stepper_hitos_node.html' with s=s clickable=clickable %}
     {% endfor %}
   </div>
   <div class="hito-flow-fork" aria-hidden="true">
@@ -14,10 +14,10 @@
   </div>
   <div class="hito-flow-arms">
     {% for s in rama %}
-      {% include 'partials/stepper_hitos_node.html' with s=s %}
+      {% include 'partials/stepper_hitos_node.html' with s=s clickable=clickable %}
     {% endfor %}
   </div>
 </div>
 {% else %}
-  {% include 'partials/stepper_hitos_row.html' with steps=steps compact=compact %}
+  {% include 'partials/stepper_hitos_row.html' with steps=steps compact=compact clickable=clickable %}
 {% endif %}

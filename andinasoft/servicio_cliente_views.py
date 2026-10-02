@@ -1,5 +1,6 @@
 """Vistas internas de servicio al cliente: dashboard, ficha, PQRS y hitos."""
 import datetime
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -28,9 +29,10 @@ from andinasoft.promesas_service import (
     nombre_documento_paso,
     paso_index,
     registrar_fechas_firmadas,
+    registrar_novacion,
     registrar_otrosi,
 )
-from andinasoft.servicio_cliente_service import dashboard_sac, ficha_cliente, url_ficha
+from andinasoft.servicio_cliente_service import dashboard_sac, detalle_kpi_sac, ficha_cliente, url_ficha
 from andinasoft.shared_models import documentos_contratos
 
 
@@ -53,7 +55,29 @@ def sac_dashboard(request):
     proyecto = request.GET.get('proyecto') or ''
     tipo = request.GET.get('tipo') or ''
     data = dashboard_sac(request.user, proyecto=proyecto or None, tipo=tipo or None)
+    data.pop('fuentes', None)
     return render(request, 'servicio_cliente/dashboard.html', data)
+
+
+@login_required
+def sac_dashboard_detalle(request):
+    _require_sac(request)
+    kpi = (request.GET.get('kpi') or '').strip()
+    proyecto = request.GET.get('proyecto') or None
+    tipo = request.GET.get('tipo') or None
+    q = request.GET.get('q') or ''
+    try:
+        offset = int(request.GET.get('offset') or 0)
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        payload = detalle_kpi_sac(
+            request.user, kpi,
+            proyecto=proyecto, tipo=tipo or '', q=q, offset=offset,
+        )
+    except ValueError:
+        return JsonResponse({'error': 'Indicador no disponible.'}, status=400)
+    return JsonResponse(payload)
 
 
 @login_required
@@ -64,6 +88,12 @@ def sac_ficha_cliente(request, cliente_id):
     data = ficha_cliente(cliente_id, request.user, proyecto=proyecto, adj=adj)
     if not data:
         raise Http404('Cliente no encontrado')
+    tab = request.GET.get('tab') or 'escritura'
+    if tab == 'entrega':
+        tab = 'escritura'
+    if tab not in ('escritura', 'atencion', 'documentos'):
+        tab = 'escritura'
+    data['tab_activa'] = tab
     return render(request, 'servicio_cliente/ficha_cliente.html', data)
 
 
@@ -189,7 +219,10 @@ def marcar_hito_view(request, proyecto, adj):
     fecha = request.POST.get('fecha')
     nota = request.POST.get('nota') or ''
     archivo = request.FILES.get('documento')
-    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or f'/operaciones/promesas/{proyecto}'
+    next_url = _url_con_tab(
+        request.POST.get('next') or request.META.get('HTTP_REFERER') or f'/operaciones/promesas/{proyecto}',
+        'escritura',
+    )
     try:
         doc_name = nombre_documento_paso(paso, archivo)
     except ValueError as exc:
@@ -214,10 +247,8 @@ def marcar_hito_view(request, proyecto, adj):
         if request.is_ajax() or request.headers.get('x-requested-with') == 'XMLHttpRequest':
             return JsonResponse({'passed': False, 'msj': str(exc)}, status=400)
         messages.error(request, str(exc))
-        next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or f'/operaciones/promesas/{proyecto}'
         return HttpResponseRedirect(next_url)
     messages.success(request, f'Paso {PASO_LABEL.get(paso, paso)} registrado.')
-    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or f'/operaciones/promesas/{proyecto}'
     if request.is_ajax() or request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'passed': True, 'msj': 'Paso registrado', 'paso': paso, 'paso_idx': paso_index(paso)})
     return HttpResponseRedirect(next_url)
@@ -227,6 +258,15 @@ def _next_ficha(request, proyecto):
     return request.POST.get('next') or request.META.get('HTTP_REFERER') or (
         '/operaciones/promesas/%s' % proyecto
     )
+
+
+def _url_con_tab(url, tab):
+    if not url or not tab:
+        return url
+    parts = urlsplit(url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != 'tab']
+    query.append(('tab', tab))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def _guardar_pdf_contrato(archivo, adj, proyecto, usuario, prefijo, *, requerido=False):
@@ -251,7 +291,13 @@ def actualizar_promesa_view(request, proyecto, adj):
     check_project(request, proyecto)
     check_perms(request, ('andinasoft.change_promesas',))
     accion = request.POST.get('accion')
-    next_url = _next_ficha(request, proyecto)
+    tab = {
+        'fechas': 'escritura',
+        'entrega': 'escritura',
+        'otrosi': 'escritura',
+        'novacion': 'escritura',
+    }.get(accion, 'escritura')
+    next_url = _url_con_tab(_next_ficha(request, proyecto), tab)
     try:
         if accion == 'fechas':
             registrar_fechas_firmadas(
@@ -286,6 +332,16 @@ def actualizar_promesa_view(request, proyecto, adj):
                 documento=doc_name,
             )
             messages.success(request, 'Otrosi registrado.')
+        elif accion == 'novacion':
+            registrar_novacion(
+                proyecto, adj,
+                request.POST.get('fecha_promesa_nueva'),
+                request.POST.get('fecha_entrega_nueva'),
+                request.POST.get('fecha_escritura_nueva'),
+                request.user,
+                observaciones=request.POST.get('observaciones') or '',
+            )
+            messages.success(request, 'Novacion registrada.')
         else:
             raise ValueError('Accion no reconocida.')
     except ValueError as exc:

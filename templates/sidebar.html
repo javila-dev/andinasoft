@@ -30,12 +30,12 @@
         </div>
     </div>
     <div class='sidebarItems'>
-        <ul class="list-unstyled components">
+        <ul class="list-unstyled components" id="sidebarMenu">
             <p class='mb-0'>Areas</p>
             <li class="active">
                 <a href="#tercerosSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-lg fa-user-plus"></i>&nbsp;Terceros</a></a>
-                <ul class="collapse list-unstyled" id="tercerosSubmenu">
+                <ul class="collapse list-unstyled" id="tercerosSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/reg_asesor">Asesor</a>
                     </li>
@@ -53,7 +53,7 @@
             <li>
                 <a href="#comercialSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-lg fa-money-bill-wave"></i>&nbsp;Comercial</a>
-                <ul class="collapse list-unstyled" id="comercialSubmenu">
+                <ul class="collapse list-unstyled" id="comercialSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/simulador">Simulador</a>
                     </li>
@@ -80,7 +80,7 @@
             <li>
                 <a href="#operacionesSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-lg fa-project-diagram"></i>&nbsp;Operaciones</a>
-                <ul class="collapse list-unstyled" id="operacionesSubmenu">
+                <ul class="collapse list-unstyled" id="operacionesSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/projectselector/nueva_adjudicacion">Reservas</a>
                     </li>
@@ -111,27 +111,9 @@
                 </ul>
             </li>
             <li>
-                <a href="#proyectosSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
-                    <i class="fas fa-hammer"></i>&nbsp;Proyectos</a>
-                <ul class="collapse list-unstyled" id="proyectosSubmenu">
-                    <li>
-                        <a href="/buildingcontrol/suppliers">Proveedores</a>
-                        <a href="/buildingcontrol/productsandservices">Productos y servicios</a>
-                        <a href="/buildingcontrol/requirements">Requisiciones</a>
-                        <a href="/buildingcontrol/newcontract">Nueva orden</a>
-                        <a href="/buildingcontrol/unaprovedcontracts">Ordenes sin aprobar</a>
-                        <a href="/buildingcontrol/aprovedcontracts">Ordenes aprobadas</a>
-                        <a href="/buildingcontrol/allcontractprogress">Actas de recibido</a>
-                        <a href="/buildingcontrol/allotrosi">Adicionales</a>
-                        <a href="/buildingcontrol/payments">Pagos</a>
-                        <a href="/buildingcontrol/logbook">Bitacora</a>
-                    </li>
-                </ul>
-            </li>   
-            <li>
                 <a href="#tesoreriaSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-lg fa-hand-holding-usd"></i>&nbsp;Tesoreria</a>
-                <ul class="collapse list-unstyled" id="tesoreriaSubmenu">
+                <ul class="collapse list-unstyled" id="tesoreriaSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/projectselector/nuevo_recaudo">Nuevo Recaudo</a>
                     </li>
@@ -161,7 +143,7 @@
             <li>
                 <a href="#carteraSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-search-dollar"></i>&nbsp;Cartera</a>
-                <ul class="collapse list-unstyled" id="carteraSubmenu">
+                <ul class="collapse list-unstyled" id="carteraSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/cartera/dashboard"><i class="fas fa-tachometer-alt"></i>&nbsp;Dashboard de gestion</a>
                     </li>
@@ -187,7 +169,7 @@
             <li>
                 <a href="#contabilidadSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-coins"></i>&nbsp;Contabilidad</a>
-                <ul class="collapse list-unstyled" id="contabilidadSubmenu">
+                <ul class="collapse list-unstyled" id="contabilidadSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/projectselector/interfaces">Interfaces</a>
                     </li>
@@ -214,7 +196,7 @@
             <li>
                 <a href="#recepcionSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-inbox"></i>&nbsp;Recepcion</a>
-                <ul class="collapse list-unstyled" id="recepcionSubmenu">
+                <ul class="collapse list-unstyled" id="recepcionSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/accounting/radicarfactura">Radicar Factura</a>
                     </li>
@@ -229,7 +211,7 @@
             <li>
                 <a href="#servicioclienteSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-mail-bulk"></i>&nbsp;Servicio al Cliente</a>
-                <ul class="collapse list-unstyled" id="servicioclienteSubmenu">
+                <ul class="collapse list-unstyled" id="servicioclienteSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/servicio_cliente/dashboard">Dashboard</a>
                     </li>
@@ -247,7 +229,7 @@
             <li>
                 <a href="#graficasSubmenu" data-toggle="collapse" aria-expanded="false" class="dropdown-toggle">
                     <i class="fas fa-poll"></i>&nbsp;Graficos</a>
-                <ul class="collapse list-unstyled" id="graficasSubmenu">
+                <ul class="collapse list-unstyled" id="graficasSubmenu" data-parent="#sidebarMenu">
                     <li>
                         <a href="/projectselector/graph_rcdo_mes">Recaudos mes</a>
                     </li>

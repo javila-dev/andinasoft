@@ -508,10 +508,12 @@ class PromesaOtrosi(models.Model):
     TIPO_ENTREGA = 'entrega'
     TIPO_ESCRITURA = 'escritura'
     TIPO_AMBOS = 'ambos'
+    TIPO_NOVACION = 'novacion'
     TIPO_CHOICES = (
         (TIPO_ENTREGA, 'Entrega'),
         (TIPO_ESCRITURA, 'Escritura'),
         (TIPO_AMBOS, 'Entrega y escritura'),
+        (TIPO_NOVACION, 'Novacion'),
     )
 
     proyecto = models.ForeignKey(
@@ -522,6 +524,8 @@ class PromesaOtrosi(models.Model):
     )
     adj = models.CharField(max_length=255, db_index=True)
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    fecha_promesa_anterior = models.DateField(null=True, blank=True)
+    fecha_promesa_nueva = models.DateField(null=True, blank=True)
     fecha_entrega_anterior = models.DateField(null=True, blank=True)
     fecha_entrega_nueva = models.DateField(null=True, blank=True)
     fecha_escritura_anterior = models.DateField(null=True, blank=True)

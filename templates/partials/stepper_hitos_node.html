@@ -1,4 +1,8 @@
+{% if clickable and s.estado == 'next' %}
+<button type="button" class="hito-card {{ s.estado }}{% if s.interno %} interno{% endif %}" data-toggle="modal" data-target="#modal-hito-{{ s.codigo }}" title="Registrar {{ s.label }}">
+{% else %}
 <div class="hito-card {{ s.estado }}{% if s.interno %} interno{% endif %}" title="{{ s.label }}{% if s.interno %} (interno){% endif %}{% if s.fecha %} · {% if s.fecha.year %}{{ s.fecha|date:'Y-m-d' }}{% else %}{{ s.fecha }}{% endif %}{% endif %}">
+{% endif %}
   <div class="hito-card-icon"><i class="fas {{ s.icon }}"></i></div>
   <div class="hito-card-body">
     <div class="hito-card-title">{{ s.label }}</div>
@@ -10,4 +14,4 @@
       {% else %}Bloqueado{% endif %}
     </div>
   </div>
-</div>
+{% if clickable and s.estado == 'next' %}</button>{% else %}</div>{% endif %}

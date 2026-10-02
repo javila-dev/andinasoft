@@ -6,6 +6,36 @@
 {%block content%}
 {% include 'partials/stepper_hitos_css.html' %}
 <style>
+  .ficha-paneles {
+    border: 1px solid #dee2e6;
+    border-top: 0;
+    background: #fff;
+    border-radius: 0 0 .25rem .25rem;
+    padding: 1rem;
+  }
+  .ficha-paneles > .tab-pane > .card { box-shadow: none !important; }
+  .ficha-enc-card {
+    height: 280px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .ficha-enc-title {
+    flex: 0 0 auto;
+    padding: .75rem 1rem .5rem;
+    margin: 0;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #6c757d;
+  }
+  .ficha-enc-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 1rem 1rem;
+  }
   .ficha-label { font-size: .7rem; color: #90a4ae; text-transform: uppercase; letter-spacing: .03em; }
   .ficha-val { font-size: .9rem; }
   details.titular-item { margin-bottom: .15rem; }
@@ -29,18 +59,24 @@
 </style>
 <div class="container-fluid py-3">
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Ficha</h4>
+    <h4 class="mb-0">Ficha de gestion{% if adj %} {{ adj }}{% endif %}{% if proyecto %} {{ proyecto }}{% endif %}</h4>
     <div>
       <a class="btn btn-sm btn-outline-secondary" href="/servicio_cliente/dashboard">Dashboard</a>
       {% if proyecto %}<a class="btn btn-sm btn-outline-primary" href="/crm/actas/nueva">Nueva reunion</a>{% endif %}
     </div>
   </div>
 
-  <div class="row">
-    <div class="col-lg-6 mb-3">
-      <div class="card shadow-sm h-100">
-        <div class="card-body">
-          <h6 class="text-uppercase text-muted font-weight-bold mb-3">Negocio y cartera</h6>
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %} py-2 small">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
+  <div class="row ficha-encabezado">
+    <div class="col-md-6 mb-3">
+      <div class="card shadow-sm ficha-enc-card">
+        <h6 class="ficha-enc-title">Negocio y cartera</h6>
+        <div class="ficha-enc-body">
           {% if proyecto and adj %}
           <div class="mb-3">
             {% for t in titulares %}
@@ -80,8 +116,138 @@
         </div>
       </div>
     </div>
+    <div class="col-md-6 mb-3">
+      <div class="card shadow-sm ficha-enc-card">
+        <h6 class="ficha-enc-title">Historial</h6>
+        <div class="ficha-enc-body">
+          {% for h in historial %}
+          <div class="small mb-2">
+            <strong>{{ h.fecha }}</strong> · {{ h.usuario }}
+            <div>{{ h.texto }}</div>
+          </div>
+          {% empty %}
+          <p class="text-muted mb-0">Sin eventos recientes.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <div class="col-lg-6 mb-3">
+  <ul class="nav nav-tabs" id="fichaTabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link {% if tab_activa != 'atencion' and tab_activa != 'documentos' %}active{% endif %}" data-toggle="tab" href="#ficha-escritura" role="tab">Entrega y escritura</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if tab_activa == 'documentos' %}active{% endif %}" data-toggle="tab" href="#ficha-documentos" role="tab">Documentos</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if tab_activa == 'atencion' %}active{% endif %}" data-toggle="tab" href="#ficha-atencion" role="tab">Atencion</a>
+    </li>
+  </ul>
+  <div class="tab-content ficha-paneles mb-3">
+    <div class="tab-pane fade {% if tab_activa != 'atencion' and tab_activa != 'documentos' %}show active{% endif %}" id="ficha-escritura" role="tabpanel">
+      {% if promesa and puede_gestionar_promesa and not promesa.puede_editar_fechas %}
+      <div class="mb-3">
+        <button type="button" class="btn btn-sm btn-outline-primary mr-2" data-toggle="modal" data-target="#modalOtrosiFicha">Registrar otrosí</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#modalNovacionFicha">Registrar novación</button>
+      </div>
+      {% endif %}
+      {% if promesa %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <h6 class="text-uppercase text-muted font-weight-bold mb-0">Entrega</h6>
+            <span class="badge {{ promesa.estado_entrega_badge }}">{{ promesa.estado_entrega_label }}</span>
+          </div>
+          {% if puede_gestionar_promesa %}
+          <p class="small text-muted mb-2">Haga click en el paso para registrar la informacion.</p>
+          {% endif %}
+          {% include 'partials/stepper_hitos.html' with steps=promesa.entrega_ui clickable=puede_gestionar_promesa %}
+          {% if promesa.entregado and promesa.fecha_entrega_real %}
+          <p class="hito-date mb-0 mt-2">Real: {{ promesa.fecha_entrega_real|date:'Y-m-d' }}</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      <div class="card shadow-sm">
+        <div class="card-body">
+          {% if promesa %}
+          <p class="small text-muted mb-2">
+            Los estados se consultan en <a href="/operaciones/promesas/{{ proyecto }}">Estados de Promesas</a>.
+            Fechas, entrega, escritura y otrosí se actualizan aquí.
+          </p>
+
+          <div class="border rounded p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <strong>Escritura</strong>
+              <span>
+                {% if promesa.dias_firma_cliente != None %}
+                <span class="badge {% if promesa.alerta_firma_empresa %}badge-danger{% else %}badge-info{% endif %}" title="Dias desde la firma del cliente">{% if promesa.dias_firma_cliente == 1 %}1 dia{% else %}{{ promesa.dias_firma_cliente }} dias{% endif %}</span>
+                {% endif %}
+                <span class="badge {{ promesa.estado_escritura_badge }}">{{ promesa.estado_escritura_label }}</span>
+              </span>
+            </div>
+            {% if puede_gestionar_promesa %}
+            <p class="small text-muted mb-2">Haga click en el paso para registrar la informacion.</p>
+            {% endif %}
+            {% if promesa.alerta_firma_empresa %}
+            <div class="alert alert-danger py-2 small mb-2">Mas de un mes sin firma de la empresa. Se acerca el plazo para registrarla.</div>
+            {% endif %}
+            {% include 'partials/stepper_hitos.html' with steps=promesa.pasos_linea rama=promesa.pasos_rama clickable=puede_gestionar_promesa %}
+            <p class="hito-date mb-0 mt-1">Pactada: {% if promesa.fechaescritura %}{{ promesa.fechaescritura|date:'Y-m-d' }}{% else %}sin fecha{% endif %}</p>
+            {% if promesa.escritura_completa %}
+            <div class="alert alert-success py-2 small mb-0 mt-2">Escritura completa (registro y facturado).</div>
+            {% endif %}
+          </div>
+          {% if otrosi_historial %}
+          <div class="table-responsive">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Promesa</th>
+                  <th>Entrega</th>
+                  <th>Escritura</th>
+                  <th>Usuario</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in otrosi_historial %}
+                <tr>
+                  <td>{{ h.fecha_registro|date:'Y-m-d H:i' }}</td>
+                  <td>{{ h.tipo_label }}</td>
+                  <td>{% if h.fecha_promesa_nueva %}{{ h.fecha_promesa_anterior|date:'Y-m-d'|default:'—' }} → {{ h.fecha_promesa_nueva|date:'Y-m-d' }}{% else %}—{% endif %}</td>
+                  <td>{% if h.fecha_entrega_nueva %}{{ h.fecha_entrega_anterior|date:'Y-m-d'|default:'—' }} → {{ h.fecha_entrega_nueva|date:'Y-m-d' }}{% else %}—{% endif %}</td>
+                  <td>{% if h.fecha_escritura_nueva %}{{ h.fecha_escritura_anterior|date:'Y-m-d'|default:'—' }} → {{ h.fecha_escritura_nueva|date:'Y-m-d' }}{% else %}—{% endif %}</td>
+                  <td>{{ h.usuario }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+          {% else %}
+          <p class="text-muted mb-0">Sin datos de promesa para este negocio.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="tab-pane fade {% if tab_activa == 'documentos' %}show active{% endif %}" id="ficha-documentos" role="tabpanel">
+      {% if documentos_promesa %}
+      <ul class="list-unstyled small mb-0">
+        {% for d in documentos_promesa %}
+        <li class="mb-1">
+          <a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.descripcion_doc }}</a>
+          <span class="text-muted">· {{ d.fecha_carga }} · {{ d.usuario_carga }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-muted mb-0">Sin documentos.</p>
+      {% endif %}
+    </div>
+    <div class="tab-pane fade {% if tab_activa == 'atencion' %}show active{% endif %}" id="ficha-atencion" role="tabpanel">
       <div class="card shadow-sm mb-3">
         <div class="card-body">
           <h6 class="text-uppercase text-muted font-weight-bold">Atencion</h6>
@@ -125,222 +291,197 @@
           {% endfor %}
         </div>
       </div>
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h6 class="text-uppercase text-muted font-weight-bold">Historial</h6>
-          {% for h in historial %}
-          <div class="small mb-2">
-            <strong>{{ h.fecha }}</strong> · {{ h.usuario }}
-            <div>{{ h.texto }}</div>
-          </div>
-          {% empty %}
-          <p class="text-muted mb-0">Sin eventos recientes.</p>
-          {% endfor %}
-        </div>
-      </div>
     </div>
   </div>
 
-  <div class="row">
-    <div class="col-12 mb-3">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h6 class="text-uppercase text-muted font-weight-bold">Entrega y escritura</h6>
-          {% if messages %}
-          {% for message in messages %}
-          <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %} py-2 small">{{ message }}</div>
-          {% endfor %}
-          {% endif %}
-          {% if promesa %}
-          <p class="small text-muted mb-2">
-            Los estados se consultan en <a href="/operaciones/promesas/{{ proyecto }}">Estados de Promesas</a>.
-            Fechas, entrega, escritura y otrosí se actualizan aquí.
-          </p>
-          {% if puede_gestionar_promesa and promesa.puede_editar_fechas %}
-          <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}" class="border rounded p-3 mb-3">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <input type="hidden" name="accion" value="fechas">
-            <strong class="d-block mb-2">Fechas pactadas</strong>
-            <p class="small text-muted mb-2">Se registran una sola vez. Después, los cambios van por otrosí.</p>
-            <div class="form-row align-items-end">
-              <div class="col-md-3 mb-2">
-                <label class="small mb-1">Fecha promesa</label>
-                <input type="date" name="fecha_promesa" class="form-control form-control-sm" value="{% if promesa.fechapromesa %}{{ promesa.fechapromesa|date:'Y-m-d' }}{% endif %}" required>
-              </div>
-              <div class="col-md-3 mb-2">
-                <label class="small mb-1">Fecha entrega</label>
-                <input type="date" name="fecha_entrega" class="form-control form-control-sm" required>
-              </div>
-              <div class="col-md-3 mb-2">
-                <label class="small mb-1">Fecha escritura</label>
-                <input type="date" name="fecha_escritura" class="form-control form-control-sm" required>
-              </div>
-              <div class="col-md-3 mb-2">
-                <button class="btn btn-sm btn-primary">Guardar fechas</button>
-              </div>
-            </div>
-          </form>
-          {% endif %}
-          <div class="border rounded p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <strong>Entrega</strong>
-              <span class="badge {{ promesa.estado_entrega_badge }}">{{ promesa.estado_entrega_label }}</span>
-            </div>
-            {% include 'partials/stepper_hitos.html' with steps=promesa.entrega_ui %}
-            {% if not promesa.fechaentrega %}
-            <div class="alert alert-warning py-1 px-2 small mb-0 mt-2">Registre las fechas pactadas para poder marcar la entrega.</div>
-            {% elif puede_gestionar_promesa and not promesa.entregado %}
-            <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}" class="mt-3" enctype="multipart/form-data">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <input type="hidden" name="accion" value="entrega">
-              <input type="hidden" name="entregado" value="1">
-              <div class="form-row align-items-end">
-                <div class="col-auto">
-                  <label class="small mb-1">Fecha real</label>
-                  <input type="date" name="fecha_entrega_real" class="form-control form-control-sm" required>
-                </div>
-                <div class="col-auto">
-                  <label class="small mb-1">Acta (PDF, opcional)</label>
-                  <input type="file" name="documento" class="form-control-file" accept="application/pdf">
-                </div>
-                <div class="col-auto">
-                  <button class="btn btn-sm btn-primary">Marcar entregada</button>
-                </div>
-              </div>
-            </form>
-            {% elif promesa.entregado and promesa.fecha_entrega_real %}
-            <p class="hito-date mb-0 mt-2">Real: {{ promesa.fecha_entrega_real|date:'Y-m-d' }}</p>
-            {% endif %}
-          </div>
-          <div class="border rounded p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <strong>Escritura</strong>
-              <span class="badge {{ promesa.estado_escritura_badge }}">{{ promesa.estado_escritura_label }}</span>
-            </div>
-            {% include 'partials/stepper_hitos.html' with steps=promesa.pasos_linea rama=promesa.pasos_rama %}
-            <p class="hito-date mb-0 mt-1">Pactada: {% if promesa.fechaescritura %}{{ promesa.fechaescritura|date:'Y-m-d' }}{% else %}sin fecha{% endif %}</p>
-            {% if puede_gestionar_promesa and proyecto and adj and promesa.pasos_siguientes %}
-            {% for sp in promesa.pasos_siguientes %}
-            <form method="post" action="/servicio_cliente/escritura/{{ proyecto }}/{{ adj }}" class="mt-3"{% if sp.requiere_archivo %} enctype="multipart/form-data"{% endif %}>
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <input type="hidden" name="paso" value="{{ sp.codigo }}">
-              <div class="alert {% if sp.interno %}alert-warning{% else %}alert-info{% endif %} py-2 small mb-2">
-                {% if sp.interno %}Interno · {% endif %}Siguiente: <strong>{{ sp.label }}</strong>
-              </div>
-              <div class="form-row align-items-end">
-                <div class="col-auto">
-                  <label class="small mb-1">Fecha del paso</label>
-                  <input type="date" name="fecha" class="form-control form-control-sm" required>
-                </div>
-                {% if sp.requiere_archivo %}
-                <div class="col-auto">
-                  <label class="small mb-1">PDF {{ sp.archivo_label|default:'documento' }}</label>
-                  <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
-                </div>
-                {% endif %}
-                <div class="col-auto">
-                  <button class="btn btn-sm btn-primary">Registrar {{ sp.label }}</button>
-                </div>
-              </div>
-            </form>
-            {% endfor %}
-            {% elif promesa.escritura_completa %}
-            <div class="alert alert-success py-2 small mb-0 mt-2">Escritura completa (registro y facturado).</div>
-            {% endif %}
-          </div>
-          {% if not promesa.puede_editar_fechas %}
-          <div class="border rounded p-3 mb-3">
-            <strong class="d-block mb-2">Otrosí</strong>
-            {% if puede_gestionar_promesa %}
-            <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}" enctype="multipart/form-data" id="formOtrosiFicha">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <input type="hidden" name="accion" value="otrosi">
-              <div class="form-row align-items-end">
-                <div class="col-md-3 mb-2">
-                  <label class="small mb-1">Tipo</label>
-                  <select class="form-control form-control-sm" name="tipo_otrosi" id="tipo_otrosi_ficha" required>
-                    <option value="entrega">Entrega</option>
-                    <option value="escritura">Escritura</option>
-                    <option value="ambos">Entrega y escritura</option>
-                  </select>
-                </div>
-                <div class="col-md-3 mb-2" id="wrapEntregaNuevaFicha">
-                  <label class="small mb-1">Nueva entrega</label>
-                  <input type="date" name="fecha_entrega_nueva" class="form-control form-control-sm" id="fecha_entrega_nueva_ficha">
-                </div>
-                <div class="col-md-3 mb-2 d-none" id="wrapEscrituraNuevaFicha">
-                  <label class="small mb-1">Nueva escritura</label>
-                  <input type="date" name="fecha_escritura_nueva" class="form-control form-control-sm" id="fecha_escritura_nueva_ficha">
-                </div>
-                <div class="col-md-3 mb-2">
-                  <label class="small mb-1">PDF otrosí</label>
-                  <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
-                </div>
-                <div class="col-12 mb-2">
-                  <label class="small mb-1">Observaciones</label>
-                  <input type="text" name="observaciones" class="form-control form-control-sm">
-                </div>
-                <div class="col-12">
-                  <button class="btn btn-sm btn-outline-primary">Registrar otrosí</button>
-                </div>
-              </div>
-            </form>
-            {% endif %}
-            {% if otrosi_historial %}
-            <div class="table-responsive mt-3">
-              <table class="table table-sm mb-0">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Entrega</th>
-                    <th>Escritura</th>
-                    <th>Usuario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for h in otrosi_historial %}
-                  <tr>
-                    <td>{{ h.fecha_registro|date:'Y-m-d H:i' }}</td>
-                    <td>{{ h.tipo_label }}</td>
-                    <td>{% if h.fecha_entrega_nueva %}{{ h.fecha_entrega_anterior|date:'Y-m-d'|default:'—' }} → {{ h.fecha_entrega_nueva|date:'Y-m-d' }}{% else %}—{% endif %}</td>
-                    <td>{% if h.fecha_escritura_nueva %}{{ h.fecha_escritura_anterior|date:'Y-m-d'|default:'—' }} → {{ h.fecha_escritura_nueva|date:'Y-m-d' }}{% else %}—{% endif %}</td>
-                    <td>{{ h.usuario }}</td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-            {% elif not puede_gestionar_promesa %}
-            <p class="text-muted small mb-0">Sin otrosí registrados.</p>
-            {% endif %}
-          </div>
-          {% endif %}
-          {% if documentos_promesa %}
-          <div class="border rounded p-3">
-            <strong class="d-block mb-2">Documentos</strong>
-            <ul class="list-unstyled small mb-0">
-              {% for d in documentos_promesa %}
-              <li class="mb-1">
-                <a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.descripcion_doc }}</a>
-                <span class="text-muted">· {{ d.fecha_carga }} · {{ d.usuario_carga }}</span>
-              </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% endif %}
-          {% else %}
-          <p class="text-muted mb-0">Sin datos de promesa para este negocio.</p>
-          {% endif %}
+</div>
+{% if promesa and puede_gestionar_promesa %}
+{% for s in promesa.entrega_ui %}
+{% if s.estado == 'next' %}
+<div class="modal fade" id="modal-hito-{{ s.codigo }}" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      {% if s.codigo == 'pactada' and promesa.puede_editar_fechas %}
+      <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <input type="hidden" name="accion" value="fechas">
+        <div class="modal-header">
+          <h5 class="modal-title">Fechas pactadas</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
         </div>
+        <div class="modal-body">
+          <p class="small text-muted">Se registran una sola vez. Después, los cambios van por otrosí o novación.</p>
+          <label class="small mb-1">Fecha promesa</label>
+          <input type="date" name="fecha_promesa" class="form-control form-control-sm mb-2" value="{% if promesa.fechapromesa %}{{ promesa.fechapromesa|date:'Y-m-d' }}{% endif %}" required>
+          <label class="small mb-1">Fecha entrega</label>
+          <input type="date" name="fecha_entrega" class="form-control form-control-sm mb-2" required>
+          <label class="small mb-1">Fecha escritura</label>
+          <input type="date" name="fecha_escritura" class="form-control form-control-sm" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-sm btn-primary">Guardar fechas</button>
+        </div>
+      </form>
+      {% elif s.codigo == 'entregada' %}
+      <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <input type="hidden" name="accion" value="entrega">
+        <input type="hidden" name="entregado" value="1">
+        <div class="modal-header">
+          <h5 class="modal-title">Marcar entregada</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <label class="small mb-1">Fecha real</label>
+          <input type="date" name="fecha_entrega_real" class="form-control form-control-sm mb-2" required>
+          <label class="small mb-1">Acta (PDF, opcional)</label>
+          <input type="file" name="documento" class="form-control-file" accept="application/pdf">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-sm btn-primary">Marcar entregada</button>
+        </div>
+      </form>
+      {% else %}
+      <div class="modal-header">
+        <h5 class="modal-title">{{ s.label }}</h5>
+        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
       </div>
+      <div class="modal-body">
+        <p class="mb-0">Esta fecha se cambia con un otrosí.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cerrar</button>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
+{% endif %}
+{% endfor %}
+{% for sp in promesa.pasos_siguientes %}
+<div class="modal fade" id="modal-hito-{{ sp.codigo }}" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="/servicio_cliente/escritura/{{ proyecto }}/{{ adj }}"{% if sp.requiere_archivo %} enctype="multipart/form-data"{% endif %}>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <input type="hidden" name="paso" value="{{ sp.codigo }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Registrar {{ sp.label }}</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          {% if sp.interno %}<p class="small text-muted">Paso interno.</p>{% endif %}
+          <label class="small mb-1">Fecha del paso</label>
+          <input type="date" name="fecha" class="form-control form-control-sm mb-2" required>
+          {% if sp.requiere_archivo %}
+          <label class="small mb-1">PDF {{ sp.archivo_label|default:'documento' }}</label>
+          <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-sm btn-primary">Registrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% if not promesa.puede_editar_fechas %}
+<div class="modal fade" id="modalOtrosiFicha" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}" enctype="multipart/form-data" id="formOtrosiFicha">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <input type="hidden" name="accion" value="otrosi">
+        <div class="modal-header">
+          <h5 class="modal-title">Registrar otrosí</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="col-md-6 mb-2">
+              <label class="small mb-1">Tipo</label>
+              <select class="form-control form-control-sm" name="tipo_otrosi" id="tipo_otrosi_ficha" required>
+                <option value="entrega">Entrega</option>
+                <option value="escritura">Escritura</option>
+                <option value="ambos">Entrega y escritura</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-2" id="wrapEntregaNuevaFicha">
+              <label class="small mb-1">Nueva entrega</label>
+              <input type="date" name="fecha_entrega_nueva" class="form-control form-control-sm" id="fecha_entrega_nueva_ficha">
+            </div>
+            <div class="col-md-6 mb-2 d-none" id="wrapEscrituraNuevaFicha">
+              <label class="small mb-1">Nueva escritura</label>
+              <input type="date" name="fecha_escritura_nueva" class="form-control form-control-sm" id="fecha_escritura_nueva_ficha">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label class="small mb-1">PDF otrosí</label>
+              <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
+            </div>
+            <div class="col-12 mb-2">
+              <label class="small mb-1">Observaciones</label>
+              <input type="text" name="observaciones" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-sm btn-outline-primary">Registrar otrosí</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="modalNovacionFicha" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <input type="hidden" name="accion" value="novacion">
+        <div class="modal-header">
+          <h5 class="modal-title">Registrar novación</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">Cuando se vuelve a hacer la promesa y cambian las fechas. No requiere PDF.</p>
+          <div class="form-row">
+            <div class="col-md-4 mb-2">
+              <label class="small mb-1">Nueva promesa</label>
+              <input type="date" name="fecha_promesa_nueva" class="form-control form-control-sm" value="{% if promesa.fechapromesa %}{{ promesa.fechapromesa|date:'Y-m-d' }}{% endif %}" required>
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="small mb-1">Nueva entrega</label>
+              <input type="date" name="fecha_entrega_nueva" class="form-control form-control-sm" value="{% if promesa.fechaentrega %}{{ promesa.fechaentrega|date:'Y-m-d' }}{% endif %}" required>
+            </div>
+            <div class="col-md-4 mb-2">
+              <label class="small mb-1">Nueva escritura</label>
+              <input type="date" name="fecha_escritura_nueva" class="form-control form-control-sm" value="{% if promesa.fechaescritura %}{{ promesa.fechaescritura|date:'Y-m-d' }}{% endif %}" required>
+            </div>
+            <div class="col-12">
+              <label class="small mb-1">Observaciones</label>
+              <input type="text" name="observaciones" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-sm btn-outline-primary">Registrar novación</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endif %}
 <script>
 (function(){
   var sel = document.getElementById('tipo_otrosi_ficha');
@@ -362,6 +503,17 @@
   }
   sel.addEventListener('change', syncOtrosi);
   syncOtrosi();
+})();
+(function(){
+  var links = document.querySelectorAll('#fichaTabs a[data-toggle="tab"]');
+  if (!links.length || !window.jQuery) return;
+  jQuery(links).on('shown.bs.tab', function(e){
+    var id = (e.target.getAttribute('href') || '').replace('#ficha-', '');
+    if (!id || !window.history || !history.replaceState) return;
+    var url = new URL(window.location.href);
+    url.searchParams.set('tab', id);
+    history.replaceState(null, '', url.pathname + url.search);
+  });
 })();
 </script>
 {%endblock%}

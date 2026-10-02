@@ -10,6 +10,7 @@ from andinasoft.models import PromesaCumplimiento, PromesaHito, PromesaOtrosi, c
 from andinasoft.shared_models import Adjudicacion, Promesas, timeline, ventas_nuevas
 
 DIAS_POR_VENCER = 30
+DIAS_ALERTA_FIRMA_EMPRESA = 30
 
 ESTADOS_ACTIVOS = ('Aprobado', 'Pagado')
 
@@ -347,6 +348,29 @@ def pasos_from_cumplimiento(cump):
     return pipe['paso'], pipe['pasos_ui']
 
 
+def seguimiento_firma_cliente(pipe, hoy=None):
+    """Dias desde la firma del cliente. Alerta si pasa un mes sin firma de la empresa."""
+    hechos = pipe.get('hechos') or set()
+    if PromesaCumplimiento.PASO_FIRMA_CLIENTE not in hechos:
+        return None, False
+    fecha = None
+    for step in pipe.get('pasos_ui') or []:
+        if step.get('codigo') == PromesaCumplimiento.PASO_FIRMA_CLIENTE:
+            fecha = _as_date(step.get('fecha'))
+            break
+    if not fecha:
+        return None, False
+    hoy = hoy or datetime.date.today()
+    dias = (hoy - fecha).days
+    if dias < 0:
+        dias = 0
+    alerta = (
+        dias > DIAS_ALERTA_FIRMA_EMPRESA
+        and PromesaCumplimiento.PASO_FIRMA_EMPRESA not in hechos
+    )
+    return dias, alerta
+
+
 def entrega_ui(fecha_pactada, entregado, fecha_real=None):
     """Pactada → Entregada. Sin fecha pactada no se puede marcar entregada."""
     pactada = {
@@ -533,6 +557,7 @@ def build_promesa_rows(proyecto):
         paso_escritura = pipe['paso']
         pasos_ui = pipe['pasos_ui']
         next_paso = pipe['paso_siguiente']
+        dias_firma, alerta_firma = seguimiento_firma_cliente(pipe, hoy)
         ent_ui = entrega_ui(fechaentrega, entregado, fecha_entrega_real)
 
         est_entrega = estado_fecha(fechaentrega, entregado, hoy=hoy)
@@ -576,6 +601,8 @@ def build_promesa_rows(proyecto):
             'escritura_completa': pipe['completa'],
             'carga_pendiente': pipe['carga_pendiente'],
             'factura_pendiente': pipe['factura_pendiente'],
+            'dias_firma_cliente': dias_firma,
+            'alerta_firma_empresa': alerta_firma,
             'entrega_ui': ent_ui,
             'puede_marcar_entrega': bool(fechaentrega),
             'estado_entrega': est_entrega,
@@ -755,6 +782,71 @@ def registrar_otrosi(
     return promesa
 
 
+def _iso_fecha(value):
+    value = _as_date(value)
+    return value.isoformat() if value else 'sin fecha'
+
+
+def texto_historial_novacion(
+    fecha_promesa_anterior, fecha_promesa,
+    fecha_entrega_anterior, fecha_entrega,
+    fecha_escritura_anterior, fecha_escritura,
+):
+    texto = (
+        'Novacion. Promesa %s -> %s. Entrega %s -> %s. Escritura %s -> %s.'
+        % (
+            _iso_fecha(fecha_promesa_anterior), _iso_fecha(fecha_promesa),
+            _iso_fecha(fecha_entrega_anterior), _iso_fecha(fecha_entrega),
+            _iso_fecha(fecha_escritura_anterior), _iso_fecha(fecha_escritura),
+        )
+    )
+    return texto[:255]
+
+
+def registrar_novacion(
+    proyecto, adj, fecha_promesa, fecha_entrega, fecha_escritura, usuario, *,
+    observaciones='',
+):
+    """Reemplaza las fechas pactadas de una promesa nueva. No exige PDF."""
+    fecha_promesa = _as_date(fecha_promesa)
+    fecha_entrega = _as_date(fecha_entrega)
+    fecha_escritura = _as_date(fecha_escritura)
+    if not (fecha_promesa and fecha_entrega and fecha_escritura):
+        raise ValueError('Indique la nueva fecha de promesa, entrega y escritura.')
+    promesa = ensure_promesa(proyecto, adj, usuario=usuario)
+    if not promesa.fechaentrega and not promesa.fechaescritura:
+        raise ValueError('Registre primero las fechas pactadas.')
+    fp_ant = promesa.fechapromesa
+    fe_ant = promesa.fechaentrega
+    fs_ant = promesa.fechaescritura
+    promesa.fechapromesa = fecha_promesa
+    promesa.fechaentrega = fecha_entrega
+    promesa.fechaescritura = fecha_escritura
+    promesa.save()
+    cumplimiento = ensure_cumplimiento(proyecto, adj)
+    PromesaOtrosi.objects.create(
+        proyecto=cumplimiento.proyecto,
+        adj=adj,
+        tipo=PromesaOtrosi.TIPO_NOVACION,
+        fecha_promesa_anterior=fp_ant,
+        fecha_promesa_nueva=fecha_promesa,
+        fecha_entrega_anterior=fe_ant,
+        fecha_entrega_nueva=fecha_entrega,
+        fecha_escritura_anterior=fs_ant,
+        fecha_escritura_nueva=fecha_escritura,
+        observaciones=observaciones or '',
+        documento='',
+        usuario=str(usuario or ''),
+    )
+    timeline.objects.using(proyecto).create(
+        adj=adj, fecha=datetime.date.today(), usuario=usuario,
+        accion=texto_historial_novacion(
+            fp_ant, fecha_promesa, fe_ant, fecha_entrega, fs_ant, fecha_escritura,
+        ),
+    )
+    return promesa
+
+
 def listar_otrosi(proyecto, adj):
     rows = []
     for item in PromesaOtrosi.objects.filter(proyecto_id=proyecto, adj=adj).order_by('-fecha_registro'):
@@ -762,6 +854,8 @@ def listar_otrosi(proyecto, adj):
             'id': item.pk,
             'tipo': item.tipo,
             'tipo_label': item.get_tipo_display(),
+            'fecha_promesa_anterior': item.fecha_promesa_anterior,
+            'fecha_promesa_nueva': item.fecha_promesa_nueva,
             'fecha_entrega_anterior': item.fecha_entrega_anterior,
             'fecha_entrega_nueva': item.fecha_entrega_nueva,
             'fecha_escritura_anterior': item.fecha_escritura_anterior,

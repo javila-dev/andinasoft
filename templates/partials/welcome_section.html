@@ -1,0 +1,36 @@
+{# Card de una sección del dashboard de inicio (welcome.html). #}
+<section class="wd-panel wd-section size-{{ section.size }}{%if big%} is-big{%endif%}"{%if span%} style="--span: {{ span }}"{%endif%}>
+  <div class="wd-section-head">
+    <i class="fas {{ section.icon }}"></i>
+    <h2>{{ section.title }}</h2>
+    {%if section.scope == 'accounting'%}{%if empresas_activas or proyectos_activos%}<span class="wd-scope">{%if not empresas_activas%}Todas tus empresas{%elif empresas_activas|length == 1%}{{ empresas_activas.0.corto }}{%else%}{{ empresas_activas|length }} empresas{%endif%}</span>{%endif%}
+    {%elif section.scope == 'personal' and proyectos_activos%}<span class="wd-scope">Tuyo · todos los proyectos</span>{%endif%}
+    {%if section.asesor_filter and asesores%}
+    <form method="get" class="wd-head-filter">
+      <label class="wd-select wd-select-native{%if asesor_activo%} is-set{%endif%}" title="Filtrar por asesor externo">
+        <i class="fas fa-user-tie" aria-hidden="true"></i>
+        <span class="sr-only">Asesor:</span>
+        <select name="asesor" data-autosubmit>
+          <option value="">Todos los asesores</option>
+          {%for a in asesores%}<option value="{{ a.id }}"{%if asesor_activo and a.id == asesor_activo.id%} selected{%endif%}>{{ a.nombre }}</option>{%endfor%}
+        </select>
+      </label>
+    </form>
+    {%endif%}
+  </div>
+  <div class="wd-body">
+    <div class="wd-kpis" data-n="{{ section.kpis|length }}">
+      {%for kpi in section.kpis%}
+      <a class="wd-kpi{%if kpi.alert%} is-alert{%endif%}" href="{{ kpi.href }}" title="{{ kpi.label }}: {{ kpi.full }}">
+        <div class="v">{{ kpi.display }}</div>
+        <div class="l">{{ kpi.label }}</div>
+      </a>
+      {%endfor%}
+    </div>
+    {%if section.charts%}
+    <div class="wd-charts">
+      {%for key in section.charts%}<div class="wd-chart" data-chart="{{ key }}"></div>{%endfor%}
+    </div>
+    {%endif%}
+  </div>
+</section>

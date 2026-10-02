@@ -5,111 +5,494 @@
 
 {%block style%}
 <style>
-  .cg-kpi { border-radius: 8px; padding: 1rem 1.25rem; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); height: 100%; }
-  .cg-kpi .label { font-size: .75rem; color: #6c757d; text-transform: uppercase; letter-spacing: .04em; text-align: center; }
-  .cg-kpi .value { font-size: 1.45rem; font-weight: 700; margin-top: .2rem; text-align: center; }
-  .cg-badge-filter { display: inline-block; padding: .35rem .7rem; margin: 0 .35rem .35rem 0; border-radius: 999px; font-size: .8rem; background: #eef2f5; color: #334; text-decoration: none; }
-  .cg-badge-filter.active { background: #2c3e50; color: #fff; }
-  .cg-card-alert { border: 1px solid #e5e8eb; border-radius: 8px; background: #fff; padding: .75rem 1rem; height: 100%; }
-  .cg-card-alert h6 { font-size: .85rem; margin: 0 0 .5rem; }
-  .cg-item { font-size: .78rem; line-height: 1.25; padding: .4rem 0; border-bottom: 1px solid #f0f2f4; }
+  .sac-shell { --sac-ink: #22302d; --sac-muted: #6b7a76; --sac-brand: #33544b; --sac-line: #e7ecea; --sac-soft: #eef3f1; --sac-warn: #b03a2e; --sac-warn-bg: #fdf3f2; --sac-warn-line: #f1cdc9; }
+  .sac-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: .75rem 1rem; margin-bottom: 1rem; }
+  .sac-head h1 { font-size: 1.45rem; font-weight: 600; margin: 0; color: var(--sac-brand); }
+  .sac-date { color: var(--sac-muted); font-size: .85rem; }
+  .sac-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .sac-filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+  /* Filtros tipo píldora, como en el inicio. */
+  .sac-ms { position: relative; }
+  .sac-ms > summary { list-style: none; display: inline-flex; align-items: center; gap: .45rem; height: 34px; padding: 0 .75rem; border: 1px solid var(--sac-line); border-radius: 999px; background: #fff; color: var(--sac-ink); font-size: .8rem; cursor: pointer; user-select: none; transition: border-color .15s, background .15s; }
+  .sac-ms > summary::-webkit-details-marker { display: none; }
+  .sac-ms > summary::after { content: ''; width: 10px; height: 6px; margin-left: .15rem; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7a76' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center; transition: transform .15s; }
+  .sac-ms[open] > summary::after { transform: rotate(180deg); }
+  .sac-ms > summary:hover { border-color: #c3d9cf; }
+  .sac-ms > summary:focus-visible { outline: none; border-color: var(--sac-brand); box-shadow: 0 0 0 3px rgba(51,84,75,.12); }
+  .sac-ms > summary > i { color: var(--sac-muted); font-size: .75rem; }
+  .sac-ms-value { font-weight: 600; max-width: 12rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sac-ms.is-set > summary { background: #e8f1ed; border-color: #c3d9cf; }
+  .sac-ms.is-set > summary > i, .sac-ms.is-set .sac-ms-value { color: var(--sac-brand); }
+  .sac-ms-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 230px; max-width: 320px; max-height: 60vh; overflow-y: auto; background: #fff; border: 1px solid var(--sac-line); border-radius: 10px; box-shadow: 0 14px 32px rgba(16,24,40,.16); padding: .35rem; }
+  .sac-ms-opt { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .45rem .6rem; border-radius: 6px; font-size: .82rem; color: var(--sac-ink); text-decoration: none; }
+  .sac-ms-opt:hover { background: #f4f7f6; color: var(--sac-ink); text-decoration: none; }
+  .sac-ms-opt.active { font-weight: 600; color: var(--sac-brand); }
+  .sac-ms-opt.active::after { content: '\2713'; color: var(--sac-brand); }
+  /* KPIs resumidas: un número principal y el desglose debajo. */
+  .sac-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+  @media (max-width: 991.98px) { .sac-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .sac-kpi { border: 1px solid var(--sac-line); border-radius: 10px; background: #fff; padding: .7rem .9rem; min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
+  .sac-kpi.is-alert { background: var(--sac-warn-bg); border-color: var(--sac-warn-line); }
+  .sac-kpi-main { display: flex; align-items: baseline; gap: .5rem; border: 0; background: none; padding: 0; text-align: left; color: inherit; min-width: 0; }
+  button.sac-kpi-main { cursor: pointer; }
+  button.sac-kpi-main:hover .l { color: var(--sac-brand); text-decoration: underline; }
+  .sac-kpi-main .v { font-size: 1.5rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .sac-kpi-main .l { font-size: .8rem; color: var(--sac-muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sac-kpi.is-alert .sac-kpi-main .v { color: var(--sac-warn); }
+  .sac-kpi-sub { display: flex; flex-wrap: wrap; gap: .3rem; }
+  .sac-kpi-sub button { border: 0; border-radius: 999px; background: var(--sac-soft); color: var(--sac-ink); font-size: .7rem; padding: .12rem .5rem; cursor: pointer; }
+  .sac-kpi-sub button b { font-variant-numeric: tabular-nums; }
+  .sac-kpi-sub button:hover { background: #dfe9e5; }
+  .sac-kpi-sub button.is-zero { color: var(--sac-muted); background: transparent; box-shadow: inset 0 0 0 1px var(--sac-line); }
+  .sac-kpi.is-alert .sac-kpi-sub button:not(.is-zero) { background: #fbe1de; color: var(--sac-warn); }
+  .sac-kpi-note { font-size: .7rem; color: var(--sac-muted); padding: .12rem 0; }
+  .cg-kpi-lista { max-height: 50vh; overflow-y: auto; }
+  .sac-shell {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-bottom: 0;
+    box-sizing: border-box;
+  }
+  .sac-top { flex: 0 0 auto; }
+  .sac-cols {
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  .sac-cols > [class*="col-"] {
+    display: flex;
+    min-height: 0;
+    margin-bottom: 0;
+  }
+  .cg-card-alert {
+    border: 1px solid #e5e8eb;
+    border-radius: 8px;
+    background: #fff;
+    padding: 0;
+    flex: 1 1 auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .cg-card-alert h6 {
+    flex: 0 0 auto;
+    font-size: .85rem;
+    margin: 0;
+    padding: .7rem 1rem .55rem;
+    background: #fff;
+    border-bottom: 1px solid #f0f2f4;
+  }
+  .cg-card-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: .15rem 1rem .6rem;
+  }
+  .cg-grupo-filtros { display: flex; flex-wrap: wrap; gap: .3rem; padding: 0 1rem .55rem; background: #fff; }
+  .cg-grupo-filtros button {
+    border: 0;
+    background: #eef2f5;
+    color: #445;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 600;
+    padding: .15rem .5rem;
+    cursor: pointer;
+  }
+  .cg-grupo-filtros button.active { background: #2c3e50; color: #fff; }
+  .cg-grupo-titulo {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #fff;
+    font-size: .72rem;
+    font-weight: 700;
+    color: #334;
+    padding: .4rem 0 .25rem;
+    border-bottom: 1px solid #eef2f4;
+    margin-top: .15rem;
+  }
+  .cg-grupo-titulo span { color: #90a4ae; font-weight: 600; margin-left: .25rem; }
+  @media (max-width: 767.98px) {
+    .sac-cols { flex-direction: column; }
+    .sac-cols > [class*="col-"] {
+      flex: 1 1 0;
+      width: 100%;
+      max-width: 100%;
+      padding-bottom: .5rem;
+    }
+  }
+  .cg-item { display: flex; align-items: flex-start; gap: .45rem; font-size: .78rem; line-height: 1.25; padding: .4rem 0; border-bottom: 1px solid #f0f2f4; color: inherit; text-decoration: none; }
+  .cg-item:hover { background: #f6f8fa; color: inherit; text-decoration: none; }
   .cg-item:last-child { border-bottom: 0; }
-  .tag-chip { display: inline-block; font-size: .65rem; padding: .1rem .35rem; border-radius: 4px; background: #eef2f5; color: #445; margin-right: .2rem; }
+  .cg-item-title { color: #007bff; }
+  .tag-chip { display: inline-block; font-size: .65rem; padding: .1rem .35rem; border-radius: 4px; background: #eef2f5; color: #445; margin-right: .2rem; font-weight: 600; }
+  .tag-reunion { background: #e3f2fd; color: #1565c0; }
+  .tag-pqrs { background: #fdecea; color: #c0392b; }
+  .tag-entrega { background: #fff3e0; color: #e67e22; }
+  .tag-escritura { background: #f3e8ff; color: #7e3ff2; }
+  .tag-pendiente { background: #f4f5f7; color: #607d8b; }
+  .tag-firma-cliente { background: #e8eaf6; color: #3949ab; }
+  .tag-factura { background: #fff8e1; color: #8a6d00; }
+  .tag-firma-empresa { background: #e0f2f1; color: #00796b; }
+  .tag-carga { background: #e0f7fa; color: #00838f; }
+  .tag-registro { background: #e8f5e9; color: #2e7d32; }
+  .tag-facturado { background: #e8f8f0; color: #1e8449; }
+  .tag-cambio { background: #e1f5fe; color: #0277bd; }
+  .tag-envio { background: #f3e5f5; color: #8e24aa; }
+  .tag-cita { background: #fce4ec; color: #c2185b; }
+  .tag-respuesta { background: #efebe9; color: #6d4c41; }
+  .tag-gestion { background: #f1f8e9; color: #558b2f; }
+  .tag-otro { background: #eceff1; color: #546e7a; }
+  .tag-acta { background: #ede7f6; color: #5e35b1; }
+  .tag-dias { background: #e3f2fd; color: #1565c0; }
+  .tag-dias.tag-alerta { background: #fdecea; color: #c0392b; }
+  a.cg-item.cg-alerta { background: #fff5f5; box-shadow: inset 3px 0 0 #c0392b; }
+  a.cg-item.cg-alerta:hover { background: #fdecea; color: inherit; }
+  .cg-alerta-txt { font-size: .68rem; color: #c0392b; font-weight: 600; margin-top: .15rem; }
+  .cg-item-main { flex: 1; min-width: 0; }
+  .hito-paso-slot {
+    margin-left: auto;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hito-paso-mark { position: absolute; top: 0; left: 0; }
+  .hito-paso-slot .hito-paso-mark { display: none; }
+  .hito-paso-slot .hito-paso-mark.next { display: flex; }
+  .hito-paso-slot .hito-paso-mark.next ~ .hito-paso-mark { display: none; }
+  .hito-paso-slot:not(:has(.next)) .hito-paso-mark.done:last-of-type { display: flex; }
+  .hito-paso-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .72rem;
+    background: #eef2f5;
+    color: #607d8b;
+    cursor: pointer;
+  }
+  .hito-paso-mark.done { background: #1e8449; color: #fff; }
+  .hito-paso-mark.next {
+    background: #fff;
+    color: #546e7a;
+    outline: 1px solid #cfd8dc;
+    animation: hito-pulse 1.8s ease-in-out infinite;
+  }
+  .hito-paso-mark.locked { color: #90a4ae; }
+  @keyframes hito-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(144, 164, 174, .28); }
+    50% { box-shadow: 0 0 0 5px rgba(144, 164, 174, .06); }
+  }
+  .hito-date { font-size: .68rem; color: #7b8794; }
 </style>
-{% include 'partials/stepper_hitos_css.html' %}
 {%endblock%}
 
 {%block content%}
-<div class="principal-container bg-white rounded shadow-lg p-3">
-  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+<div class="principal-container sac-shell bg-white rounded shadow-lg p-3" id="sacShell">
+  <div class="sac-top">
+  <div class="sac-head">
     <div>
-      <h3 class="section-title text-white mb-1">Servicio al cliente</h3>
-      <small class="text-muted">Cola del gestor · {{ today }}{% if proyecto %} · {{ proyecto }}{% endif %}</small>
+      <h1>Servicio al cliente</h1>
+      <div class="sac-date">Cola del gestor · {{ today }}</div>
     </div>
-    <div>
+    <div class="sac-actions">
       <a class="btn btn-sm btn-outline-primary" href="/crm/actas"><i class="fas fa-comments"></i> Actas</a>
       <a class="btn btn-sm btn-outline-secondary" href="/projectselector/pqrs"><i class="fas fa-mail-bulk"></i> PQRS</a>
       <a class="btn btn-sm btn-outline-secondary" href="/projectselector/promesas"><i class="fas fa-file-signature"></i> Promesas</a>
     </div>
   </div>
 
-  <div class="mb-3">
-    <a class="cg-badge-filter {% if not proyecto %}active{% endif %}" href="/servicio_cliente/dashboard{% if tipo %}?tipo={{ tipo }}{% endif %}">Todos</a>
-    {% for p in proyectos %}
-    <a class="cg-badge-filter {% if proyecto == p %}active{% endif %}" href="/servicio_cliente/dashboard?proyecto={{ p|urlencode }}{% if tipo %}&tipo={{ tipo }}{% endif %}">{{ p }}</a>
-    {% endfor %}
-  </div>
-  <div class="mb-3">
-    <a class="cg-badge-filter {% if not tipo %}active{% endif %}" href="/servicio_cliente/dashboard{% if proyecto %}?proyecto={{ proyecto|urlencode }}{% endif %}">Todos los tipos</a>
-    {% for value, label in tipos %}
-    <a class="cg-badge-filter {% if tipo == value %}active{% endif %}" href="/servicio_cliente/dashboard?{% if proyecto %}proyecto={{ proyecto|urlencode }}&{% endif %}tipo={{ value }}">{{ label }}</a>
-    {% endfor %}
-  </div>
-
-  <div class="row mb-3">
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Reuniones hoy</div><div class="value">{{ kpis.reuniones_hoy }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Reuniones semana</div><div class="value">{{ kpis.reuniones_semana }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Compromisos hoy</div><div class="value text-warning">{{ kpis.compromisos_hoy }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Compromisos vencidos</div><div class="value text-danger">{{ kpis.compromisos_vencidos }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">PQRS abiertas</div><div class="value">{{ kpis.pqrs_abiertas }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">PQRS vencidas</div><div class="value text-danger">{{ kpis.pqrs_vencidas }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Juridica</div><div class="value">{{ kpis.pqrs_juridica }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Entregas vencidas</div><div class="value text-danger">{{ kpis.entregas_vencidas }}</div></div></div>
-    <div class="col-6 col-md-3 col-xl mb-2"><div class="cg-kpi"><div class="label">Escrituras en tramite</div><div class="value">{{ kpis.escrituras_pendientes }}</div></div></div>
+  <div class="sac-filters">
+    <details class="sac-ms{% if proyecto %} is-set{% endif %}">
+      <summary title="Filtrar por proyecto"><i class="fas fa-map-marker-alt" aria-hidden="true"></i><span class="sr-only">Proyecto:</span><span class="sac-ms-value">{% if proyecto %}{{ proyecto }}{% else %}Todos los proyectos{% endif %}</span></summary>
+      <div class="sac-ms-panel">
+        <a class="sac-ms-opt{% if not proyecto %} active{% endif %}" href="/servicio_cliente/dashboard{% if tipo %}?tipo={{ tipo }}{% endif %}">Todos los proyectos</a>
+        {% for p in proyectos %}
+        <a class="sac-ms-opt{% if proyecto == p %} active{% endif %}" href="/servicio_cliente/dashboard?proyecto={{ p|urlencode }}{% if tipo %}&tipo={{ tipo }}{% endif %}">{{ p }}</a>
+        {% endfor %}
+      </div>
+    </details>
+    <details class="sac-ms{% if tipo %} is-set{% endif %}">
+      <summary title="Filtrar por tipo"><i class="fas fa-tag" aria-hidden="true"></i><span class="sr-only">Tipo:</span><span class="sac-ms-value">{% if tipo %}{% for value, label in tipos %}{% if tipo == value %}{{ label }}{% endif %}{% endfor %}{% else %}Todos los tipos{% endif %}</span></summary>
+      <div class="sac-ms-panel">
+        <a class="sac-ms-opt{% if not tipo %} active{% endif %}" href="/servicio_cliente/dashboard{% if proyecto %}?proyecto={{ proyecto|urlencode }}{% endif %}">Todos los tipos</a>
+        {% for value, label in tipos %}
+        <a class="sac-ms-opt{% if tipo == value %} active{% endif %}" href="/servicio_cliente/dashboard?{% if proyecto %}proyecto={{ proyecto|urlencode }}&{% endif %}tipo={{ value }}">{{ label }}</a>
+        {% endfor %}
+      </div>
+    </details>
   </div>
 
-  <div class="row">
-    <div class="col-md-4 mb-3">
+  <div class="sac-kpis" id="sacKpis" data-proyecto="{{ proyecto|default:'' }}" data-tipo="{{ tipo|default:'' }}">
+    <div class="sac-kpi">
+      <button type="button" class="sac-kpi-main" data-kpi="reuniones_hoy" data-titulo="Reuniones hoy"><span class="v">{{ kpis.reuniones_hoy }}</span><span class="l">Reuniones hoy</span></button>
+      <div class="sac-kpi-sub">
+        <button type="button" data-kpi="compromisos_hoy" data-titulo="Compromisos hoy"{% if not kpis.compromisos_hoy %} class="is-zero"{% endif %}><b>{{ kpis.compromisos_hoy }}</b> compromisos hoy</button>
+      </div>
+    </div>
+    <div class="sac-kpi{% if kpis.vencidos_total %} is-alert{% endif %}">
+      <div class="sac-kpi-main"><span class="v">{{ kpis.vencidos_total }}</span><span class="l">Vencidos</span></div>
+      <div class="sac-kpi-sub">
+        <button type="button" data-kpi="compromisos_vencidos" data-titulo="Compromisos vencidos"{% if not kpis.compromisos_vencidos %} class="is-zero"{% endif %}><b>{{ kpis.compromisos_vencidos }}</b> compromisos</button>
+        <button type="button" data-kpi="pqrs_vencidas" data-titulo="PQRS vencidas"{% if not kpis.pqrs_vencidas %} class="is-zero"{% endif %}><b>{{ kpis.pqrs_vencidas }}</b> PQRS</button>
+        <button type="button" data-kpi="entregas_vencidas" data-titulo="Entregas vencidas"{% if not kpis.entregas_vencidas %} class="is-zero"{% endif %}><b>{{ kpis.entregas_vencidas }}</b> entregas</button>
+        <button type="button" data-kpi="escrituras_vencidas" data-titulo="Escrituras vencidas"{% if not kpis.escrituras_vencidas %} class="is-zero"{% endif %}><b>{{ kpis.escrituras_vencidas }}</b> escrituras</button>
+      </div>
+    </div>
+    <div class="sac-kpi">
+      <button type="button" class="sac-kpi-main" data-kpi="pqrs_abiertas" data-titulo="PQRS abiertas"><span class="v">{{ kpis.pqrs_abiertas }}</span><span class="l">PQRS abiertas</span></button>
+      <div class="sac-kpi-sub">
+        <button type="button" data-kpi="pqrs_juridica" data-titulo="PQRS en jurídica"{% if not kpis.pqrs_juridica %} class="is-zero"{% endif %}><b>{{ kpis.pqrs_juridica }}</b> en jurídica</button>
+      </div>
+    </div>
+    <div class="sac-kpi">
+      <button type="button" class="sac-kpi-main" data-kpi="escrituras_tramite" data-titulo="Escrituras en trámite"><span class="v">{{ kpis.escrituras_pendientes }}</span><span class="l">Escrituras en trámite</span></button>
+      <div class="sac-kpi-sub"><span class="sac-kpi-note">Seguimiento en la columna derecha</span></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="row sac-cols">
+    <div class="col-md-4">
       <div class="cg-card-alert">
         <h6>Hoy</h6>
+        <div class="cg-card-scroll">
         {% for item in hoy %}
-        <div class="cg-item">
-          <span class="tag-chip">{{ item.chip }}</span>
-          <a href="{{ item.href }}">{{ item.titulo }}</a>
-          <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }} · {{ item.fecha }}</div>
-        </div>
+        <a class="cg-item" href="{{ item.href }}">
+          <div class="cg-item-main">
+            {% for badge in item.badges %}
+            <span class="tag-chip tag-{{ badge.chip_slug }}">{{ badge.chip }}</span>
+            {% endfor %}
+            <span class="cg-item-title">{% if item.adj %}ADJ {{ item.adj }}{% else %}{{ item.titulo }}{% endif %}</span>
+            <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }}{% if item.fecha %} · {{ item.fecha|date:'d/m/Y' }}{% endif %}</div>
+          </div>
+        </a>
         {% empty %}
         <div class="text-muted">Nada para hoy.</div>
         {% endfor %}
+        </div>
       </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-4">
       <div class="cg-card-alert">
-        <h6>Atrasados</h6>
-        {% for item in atrasados %}
-        <div class="cg-item">
-          <span class="tag-chip">{{ item.chip }}</span>
-          <a href="{{ item.href }}">{{ item.titulo }}</a>
-          <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }} · {{ item.fecha }}</div>
-          {% if item.entrega_ui %}
-          {% include 'partials/stepper_hitos.html' with steps=item.entrega_ui compact=True %}
-          {% endif %}
+        <h6>Atrasados <span style="color:#90a4ae;font-weight:600">{{ atrasados_total }}</span></h6>
+        {% if atrasados_filtros %}
+        <div class="cg-grupo-filtros" id="filtrosAtrasados">
+          <button type="button" class="active" data-grupo="">Todos</button>
+          {% for filtro in atrasados_filtros %}
+          <button type="button" data-grupo="{{ filtro.clave }}">{{ filtro.titulo }} {{ filtro.total }}</button>
+          {% endfor %}
         </div>
+        {% endif %}
+        <div class="cg-card-scroll" id="listaAtrasados">
+        {% for item in atrasados %}
+        <a class="cg-item cg-fila-adj" href="{{ item.href }}" data-tipos="{{ item.tipos|join:' ' }}">
+          <div class="cg-item-main">
+            {% for badge in item.badges %}
+            <span class="tag-chip tag-{{ badge.chip_slug }}">{{ badge.chip }}</span>
+            {% endfor %}
+            <span class="cg-item-title">{% if item.adj %}ADJ {{ item.adj }}{% else %}{{ item.titulo }}{% endif %}</span>
+            <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }}{% if item.fecha %} · {{ item.fecha|date:'d/m/Y' }}{% endif %}</div>
+          </div>
+          {% if item.entrega_ui %}
+          {% include 'partials/hito_paso_icono.html' with steps=item.entrega_ui %}
+          {% elif item.pasos_ui %}
+          {% include 'partials/hito_paso_icono.html' with steps=item.pasos_ui %}
+          {% endif %}
+        </a>
         {% empty %}
         <div class="text-muted">Sin atrasos.</div>
         {% endfor %}
+        </div>
       </div>
     </div>
-    <div class="col-md-4 mb-3">
+    <div class="col-md-4">
       <div class="cg-card-alert">
         <h6>En tramite de escritura</h6>
+        <div class="cg-card-scroll">
         {% for item in escrituras %}
-        <div class="cg-item">
-          <span class="tag-chip">{{ item.chip }}</span>
-          <a href="{{ item.href }}">{{ item.titulo }}</a>
-          <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }}</div>
-          {% if item.pasos_linea %}
-          {% include 'partials/stepper_hitos.html' with steps=item.pasos_linea rama=item.pasos_rama compact=True %}
-          {% elif item.pasos_ui %}
-          {% include 'partials/stepper_hitos.html' with steps=item.pasos_ui compact=True %}
+        <a class="cg-item{% if item.alerta_registro %} cg-alerta{% endif %}" href="{{ item.href }}">
+          <div class="cg-item-main">
+            <span class="tag-chip tag-{{ item.chip_slug }}">{{ item.chip }}</span>
+            {% if item.dias_firma != None %}
+            <span class="tag-chip tag-dias{% if item.alerta_registro %} tag-alerta{% endif %}" title="Dias desde la firma del cliente">{% if item.dias_firma == 1 %}1 dia{% else %}{{ item.dias_firma }} dias{% endif %}</span>
+            {% endif %}
+            <span class="cg-item-title">{{ item.titulo }}</span>
+            <div class="text-muted">{{ item.cliente }} · {{ item.proyecto }}</div>
+            <div class="hito-date">Pactada: {% if item.fecha %}{{ item.fecha|date:'d/m/Y' }}{% else %}sin fecha{% endif %}</div>
+            {% if item.alerta_registro %}
+            <div class="cg-alerta-txt">Mas de un mes sin firma de la empresa. Se acerca el plazo para registrarla.</div>
+            {% endif %}
+          </div>
+          {% if item.pasos_ui %}
+          {% include 'partials/hito_paso_icono.html' with steps=item.pasos_ui %}
+          {% elif item.pasos_linea %}
+          {% include 'partials/hito_paso_icono.html' with steps=item.pasos_linea %}
           {% endif %}
-          <div class="hito-date">Pactada: {{ item.fecha|default:'sin fecha' }}</div>
-        </div>
+        </a>
         {% empty %}
         <div class="text-muted">Sin escrituras en tramite.</div>
         {% endfor %}
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="modalKpi" tabindex="-1" role="dialog" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="modalKpiTitulo">Detalle</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <input type="search" id="modalKpiBuscar" class="form-control form-control-sm mb-2" placeholder="Buscar por negocio o nombre" autocomplete="off">
+        <div class="small text-muted mb-2" id="modalKpiCuenta"></div>
+        <div id="modalKpiLista" class="cg-kpi-lista"></div>
+        <div class="text-center">
+          <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="modalKpiMas" style="display:none">Ver mas</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{%endblock%}
+{%block jsbottom%}
+<script>
+(function () {
+  function fitSac() {
+    var el = document.getElementById('sacShell');
+    if (!el) return;
+    var top = el.getBoundingClientRect().top;
+    var h = window.innerHeight - Math.max(top, 0) - 12;
+    if (h < 0) h = 0;
+    el.style.height = h + 'px';
+    el.style.maxHeight = h + 'px';
+  }
+  fitSac();
+  window.addEventListener('resize', fitSac);
+})();
+(function () {
+  // Filtros tipo píldora: uno abierto a la vez; se cierran al hacer clic fuera.
+  var menus = document.querySelectorAll('.sac-ms');
+  function closeAll(except) { menus.forEach(function (m) { if (m !== except) m.open = false; }); }
+  menus.forEach(function (m) { m.addEventListener('toggle', function () { if (m.open) closeAll(m); }); });
+  document.addEventListener('click', function (e) { if (!e.target.closest('.sac-ms')) closeAll(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+})();
+(function () {
+  var bar = document.getElementById('filtrosAtrasados');
+  if (!bar) return;
+  var filas = document.querySelectorAll('#listaAtrasados .cg-fila-adj');
+  bar.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('button');
+    if (!btn) return;
+    var clave = btn.getAttribute('data-grupo');
+    bar.querySelectorAll('button').forEach(function (el) { el.classList.toggle('active', el === btn); });
+    filas.forEach(function (fila) {
+      var tipos = (fila.getAttribute('data-tipos') || '').split(' ');
+      fila.style.display = !clave || tipos.indexOf(clave) >= 0 ? '' : 'none';
+    });
+  });
+})();
+(function () {
+  var root = document.getElementById('sacKpis');
+  var lista = document.getElementById('modalKpiLista');
+  var cuenta = document.getElementById('modalKpiCuenta');
+  var buscar = document.getElementById('modalKpiBuscar');
+  var btnMas = document.getElementById('modalKpiMas');
+  var titulo = document.getElementById('modalKpiTitulo');
+  if (!root || !lista) return;
+  var kpi = '';
+  var offset = 0;
+  var timer = null;
+  var seq = 0;
+
+  function esc(value) {
+    return String(value || '').replace(/[&<>"']/g, function (ch) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch];
+    });
+  }
+
+  function fila(item) {
+    var meta = [item.cliente, item.proyecto, item.adj ? 'ADJ ' + item.adj : '', item.fecha].filter(Boolean).join(' · ');
+    var extra = item.extra ? '<div class="cg-alerta-txt">' + esc(item.extra) + '</div>' : '';
+    var inner = '<div class="cg-item-main"><span class="tag-chip tag-' + esc(item.chip_slug) + '">' + esc(item.chip) +
+      '</span> <span class="cg-item-title">' + esc(item.titulo) + '</span><div class="text-muted">' + esc(meta) +
+      '</div>' + extra + '</div>';
+    if (item.href && item.href !== '#') {
+      return '<a class="cg-item" href="' + esc(item.href) + '">' + inner + '</a>';
+    }
+    return '<div class="cg-item">' + inner + '</div>';
+  }
+
+  function cargar(reset) {
+    var mine = ++seq;
+    if (reset) {
+      offset = 0;
+      lista.innerHTML = '<div class="text-muted py-2">Cargando...</div>';
+    }
+    btnMas.disabled = true;
+    var params = new URLSearchParams();
+    params.set('kpi', kpi);
+    params.set('q', buscar.value || '');
+    params.set('offset', String(offset));
+    if (root.getAttribute('data-proyecto')) params.set('proyecto', root.getAttribute('data-proyecto'));
+    if (root.getAttribute('data-tipo')) params.set('tipo', root.getAttribute('data-tipo'));
+    fetch('/servicio_cliente/dashboard/detalle?' + params.toString(), {credentials: 'same-origin'})
+      .then(function (res) { return res.json().then(function (body) { return {ok: res.ok, body: body}; }); })
+      .then(function (pack) {
+        if (mine !== seq) return;
+        btnMas.disabled = false;
+        if (!pack.ok) {
+          lista.innerHTML = '<div class="text-danger py-2">No se pudo cargar el detalle.</div>';
+          btnMas.style.display = 'none';
+          return;
+        }
+        var items = pack.body.items || [];
+        if (reset) lista.innerHTML = '';
+        if (!items.length && offset === 0) {
+          lista.innerHTML = '<div class="text-muted py-2">No hay registros.</div>';
+        } else {
+          lista.insertAdjacentHTML('beforeend', items.map(fila).join(''));
+        }
+        var shown = lista.querySelectorAll('.cg-item').length;
+        cuenta.textContent = shown + ' de ' + (pack.body.total || 0);
+        offset = shown;
+        btnMas.style.display = pack.body.has_more ? '' : 'none';
+      })
+      .catch(function () {
+        if (mine !== seq) return;
+        btnMas.disabled = false;
+        lista.innerHTML = '<div class="text-danger py-2">No se pudo cargar el detalle.</div>';
+        btnMas.style.display = 'none';
+      });
+  }
+
+  root.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('button[data-kpi]');
+    if (!btn) return;
+    kpi = btn.getAttribute('data-kpi');
+    titulo.textContent = btn.getAttribute('data-titulo') || 'Detalle';
+    buscar.value = '';
+    $('#modalKpi').modal('show');
+    cargar(true);
+  });
+  btnMas.addEventListener('click', function () { cargar(false); });
+  buscar.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { cargar(true); }, 300);
+  });
+})();
+</script>
 {%endblock%}

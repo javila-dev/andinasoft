@@ -123,6 +123,7 @@ urlpatterns = [
     path('operaciones/buscar_cliente',views.buscar_cliente,name='buscar cliente'),
     path('blank_request',views.blank_request),
     path('servicio_cliente/dashboard', servicio_cliente_views.sac_dashboard, name='sac dashboard'),
+    path('servicio_cliente/dashboard/detalle', servicio_cliente_views.sac_dashboard_detalle, name='sac dashboard detalle'),
     path('servicio_cliente/cliente/<str:cliente_id>', servicio_cliente_views.sac_ficha_cliente, name='sac ficha cliente'),
     path('servicio_cliente/pqrs/<proyecto>', servicio_cliente_views.pqrs_lista, name='lista pqrs'),
     path('servicio_cliente/pqrs/<proyecto>/nueva', servicio_cliente_views.pqrs_radicar, name='pqrs radicar'),

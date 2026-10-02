@@ -1,4 +1,11 @@
 <style>
+  button.hito-card {
+    cursor: pointer;
+    font-family: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  button.hito-card:hover { border-color: #90a4ae; }
   .hito-card {
     display: flex;
     align-items: center;
@@ -101,8 +108,9 @@
     width: 100%;
     margin: .4rem 0 .2rem;
   }
+  /* Cada paso del tronco y la rama ocupan el mismo ancho (columnas iguales). */
   .hito-flow-trunk {
-    flex: 1.15 1 0;
+    flex: var(--trunk, 3) 1 0;
     display: flex;
     align-items: center;
     min-width: 0;
@@ -121,7 +129,7 @@
     min-height: 168px;
   }
   .hito-flow-arms {
-    flex: 1.15 1 0;
+    flex: 1 1 0;
     min-width: 0;
     display: flex;
     flex-direction: column;

@@ -1,0 +1,15 @@
+{% if steps %}
+<span class="hito-paso-slot">
+  {% for s in steps %}
+  {% if s.estado == 'next' or s.estado == 'done' %}
+  <span class="hito-paso-mark {{ s.estado }}"
+        data-toggle="tooltip"
+        data-placement="left"
+        data-container="body"
+        title="{{ s.label }}{% if s.interno %}. Interno{% endif %}. {% if s.fecha %}{% if s.fecha.year %}{{ s.fecha|date:'Y-m-d' }}{% else %}{{ s.fecha }}{% endif %}{% elif s.estado == 'next' %}Pendiente{% elif s.estado == 'done' %}Hecho{% else %}Bloqueado{% endif %}">
+    <i class="fas {{ s.icon }}" aria-hidden="true"></i>
+  </span>
+  {% endif %}
+  {% endfor %}
+</span>
+{% endif %}

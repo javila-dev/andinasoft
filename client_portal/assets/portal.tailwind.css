@@ -1,0 +1,122 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen bg-base-200 text-base-content font-body;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-body font-semibold tracking-tight;
+  }
+
+  input[type="text"],
+  input[type="date"],
+  input[type="email"] {
+    @apply input input-bordered w-full rounded-lg border-base-300 bg-base-100;
+  }
+}
+
+@layer components {
+  /* ── Layout ─────────────────────────────────────── */
+  .portal-shell {
+    @apply mx-auto w-full max-w-[1380px] px-4 md:px-6;
+  }
+
+  .portal-header {
+    @apply sticky top-0 z-20 border-b border-base-300/80 bg-base-100/95 backdrop-blur-sm;
+  }
+
+  .portal-logo-badge {
+    @apply flex h-7 w-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-content;
+  }
+
+  /* ── Cards & containers ─────────────────────────── */
+  .portal-panel {
+    @apply rounded-xl border border-base-300/80 bg-base-100 shadow-sm;
+  }
+
+  /* ── Typography helpers ─────────────────────────── */
+  .portal-kicker {
+    @apply text-[10px] font-semibold uppercase tracking-[0.22em] text-base-content/45;
+  }
+
+  .portal-page-title {
+    @apply text-lg font-semibold;
+  }
+
+  /* ── Tab navigation ─────────────────────────────── */
+  .portal-tab-nav {
+    @apply flex items-center gap-0.5 overflow-x-auto rounded-xl border border-base-300/80 bg-base-100 p-1 shadow-sm;
+  }
+
+  .portal-tab {
+    @apply whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-medium text-base-content/60 no-underline transition-colors hover:bg-base-200 hover:text-base-content;
+  }
+
+  .portal-tab-active {
+    @apply bg-primary text-primary-content hover:bg-primary/90 hover:text-primary-content;
+  }
+
+  /* ── Badges ─────────────────────────────────────── */
+  .pbadge {
+    @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none tracking-wide;
+  }
+
+  /* Estado del negocio */
+  .pbadge-active {
+    @apply bg-primary/15 text-primary ring-1 ring-inset ring-primary/30;
+  }
+
+  .pbadge-paid {
+    @apply bg-success/15 text-success ring-1 ring-inset ring-success/30;
+  }
+
+  /* Cuota states */
+  .pbadge-overdue {
+    @apply bg-warning/20 text-warning ring-1 ring-inset ring-warning/35;
+  }
+
+  .pbadge-upcoming {
+    @apply bg-info/15 text-info ring-1 ring-inset ring-info/30;
+  }
+
+  .pbadge-paid-cuota {
+    @apply bg-success/15 text-success ring-1 ring-inset ring-success/30;
+  }
+
+  .pbadge-pending {
+    @apply bg-base-300/70 text-base-content/60 ring-1 ring-inset ring-base-300;
+  }
+
+  /* Meta / neutral */
+  .pbadge-meta {
+    @apply bg-base-200 text-base-content/60 ring-1 ring-inset ring-base-300/80;
+  }
+
+  .pbadge-person {
+    @apply bg-secondary/10 text-secondary ring-1 ring-inset ring-secondary/20;
+  }
+
+  /* ── Breadcrumb ─────────────────────────────────── */
+  .portal-breadcrumb {
+    @apply flex items-center gap-1.5 text-xs;
+  }
+
+  .portal-breadcrumb a {
+    @apply text-base-content/50 no-underline hover:text-base-content;
+  }
+
+  .portal-breadcrumb-sep {
+    @apply text-base-content/25;
+  }
+
+  .portal-breadcrumb-current {
+    @apply font-medium text-base-content/80;
+  }
+}

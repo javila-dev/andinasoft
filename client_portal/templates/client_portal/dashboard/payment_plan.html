@@ -1,0 +1,156 @@
+{% extends 'client_portal/base_portal.html' %}
+
+{% block title %}Plan de pagos — {{ business.inmueble }}{% endblock %}
+
+{% block subnav %}
+<nav class="portal-breadcrumb mb-3">
+  <a href="/portal/mis-negocios">Mis negocios</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <a href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">{{ business.inmueble }}</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <span class="portal-breadcrumb-current">Plan de pagos</span>
+</nav>
+<nav class="portal-tab-nav">
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">Resumen</a>
+  <a class="portal-tab portal-tab-active" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/plan-pagos">Plan de pagos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/documentos">Documentos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/perfil">Mis datos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/pqrs">PQRS</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Stats header ─────────────────────────────────── -->
+<div class="portal-panel p-5">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h1 class="portal-page-title">Plan de pagos</h1>
+      <p class="mt-0.5 text-sm text-base-content/50">{{ business.inmueble }}</p>
+    </div>
+    <div class="flex flex-wrap gap-px overflow-hidden rounded-xl border border-base-300/80">
+      <div class="flex flex-col items-center px-5 py-3 bg-base-100">
+        <p class="portal-kicker mb-1.5">Total cuotas</p>
+        <p class="text-2xl font-bold">{{ summary.total_installments|default:0 }}</p>
+      </div>
+      <div class="flex flex-col items-center px-5 py-3 bg-success/10">
+        <p class="portal-kicker mb-1.5 text-success/70">Pagadas</p>
+        <p class="text-2xl font-bold text-success">{{ summary.paid_count|default:0 }}</p>
+      </div>
+      <div class="flex flex-col items-center px-5 py-3 {% if summary.overdue_count %}bg-warning/10{% else %}bg-base-100{% endif %}">
+        <p class="portal-kicker mb-1.5 {% if summary.overdue_count %}text-warning/70{% endif %}">Vencidas</p>
+        <p class="text-2xl font-bold {% if summary.overdue_count %}text-warning{% endif %}">{{ summary.overdue_count|default:0 }}</p>
+      </div>
+      <div class="flex flex-col items-center px-5 py-3 bg-info/10">
+        <p class="portal-kicker mb-1.5 text-info/70">Próximas</p>
+        <p class="text-2xl font-bold text-info">{{ summary.upcoming_count|default:0 }}</p>
+      </div>
+      <div class="flex flex-col items-center px-5 py-3 bg-base-100">
+        <p class="portal-kicker mb-1.5">Pendientes</p>
+        <p class="text-2xl font-bold text-base-content/60">{{ summary.pending_count|default:0 }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  {% if summary.total_installments %}
+  <div class="mt-4">
+    <div class="flex h-2 w-full overflow-hidden rounded-full bg-base-200">
+      {% widthratio summary.paid_count summary.total_installments 100 as pct_paid %}
+      <div class="h-full bg-success transition-all" style="width: {{ pct_paid }}%"></div>
+    </div>
+    <p class="mt-1.5 text-xs text-base-content/40">{{ pct_paid }}% pagado</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Main grid ─────────────────────────────────────── -->
+<div class="grid gap-4 xl:grid-cols-[300px_1fr]">
+
+  <!-- Sidebar -->
+  <div class="grid gap-4 content-start">
+
+    <article class="portal-panel p-5">
+      <p class="portal-kicker mb-3">Saldos</p>
+      <div class="divide-y divide-base-300/50 text-sm">
+        <div class="flex justify-between py-2.5">
+          <span class="text-base-content/55">Capital pendiente</span>
+          <strong>{{ summary.capital_pending|default:0 }}</strong>
+        </div>
+        <div class="flex justify-between py-2.5">
+          <span class="text-base-content/55">Interés pendiente</span>
+          <strong>{{ summary.interest_pending|default:0 }}</strong>
+        </div>
+        <div class="flex justify-between py-2.5">
+          <span class="text-base-content/55">Mora estimada</span>
+          <strong class="{% if summary.mora_estimada %}text-warning{% endif %}">{{ summary.mora_estimada|default:0 }}</strong>
+        </div>
+        <div class="flex justify-between py-2.5 border-t-2 border-base-300">
+          <span class="font-medium">Total pendiente</span>
+          <strong class="text-primary">{{ summary.total_pending|default:0 }}</strong>
+        </div>
+      </div>
+    </article>
+
+    {% if summary.overdue_installments %}
+    <article class="portal-panel p-5 border-warning/30">
+      <p class="portal-kicker mb-3 text-warning/70">Cuotas vencidas</p>
+      <div class="grid gap-2">
+        {% for inst in summary.overdue_installments %}
+        <div class="rounded-lg bg-warning/10 px-3 py-2.5 ring-1 ring-inset ring-warning/25">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium">Cuota {{ inst.nrocta }}</span>
+            <span class="text-xs font-semibold text-warning">{{ inst.dias_mora }} días</span>
+          </div>
+          <div class="mt-1 flex items-center justify-between">
+            <span class="text-xs text-base-content/50">{{ inst.fecha }}</span>
+            <span class="text-sm font-bold text-warning">{{ inst.saldo_total }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </article>
+    {% endif %}
+
+  </div>
+
+  <!-- Table -->
+  <article class="portal-panel overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="table table-sm w-full">
+        <thead class="sticky top-0 z-10 bg-base-200/90 backdrop-blur-sm text-xs">
+          <tr>
+            <th class="py-3">N°</th>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Cuota</th>
+            <th>Estado</th>
+            <th class="text-right">Saldo</th>
+            <th class="text-right">Mora</th>
+          </tr>
+        </thead>
+        <tbody class="text-sm">
+          {% for inst in installments %}
+          <tr class="{% if inst.estado_ui == 'vencida' %}bg-warning/5 hover:bg-warning/10{% elif inst.estado_ui == 'proxima' %}bg-info/5 hover:bg-info/10{% elif inst.estado_ui == 'pagada' %}opacity-50 hover:opacity-100{% else %}hover:bg-base-200/60{% endif %} transition-colors">
+            <td class="font-medium">{{ inst.nrocta }}</td>
+            <td class="text-base-content/60">{{ inst.fecha }}</td>
+            <td class="text-base-content/50 text-xs">{{ inst.tipocta }}</td>
+            <td class="font-medium">{{ inst.cuota }}</td>
+            <td>
+              <span class="pbadge {% if inst.estado_ui == 'vencida' %}pbadge-overdue{% elif inst.estado_ui == 'proxima' %}pbadge-upcoming{% elif inst.estado_ui == 'pagada' %}pbadge-paid-cuota{% else %}pbadge-pending{% endif %}">{{ inst.estado_ui }}</span>
+            </td>
+            <td class="text-right font-semibold {% if inst.estado_ui == 'vencida' %}text-warning{% endif %}">{{ inst.saldo_total }}</td>
+            <td class="text-right text-xs {% if inst.mora_estimada %}text-warning/80{% else %}text-base-content/30{% endif %}">{{ inst.mora_estimada }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="py-8 text-center text-sm text-base-content/40">No encontramos cuotas para este negocio.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+</div>
+{% endblock %}

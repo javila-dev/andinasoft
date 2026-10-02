@@ -1,0 +1,127 @@
+{% extends 'client_portal/base_portal.html' %}
+
+{% block title %}Ingreso al portal{% endblock %}
+
+{% block outer %}
+<div class="grid min-h-screen lg:grid-cols-[1fr_1fr] xl:grid-cols-[1.1fr_0.9fr]">
+
+  <!-- ── Branded left panel ─────────────────────────── -->
+  <div class="relative hidden flex-col justify-between overflow-hidden bg-secondary p-10 lg:flex xl:p-14">
+    <!-- Background texture -->
+    <div class="pointer-events-none absolute inset-0 opacity-[0.04]"
+         style="background-image: radial-gradient(circle at 30% 20%, #fff 1px, transparent 1px), radial-gradient(circle at 70% 80%, #fff 1px, transparent 1px); background-size: 40px 40px;"></div>
+    <div class="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-primary/20 blur-3xl"></div>
+    <div class="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-primary/10 blur-3xl"></div>
+
+    <!-- Top: branding -->
+    <div class="relative">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-content shadow-lg">A</div>
+      <p class="mt-4 text-lg font-semibold text-white/90">Área de clientes</p>
+      <p class="mt-1 text-sm text-white/45">Portal de gestión de negocios</p>
+    </div>
+
+    <!-- Middle: feature list -->
+    <div class="relative space-y-3">
+      <p class="mb-5 text-xs font-semibold uppercase tracking-widest text-white/35">Qué puedes hacer aquí</p>
+
+      <div class="flex items-start gap-3 rounded-xl bg-white/5 px-4 py-3.5">
+        <div class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/30 text-primary-content">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-white/85">Plan de pagos</p>
+          <p class="mt-0.5 text-xs text-white/45">Consulta cuotas, vencimientos y saldos en tiempo real.</p>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-3 rounded-xl bg-white/5 px-4 py-3.5">
+        <div class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/30 text-primary-content">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-white/85">Documentos</p>
+          <p class="mt-0.5 text-xs text-white/45">Descarga estado de cuenta y soportes del negocio.</p>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-3 rounded-xl bg-white/5 px-4 py-3.5">
+        <div class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/30 text-primary-content">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-white/85">Estado de cartera</p>
+          <p class="mt-0.5 text-xs text-white/45">Revisa el resumen financiero actualizado de tu negocio.</p>
+        </div>
+      </div>
+
+      <div class="flex items-start gap-3 rounded-xl bg-white/5 px-4 py-3.5">
+        <div class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/30 text-primary-content">
+          <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-medium text-white/85">Soporte y PQRS</p>
+          <p class="mt-0.5 text-xs text-white/45">Envía y haz seguimiento a tus solicitudes.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom: security note -->
+    <div class="relative flex items-center gap-2 text-xs text-white/30">
+      <svg class="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>Sesión protegida · Acceso exclusivo para clientes</span>
+    </div>
+  </div>
+
+  <!-- ── Right: login form ──────────────────────────── -->
+  <div class="flex flex-col items-center justify-center bg-base-100 px-6 py-12 sm:px-12 xl:px-16">
+
+    <!-- Mobile-only branding -->
+    <div class="mb-8 text-center lg:hidden">
+      <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-base font-bold text-primary-content">A</div>
+      <h1 class="text-lg font-semibold">Área de clientes</h1>
+      <p class="mt-1 text-sm text-base-content/50">Portal de gestión de negocios</p>
+    </div>
+
+    <div class="w-full max-w-md">
+      <div class="mb-8">
+        <h2 class="text-2xl font-semibold text-base-content">Ingresa a tu cuenta</h2>
+        <p class="mt-1.5 text-sm text-base-content/50">Usa tu cédula y fecha de nacimiento para continuar.</p>
+      </div>
+
+      {% if messages %}
+      <div class="mb-5 grid gap-2">
+        {% for message in messages %}
+        <div class="alert rounded-lg py-2.5 text-sm {% if 'error' in message.tags %}alert-error{% elif 'success' in message.tags %}alert-success{% else %}alert-info{% endif %}">
+          <span>{{ message }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" class="grid gap-5" data-loading-submit>
+        {% csrf_token %}
+        <div class="form-control gap-1.5">
+          <label class="label pb-0" for="{{ form.document.id_for_label }}">
+            <span class="label-text text-sm font-medium">Número de cédula</span>
+          </label>
+          {{ form.document }}
+        </div>
+        <div class="form-control gap-1.5">
+          <label class="label pb-0" for="{{ form.birth_date.id_for_label }}">
+            <span class="label-text text-sm font-medium">Fecha de nacimiento</span>
+          </label>
+          {{ form.birth_date }}
+        </div>
+        <button type="submit" class="btn btn-primary mt-1 h-11 rounded-lg text-sm font-semibold" data-submit-button>
+          <span data-submit-label>Ingresar al portal</span>
+        </button>
+      </form>
+
+      <p class="mt-8 text-center text-xs text-base-content/35">
+        Si tienes dificultades para ingresar, comunícate con tu asesor.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

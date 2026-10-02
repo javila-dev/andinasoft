@@ -1,59 +1,467 @@
 {%extends 'base.html'%}
-{%load static%}
 {%block title%}AndinaSoft{%endblock%}
+
+{%block style%}
+<style>
+  .wd { container: wd / inline-size; --wd-ink: #22302d; --wd-muted: #6b7a76; --wd-brand: #33544b; --wd-line: #e7ecea; --wd-warn: #2f6b58; --wd-warn-bg: #e8f1ed; --wd-warn-line: #c3d9cf; padding: 1.25rem 1rem 2rem 0; color: var(--wd-ink); }
+  .wd-panel { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(16,24,40,.08); }
+  .wd-hero { padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; container: hero / inline-size; }
+  /* Saludo | Proyecto  /  Fecha | Empresa */
+  .wd-hero-head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title proy' 'date emp'; align-items: center; gap: .5rem 1.25rem; }
+  .wd-title { grid-area: title; }
+  .wd-hero .wd-date { grid-area: date; }
+  .wd-ms-proy { grid-area: proy; }
+  .wd-ms-emp { grid-area: emp; }
+  /* Solo en pantallas muy angostas los filtros bajan bajo la fecha, lado a lado. */
+  @container hero (max-width: 539px) { .wd-hero-head { grid-template-columns: auto auto; justify-content: start; grid-template-areas: 'title title' 'date date' 'proy emp'; } }
+  .wd-hero h1 { font-size: 1.6rem; font-weight: 600; margin: 0; color: var(--wd-brand); }
+  .wd-title { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; min-width: 0; }
+  .wd-title h1 { margin-right: .25rem; }
+  .wd-hero .wd-date { color: var(--wd-muted); font-size: .9rem; }
+  .wd-chip { font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 999px; background: #eef3f1; color: var(--wd-brand); }
+  /* Filtros: selectores tipo píldora. */
+  .wd-select { position: relative; display: inline-flex; align-items: center; gap: .45rem; height: 34px; padding: 0 .3rem 0 .75rem; margin: 0; border: 1px solid var(--wd-line); border-radius: 999px; background: #fff; color: var(--wd-ink); font-size: .8rem; cursor: pointer; transition: border-color .15s, background .15s; }
+  .wd-select:hover { border-color: var(--wd-warn-line); }
+  .wd-select:focus-within { border-color: var(--wd-brand); box-shadow: 0 0 0 3px rgba(51,84,75,.12); }
+  .wd-select > i { color: var(--wd-muted); font-size: .75rem; }
+  /* Selección múltiple: <details> con casillas. */
+  .wd-ms { position: relative; }
+  .wd-ms > summary { list-style: none; padding-right: .75rem; user-select: none; }
+  .wd-ms > summary::-webkit-details-marker { display: none; }
+  .wd-ms > summary::after { content: ''; width: 10px; height: 6px; margin-left: .15rem; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7a76' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center; transition: transform .15s; }
+  .wd-ms[open] > summary::after { transform: rotate(180deg); }
+  .wd-ms > summary:focus-visible { outline: none; border-color: var(--wd-brand); box-shadow: 0 0 0 3px rgba(51,84,75,.12); }
+  .wd-ms-value { font-weight: 600; width: 10rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wd-ms.is-set > summary { background: var(--wd-warn-bg); border-color: var(--wd-warn-line); }
+  .wd-ms.is-set > summary > i, .wd-ms.is-set .wd-ms-value { color: var(--wd-brand); }
+  .wd-ms-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 250px; max-width: 320px; background: #fff; border: 1px solid var(--wd-line); border-radius: 10px; box-shadow: 0 14px 32px rgba(16,24,40,.16); padding: .4rem; }
+  .wd-ms-opt { display: flex; align-items: center; gap: .55rem; margin: 0; padding: .45rem .55rem; border-radius: 6px; font-size: .82rem; cursor: pointer; }
+  .wd-ms-opt:hover { background: #f4f7f6; }
+  .wd-ms-opt input { accent-color: var(--wd-brand); width: 15px; height: 15px; flex: 0 0 15px; margin: 0; }
+  .wd-ms-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wd-ms-actions { display: flex; justify-content: space-between; gap: .5rem; border-top: 1px solid #f1f4f3; margin-top: .3rem; padding: .45rem .25rem .1rem; }
+  .wd-ms-actions button { border: 0; border-radius: 6px; padding: .35rem .8rem; font-size: .76rem; font-weight: 600; cursor: pointer; }
+  .wd-ms-clear { background: transparent; color: var(--wd-muted); }
+  .wd-ms-clear:hover { color: var(--wd-brand); background: #f4f7f6; }
+  .wd-ms-apply { background: var(--wd-brand); color: #fff; }
+  .wd-ms-apply:hover { background: #2a463e; }
+  /* Selector simple en la cabecera de una sección (asesor). */
+  .wd-head-filter { margin: -.2rem 0 -.2rem auto; min-width: 0; }
+  .wd-select-native { height: 30px; padding-right: 0; max-width: 100%; }
+  .wd-select-native select { appearance: none; -webkit-appearance: none; border: 0; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7a76' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right .7rem center; height: 100%; width: 12rem; max-width: 100%; min-width: 0; padding: 0 1.8rem 0 0; font: inherit; font-weight: 600; color: inherit; cursor: pointer; text-overflow: ellipsis; }
+  .wd-select-native select:focus { outline: none; }
+  .wd-select-native.is-set { background: var(--wd-warn-bg); border-color: var(--wd-warn-line); }
+  .wd-select-native.is-set > i, .wd-select-native.is-set select { color: var(--wd-brand); }
+  /* Accesos rápidos dentro del encabezado. */
+  .wd-quick { border-top: 1px solid #f1f4f3; padding-top: .9rem; }
+  .wd-quick-title { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--wd-muted); margin-bottom: .55rem; display: flex; align-items: center; gap: .4rem; }
+  .wd-quick-title i { color: var(--wd-brand); }
+  .wd-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin-bottom: 1rem; }
+  .wd-bday-panel { max-height: 280px; }
+  @container wd (min-width: 860px) {
+    .wd-top { grid-template-columns: minmax(0, 2.4fr) minmax(250px, 1fr); }
+    /* La altura de la fila la marca el encabezado; los cumpleaños hacen scroll. */
+    .wd-bday-panel { height: 0; min-height: 100%; max-height: none; }
+  }
+  .wd-bday-list { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
+  .wd-updated { font-size: .78rem; white-space: nowrap; }
+  .wd-section-head .wd-scope { margin-left: auto; font-size: .7rem; color: var(--wd-muted); font-weight: 500; }
+  .wd-section { padding: 1rem 1.25rem 1.1rem; display: flex; flex-direction: column; min-width: 0; container: sec / inline-size; }
+  .wd-body { flex: 1; display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+  .wd-section, .wd-side { transition: transform .18s ease, box-shadow .18s ease; }
+  .wd-section:hover, .wd-side:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(16,24,40,.12); }
+  @media (prefers-reduced-motion: reduce) { .wd-section, .wd-side, .wd-kpi { transition: none; } .wd-section:hover, .wd-side:hover, .wd-kpi:hover { transform: none; } }
+  .wd-section-head { display: flex; align-items: center; gap: .55rem; margin-bottom: .8rem; }
+  .wd-section-head i { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: #eef3f1; color: var(--wd-brand); font-size: .85rem; }
+  .wd-section-head h2 { font-size: 1rem; font-weight: 600; margin: 0; white-space: nowrap; }
+  .wd-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); grid-auto-rows: 78px; align-content: start; gap: .6rem; }
+  /* 6 o 9 tarjetas: 3 columnas para no dejar una huérfana. */
+  @container sec (min-width: 420px) { .wd-kpis[data-n="6"], .wd-kpis[data-n="9"] { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  /* 4 tarjetas: una fila si caben, si no 2×2 (nunca 3+1). */
+  .wd-kpis[data-n="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @container sec (min-width: 580px) { .wd-kpis[data-n="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .wd-kpi { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-width: 0; padding: .5rem .4rem; border: 1px solid var(--wd-line); border-radius: 8px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s, box-shadow .15s; }
+  .wd-kpi:hover { color: inherit; text-decoration: none; border-color: #c9d6d1; transform: translateY(-2px); box-shadow: 0 6px 14px rgba(16,24,40,.08); }
+  .wd-kpi .v, .wd-kpi .l { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wd-kpi .v { font-size: 1.45rem; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .wd-kpi .l { font-size: .72rem; color: var(--wd-muted); margin-top: .2rem; }
+  .wd-kpi.is-alert { border-color: var(--wd-warn-line); background: var(--wd-warn-bg); }
+  .wd-kpi.is-alert .v { color: var(--wd-warn); }
+  .wd-kpi.is-alert:hover { border-color: #a9c8ba; }
+  .wd-side { padding: 1rem 1.1rem; min-width: 0; display: flex; flex-direction: column; }
+  .wd-side h3 { font-size: .95rem; font-weight: 600; margin: 0 0 .7rem; display: flex; align-items: center; gap: .45rem; }
+  .wd-bday { display: flex; align-items: center; gap: .6rem; padding: .45rem 0; border-bottom: 1px solid #f1f4f3; }
+  .wd-bday:last-child { border-bottom: 0; }
+  .wd-bday img, .wd-bday .ph { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: 0 0 34px; background: #eef3f1; display: inline-flex; align-items: center; justify-content: center; color: var(--wd-brand); }
+  .wd-bday .n { font-size: .82rem; font-weight: 600; line-height: 1.2; }
+  .wd-bday .d { font-size: .72rem; color: var(--wd-muted); }
+  .wd-bday.today { background: #fffaf0; margin: 0 -.5rem; padding-left: .5rem; padding-right: .5rem; border-radius: 6px; }
+  .wd-bday.today .d { color: #b7791f; font-weight: 600; }
+  .wd-empty { color: var(--wd-muted); font-size: .82rem; }
+  .wd-warnbox { font-size: .8rem; padding: .55rem .8rem; border-radius: 8px; background: #fff8e6; color: #8a5a00; }
+  .wd-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem 1.5rem; padding-top: 1rem; border-top: 1px solid #f1f4f3; }
+
+  /* ── Mosaico ── spans calculados en el servidor (pack_layout) sobre 12 columnas. */
+  .wd-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; align-items: stretch; }
+  .wd-grid > * { grid-column: span var(--span, 12); }
+  /* Dos secciones flacas apiladas en una columna; reparten la altura de la fila. */
+  .wd-stack { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+  .wd-stack > .wd-section { flex: 1; }
+  /* Gráfica única al lado de los KPIs cuando la sección es ancha. */
+  @container sec (min-width: 600px) {
+    .wd-section.size-wide .wd-body { flex-direction: row; align-items: stretch; }
+    .wd-section.size-wide .wd-kpis { flex: 0 0 min(42%, 330px); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .wd-section.size-wide .wd-charts { flex: 1; min-width: 0; padding: 0 0 0 1.25rem; border-top: 0; border-left: 1px solid #f1f4f3; grid-template-columns: 1fr; }
+  }
+  @container wd (max-width: 859px) {
+    .wd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .wd-grid > * { grid-column: span 1; }
+    .wd-grid > .is-big { grid-column: 1 / -1; }
+  }
+  @container wd (max-width: 559px) {
+    .wd-grid { grid-template-columns: minmax(0, 1fr); }
+    .wd-grid > * { grid-column: 1 / -1; }
+  }
+
+  .wd-chart h4 { font-size: .78rem; font-weight: 600; color: var(--wd-muted); margin: 0 0 .5rem; display: flex; justify-content: space-between; gap: .5rem; }
+  .wd-chart h4 small { font-weight: 500; }
+  .wd-chart-body { position: relative; }
+  .wd-chart svg { display: block; width: 100%; overflow: visible; }
+  .wd-chart svg text { font-size: 11px; fill: var(--wd-muted); font-variant-numeric: tabular-nums; }
+  .wd-chart svg text.strong { fill: var(--wd-ink); font-weight: 600; }
+  .wd-chart .hit { fill: transparent; }
+  .wd-chart .hit:hover { fill: rgba(51,84,75,.05); }
+  .wd-legend { display: flex; flex-wrap: wrap; gap: .25rem .8rem; font-size: .72rem; color: var(--wd-muted); margin-bottom: .45rem; }
+  .wd-legend span { display: inline-flex; align-items: center; gap: .3rem; }
+  .wd-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .wd-tip { position: absolute; pointer-events: none; background: #22302d; color: #fff; font-size: .72rem; line-height: 1.35; padding: .35rem .55rem; border-radius: 6px; white-space: nowrap; transform: translate(-50%, calc(-100% - 8px)); opacity: 0; transition: opacity .1s; z-index: 5; }
+  .wd-tip.on { opacity: 1; }
+  .wd-hint { position: absolute; top: calc(100% + 10px); right: 0; z-index: 20; max-width: 330px; background: var(--wd-brand); color: #fff; border-radius: 10px; padding: .8rem .95rem; box-shadow: 0 12px 28px rgba(16,24,40,.22); font-size: .8rem; line-height: 1.4; }
+  .wd-hint[hidden] { display: none; }
+  .wd-hint::before { content: ''; position: absolute; top: -6px; right: 26px; width: 12px; height: 12px; background: var(--wd-brand); transform: rotate(45deg); }
+  .wd-hint strong { display: block; font-size: .85rem; margin-bottom: .2rem; }
+  .wd-hint button { margin-top: .55rem; border: 0; border-radius: 6px; padding: .3rem .75rem; font-size: .75rem; font-weight: 600; background: #fff; color: var(--wd-brand); cursor: pointer; }
+  .wd-hint button:focus { outline: 2px solid #a9c4b9; outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) { .wd-hint { animation: wd-hint-in .25s ease-out; } }
+  @keyframes wd-hint-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .wd-tip b { font-weight: 600; }
+  .wd-shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .4rem; }
+  .wd-shortcut { display: flex; align-items: center; gap: .45rem; padding: .45rem .5rem; min-width: 0; border: 1px solid var(--wd-line); border-radius: 8px; font-size: .78rem; font-weight: 500; color: var(--wd-ink); text-decoration: none; line-height: 1.2; transition: border-color .15s, background .15s; }
+  .wd-shortcut:hover { color: var(--wd-brand); text-decoration: none; border-color: var(--wd-warn-line); background: var(--wd-warn-bg); }
+  .wd-shortcut i { color: var(--wd-brand); width: 16px; text-align: center; flex: 0 0 16px; }
+  .wd-shortcut span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 767.98px) { .wd { padding-right: 0; } .wd-hero h1 { font-size: 1.3rem; } }
+</style>
+{%endblock%}
+
 {%block content%}
 {%if user.is_authenticated%}
-<div class='row h-100'>
-    <div class='col-md-6 col-lg-8 col-xl-9'>
-        <table style="height: 100%;width: 100%;">
-            <tbody>
-                <td class='align-middle'>
-                    <h1 class="display-4 text-center" style="color:#3b5e5e">Hola {{user.first_name}} <i class="far fa-grin-beam"></i></h1>
-                </td>
-            </tbody>
-        </table>
-    </div>
-    <div class='col-md-6 col-lg-4 col-xl-3 ml-auto'>
-        <div class='container-fluid bg-white rounded shadow p-3 overflow-auto' style="max-height: 33vh;">
-            <h5 class='text-center mb-2'>
-                <span class='mr-2'><i class="birthday cake icon"></i></span>Cumpleaños</h5>
-            <table style='width: 100%;'>
-                {%for birth in birthdays%}
-                <tr>
-                    <td style='width: 65%;'><small><strong>{{birth.user.first_name|add:" "|add:birth.user.last_name}}</strong></small>
-                    </td>
-                    <td style='width: 35%;text-align: right;'><small>{{birth.fecha_nacimiento|date:"j F"}}</small></td>
-                </tr>
-                {%endfor%}
-            </table>
+<div class="wd">
+  <div class="wd-top">
+    <section class="wd-panel wd-hero">
+      {%if projects|length > 1 or empresas|length > 1%}
+      <form id="wd-filtros" method="get" hidden><input type="hidden" name="filtros" value="1"></form>
+      {%endif%}
+      <div class="wd-hero-head">
+        <div class="wd-title">
+          <h1>Hola {{ user.first_name|default:user.username }}</h1>
+          {%for g in groups%}<span class="wd-chip">{{ g }}</span>{%endfor%}
         </div>
-        <div class='container-fluid bg-white rounded shadow px-3 pt-3 pb-1  mt-3 overflow-auto' style="max-height: 70vh;">
-            <h5 class='text-center mb-2'>
-                <img src="{% static 'icons/recordatorio.png' %}" class='mr-2' width='30' height='30'>Recordatorios</h5>
-            {%for grupo in recordatorios%}
-            <p class='my-1'>{{grupo.name}}</p>
-            <table style="width: 100%;">
-                <tbody>
-                    {%for reminder in grupo.reminders%}
-                    <tr>
-                        <td>
-                            <small><strong>{{reminder.title}}</strong></small>
-                        </td>
-                        <td style='text-align: right;'>
-                            <small>{{reminder.value}}</small>
-                        </td>
-                    </tr>
-                    {%endfor%}
-                </tbody>
-            </table>
-            {%endfor%}
-            <p class='mt-auto text-center mb-0 pt-2'>{{hoy|date:"l, j F Y "}}
+        {%if projects|length > 1%}
+        <details class="wd-ms wd-ms-proy{%if proyectos_activos%} is-set{%endif%}">
+          <summary class="wd-select" title="Filtrar por proyecto">
+            <i class="fas fa-map-marker-alt" aria-hidden="true"></i>
+            <span class="sr-only">Proyecto:</span>
+            <span class="wd-ms-value">{%if not proyectos_activos%}Todos los proyectos{%elif proyectos_activos|length == 1%}{{ proyectos_activos.0 }}{%else%}{{ proyectos_activos|length }} proyectos{%endif%}</span>
+          </summary>
+          <div class="wd-ms-panel">
+            {%for p in projects%}<label class="wd-ms-opt"><input type="checkbox" form="wd-filtros" name="proyectos" value="{{ p }}"{%if p in proyectos_activos%} checked{%endif%}><span>{{ p }}</span></label>{%endfor%}
+            <div class="wd-ms-actions"><button type="button" class="wd-ms-clear" data-ms-clear>Ver todos</button><button type="submit" form="wd-filtros" class="wd-ms-apply">Aplicar</button></div>
+          </div>
+        </details>
+        {%endif%}
+        <div class="wd-date">{{ hoy|date:"l, j \d\e F \d\e Y"|capfirst }}{%if sections%} <span class="wd-updated">· actualizado {{ generated_at|time:"g:i a" }}</span>{%endif%}</div>
+        {%if empresas|length > 1%}
+        <details class="wd-ms wd-ms-emp{%if empresas_activas%} is-set{%endif%}">
+          <summary class="wd-select" title="Filtrar por empresa">
+            <i class="fas fa-building" aria-hidden="true"></i>
+            <span class="sr-only">Empresa:</span>
+            <span class="wd-ms-value">{%if not empresas_activas%}Todas las empresas{%elif empresas_activas|length == 1%}{{ empresas_activas.0.corto }}{%else%}{{ empresas_activas|length }} empresas{%endif%}</span>
+          </summary>
+          <div class="wd-ms-panel">
+            {%for e in empresas%}<label class="wd-ms-opt" title="{{ e.nombre }} · NIT {{ e.id }}"><input type="checkbox" form="wd-filtros" name="empresas" value="{{ e.id }}"{%if e.id in empresas_activas_ids%} checked{%endif%}><span>{{ e.corto }}</span></label>{%endfor%}
+            <div class="wd-ms-actions"><button type="button" class="wd-ms-clear" data-ms-clear>Ver todas</button><button type="submit" form="wd-filtros" class="wd-ms-apply">Aplicar</button></div>
+          </div>
+        </details>
+        {%endif%}
+        {%if projects|length > 1 or empresas|length > 1%}
+        <div class="wd-hint" id="wd-hint-filtro" role="status" hidden>
+          <strong><i class="fas fa-filter mr-1"></i>Nuevo: filtra el tablero</strong>
+          Marca uno o varios proyectos{%if empresas|length > 1%} o empresas{%endif%} para ver solo sus datos. Tu elección queda guardada en este navegador.
+          <div><button type="button" data-dismiss-hint>Entendido</button></div>
         </div>
+        {%endif%}
+      </div>
+      {%if shortcuts%}
+      <nav class="wd-quick" aria-label="Accesos rápidos">
+        <div class="wd-quick-title"><i class="fas fa-bolt"></i>Accesos rápidos</div>
+        <div class="wd-shortcuts">
+          {%for sc in shortcuts%}<a class="wd-shortcut" href="{{ sc.href }}" title="{{ sc.label }}"><i class="fas {{ sc.icon }}"></i><span>{{ sc.label }}</span></a>{%endfor%}
+        </div>
+      </nav>
+      {%endif%}
+    </section>
+
+    <aside class="wd-panel wd-side wd-bday-panel">
+      <h3><i class="fas fa-birthday-cake" style="color:#c27c2c"></i>Cumpleaños próximos</h3>
+      <div class="wd-bday-list">
+        {%for b in birthdays%}
+        <div class="wd-bday {%if b.dias == 0%}today{%endif%}">
+          {%if b.avatar_url%}<img src="{{ b.avatar_url }}" alt="">{%else%}<span class="ph"><i class="fas fa-user"></i></span>{%endif%}
+          <div>
+            <div class="n">{{ b.nombre }}</div>
+            <div class="d">{%if b.dias == 0%}¡Hoy!{%elif b.dias == 1%}Mañana · {{ b.fecha|date:"j \d\e F" }}{%else%}{{ b.fecha|date:"l j \d\e F"|capfirst }}{%endif%}</div>
+          </div>
+        </div>
+        {%empty%}
+        <p class="wd-empty mb-0">Nadie cumple años en los próximos 15 días.</p>
+        {%endfor%}
+      </div>
+    </aside>
+  </div>
+
+  {%if failed_projects%}
+  <div class="wd-warnbox mb-3"><i class="fas fa-exclamation-triangle mr-1"></i>No se pudieron cargar datos de: {{ failed_projects|join:", " }}.</div>
+  {%endif%}
+
+  <div class="wd-grid">
+    {%if not sections%}
+    <section class="wd-panel wd-section" style="--span: 8">
+      <div class="wd-section-head"><i class="fas fa-compass"></i><h2>Bienvenido a AndinaSoft</h2></div>
+      <p class="wd-empty mb-0">Tu usuario aún no tiene un rol con indicadores asignados. Usa el menú lateral para navegar los módulos a los que tienes acceso.</p>
+    </section>
+    {%endif%}
+
+    {%for item in layout%}
+    {%if item.kind == 'stack'%}
+    <div class="wd-stack{%if item.big%} is-big{%endif%}" style="--span: {{ item.span }}">
+      {%for section in item.sections%}{%include 'partials/welcome_section.html' with section=section span=None big=False%}{%endfor%}
     </div>
+    {%else%}
+    {%include 'partials/welcome_section.html' with section=item.section span=item.span big=item.big%}
+    {%endif%}
+    {%endfor%}
+  </div>
 </div>
 {%endif%}
+{%endblock%}
+
+{%block jsbottom%}
 <script>
-    $('main').addClass('h-100')
-   
+// Selectores simples: cambiar el valor recarga con ese filtro (queda guardado en cookie).
+document.querySelectorAll('select[data-autosubmit]').forEach(function (sel) {
+  sel.addEventListener('change', function () { sel.form.submit(); });
+});
+// Filtros de selección múltiple (<details> con casillas dentro de un mismo <form>).
+(function () {
+  var menus = document.querySelectorAll('.wd-ms');
+  function closeAll(except) { menus.forEach(function (m) { if (m !== except) m.open = false; }); }
+  menus.forEach(function (m) {
+    m.addEventListener('toggle', function () { if (m.open) closeAll(m); });
+    m.querySelector('[data-ms-clear]').addEventListener('click', function () {
+      m.querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = false; });
+      document.getElementById('wd-filtros').submit();
+    });
+  });
+  document.addEventListener('click', function (e) { if (!e.target.closest('.wd-ms')) closeAll(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
+})();
+</script>
+<script>
+(function () {
+  // Aviso de una sola vez sobre el filtro por proyecto.
+  var KEY = 'welcome:hint-filtros:v2';
+  var hint = document.getElementById('wd-hint-filtro');
+  if (!hint) return;
+  var seen = false;
+  try { seen = localStorage.getItem(KEY) === '1'; } catch (e) { return; }
+  if (seen) return;
+  function dismiss() {
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+    hint.hidden = true;
+  }
+  hint.hidden = false;
+  hint.querySelector('[data-dismiss-hint]').addEventListener('click', dismiss);
+  // Usar el filtro también cuenta como visto.
+  document.querySelectorAll('.wd-ms').forEach(function (m) { m.addEventListener('toggle', dismiss); });
+})();
+</script>
+{{ charts|json_script:"wd-charts-data" }}
+<script>
+(function () {
+  var el = document.getElementById('wd-charts-data');
+  if (!el) return;
+  var CHARTS = JSON.parse(el.textContent);
+  var NS = 'http://www.w3.org/2000/svg';
+  var BRAND = '#33544b', BRAND_SOFT = '#a9c4b9', GRID = '#edf1ef';
+
+  function thousands(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  function fmtFull(v, fmt) { return fmt === 'money' ? '$' + thousands(v) : thousands(v); }
+  function fmtShort(v, fmt) {
+    if (fmt !== 'money') return thousands(v);
+    if (Math.abs(v) >= 1e9) return '$' + (v / 1e9).toFixed(1).replace('.', ',') + ' mil M';
+    if (Math.abs(v) >= 1e6) return '$' + thousands(v / 1e6) + ' M';
+    return '$' + thousands(v);
+  }
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    var p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p;
+  }
+  function node(tag, attrs, parent) {
+    var n = document.createElementNS(NS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function text(parent, x, y, str, attrs) {
+    var t = node('text', Object.assign({x: x, y: y}, attrs || {}), parent);
+    t.textContent = str;
+    return t;
+  }
+  // Barra con extremo de datos redondeado (4px) y base recta.
+  function barPath(x, y, w, h, horizontal) {
+    var r = Math.min(4, horizontal ? w : h, horizontal ? h / 2 : w / 2);
+    if (horizontal) return 'M' + x + ',' + y + 'h' + (w - r) + 'q' + r + ',0 ' + r + ',' + r + 'v' + (h - 2 * r) + 'q0,' + r + ' ' + (-r) + ',' + r + 'h' + (r - w) + 'z';
+    return 'M' + x + ',' + (y + h) + 'v' + (r - h) + 'q0,' + (-r) + ' ' + r + ',' + (-r) + 'h' + (w - 2 * r) + 'q' + r + ',0 ' + r + ',' + r + 'v' + (h - r) + 'z';
+  }
+  function tooltip(body) {
+    var tip = document.createElement('div');
+    tip.className = 'wd-tip';
+    body.appendChild(tip);
+    return {
+      show: function (html, x, y) { tip.innerHTML = html; tip.style.left = x + 'px'; tip.style.top = y + 'px'; tip.classList.add('on'); },
+      hide: function () { tip.classList.remove('on'); }
+    };
+  }
+
+  function columns(box, c) {
+    var W = box.clientWidth, H = 170, top = 18, bottom = 22, left = 58;
+    var max = niceMax(Math.max.apply(null, c.points.map(function (p) { return p.value; })));
+    var svg = node('svg', {viewBox: '0 0 ' + W + ' ' + H, height: H, role: 'img',
+      'aria-label': c.title + ': ' + c.points.map(function (p) { return p.full + ' ' + fmtFull(p.value, c.fmt); }).join(', ')}, box);
+    var plotH = H - top - bottom, plotW = W - left, band = plotW / c.points.length;
+    [0, .5, 1].forEach(function (f) {
+      var y = top + plotH * (1 - f);
+      node('line', {x1: left, x2: W, y1: y, y2: y, stroke: GRID, 'stroke-width': 1}, svg);
+      text(svg, left - 8, y + 4, fmtShort(max * f, c.fmt), {'text-anchor': 'end'});
+    });
+    var tip = tooltip(box);
+    var best = c.points.reduce(function (a, p) { return p.value > a.value ? p : a; }, c.points[0]);
+    c.points.forEach(function (p, i) {
+      var bw = Math.min(24, band * .55), x = left + band * i + (band - bw) / 2;
+      var h = plotH * p.value / max, y = top + plotH - h;
+      if (h > 0) node('path', {d: barPath(x, y, bw, h), fill: p.partial ? BRAND_SOFT : BRAND}, svg);
+      text(svg, x + bw / 2, H - 6, p.label + (p.partial ? '*' : ''), {'text-anchor': 'middle'});
+      if ((p === best || p.partial) && p.value > 0) text(svg, x + bw / 2, y - 5, fmtShort(p.value, c.fmt), {'text-anchor': 'middle', 'class': 'strong'});
+      var hit = node('rect', {x: left + band * i, y: top, width: band, height: plotH, 'class': 'hit'}, svg);
+      hit.addEventListener('mouseenter', function () {
+        tip.show('<b>' + p.full + (p.partial ? ' (en curso)' : '') + '</b><br>' + fmtFull(p.value, c.fmt), x + bw / 2, Math.max(y, top));
+      });
+      hit.addEventListener('mouseleave', tip.hide);
+    });
+  }
+
+  // Columnas apiladas por categoría (p. ej. radicados por oficina). Cada segmento
+  // lleva 2px de separación; el extremo superior de la columna va redondeado.
+  function stackedColumns(box, c) {
+    var legend = document.createElement('div');
+    legend.className = 'wd-legend';
+    legend.innerHTML = c.categories.map(function (k) { return '<span><i style="background:' + k.color + '"></i>' + k.label + '</span>'; }).join('');
+    box.appendChild(legend);
+    var W = box.clientWidth, H = 170, top = 18, bottom = 22, left = 40;
+    var max = niceMax(Math.max.apply(null, c.points.map(function (p) { return p.total; })));
+    var svg = node('svg', {viewBox: '0 0 ' + W + ' ' + H, height: H, role: 'img',
+      'aria-label': c.title + ': ' + c.points.map(function (p) {
+        return p.full + ' ' + c.categories.map(function (k) { return k.label + ' ' + thousands(p.values[k.key]); }).join(', ');
+      }).join('; ')}, box);
+    var plotH = H - top - bottom, plotW = W - left, band = plotW / c.points.length;
+    [0, .5, 1].forEach(function (f) {
+      var y = top + plotH * (1 - f);
+      node('line', {x1: left, x2: W, y1: y, y2: y, stroke: GRID, 'stroke-width': 1}, svg);
+      text(svg, left - 8, y + 4, thousands(max * f), {'text-anchor': 'end'});
+    });
+    var tip = tooltip(box);
+    var best = c.points.reduce(function (a, p) { return p.total > a.total ? p : a; }, c.points[0]);
+    c.points.forEach(function (p, i) {
+      var bw = Math.min(24, band * .55), x = left + band * i + (band - bw) / 2;
+      var base = top + plotH;
+      var segs = c.categories.filter(function (k) { return p.values[k.key] > 0; });
+      segs.forEach(function (k, j) {
+        var h = plotH * p.values[k.key] / max, isTop = j === segs.length - 1;
+        var gap = isTop ? 0 : 2, segH = Math.max(h - gap, 1), y = base - h + gap;
+        if (isTop) node('path', {d: barPath(x, base - h, bw, segH), fill: k.color, opacity: p.partial ? .55 : 1}, svg);
+        else node('rect', {x: x, y: y, width: bw, height: segH, fill: k.color, opacity: p.partial ? .55 : 1}, svg);
+        base -= h;
+      });
+      text(svg, x + bw / 2, H - 6, p.label + (p.partial ? '*' : ''), {'text-anchor': 'middle'});
+      if ((p === best || p.partial) && p.total > 0) text(svg, x + bw / 2, base - 5, thousands(p.total), {'text-anchor': 'middle', 'class': 'strong'});
+      var hit = node('rect', {x: left + band * i, y: top, width: band, height: plotH, 'class': 'hit'}, svg);
+      hit.addEventListener('mouseenter', function () {
+        tip.show('<b>' + p.full + (p.partial ? ' (en curso)' : '') + '</b><br>' +
+          c.categories.map(function (k) { return k.label + ': ' + thousands(p.values[k.key]); }).join('<br>') +
+          '<br>Total: ' + thousands(p.total), x + bw / 2, Math.max(base, top));
+      });
+      hit.addEventListener('mouseleave', tip.hide);
+    });
+  }
+
+  function stacked(box, c) {
+    var legend = document.createElement('div');
+    legend.className = 'wd-legend';
+    legend.innerHTML = c.categories.map(function (k) { return '<span><i style="background:' + k.color + '"></i>' + k.label + '</span>'; }).join('');
+    box.appendChild(legend);
+    var W = box.clientWidth, rowH = 26, barH = 16, left = 112, right = 64, H = c.rows.length * rowH;
+    var max = Math.max.apply(null, c.rows.map(function (r) { return r.total; })) || 1;
+    var svg = node('svg', {viewBox: '0 0 ' + W + ' ' + H, height: H, role: 'img', 'aria-label': c.title}, box);
+    var tip = tooltip(box), plotW = W - left - right;
+    c.rows.forEach(function (r, i) {
+      var y = i * rowH + (rowH - barH) / 2, x = left;
+      text(svg, 0, y + barH - 3, r.label);
+      var segs = c.categories.filter(function (k) { return r.values[k.key] > 0; });
+      segs.forEach(function (k, j) {
+        var w = plotW * r.values[k.key] / max, isLast = j === segs.length - 1;
+        var segW = Math.max(w - (isLast ? 0 : 2), 1);
+        var seg = isLast ? node('path', {d: barPath(x, y, segW, barH, true), fill: k.color}, svg)
+                         : node('rect', {x: x, y: y, width: segW, height: barH, fill: k.color}, svg);
+        var cx = x + segW / 2;
+        seg.addEventListener('mouseenter', function () {
+          tip.show('<b>' + r.label + '</b><br>' + k.label + ': ' + thousands(r.values[k.key]) + ' de ' + thousands(r.total), cx, y);
+        });
+        seg.addEventListener('mouseleave', tip.hide);
+        x += w;
+      });
+      text(svg, x + 6, y + barH - 3, thousands(r.values.libre || 0) + ' libres', {'class': 'strong'});
+    });
+  }
+
+  function renderAll() {
+    document.querySelectorAll('.wd-chart[data-chart]').forEach(function (box) {
+      var c = CHARTS[box.dataset.chart];
+      if (!c) return;
+      box.innerHTML = '';
+      var h = document.createElement('h4');
+      h.innerHTML = c.title + (c.type !== 'stacked' ? '<small>* mes en curso</small>' : '');
+      box.appendChild(h);
+      var body = document.createElement('div');
+      body.className = 'wd-chart-body';
+      box.appendChild(body);
+      ({columns: columns, stacked_columns: stackedColumns, stacked: stacked}[c.type])(body, c);
+    });
+  }
+  renderAll();
+  var t;
+  window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(renderAll, 150); });
+})();
 </script>
 {%endblock%}

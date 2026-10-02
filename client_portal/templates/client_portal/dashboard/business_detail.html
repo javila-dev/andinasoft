@@ -1,0 +1,178 @@
+{% extends 'client_portal/base_portal.html' %}
+
+{% block title %}{{ business.inmueble }}{% endblock %}
+
+{% block subnav %}
+<nav class="portal-breadcrumb mb-3">
+  <a href="/portal/mis-negocios">Mis negocios</a>
+  <span class="portal-breadcrumb-sep">/</span>
+  <span class="portal-breadcrumb-current">{{ business.inmueble }}</span>
+</nav>
+<nav class="portal-tab-nav">
+  <a class="portal-tab portal-tab-active" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}">Resumen</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/plan-pagos">Plan de pagos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/documentos">Documentos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/perfil">Mis datos</a>
+  <a class="portal-tab" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/pqrs">PQRS</a>
+</nav>
+{% endblock %}
+
+{% block content %}
+<!-- Identity + stats row -->
+<div class="portal-panel p-5">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <div class="flex flex-wrap gap-1.5">
+        <span class="pbadge {% if business.estado_ui == 'Pagado' %}pbadge-paid{% else %}pbadge-active{% endif %}">{{ business.estado_ui }}</span>
+        <span class="pbadge pbadge-meta">Adj {{ business.adj_id }}</span>
+        <span class="pbadge pbadge-meta">{{ business.project_name }}</span>
+      </div>
+      <h1 class="mt-2 text-xl font-semibold">{{ business.inmueble }}</h1>
+      {% if business.titulares %}
+      <div class="mt-2 flex flex-wrap gap-1.5">
+        {% for titular in business.titulares %}
+        <span class="pbadge pbadge-person">{{ titular }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="rounded-lg bg-base-200 px-3 py-2 text-right">
+      <p class="portal-kicker mb-1">Estado</p>
+      <p class="text-sm font-medium">{{ business.estado_tecnico }}</p>
+    </div>
+  </div>
+
+  <div class="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-base-300/50 pt-4 lg:grid-cols-4">
+    <div>
+      <p class="portal-kicker mb-1.5">Saldo pendiente</p>
+      <p class="text-xl font-semibold text-primary">{{ business.saldo_pendiente }}</p>
+    </div>
+    <div>
+      <p class="portal-kicker mb-1.5">Capital pagado</p>
+      <p class="text-xl font-semibold">{{ business.capital_pagado }}</p>
+    </div>
+    <div>
+      <p class="portal-kicker mb-1.5">Valor negocio</p>
+      <p class="text-xl font-semibold">{{ business.valor_negocio }}</p>
+    </div>
+    <div>
+      <p class="portal-kicker mb-1.5">Pago estimado hoy</p>
+      <p class="text-xl font-semibold">{{ business.pago_hoy.total_pago_hoy|default:'$0' }}</p>
+    </div>
+  </div>
+</div>
+
+<!-- Detail grid -->
+<div class="grid gap-4 xl:grid-cols-[1fr_1.25fr]">
+  <article class="portal-panel p-5">
+    <p class="portal-kicker mb-3">Resumen financiero</p>
+    <div class="divide-y divide-base-300/50 text-sm">
+      <div class="flex items-center justify-between py-2">
+        <span class="text-base-content/55">Capital pagado</span>
+        <strong>{{ business.capital_pagado }}</strong>
+      </div>
+      <div class="flex items-center justify-between py-2">
+        <span class="text-base-content/55">Saldo capital</span>
+        <strong>{{ business.saldo_capital }}</strong>
+      </div>
+      <div class="flex items-center justify-between py-2">
+        <span class="text-base-content/55">Meses crédito</span>
+        <strong>{{ business.payment_summary.meses_credito|default:0 }} meses</strong>
+      </div>
+      <div class="flex items-center justify-between py-2">
+        <span class="text-base-content/55">Total pago hoy</span>
+        <strong class="{% if business.payment_summary.total_pago_hoy %}text-primary{% endif %}">{{ business.payment_summary.total_pago_hoy|default:0 }}</strong>
+      </div>
+    </div>
+  </article>
+
+  <div class="grid gap-4">
+    <!-- Cuotas vencidas -->
+    <article class="portal-panel p-5">
+      <div class="mb-3 flex items-center justify-between">
+        <p class="portal-kicker">Cuotas vencidas</p>
+        <a class="text-xs text-primary no-underline hover:underline" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/plan-pagos">Ver plan →</a>
+      </div>
+      {% if business.payment_summary.overdue_count %}
+      <div class="grid grid-cols-3 gap-3">
+        <div class="rounded-lg bg-warning/10 px-3 py-3 text-center">
+          <p class="portal-kicker mb-1.5">Cuotas</p>
+          <p class="text-2xl font-bold text-warning">{{ business.payment_summary.overdue_count }}</p>
+        </div>
+        <div class="rounded-lg bg-warning/10 px-3 py-3 text-center">
+          <p class="portal-kicker mb-1.5">Días mora</p>
+          <p class="text-2xl font-bold text-warning">{{ business.payment_summary.max_dias_mora }}</p>
+        </div>
+        <div class="rounded-lg bg-warning/10 px-3 py-3 text-center">
+          <p class="portal-kicker mb-1.5">Valor</p>
+          <p class="text-sm font-bold text-warning leading-tight mt-1">{{ business.payment_summary.valor_en_mora }}</p>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-base-content/45">No hay cuotas vencidas.</p>
+      {% endif %}
+    </article>
+
+    <!-- Próxima cuota -->
+    <article class="portal-panel p-5">
+      <p class="portal-kicker mb-3">Próxima cuota</p>
+      {% with installment=business.payment_summary.next_installments|first %}
+      {% if installment %}
+      <div class="flex items-center justify-between rounded-lg border border-base-300/60 px-3.5 py-3">
+        <div>
+          <p class="text-sm font-medium">Cuota {{ installment.nrocta }}</p>
+          <p class="mt-0.5 text-xs text-base-content/50">Vence {{ installment.fecha }}</p>
+        </div>
+        <div class="text-right">
+          <span class="pbadge {% if installment.estado_ui == 'vencida' %}pbadge-overdue{% elif installment.estado_ui == 'proxima' %}pbadge-upcoming{% elif installment.estado_ui == 'pagada' %}pbadge-paid-cuota{% else %}pbadge-pending{% endif %}">{{ installment.estado_ui }}</span>
+          <p class="mt-1 text-sm font-semibold">{{ installment.saldo_total }}</p>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-base-content/45">No hay cuotas pendientes próximas.</p>
+      {% endif %}
+      {% endwith %}
+    </article>
+  </div>
+</div>
+
+<!-- Quick access row -->
+<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+  <a class="portal-panel flex items-center gap-3 p-4 no-underline transition-shadow hover:shadow-md" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/plan-pagos">
+    <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </div>
+    <div>
+      <p class="text-sm font-medium text-base-content">Plan de pagos</p>
+      <p class="text-xs text-base-content/45">Cuotas y saldos</p>
+    </div>
+  </a>
+  <a class="portal-panel flex items-center gap-3 p-4 no-underline transition-shadow hover:shadow-md" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/documentos">
+    <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    </div>
+    <div>
+      <p class="text-sm font-medium text-base-content">Documentos</p>
+      <p class="text-xs text-base-content/45">Soportes y estados</p>
+    </div>
+  </a>
+  <a class="portal-panel flex items-center gap-3 p-4 no-underline transition-shadow hover:shadow-md" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/perfil">
+    <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div>
+      <p class="text-sm font-medium text-base-content">Mis datos</p>
+      <p class="text-xs text-base-content/45">Información de contacto</p>
+    </div>
+  </a>
+  <a class="portal-panel flex items-center gap-3 p-4 no-underline transition-shadow hover:shadow-md" href="/portal/negocio/{{ business.project_alias }}/{{ business.adj_id }}/pqrs">
+    <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <div>
+      <p class="text-sm font-medium text-base-content">PQRS</p>
+      <p class="text-xs text-base-content/45">Solicitudes de soporte</p>
+    </div>
+  </a>
+</div>
+{% endblock %}

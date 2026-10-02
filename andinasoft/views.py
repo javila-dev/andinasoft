@@ -65,6 +65,7 @@ from andinasoft.certificado_tributario_service import (
     titulares_para_certificado,
 )
 from andinasoft.paz_y_salvo_service import build_paz_y_salvo_context
+from andinasoft.welcome_dashboard_service import build_dashboard as build_welcome_dashboard
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
 from andinasoft.handlers_functions import (
@@ -96,7 +97,7 @@ import math
 import calendar
 import random
 import string
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 from openpyxl.styles import Font, Color, Alignment, Border, Side, colors, PatternFill
 from copy import copy
 
@@ -466,317 +467,46 @@ def proyecto_popup(request,redireccion):
     }
     return render(request,'proyectos_popup.html',context)
 
+# Filtros del dashboard recordados en cookies: (parámetro GET, cookie, clave con los
+# valores activos en el contexto). Admiten varios valores (?proyecto=A&proyecto=B).
+WELCOME_FILTROS = (
+    ('proyectos', 'welcome_proyectos', 'proyectos_activos'),
+    ('empresas', 'welcome_empresas', 'empresas_activas_ids'),
+    ('asesor', 'welcome_asesor', 'asesor_activo_ids'),
+)
+WELCOME_COOKIE_SEP = '|'
+
+
 @login_required
 def welcome(request):
     
     if check_groups(request,groups=['ExternoFractal'],raise_exception=False):
         if not request.user.is_superuser:
             return HttpResponseRedirect('/fractal')
-    
-    avatar_actual=Profiles.objects.get(user=request.user).avatar.pk
-    show_info=False
-    if avatar_actual == 9999999:
-        show_info = True
-    
-    birthdays = [] 
-    active_users = Profiles.objects.filter(user__is_active=True)
-    hoy=datetime.date.today()
-    futuro = hoy+relativedelta(days=15)
-    for user in active_users:
-        dia = user.fecha_nacimiento.day
-        mes= user.fecha_nacimiento.month
-        año = datetime.date.today().year
-        cumpleaños = datetime.date(año,mes,dia)
-        if (cumpleaños>=hoy and cumpleaños<=futuro):
-            birthdays.append(user)
-    proyectos=(
-        'Tesoro Escondido',
-        'Vegas de Venecia',
-        'Perla del Mar',
-        'Sandville Beach',
-        'Sotavento',
-        'Oasis',
-    )   
-    mes=datetime.date.today().month
-    año=datetime.date.today().year
-    ultimo_dia=calendar.monthrange(año,mes)[1]
-    inicio_mes=datetime.date(año,mes,1)
-    fin_mes=datetime.date(año,mes,ultimo_dia)
-    contratos_por_aprobar = 0
-    ventas_mes=0
-    lotes_disponibles = 0
-    gtt_pendientes=0
-    recibos=0
-    recibos_pormi=0
-    recibos_nr=0
-    clientes_cobro_ccial=0
-    clientes_cobro_admin=0
-    pqrs_rad=0
-    pqrs_abierta=0
-    pqrs_cerr=0
-    ventas_jefe=0
-    ventas_pdtes_jefe=0
-    lotes_libres_jefe=0
-    ventas_por_adjudicar=0
-    ventas_adjudicadas=0
-    contratos_anulados=0
-    for proyecto in proyectos:
-        valor=ventas_nuevas.objects.using(proyecto).filter(estado='Pendiente').count()
-        ventas_mes+=ventas_nuevas.objects.using(proyecto).filter(fecha_contrato__gte=inicio_mes,fecha_contrato__lte=fin_mes).exclude(estado='Anulado').count()
-        contratos_por_aprobar+=valor
-        #---------------------------
-        lotes=Inmuebles.objects.using(proyecto).filter(estado='libre').count()
-        lotes_disponibles+=lotes  
-        #---------------------------
-        gtt=Gtt.objects.filter(proyecto=proyecto,estado='pendiente').count()
-        gtt_pendientes+=gtt
-        #---------------------------
-        recibos+=Recaudos_general.objects.using(proyecto).filter(fecha__gte=inicio_mes,fecha__lte=fin_mes).count()
-        recibos_pormi+=Recaudos_general.objects.using(proyecto).filter(fecha__gte=inicio_mes,fecha__lte=fin_mes,usuario=request.user).count()
-        #---------------------------
-        recibos_nr+=RecaudosNoradicados.objects.using(proyecto).all().count()
-        #---------------------------
-        periodo = f'{año}{mes:02d}'
-        clientes_cobro_ccial+=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo,tipocartera='Comercial').values('idadjudicacion').annotate(Sum('cuota')).count()
-        clientes_cobro_admin+=PresupuestoCartera.objects.using(proyecto).filter(periodo=periodo,tipocartera ='Administrativa').values('idadjudicacion').annotate(Sum('cuota')).count()
-        #---------------------------
-        pqrs_rad+=Pqrs.objects.using(proyecto).filter(fecha_radicado__gte=inicio_mes,fecha_radicado__lte=fin_mes).count()
-        pqrs_cerr+=Pqrs.objects.using(proyecto).filter(fecha_respuesta__gte=inicio_mes,fecha_respuesta__lte=fin_mes,estado='Cerrado').count()
-        pqrs_abierta+=Pqrs.objects.using(proyecto).filter(estado='Abierta').count()
-        #Jefe ventas----------------
-        ventas_jefe+=ventas_nuevas.objects.using(proyecto).filter(usuario=request.user,fecha_contrato__gte=inicio_mes,fecha_contrato__lte=fin_mes).exclude(estado='Anulado').count()
-        ventas_pdtes_jefe+=ventas_nuevas.objects.using(proyecto).filter(estado='Pendiente',usuario=request.user).count()
-        if check_project(request,proyecto,raise_exception=False):
-            lotes_libres_jefe+=Inmuebles.objects.using(proyecto).filter(estado='libre').count()
-        #Asistente Operaciones
-        if check_project(request,proyecto,raise_exception=False):
-            ventas_por_adjudicar+=ventas_nuevas.objects.using(proyecto).filter(estado='Aprobado').count()
-            ventas_adjudicadas+=Adjudicacion.objects.using(proyecto).filter(fecha__gte=inicio_mes,fecha__lte=fin_mes).count()
-            contratos_anulados+=ventas_nuevas.objects.using(proyecto).filter(estado='Anulado',fecha_contrato__gte=inicio_mes,fecha_contrato__lte=fin_mes).count()
-        #Proyectos
-        ordenes_abiertas = building_model.contratos.objects.filter(estado='Pendiente').count()
-        ordenes_delmes = building_model.contratos.objects.filter(fecha_creacion__gte=inicio_mes).count()
-        mis_ordenes_abiertas = building_model.contratos.objects.filter(estado='Pendiente',usuario_crea=request.user).count()
-        mis_ordenes_delmes = building_model.contratos.objects.filter(fecha_creacion__gte=inicio_mes,usuario_crea=request.user).count()
-        actas_abiertas = building_model.actas_contratos.objects.filter(estado='Pendiente').count()
-        actas_delmes = building_model.actas_contratos.objects.filter(fecha_acta__gte=inicio_mes).count()
-        mis_actas_abiertas = building_model.actas_contratos.objects.filter(estado='pendiente',usuario_crea=request.user).count()
-        mis_actas_delmes = building_model.actas_contratos.objects.filter(fecha_acta__gte=inicio_mes,usuario_crea=request.user).count()
-    
-    list_reminders={
-        'Gerencia Comercial':{
-            'name':'Gerencia Comercial',
-            'reminders':[
-                {
-                    'title':'Ventas del mes',
-                    'value':ventas_mes
-                },
-                {
-                    'title':'Contratos por aprobar',
-                    'value':contratos_por_aprobar
-                },
-                {
-                    'title':'Lotes disponibles',
-                    'value':lotes_disponibles,
-                },
-                {
-                    'title':'GTT por aprobar',
-                    'value': gtt_pendientes
-                },
-                {
-                    'title':'Asesores activos',
-                    'value':asesores.objects.filter(estado='Activo',tipo_asesor='Externo').count()
-                },
-                         ]
-        },
-        'Tesoreria':{
-            'name':'Tesoreria',
-            'reminders':[
-                {
-                'title':'Recibos hechos en el mes',
-                'value':recibos
-                },
-                {
-                'title':'Recibos hechos por mi',
-                'value':recibos_pormi
-                },
-                {
-                'title':'Recibos no radicados',
-                'value':recibos_nr
-                },
-                {
-                'title':'Pagos registrados en el mes',
-                'value':Pagos.objects.filter(fechapago__gte=inicio_mes,fechapago__lte=fin_mes).count()
-                },
-                {
-                'title':'Causaciones recibidas',
-                'value':Facturas.objects.filter(fechacausa__gte=inicio_mes,fechacausa__lte=fin_mes).count()
-                },
-            ]
-        },
-        'Contabilidad':{
-            'name':'Contabilidad',
-            'reminders':[
-                {
-                'title':'Facturas recibidas mes',
-                'value':Facturas.objects.filter(fecharadicado__gte=inicio_mes,fecharadicado__lte=fin_mes,).count()
-                },
-                {
-                'title':'Causaciones registradas mes',
-                'value':Facturas.objects.filter(fechacausa__gte=inicio_mes,fechacausa__lte=fin_mes).count()
-                },
-                {
-                'title':'Facturas sin causar',
-                'value':Facturas.objects.filter(fechacausa__isnull=True).count()
-                },
-            ]
-        },
-        'Supervisor Cartera':{
-            'name':'Supervisor Cartera',
-            'reminders':[
-                {
-                'title':'Clientes cartera ccial',
-                'value':clientes_cobro_ccial
-                },
-                {
-                'title':'Clientes cartera admin',
-                'value':clientes_cobro_admin
-                },
-            ]
-        },
-        'Gestor Cartera':{
-            'name':'Gestor Cartera',
-            'reminders':[
-                {
-                'title':'Clientes cartera ccial',
-                'value':clientes_cobro_ccial
-                },
-                {
-                'title':'Clientes cartera admin',
-                'value':clientes_cobro_admin
-                },
-            ]
-        },
-        'Servicio Cliente':{
-            'name':'Servicio Cliente',
-            'reminders':[
-                {
-                'title':'Pqrs radicadas en el mes',
-                'value':pqrs_rad
-                },
-                {
-                'title':'Pqrs abiertas',
-                'value':pqrs_abierta,
-                },
-                {
-                'title':'Pqrs cerradas en el mes',
-                'value':pqrs_cerr
-                },
-            ]
-        },
-        'Jefe Ventas':{
-            'name':'Jefe Ventas',
-            'reminders':[
-                {
-                'title':'Mis ventas del mes',
-                'value':ventas_jefe
-                },
-                {
-                'title':'Ventas sin aprobar',
-                'value':ventas_pdtes_jefe,
-                },
-                {
-                'title':'Lotes disponibles',
-                'value':lotes_libres_jefe 
-                },
-            ]
-        },
-        'Recepcion':{
-            'name':'Recepcion',
-            'reminders':[
-                {
-                'title':'Facturas radicadas en el mes',
-                'value':Facturas.objects.filter(fecharadicado__gte=inicio_mes,fecharadicado__lte=fin_mes,).count()
-                },
-                {
-                'title':'Facturas sin causar',
-                'value':Facturas.objects.filter(fechacausa__isnull=True).count()
-                },
-            ]
-        },
-        'Asistente Operaciones':{
-            'name':'Operaciones',
-            'reminders':[
-                {
-                'title':'Ventas por adjudicar',
-                'value':ventas_por_adjudicar
-                },
-                {
-                'title':'Ventas adjudicadas en el mes',
-                'value':ventas_adjudicadas
-                },
-                {
-                'title':'Contratos anulados en el mes',
-                'value':contratos_anulados
-                },
-            ]
-        },
-        'Gerente de Proyectos':{
-            'name':'Gerente de proyectos',
-            'reminders':[
-                {
-                'title':'Ordenes sin aprobar',
-                'value':ordenes_abiertas
-                },
-                {
-                'title':'Ordenes del mes',
-                'value':ordenes_delmes
-                },
-                {
-                'title':'Actas sin aprobar',
-                'value':actas_abiertas
-                },
-                {
-                'title':'Actas del mes',
-                'value':actas_delmes
-                },
-            ]
-        },
-        'Asistente de Proyectos':{
-            'name':'Asistente de proyectos',
-            'reminders':[
-                {
-                'title':'Ordenes sin aprobar',
-                'value':mis_ordenes_abiertas
-                },
-                {
-                'title':'Ordenes del mes',
-                'value':mis_ordenes_delmes
-                },
-                {
-                'title':'Actas sin aprobar',
-                'value':mis_actas_abiertas
-                },
-                {
-                'title':'Actas del mes',
-                'value':mis_actas_delmes
-                },
-            ]
-        }
-    }
-    grupos_usuario=[]
-    grupos = request.user.groups.all()
-    for grupo in grupos:
-        grupos_usuario.append(list_reminders.get(grupo.name))
-    if request.user.is_superuser:
-        grupos_usuario=list_reminders.values()
-    context={
-        'birthdays':birthdays,
-        'recordatorios':grupos_usuario,
-        'hoy':datetime.date.today(),
-        'showinfo':show_info,
-    }
-    return render(request,'welcome.html',context)
+
+    # El formulario de filtros envía "filtros=1": entonces lo recibido (aunque esté
+    # vacío = "todos") reemplaza lo guardado. Sin él se usa la cookie.
+    enviado = 'filtros' in request.GET
+    valores = {}
+    for param, cookie, _ in WELCOME_FILTROS:
+        if enviado or param in request.GET:
+            valores[param] = [v for v in request.GET.getlist(param) if v]
+        else:
+            guardado = unquote(request.COOKIES.get(cookie, ''))
+            valores[param] = [v for v in guardado.split(WELCOME_COOKIE_SEP) if v]
+    context = build_welcome_dashboard(request.user, **valores)
+    response = render(request, 'welcome.html', context)
+    for param, cookie, clave in WELCOME_FILTROS:
+        if not (enviado or param in request.GET):
+            continue
+        if context[clave]:
+            response.set_cookie(
+                cookie, quote(WELCOME_COOKIE_SEP.join(context[clave])),
+                max_age=60 * 60 * 24 * 365, samesite='Lax',
+            )
+        else:
+            response.delete_cookie(cookie, samesite='Lax')
+    return response
 
 def get_avatars(request):
     data = {'avatars': []}
@@ -7502,20 +7232,31 @@ def promesas(request,proyecto):
                     PromesaOtrosi.objects.filter(proyecto_id=proyecto, adj=adj)
                     .order_by('-fecha_registro')
                     .values(
-                        'id', 'tipo', 'fecha_entrega_anterior', 'fecha_entrega_nueva',
+                        'id', 'tipo', 'fecha_promesa_anterior', 'fecha_promesa_nueva',
+                        'fecha_entrega_anterior', 'fecha_entrega_nueva',
                         'fecha_escritura_anterior', 'fecha_escritura_nueva',
                         'observaciones', 'documento', 'usuario', 'fecha_registro',
                     )
                 )
+                tipo_label = dict(PromesaOtrosi.TIPO_CHOICES)
                 for item in hist:
                     if item.get('fecha_registro'):
                         item['fecha_registro'] = item['fecha_registro'].strftime('%Y-%m-%d %H:%M')
                     for k in (
+                        'fecha_promesa_anterior', 'fecha_promesa_nueva',
                         'fecha_entrega_anterior', 'fecha_entrega_nueva',
                         'fecha_escritura_anterior', 'fecha_escritura_nueva',
                     ):
                         if item.get(k):
                             item[k] = item[k].strftime('%Y-%m-%d')
+                    if item.get('fecha_promesa_nueva'):
+                        cambio = 'Promesa %s -> %s' % (
+                            item.get('fecha_promesa_anterior') or 'sin fecha',
+                            item.get('fecha_promesa_nueva'),
+                        )
+                        obs = item.get('observaciones') or ''
+                        item['observaciones'] = '%s. %s' % (cambio, obs) if obs else cambio
+                    item['tipo'] = tipo_label.get(item.get('tipo'), item.get('tipo'))
                 return JsonResponse({'passed': True, 'historial': hist})
 
             if tipo == 'documentos':
