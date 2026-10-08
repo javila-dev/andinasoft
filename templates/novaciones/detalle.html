@@ -1,0 +1,431 @@
+{%extends 'base.html'%}
+{%load humanize%}
+
+{%block title%}Novación #{{ n.pk }}{%endblock%}
+
+{%block style%}
+<style>
+  .nov-pasos { display: flex; gap: .5rem; list-style: none; padding: 0; margin: 0 0 1rem; }
+  .nov-pasos li { flex: 1; padding: .5rem .75rem; border-radius: .35rem; background: #f1f3f2; color: #6c757d; font-size: .875rem; }
+  .nov-pasos li strong { display: block; font-size: .95rem; }
+  .nov-pasos li.hecho { background: #e3f2ea; color: #16855a; }
+  .nov-pasos li.actual { background: #33544b; color: #fff; }
+  .nov-pasos li.fallo { background: #f8e1e1; color: #a12a2a; }
+  .nov-check { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .35rem 1.5rem; }
+  .nov-check li { padding: .1rem 0; white-space: nowrap; }
+  .nov-check .ok { color: #16855a; }
+  .nov-check .falta { color: #a12a2a; }
+  .nov-check .opcional { color: #6c757d; }
+  @media (max-width: 576px) { .nov-pasos { flex-direction: column; } }
+</style>
+{%endblock%}
+
+{%block content%}
+<div class="container py-3">
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Novación #{{ n.pk }}</h4>
+    <a href="/operaciones/novaciones" class="btn btn-sm btn-outline-secondary">Todas las novaciones</a>
+  </div>
+
+  <ol class="nov-pasos">
+    <li class="hecho"><strong>1. Registro</strong>{{ n.fecha_solicitud|date:'Y-m-d' }} · {{ n.usuario_solicita.username }}</li>
+    <li class="{% if n.estado == 'Documentacion' %}actual{% elif n.estado == 'Rechazada' and not n.fecha_envio %}fallo{% else %}hecho{% endif %}">
+      <strong>2. Documentación</strong>Nota y documentos firmados
+    </li>
+    <li class="{% if n.estado == 'Por aprobar' %}actual{% elif n.estado == 'Aprobada' %}hecho{% elif n.estado == 'Rechazada' and n.fecha_envio %}fallo{% endif %}">
+      <strong>3. Aprobación</strong>
+      {% if n.estado == 'Aprobada' %}Aprobada · {{ n.adj_destino }}{% elif n.estado == 'Rechazada' %}Rechazada{% elif n.estado == 'Por aprobar' %}Enviada el {{ n.fecha_envio|date:'Y-m-d' }}{% else %}Pendiente{% endif %}
+    </li>
+  </ol>
+
+  {% if n.motivo_rechazo %}<div class="alert alert-danger">Rechazada por {{ n.usuario_resuelve.username }}: {{ n.motivo_rechazo }}</div>{% endif %}
+
+  <div class="row">
+    <div class="col-md-6 mb-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h6 class="text-muted">Origen</h6>
+          <div class="h5 mb-1"><a href="/adjudicaciones/{{ n.proyecto_origen_id }}/{{ n.adj_origen }}/">{{ n.adj_origen }}</a></div>
+          <div>{{ n.proyecto_origen_id }} · lote {{ n.inmueble_origen }}</div>
+          <div>{{ nombre_titular }} ({{ n.titular }})</div>
+          <small class="text-muted">
+            {% if n.estado == 'Aprobada' %}Desistida, con el lote liberado.{% elif n.abierta %}Activa, sin recibir recaudos hasta resolver la novación.{% else %}Sigue activa.{% endif %}
+          </small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 mb-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <h6 class="text-muted">Destino</h6>
+            {% if venta and puede_imprimir %}
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modalAccionesVenta">
+              <i class="fas fa-print mr-1"></i>Acciones
+            </button>
+            {% endif %}
+          </div>
+          <div class="h5 mb-1">
+            {% if n.adj_destino %}
+              <a href="/adjudicaciones/{{ n.proyecto_destino_id }}/{{ n.adj_destino }}/">{{ n.adj_destino }}</a>
+            {% else %}
+              Venta {{ n.venta_destino }}
+            {% endif %}
+          </div>
+          <div>{{ n.proyecto_destino_id }} · lote {{ n.inmueble_destino }}</div>
+          {% if venta %}
+          <div>Valor ${{ venta.valor_venta|intcomma }} · cuota inicial ${{ cuota_inicial_destino|intcomma }} · venta {{ venta.estado }}</div>
+          {% else %}
+          <div class="text-danger">La venta {{ n.venta_destino }} ya no existe en {{ n.proyecto_destino_id }}.</div>
+          {% endif %}
+          <small class="text-muted">Se adjudica sin comisiones. Lo trasladado se aplica a la cuota inicial.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <h6>Traslado</h6>
+      <div class="table-responsive">
+        <table class="table table-sm mb-2">
+          <thead class="thead-light"><tr><th>Concepto</th><th class="text-right">Pagado en origen</th><th class="text-right">Trasladado</th><th class="text-right">Se queda en origen</th></tr></thead>
+          <tbody>
+            {% for label, pagado, trasladado, queda in componentes %}
+            <tr>
+              <td>{{ label }}</td>
+              <td class="text-right">${{ pagado|floatformat:0|intcomma }}</td>
+              <td class="text-right">${{ trasladado|floatformat:0|intcomma }}</td>
+              <td class="text-right text-muted">${{ queda|floatformat:0|intcomma }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="font-weight-bold">
+              <td>Total</td>
+              <td class="text-right">${{ total_pagado|floatformat:0|intcomma }}</td>
+              <td class="text-right">${{ n.total_trasladado|floatformat:0|intcomma }}</td>
+              <td class="text-right text-muted">${{ total_queda|floatformat:0|intcomma }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {% if n.observaciones %}<div class="small">{{ n.observaciones|linebreaksbr }}</div>{% endif %}
+    </div>
+  </div>
+
+  <!-- Paso 2: documentacion -->
+  <div class="card shadow-sm mb-3 {% if puede_documentar %}border-primary{% endif %}">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-start">
+        <div>
+          <h6 class="mb-1">Documentación</h6>
+          <p class="small text-muted mb-2">Los documentos firmados quedan en la venta nueva y pasan a su adjudicación al aprobar.</p>
+        </div>
+        {% if puede_documentar %}
+        <form method="post" class="mb-2 text-right">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="enviar">
+          <button class="btn btn-primary" {% if not checklist_completo %}disabled title="Completa los requisitos obligatorios"{% endif %}>Enviar a aprobación</button>
+          {% if n.aprobador %}<div class="small text-muted mt-1">Se le avisará a {{ n.aprobador_nombre }}</div>{% endif %}
+        </form>
+        {% endif %}
+      </div>
+
+      <div class="d-flex flex-wrap align-items-center mb-3">
+        <span class="small text-uppercase text-muted mr-2">Revisa y aprueba</span>
+        {% if puede_documentar %}
+        <form method="post" class="form-inline">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="aprobador">
+          <select name="aprobador" class="form-control form-control-sm mr-2" aria-label="Aprobador">
+            {% if not n.aprobador_id %}<option value="">Elegir…</option>{% endif %}
+            {% for pk, etiqueta in aprobadores %}<option value="{{ pk }}" {% if pk == n.aprobador_id %}selected{% endif %}>{{ etiqueta }}</option>{% endfor %}
+          </select>
+          <button class="btn btn-sm btn-outline-secondary">Cambiar</button>
+        </form>
+        {% else %}
+        <strong>{{ n.aprobador_nombre|default:'Sin asignar' }}</strong>
+        {% endif %}
+      </div>
+
+      <ul class="nov-check mb-3">
+        {% for item in checklist %}
+        <li{% if item.detalle %} title="{{ item.detalle }}"{% endif %}>
+          {% if item.ok %}<span class="ok">✓</span>{% elif item.obligatorio %}<span class="falta">○</span>{% else %}<span class="opcional">○</span>{% endif %}
+          {{ item.etiqueta }}
+          {% if not item.obligatorio %}<small class="text-muted">(opcional)</small>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+
+      <div class="border rounded px-3 py-2 mb-3">
+        {% if puede_documentar %}
+        <form method="post" class="form-inline">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="promesa">
+          <span class="small text-uppercase text-muted mr-3">Promesa</span>
+          <label class="small mr-2" for="promesa-entrega">Entrega</label>
+          <input id="promesa-entrega" type="date" name="fecha_entrega" class="form-control form-control-sm mr-3"
+                 value="{{ n.fecha_entrega|date:'Y-m-d' }}" required>
+          <label class="small mr-2" for="promesa-escritura">Escritura</label>
+          <input id="promesa-escritura" type="date" name="fecha_escritura" class="form-control form-control-sm mr-3"
+                 value="{{ n.fecha_escritura|date:'Y-m-d' }}" required>
+          <button class="btn btn-sm btn-outline-primary">{% if n.fecha_entrega %}Actualizar fechas{% else %}Guardar fechas{% endif %}</button>
+        </form>
+        {% else %}
+        <span class="small text-uppercase text-muted mr-3">Promesa</span>
+        {% if n.fecha_entrega %}
+        <span class="small">Entrega <strong>{{ n.fecha_entrega|date:'Y-m-d' }}</strong> · Escritura <strong>{{ n.fecha_escritura|date:'Y-m-d' }}</strong></span>
+        {% else %}
+        <span class="small text-muted">Sin fechas.</span>
+        {% endif %}
+        {% endif %}
+      </div>
+
+      <div class="row">
+        <div class="col-lg-5 mb-3">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-uppercase text-muted mb-2">Nota contable</div>
+            {% if n.nro_nota %}
+            <div class="mb-2">
+              <strong>{{ n.nro_nota }}</strong> · {{ n.fecha_nota|date:'Y-m-d' }}<br>
+              <span class="small">{{ n.empresa_nota.nombre }}</span>
+              {% if n.soporte %} · <a href="{{ n.soporte.url }}" target="_blank" class="small">Ver PDF</a>{% endif %}
+            </div>
+            {% elif not puede_documentar %}
+            <div class="text-muted small">Sin nota.</div>
+            {% endif %}
+            {% if puede_documentar %}
+            <form method="post" enctype="multipart/form-data">
+              {% csrf_token %}
+              <input type="hidden" name="accion" value="nota">
+              <div class="form-row">
+                <div class="col-6 mb-2">
+                  <label class="small mb-0" for="nota-nro">Número</label>
+                  <input id="nota-nro" name="nro_nota" maxlength="12" class="form-control form-control-sm" value="{{ n.nro_nota }}" required>
+                </div>
+                <div class="col-6 mb-2">
+                  <label class="small mb-0" for="nota-fecha">Fecha</label>
+                  <input id="nota-fecha" type="date" name="fecha_nota" class="form-control form-control-sm" value="{{ n.fecha_nota|date:'Y-m-d' }}" required>
+                </div>
+              </div>
+              <div class="mb-2">
+                <label class="small mb-0" for="nota-empresa">Empresa</label>
+                <select id="nota-empresa" name="empresa_nota" class="form-control form-control-sm" required>
+                  <option value="">Elegir…</option>
+                  {% for e in empresas %}<option value="{{ e.pk }}" {% if e.pk == n.empresa_nota_id %}selected{% endif %}>{{ e.nombre }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="small mb-0" for="nota-pdf">PDF de la nota{% if n.soporte %} <span class="text-muted">(para reemplazarlo)</span>{% endif %}</label>
+                <input id="nota-pdf" type="file" name="soporte" accept="application/pdf,.pdf" class="form-control-file" {% if not n.soporte %}required{% endif %}>
+              </div>
+              <button class="btn btn-sm btn-outline-primary">{% if n.nro_nota %}Actualizar nota{% else %}Guardar nota{% endif %}</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="col-lg-7 mb-3">
+          <div class="border rounded p-3 h-100">
+            <div class="small text-uppercase text-muted mb-2">Documentos firmados</div>
+            {% if documentos %}
+            <div class="d-flex flex-wrap mb-2">
+              {% for d in documentos %}
+              <div class="d-inline-flex align-items-center border rounded pl-2 pr-1 py-1 mr-2 mb-2 small"
+                   title="{{ d.descripcion }} · cargado por {{ d.usuario_carga }}">
+                <a href="{{ d.url }}" target="_blank"><i class="far fa-file-pdf mr-1"></i>{{ d.etiqueta }}</a>
+                {% if puede_documentar and d.de_novacion %}
+                <form method="post" class="ml-1" onsubmit="return confirm('¿Eliminar {{ d.descripcion|escapejs }}?');">
+                  {% csrf_token %}
+                  <input type="hidden" name="accion" value="eliminar_documento">
+                  <input type="hidden" name="descripcion" value="{{ d.descripcion }}">
+                  <button class="btn btn-sm btn-link text-danger p-0 px-1" aria-label="Eliminar {{ d.etiqueta }}" title="Eliminar">&times;</button>
+                </form>
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted small">Aún no hay documentos en la venta nueva.</p>
+            {% endif %}
+            {% if puede_documentar and todos_cargados %}
+            <p class="small text-muted mb-0">Ya están cargados todos los tipos. Para reemplazar uno, elimínalo y vuelve a cargarlo.</p>
+            {% elif puede_documentar %}
+            <form method="post" enctype="multipart/form-data" class="form-row align-items-end">
+              {% csrf_token %}
+              <input type="hidden" name="accion" value="documento">
+              <div class="col-sm-4 mb-2">
+                <label class="small mb-0" for="doc-tipo">Tipo</label>
+                <select id="doc-tipo" name="tipo" class="form-control form-control-sm">
+                  {% for t in tipos_documento %}
+                  <option value="{{ t.tipo }}" {% if t.cargado %}disabled{% endif %}>{{ t.etiqueta }}{% if t.cargado %} · ya cargado{% elif not t.obligatorio %} (opcional){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-5 mb-2">
+                <label class="small mb-0" for="doc-archivo">PDF firmado</label>
+                <input id="doc-archivo" type="file" name="archivo" accept="application/pdf,.pdf" class="form-control-file" required>
+              </div>
+              <div class="col-sm-3 mb-2">
+                <button class="btn btn-sm btn-outline-primary btn-block">Cargar</button>
+              </div>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Paso 3: aprobacion -->
+  {% if n.estado == 'Por aprobar' and not puede_resolver %}
+  <div class="alert alert-info">En revisión de {{ n.aprobador_nombre }} desde el {{ n.fecha_envio|date:'Y-m-d H:i' }}.</div>
+  {% endif %}
+  {% if puede_resolver and n.estado == 'Por aprobar' %}
+  <div class="row">
+    <div class="col-lg-7 mb-3">
+      <div class="card shadow-sm border-success h-100">
+        <div class="card-body">
+          <h6>Aprobar</h6>
+          <p class="small text-muted">Se hace todo junto, o no se hace nada: se adjudica la venta {{ n.venta_destino }} en {{ n.proyecto_destino_id }} y se le aplica la nota {{ n.nro_nota }} a la cuota inicial; se desiste {{ n.adj_origen }} con la nota negativa por lo trasladado, con registro en su seguimiento, y el lote {{ n.inmueble_origen }} queda libre. La ADJ nueva queda como promesa, con entrega {{ n.fecha_entrega|date:'Y-m-d' }} y escritura {{ n.fecha_escritura|date:'Y-m-d' }}.</p>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="aprobar">
+            {% if form_aprobar.errors %}<div class="alert alert-danger">{{ form_aprobar.errors }}</div>{% endif %}
+            <div class="form-row">
+              <div class="col-md-6 mb-2">
+                <label for="id_oficina">Oficina</label>
+                <select name="oficina" id="id_oficina" class="form-control">
+                  {% for value, label in form_aprobar.fields.oficina.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6 mb-2">
+                <label for="id_gestor_cartera">Asignar a cartera</label>
+                <select name="gestor_cartera" id="id_gestor_cartera" class="form-control">
+                  {% for value, label in form_aprobar.fields.gestor_cartera.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-success" onclick="return confirm('¿Aprobar la novación #{{ n.pk }}? Desiste {{ n.adj_origen }} y adjudica la venta {{ n.venta_destino }}.');">Aprobar novación</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-5 mb-3">
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h6>Devolver para corregir</h6>
+          <p class="small text-muted">Vuelve a documentación con tu comentario; se le avisa a quien la registró.</p>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="devolver">
+            <textarea name="comentario" class="form-control mb-2" rows="2" placeholder="Qué hay que corregir" required></textarea>
+            <button class="btn btn-outline-warning">Devolver</button>
+          </form>
+        </div>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h6>Rechazar</h6>
+          <p class="small text-muted">Anula la novación: {{ n.adj_origen }} vuelve a recibir recaudos y la venta destino queda como está.</p>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="rechazar">
+            <textarea name="motivo" class="form-control mb-2" rows="2" placeholder="Motivo" required></textarea>
+            <button class="btn btn-outline-danger">Rechazar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% elif puede_resolver and n.estado == 'Documentacion' %}
+  <details class="mb-3">
+    <summary class="small text-muted">Anular esta novación</summary>
+    <form method="post" class="mt-2" style="max-width:480px">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="rechazar">
+      <textarea name="motivo" class="form-control mb-2" rows="2" placeholder="Motivo" required></textarea>
+      <button class="btn btn-sm btn-outline-danger">Rechazar</button>
+    </form>
+  </details>
+  {% endif %}
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <h6>Bitácora</h6>
+      <ul class="list-unstyled small mb-0">
+        {% for e in eventos %}
+        <li class="border-bottom py-1">
+          <span class="text-muted">{{ e.fecha|date:'Y-m-d H:i' }} · {{ e.usuario.username }}</span>
+          · <strong>{{ e.accion }}</strong>{% if e.detalle %}: {{ e.detalle }}{% endif %}
+        </li>
+        {% empty %}
+        <li class="text-muted">Sin movimientos.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% if venta and puede_imprimir %}
+<div class="modal fade" id="modalAccionesVenta" tabindex="-1" role="dialog" aria-labelledby="modalAccionesVentaTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document" style="max-width:95vw">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="modalAccionesVentaTitulo">Acciones · venta {{ n.venta_destino }} · {{ n.proyecto_destino_id }} · lote {{ n.inmueble_destino }}</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="frameAccionesVenta" title="Acciones de la venta" src="about:blank" style="width:100%;height:80vh;border:0"
+                data-src="/comercial/acciones_venta/{{ n.proyecto_destino_id|urlencode }}/{{ n.venta_destino }}?embebido=1"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  // La pagina de acciones de la venta (impresion de contrato, pagare, etc.) se carga al abrir el modal.
+  $('#modalAccionesVenta')
+    .on('show.bs.modal', function () { var f = $('#frameAccionesVenta'); f.attr('src', f.data('src')); })
+    .on('hidden.bs.modal', function () { $('#frameAccionesVenta').attr('src', 'about:blank'); });
+</script>
+{% endif %}
+<script>
+// Estado de carga: al enviar una accion, su boton muestra un spinner y se bloquean los demas
+// botones hasta que la pagina recarga (evita dobles envios). Los campos no se deshabilitan
+// para que el archivo y los valores si viajen en el POST.
+(function () {
+  var TEXTOS = {
+    enviar: 'Enviando…', aprobador: 'Cambiando…', nota: 'Guardando…', promesa: 'Guardando…', documento: 'Cargando…',
+    eliminar_documento: 'Eliminando…', aprobar: 'Aprobando…', devolver: 'Devolviendo…', rechazar: 'Rechazando…'
+  };
+  var $botones = $('form[method="post"] button:not([type="button"])');
+  $botones.each(function () { $(this).data('deshabilitado', this.disabled).data('html', this.innerHTML); });
+
+  $('form[method="post"]').on('submit', function (e) {
+    if (e.isDefaultPrevented()) { return; }  // p. ej. confirmacion cancelada
+    var accion = $(this).find('input[name="accion"]').val();
+    var $boton = $(this).find('button:not([type="button"])').first();
+    $botones.prop('disabled', true);
+    $boton.attr('aria-busy', 'true').html(
+      '<span class="spinner-border spinner-border-sm mr-1" role="status" aria-hidden="true"></span>' +
+      (TEXTOS[accion] || 'Procesando…')
+    );
+  });
+
+  // Si el navegador vuelve a la pagina desde su cache (boton atras), se restauran los botones.
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) { return; }
+    $botones.each(function () {
+      $(this).prop('disabled', $(this).data('deshabilitado')).removeAttr('aria-busy').html($(this).data('html'));
+    });
+  });
+})();
+</script>
+{%endblock%}

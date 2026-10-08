@@ -12,6 +12,11 @@
       #content{
         background-image: url("{%static 'img/bg-andina.jpg'%}");
       }
+      {% if embebido %}
+      /* Pagina cargada dentro de un modal (iframe): sin sidebar ni margen. */
+      #content{ margin-left: 0 !important; min-height: auto; }
+      .principal-container{ max-width: 100%; }
+      {% endif %}
       .section-title{
         background: rgba(51,84,75,1);
         padding-top: 0.75rem;
@@ -48,14 +53,14 @@
     </head>
     <body>
       <div class="wrapper">
-        {%include 'sidebar.html'%}
+        {% if not embebido %}{%include 'sidebar.html'%}{% endif %}
         <div id="content">
-          {%include 'navbar_simply.html'%}
-          <main class='pl-md-3 pl-lg-5'>
+          {% if not embebido %}{%include 'navbar_simply.html'%}{% endif %}
+          <main class='{% if embebido %}px-3 pt-3{% else %}pl-md-3 pl-lg-5{% endif %}'>
             {%include 'alert_right.html'%}
-            {% if user.is_authenticated %}{% include 'accounting/_gasto_alegra_poll.html' %}{% endif %}
-            {% if user.is_authenticated %}{% include 'accounting/_gasto_aprobacion_seguimiento_poll.html' %}{% endif %}
-            {% if user.is_authenticated %}{% include 'accounting/_gasto_tesoreria_poll.html' %}{% endif %}
+            {% if user.is_authenticated and not embebido %}{% include 'accounting/_gasto_alegra_poll.html' %}{% endif %}
+            {% if user.is_authenticated and not embebido %}{% include 'accounting/_gasto_aprobacion_seguimiento_poll.html' %}{% endif %}
+            {% if user.is_authenticated and not embebido %}{% include 'accounting/_gasto_tesoreria_poll.html' %}{% endif %}
             {%block content%}{%endblock%}
           </main>
         </div>
@@ -65,7 +70,7 @@
       <script>
         window.__ANDINA_MEDIA_PREFIX__ = '{% get_media_prefix %}';
       </script>
-      <script type="text/javascript" language="javascript" src="{%static 'js/sidebar.js'%}"></script>
+      {% if not embebido %}<script type="text/javascript" language="javascript" src="{%static 'js/sidebar.js'%}"></script>{% endif %}
       <script>
         $(document).ready(function(){
           $('input:submit').dblclick(function(e){

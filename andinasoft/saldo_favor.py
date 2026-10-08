@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.db.models import Max, Q, Sum
 
-from andinasoft.shared_models import PlanPagos, Recaudos, saldos_adj
+from andinasoft.shared_models import PlanPagos, Recaudos, saldos_adj, usuario_corto
 
 TIPOCTA_SF = 'SF'
 IDCTA_SF_PREFIX = 'SF'
@@ -86,7 +86,7 @@ def registrar_saldo_favor(
         interesmora=0,
         moralqd=0,
         fechaoperacion=datetime.datetime.today(),
-        usuario=usuario,
+        usuario=usuario_corto(usuario),
         estado='Aprobado',
     )
 

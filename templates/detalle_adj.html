@@ -23,6 +23,12 @@
       <h3>Adjudicacion: <small class="text-muted"> {{adj}}</small></h3>
       <h6>Fecha de Venta: <small class="text-muted"> {{info_adj.FechaContrato}}</small></h6>
       <h6>Contrato Procesable: <small class="text-muted"> {{procesable}}</small></h6>
+      {% if novacion_pendiente %}
+      <div class="alert alert-warning py-1 px-2 small mb-2">
+        Novación <a href="/operaciones/novaciones/{{novacion_pendiente.pk}}">#{{novacion_pendiente.pk}}</a> en curso ({{novacion_pendiente.get_estado_display|lower}})
+        a {{novacion_pendiente.proyecto_destino_id}} lote {{novacion_pendiente.inmueble_destino}}. No recibe recaudos.
+      </div>
+      {% endif %}
     </div>
     <div class='col-xs-12 col-md-8'>
       <form id='form-documentos' method="post" action=''>{%csrf_token %}
@@ -54,6 +60,11 @@
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modal-cesion">Cesión</a>
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalCambiarLote">Cambiar lote</a>
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modal-desistimiento">Desistir</a>
+              {% if novacion_pendiente %}
+              <a class="dropdown-item" href="/operaciones/novaciones/{{novacion_pendiente.pk}}">Novación #{{novacion_pendiente.pk}} (en curso)</a>
+              {% elif datos_adj.estado != 'Desistido' %}
+              <a class="dropdown-item" href="/operaciones/novaciones/nueva/{{proyecto}}/{{adj}}">Novación</a>
+              {% endif %}
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modal-restaurar">Restaurar plan de pagos</a>
               <a class="dropdown-item" href="#" data-toggle="modal" data-target="#modalDesvincularRecaudos">Desvincular recaudos</a>
               <a class="dropdown-item {% if not recaudos_pendientes %}disabled{% endif %}" href="#" data-toggle="modal" data-target="#modalReapplyPendings">

@@ -1,0 +1,22 @@
+{%extends 'base.html'%}
+
+{%block title%}Venta creada{%endblock%}
+
+{%block content%}
+<div class="container py-5 text-center">
+  <h4>Venta {{ venta.pk }} creada en {{ proyecto }}</h4>
+  <p class="text-muted">Lote {{ venta.inmueble }}, pendiente y con el lote reservado. Vuelve a la novación de {{ novacion_origen.adj }} para terminar de registrarla.</p>
+  <a class="btn btn-primary" href="/operaciones/novaciones/nueva/{{ novacion_origen.proyecto|urlencode }}/{{ novacion_origen.adj|urlencode }}?proyecto_destino={{ proyecto|urlencode }}&venta={{ venta.pk }}">Ir a la novación</a>
+</div>
+<script>
+  // Dentro del modal de la novación: le entrega la venta para que la seleccione y cierre el modal.
+  (function () {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(
+        {tipo: 'venta_novacion', proyecto: '{{ proyecto|escapejs }}', venta: {{ venta.pk }}},
+        window.location.origin
+      );
+    }
+  })();
+</script>
+{%endblock%}

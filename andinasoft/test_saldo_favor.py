@@ -95,6 +95,29 @@ class RegistrarSaldoFavorTests(SimpleTestCase):
         self.assertEqual(kwargs['tipocta'], 'SF')
         self.assertEqual(kwargs['capital'], Decimal('25000'))
 
+    @patch('andinasoft.saldo_favor.PlanPagos')
+    @patch('andinasoft.saldo_favor.Recaudos')
+    def test_usuario_largo_se_recorta_a_la_columna(self, recaudos, planpagos):
+        planpagos.objects.using.return_value.filter.return_value.aggregate.return_value = {
+            'nrocta__max': 0,
+        }
+        registrar_saldo_favor(
+            proyecto='Oasis', adj='ADJ99', nro_recibo='555',
+            fecha=__import__('datetime').date(2026, 8, 5), remanente=25000,
+            usuario=Mock(username='coordinadora.cartera'), ledger_user=None,
+        )
+        kwargs = recaudos.objects.using.return_value.create.call_args.kwargs
+        self.assertEqual(kwargs['usuario'], 'coordinadora')
+
+
+class UsuarioCortoTests(SimpleTestCase):
+    def test_recorta_usuario_o_texto_a_12(self):
+        from andinasoft.shared_models import usuario_corto
+
+        self.assertEqual(usuario_corto(Mock(username='coordinadora.cartera')), 'coordinadora')
+        self.assertEqual(usuario_corto('jperez'), 'jperez')
+        self.assertEqual(usuario_corto(None), '')
+
 
 class DetallePagoExcluyeSfTests(SimpleTestCase):
     @patch('andinasoft.shared_models.Recaudos')

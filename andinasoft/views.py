@@ -19,6 +19,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.core.files.storage import default_storage
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.urls import path
 from andina.decorators import group_perm_required
 from api_auth.decorators import api_token_auth
@@ -47,6 +48,7 @@ from andinasoft.promesa_pdf import (
     aplicar_texto_forma_pago_pdf,
 )
 from andinasoft.shared_models import Adjudicacion, Vista_Adjudicacion, documentos_contratos, fractales_ventas,saldos_adj,titulares_por_adj, fractales_ventas
+from andinasoft.shared_models import usuario_corto
 from andinasoft.shared_models import Recaudos, consecutivos, Recaudos_general, AsignacionComisiones, CargosFijos, InfoCartera, Cargos_comisiones
 from andinasoft.shared_models import timeline,seguimientos, Inmuebles, ventas_nuevas, RecaudosNoradicados, Pagocomision
 from andinasoft.shared_models import VerificacionOperaciones, DescuentosCondicionados, PlanPagos, DescuentosCondicionados, formas_pago
@@ -68,6 +70,8 @@ from andinasoft.paz_y_salvo_service import build_paz_y_salvo_context
 from andinasoft.welcome_dashboard_service import build_dashboard as build_welcome_dashboard
 from andinasoft.handlers_functions import upload_docs_asesores, upload_docs_contratos, upload_docs_radicados, upload_docs
 from andinasoft.handlers_functions import aplicar_pago, respuesta_reestructuracion, envio_notificacion, envio_email_template
+from andinasoft.adjudicacion_service import crear_plan_pagos
+from andinasoft.novaciones_service import novacion_pendiente_origen, novacion_pendiente_venta
 from andinasoft.handlers_functions import (
     cargar_gastos_informe, guardar_documento_contrato,
     eliminar_documento_contrato, url_documento_contrato,
@@ -154,6 +158,107 @@ def _lote_tiene_venta_activa(proyecto, idinmueble, exclude_adj=None):
         inmueble=idinmueble,
     )
     return adj_qs.exists() or venta_qs.exists()
+
+
+def _mover_documentos_venta_a_adj(proyecto, contrato, adj):
+    """Reasigna los documentos de la venta ``contrato`` a la adjudicación ``adj`` (BD y almacenamiento)."""
+    obj_docs=documentos_contratos.objects.using(proyecto).filter(adj=contrato)
+    for doc in obj_docs:
+        doc.adj=adj
+        doc.save()
+    try:
+        src_prefix = _to_storage_key(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{contrato}')
+        dst_prefix = _to_storage_key(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{adj}')
+        _move_storage_prefix(src_prefix, dst_prefix)
+    except Exception:
+        traceback.print_exc()
+
+
+def _radicar_recibos_noradicados(request, proyecto, contrato, adj):
+    """Aplica a ``adj`` los recaudos no radicados de la venta ``contrato`` y los elimina de la cola."""
+    obj_recNR=RecaudosNoradicados.objects.using(proyecto).filter(contrato=contrato)
+    titulares=titulares_por_adj.objects.using(proyecto).get(adj=adj)
+    proyecto_obj = proyectos.objects.get(pk=proyecto)
+    for recibo in obj_recNR:
+        saldo_cuotas=saldos_adj.objects.using(proyecto).filter(adj=adj,saldocuota__gt=0)
+        aplicar_pago(request=request,adj=adj,fecha=recibo.fecha,forma_pago=recibo.formapago,
+                     valor_pagado=recibo.valor,concepto=recibo.concepto,valor_recibo=recibo.valor,
+                     porcentaje_condonado=100,saldo_cuotas=saldo_cuotas,consecutivo=recibo.recibo,
+                     Recaudos=Recaudos,Recaudos_general=Recaudos_general,titulares=titulares,
+                     proyecto=proyecto)
+        soporte_rel = _normalize_soporte_key(recibo.soportepago)
+        if soporte_rel:
+            fecha_pago_nr = recibo.fecha
+            if isinstance(fecha_pago_nr, datetime.date):
+                fecha_pago_dt = fecha_pago_nr
+            else:
+                fecha_pago_dt = parse_date(str(fecha_pago_nr))
+                if fecha_pago_dt is None:
+                    try:
+                        fecha_pago_dt = datetime.datetime.strptime(str(fecha_pago_nr),'%Y-%m-%d').date()
+                    except ValueError:
+                        fecha_pago_dt = datetime.date.today()
+            solicitud = recibos_internos.objects.using('default').filter(
+                recibo_asociado=recibo.recibo,
+                proyecto=proyecto_obj
+            ).first()
+            if not solicitud:
+                solicitud = recibos_internos.objects.using('default').create(
+                    proyecto=proyecto_obj,
+                    fecha_pago=fecha_pago_dt,
+                    valor=recibo.valor,
+                    soporte=soporte_rel,
+                    cliente=adj,
+                    usuario_solicita=request.user,
+                    condonacion=0,
+                    abono_capital=False
+                )
+                soporte_actualizado = False
+            else:
+                soporte_actualizado = False
+                if not solicitud.soporte:
+                    solicitud.soporte = soporte_rel
+                    soporte_actualizado = True
+            solicitud.recibo_asociado = recibo.recibo
+            solicitud.usuario_confirma = request.user
+            solicitud.fecha_confirma = datetime.date.today()
+            update_fields = ['recibo_asociado', 'usuario_confirma', 'fecha_confirma']
+            if soporte_actualizado:
+                update_fields.append('soporte')
+            solicitud.save(update_fields=update_fields)
+        recibo.delete()
+
+
+def _origen_novacion_desde_request(request):
+    """Datos del origen cuando Nueva venta se abre desde una novacion (?nov_proyecto=&nov_adj=)."""
+    proyecto = request.GET.get('nov_proyecto')
+    adj = request.GET.get('nov_adj')
+    if not proyecto or not adj or not check_project(request, proyecto, raise_exception=False):
+        return None
+    obj_adj = Adjudicacion.objects.using(proyecto).filter(idadjudicacion=adj).first()
+    if not obj_adj:
+        return None
+    titulares = []
+    for nro, id_tercero in enumerate(
+        (obj_adj.idtercero1, obj_adj.idtercero2, obj_adj.idtercero3, obj_adj.idtercero4), start=1,
+    ):
+        if id_tercero:
+            cliente = clientes.objects.filter(pk=id_tercero).first()
+            titulares.append({
+                'campo': f'titular{nro}',
+                'id': id_tercero,
+                'nombre': cliente.nombrecompleto if cliente else '',
+            })
+    # Total que se traslada: se propone como primera cuota inicial (una cuota, hoy).
+    # Va como texto: un entero en la plantilla sale con separador de miles y rompe el JS.
+    valor = int(''.join(c for c in (request.GET.get('nov_valor') or '') if c.isdigit()) or 0)
+    return {
+        'proyecto': proyecto,
+        'adj': adj,
+        'titulares': titulares,
+        'valor': str(valor) if valor else '',
+        'hoy': datetime.date.today().isoformat(),
+    }
 
 
 def _normalize_soporte_key(soporte_path):
@@ -1226,6 +1331,21 @@ def _guardar_recaudo(
             'severity': 'error'
         })
         return context_updates, alerts, True
+    novacion = novacion_pendiente_origen(proyecto, adj)
+    if novacion:
+        context_updates['alerta'] = True
+        context_updates['titulo'] = 'Andinasoft dice:'
+        context_updates['mensaje'] = (
+            f'{adj} tiene la novación #{novacion.pk} pendiente. '
+            'No se pueden registrar recaudos hasta que se apruebe o rechace.'
+        )
+        context_updates['link'] = False
+        alerts.append({
+            'code': 'ADJ_EN_NOVACION',
+            'message': context_updates['mensaje'],
+            'severity': 'error'
+        })
+        return context_updates, alerts, True
     if not form_recibo.is_valid():
         context_updates['form_token'] = form_token
         context_updates['form_errors'] = form_recibo.errors
@@ -1358,7 +1478,7 @@ def _guardar_recaudo(
                             interesmora=mora_pagada,
                             moralqd=cuota.saldomora,
                             fechaoperacion=datetime.datetime.today(),
-                            usuario=request.user,
+                            usuario=usuario_corto(request.user),
                             estado='Aprobado'
                         )
 
@@ -1399,7 +1519,7 @@ def _guardar_recaudo(
                         interesmora=0,
                         moralqd=0,
                         fechaoperacion=datetime.datetime.today(),
-                        usuario=request.user,
+                        usuario=usuario_corto(request.user),
                         estado='Aprobado'
                     )
 
@@ -1593,7 +1713,7 @@ def _guardar_recaudo(
                                                             interesmora=mora_pagada,
                                                             moralqd=cuota.saldomora,
                                                             fechaoperacion=datetime.datetime.today(),
-                                                            usuario=request.user,
+                                                            usuario=usuario_corto(request.user),
                                                             estado='Aprobado')
 
     # Saldo a favor interno: solo si liquido el credito y sobra valor vs detalle
@@ -1915,8 +2035,10 @@ def nuevo_recaudo(request,proyecto,adj,):
     if request.method == 'POST':
         allow_pending_flow = bool(request.POST.get('validar-recaudo') or (numsolic_post and str(numsolic_post).strip() != ''))
 
-    bloquear_formulario = tiene_recaudos_pendientes and not allow_pending_flow
+    novacion_pendiente = novacion_pendiente_origen(proyecto_alias, adj_real)
+    bloquear_formulario = bool(novacion_pendiente) or (tiene_recaudos_pendientes and not allow_pending_flow)
     context={
+        'novacion_pendiente':novacion_pendiente,
         'form':form_nuevo_recibo(proyecto=proyecto_alias),
         'adj':adj_real,
         'titulares':titulares,
@@ -1932,7 +2054,7 @@ def nuevo_recaudo(request,proyecto,adj,):
         context['mensaje_bloqueo']='Existen recaudos pendientes por validar. Debes aplicarlos antes de generar un nuevo recibo.'
 
     if request.method == 'POST':
-        if tiene_recaudos_pendientes and not allow_pending_flow:
+        if bloquear_formulario:
             return render(request,'nuevo_recaudo.html',context)
 
         form_recibo = form_nuevo_recibo(request.POST or None,proyecto=proyecto)
@@ -2876,6 +2998,8 @@ def detalle_adjudicacion(request,proyecto,adj):
             
             elif todo == 'reaplicar_recaudos':
                 check_perms(request,('andinasoft.add_recaudos_general',),raise_exception=True)
+                if novacion_pendiente_origen(proyecto, adj):
+                    return JsonResponse({'status':400,'message':'La adjudicación tiene una novación pendiente; no se pueden aplicar recaudos.'},status=400)
                 recibos = request.POST.getlist('recibos[]')
                 if not recibos:
                     return JsonResponse({'status':400,'message':'Selecciona al menos un recibo pendiente.'},status=400)
@@ -2981,7 +3105,11 @@ def detalle_adjudicacion(request,proyecto,adj):
                     if obj_adj.p_enmendadura==1: procesable='No'
                     if obj_adj.p_doccompleta==1: procesable='No'
                     if obj_adj.p_valincorrectos==1: procesable='No'
-            if request.POST.get('btnDesistir'):
+            if request.POST.get('btnDesistir') and novacion_pendiente_origen(proyecto, adj):
+                alerta=True
+                titulo='Novación pendiente'
+                mensaje=f'{adj} tiene una novación pendiente. Apruébala o recházala antes de desistir.'
+            elif request.POST.get('btnDesistir'):
                 if check_perms(request,('andinasoft.delete_adjudicacion',),raise_exception=False):
                     obj_adj=Adjudicacion.objects.using(proyecto).get(idadjudicacion=adj)
                     inmueble_liberar=obj_adj.idinmueble
@@ -3011,7 +3139,7 @@ def detalle_adjudicacion(request,proyecto,adj):
                         capital=capital_dev,interescte=interes_dev,
                         interesmora = 0, moralqd = 0,
                         fechaoperacion = datetime.date.today(),
-                        usuario = request.user.username, estado = 'Aprobado'
+                        usuario = usuario_corto(request.user), estado = 'Aprobado'
                     )
                     
                     obj_inmueble.estado=nuevo_estado_lote
@@ -3641,6 +3769,7 @@ def detalle_adjudicacion(request,proyecto,adj):
             'titulares_certificado': titulares_para_certificado(obj_adj),
             'puede_paz_y_salvo': puede_paz_y_salvo,
             'escala_comisiones': escala_comisiones,
+            'novacion_pendiente': novacion_pendiente_origen(proyecto, adj),
         }
         return render(request,'detalle_adj.html',context)
     
@@ -3649,6 +3778,7 @@ def detalle_adjudicacion(request,proyecto,adj):
 def seleccionar_proyecto(request):
     return render(request,'seleccion_proyectos.html')
 
+@xframe_options_sameorigin  # se embebe en el modal de la novacion
 @group_perm_required(perms=('andinasoft.add_ventas_nuevas',),raise_exception=True)
 def nueva_venta(request,proyecto,inmueble):
     
@@ -3673,6 +3803,12 @@ def nueva_venta(request,proyecto,inmueble):
         'proyecto':proyecto,
         'btnName':'Guardar',
     }
+    # Venta creada desde el formulario de novacion (ventana aparte): titulares del origen
+    # precargados y, al guardar, se devuelve la venta a la novacion.
+    novacion_origen = _origen_novacion_desde_request(request)
+    if novacion_origen:
+        context['novacion_origen'] = novacion_origen
+        context['embebido'] = True
     if datos_inmueble.estado!='Libre':
         context['alerta']=True
         context['mensaje']='Este inmueble ya no esta disponible'
@@ -3741,7 +3877,7 @@ def nueva_venta(request,proyecto,inmueble):
                 context['titulo_alerta'] = 'Error'
             else:
                 nueva_venta=ventas_nuevas.objects.using(proyecto)
-                nueva_venta.create(id_t1=idtercero1,id_t2=idtercero2,id_t3=idtercero3,id_t4=idtercero4,
+                venta_creada = nueva_venta.create(id_t1=idtercero1,id_t2=idtercero2,id_t3=idtercero3,id_t4=idtercero4,
                                 inmueble=inmueble,valor_venta=valor_lote,forma_pago=forma_pago,cuota_inicial=valor_ci,
                                 cant_ci1=cant_ci1,cant_ci2=cant_ci2,cant_ci3=cant_ci3,cant_ci4=cant_ci4,
                                 cant_ci5=cant_ci5,cant_ci6=cant_ci6,cant_ci7=cant_ci7,
@@ -3760,6 +3896,13 @@ def nueva_venta(request,proyecto,inmueble):
                     envio_notificacion(msj_notif,f'Se creó un contrato sobre el inmueble {inmueble} en {proyecto}',['jorgeavila@somosandina.co','sb@somosandina.co'])
                 else:
                         envio_notificacion(msj_notif,f'Se creó un contrato sobre el inmueble {inmueble} en {proyecto}',['jorgeavila@somosandina.co']) """
+                if novacion_origen:
+                    return render(request, 'novaciones/venta_creada.html', {
+                        'proyecto': proyecto,
+                        'venta': venta_creada,
+                        'novacion_origen': novacion_origen,
+                        'embebido': True,
+                    })
                 context['alerta']=True
                 context['mensaje']='El Contrato fué creado con exito'
                 context['redirect']=f"/comercial/ventas_sin_aprobar/{proyecto}"
@@ -3829,6 +3972,7 @@ def ventas_aprobadas(request,proyecto):
     }
     return render(request,'ventas_aprobadas.html',context)
 
+@xframe_options_sameorigin  # se embebe en el detalle de la novacion
 @group_perm_required(perms=('andinasoft.add_ventas_nuevas',),raise_exception=True)
 def acciones_venta(request,proyecto,contrato):
     check_project(request,proyecto)
@@ -4757,6 +4901,8 @@ def acciones_venta(request,proyecto,contrato):
         context['ruta_link']=ruta_link
         
         context['adj']=contrato
+        # Abierta desde la novacion (modal): sin menu ni barra lateral.
+        context['embebido']=request.GET.get('embebido')=='1'
         
         return render(request,'acciones_venta.html',context)
     else:
@@ -4828,6 +4974,13 @@ def adjudicar_venta(request,proyecto,contrato):
         mensaje='Este contrato ya fue adjudicado'
         redireccion=True
         dir_redirect=f'/operaciones/por_adjudicar/{proyecto}'
+    novacion_venta = novacion_pendiente_venta(proyecto, contrato)
+    if novacion_venta:
+        alerta=True
+        titulo='Venta de novación'
+        mensaje=f'Este contrato es el destino de la novación #{novacion_venta.pk}; se adjudica al aprobar la novación.'
+        redireccion=True
+        dir_redirect=f'/operaciones/novaciones/{novacion_venta.pk}'
     obj_docs=documentos_contratos.objects.using(proyecto).filter(adj=contrato)
     context={
         'recibos_generados':recibos_generados,
@@ -4858,7 +5011,7 @@ def adjudicar_venta(request,proyecto,contrato):
         'tipo_form':'adjudicacion',
         'adj':contrato
     }
-    if request.method == 'POST':
+    if request.method == 'POST' and not novacion_venta:
         if request.POST.get('btnDesaprobar'):
             obj_venta=ventas_nuevas.objects.using(proyecto).get(pk=contrato)
             obj_venta.estado='Pendiente'
@@ -4914,7 +5067,7 @@ def adjudicar_venta(request,proyecto,contrato):
                           origenventa=origen,
                           basecomision=base_comision,
                           oficina=oficina,
-                          usuario=request.user,
+                          usuario=usuario_corto(request.user),
                           p_enmendadura=p_enmendadura,
                           p_doccompleta=p_doccompleta,
                           p_valincorrectos=p_valincorrectos,
@@ -4940,196 +5093,9 @@ def adjudicar_venta(request,proyecto,contrato):
                                       nuevo_saldo=nuevo_saldo,
                                       estado='Pendiente')
           #cambiar nombre de carpeta si existe
-            obj_docs=documentos_contratos.objects.using(proyecto).filter(adj=contrato)
-            for doc in obj_docs:
-                doc.adj=f'ADJ{idadj}'
-                doc.save()
-            try:
-                src_prefix = _to_storage_key(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/{contrato}')
-                dst_prefix = _to_storage_key(f'{settings.DIR_DOCS}/doc_contratos/{proyecto}/ADJ{idadj}')
-                _move_storage_prefix(src_prefix, dst_prefix)
-            except Exception:
-                traceback.print_exc()
+            _mover_documentos_venta_a_adj(proyecto, contrato, f'ADJ{idadj}')
             #creacion plan de pagos
-           #ci
-            obj_planpagos=PlanPagos.objects.using(proyecto)
-            
-            count_ci=1
-            cantidad=datos_venta.cant_ci1
-            fecha=datos_venta.fecha_ci1
-            valor=datos_venta.valor_ci1
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-            cantidad=datos_venta.cant_ci2
-            fecha=datos_venta.fecha_ci2
-            valor=datos_venta.valor_ci2
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-            cantidad=datos_venta.cant_ci3
-            fecha=datos_venta.fecha_ci3
-            valor=datos_venta.valor_ci3
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-            cantidad=datos_venta.cant_ci4
-            fecha=datos_venta.fecha_ci4
-            valor=datos_venta.valor_ci4
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-            cantidad=datos_venta.cant_ci5
-            fecha=datos_venta.fecha_ci5
-            valor=datos_venta.valor_ci5
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-            cantidad=datos_venta.cant_ci6
-            fecha=datos_venta.fecha_ci6
-            valor=datos_venta.valor_ci6
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-            cantidad=datos_venta.cant_ci7
-            fecha=datos_venta.fecha_ci7
-            valor=datos_venta.valor_ci7
-            if cantidad is not None:
-                for j in range(0,cantidad):
-                    fecha_ci=fecha+relativedelta(months=j)
-                    idcta=f'CI{count_ci}ADJ{idadj}'
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CI',
-                                        nrocta=count_ci,
-                                        adj=f'ADJ{idadj}',
-                                        capital=valor,
-                                        intcte=0,
-                                        cuota=valor,
-                                        fecha=fecha_ci)
-                    count_ci+=1
-           #saldo
-            cantidad=datos_venta.nro_cuotas_fn
-            fecha=datos_venta.inicio_fn
-            valor=datos_venta.valor_ctas_fn
-            tasa = datos_venta.tasa
-            if datos_venta.forma_saldo=='CONTADO':
-                tipocta='CO'
-            else: tipocta='FN'
-            if cantidad is not None:
-                if datos_venta.forma_saldo=='Regular':
-                    valor_presente=datos_venta.saldo
-                else:
-                    valor_presente=Utilidades().CalcularVP(valor,tasa,cantidad)
-                capital_fn=valor_presente
-                for i in range (0,cantidad):
-                    fecha_fn=fecha+relativedelta(months=i)
-                    idcta=f'{tipocta}{i+1}ADJ{idadj}'
-                    interes=round(tasa*valor_presente,0)
-                    capital=valor-interes
-                    if i==cantidad-1:
-                        capital=valor_presente
-                        valor=capital+interes
-                    valor_presente-=capital
-                    
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta=tipocta,
-                                        nrocta=i+1,
-                                        adj=f'ADJ{idadj}',
-                                        capital=capital,
-                                        intcte=interes,
-                                        cuota=valor,
-                                        fecha=fecha_fn)
-            cantidad=datos_venta.nro_cuotas_ce
-            fecha=datos_venta.inicio_ce
-            valor=datos_venta.valor_ctas_ce
-            if cantidad is not None:
-                periodo=datos_venta.period_ce
-                periodos={
-                        'Mensual':1,
-                        'Trimestral':3,
-                        'Semestral':6,
-                        'Anual':12
-                    }
-                valor_presente=datos_venta.saldo - capital_fn
-                for i in range (0,cantidad):
-                    try: fecha_ce=fecha+relativedelta(months=i*periodos[periodo])
-                    except: fecha_ce=fecha+relativedelta(months=i*int(periodo))
-                    idcta=f'CE{i+1}ADJ{idadj}'
-                    try: interes=round(tasa*periodos[periodo]*valor_presente,0)
-                    except: interes=round(tasa*int(periodo)*valor_presente,0)
-                    capital=valor-interes
-                    if i==cantidad-1:
-                        capital=valor_presente
-                        valor=capital+interes
-                    valor_presente-=capital
-                    obj_planpagos.create(idcta=idcta,
-                                        tipocta='CE',
-                                        nrocta=i+1,
-                                        adj=f'ADJ{idadj}',
-                                        capital=capital,
-                                        intcte=interes,
-                                        cuota=valor,
-                                        fecha=fecha_ce)
+            crear_plan_pagos(proyecto, datos_venta, f'ADJ{idadj}')
            #creacion timeline
             obj_timeline=timeline.objects.using(proyecto)
             obj_timeline.create(adj=f'ADJ{idadj}',
@@ -5154,57 +5120,7 @@ def adjudicar_venta(request,proyecto,contrato):
                 cargo.save()
            #Radicacion de recibo 
             adj=f'ADJ{idadj}'
-            obj_recNR=RecaudosNoradicados.objects.using(proyecto).filter(contrato=datos_venta.id_venta)
-            titulares=titulares_por_adj.objects.using(proyecto).get(adj=adj)
-            proyecto_obj = proyectos.objects.get(pk=proyecto)
-            for recibo in obj_recNR:
-                saldo_cuotas=saldos_adj.objects.using(proyecto).filter(adj=adj,saldocuota__gt=0)
-                aplicar_pago(request=request,adj=adj,fecha=recibo.fecha,forma_pago=recibo.formapago,
-                             valor_pagado=recibo.valor,concepto=recibo.concepto,valor_recibo=recibo.valor,
-                             porcentaje_condonado=100,saldo_cuotas=saldo_cuotas,consecutivo=recibo.recibo,
-                             Recaudos=Recaudos,Recaudos_general=Recaudos_general,titulares=titulares,
-                             proyecto=proyecto)
-                soporte_rel = _normalize_soporte_key(recibo.soportepago)
-                if soporte_rel:
-                    fecha_pago_nr = recibo.fecha
-                    if isinstance(fecha_pago_nr, datetime.date):
-                        fecha_pago_dt = fecha_pago_nr
-                    else:
-                        fecha_pago_dt = parse_date(str(fecha_pago_nr))
-                        if fecha_pago_dt is None:
-                            try:
-                                fecha_pago_dt = datetime.datetime.strptime(str(fecha_pago_nr),'%Y-%m-%d').date()
-                            except ValueError:
-                                fecha_pago_dt = datetime.date.today()
-                    solicitud = recibos_internos.objects.using('default').filter(
-                        recibo_asociado=recibo.recibo,
-                        proyecto=proyecto_obj
-                    ).first()
-                    if not solicitud:
-                        solicitud = recibos_internos.objects.using('default').create(
-                            proyecto=proyecto_obj,
-                            fecha_pago=fecha_pago_dt,
-                            valor=recibo.valor,
-                            soporte=soporte_rel,
-                            cliente=adj,
-                            usuario_solicita=request.user,
-                            condonacion=0,
-                            abono_capital=False
-                        )
-                        soporte_actualizado = False
-                    else:
-                        soporte_actualizado = False
-                        if not solicitud.soporte:
-                            solicitud.soporte = soporte_rel
-                            soporte_actualizado = True
-                    solicitud.recibo_asociado = recibo.recibo
-                    solicitud.usuario_confirma = request.user
-                    solicitud.fecha_confirma = datetime.date.today()
-                    update_fields = ['recibo_asociado', 'usuario_confirma', 'fecha_confirma']
-                    if soporte_actualizado:
-                        update_fields.append('soporte')
-                    solicitud.save(update_fields=update_fields)
-                recibo.delete()
+            _radicar_recibos_noradicados(request, proyecto, datos_venta.id_venta, adj)
             # Registra el la info de cartera
             
             InfoCartera.objects.using(proyecto).create(idadjudicacion=adj,
@@ -7152,6 +7068,15 @@ def promesas(request,proyecto):
         except Exception:
             meses_entrega = 0
         ruta = settings.DIR_EXPORT + f'Promesa_{proyecto}_{adj}.pdf'
+        # Lotes fraccionados terminan en letra (ej. 12A); Tesoro Escondido lo usa
+        try:
+            parcela = int(obj_inmueble.lotenumero)
+            fraccion = None
+        except (TypeError, ValueError):
+            fraccion = obj_inmueble.lotenumero[-1]
+            parcela = obj_inmueble.lotenumero[:-1]
+        prorroga = request.POST.get('prorroga')
+        prorroga = int(prorroga) if prorroga else 365
         reportlab_kwargs = {
             'nro_contrato': consec_promesa,
             'nombre_t1': titular1.nombrecompleto, 'cc_t1': titular1.idTercero,
@@ -7192,6 +7117,12 @@ def promesas(request,proyecto):
             'es_promesa': True,
             'proyecto': proyecto,
             'ctr': promesa,
+            'inmueble': obj_inmueble,
+            'parcela': parcela,
+            'fraccion': fraccion,
+            'new_date': fecha_prom,
+            'prorroga': prorroga,
+            'prorroga_letras': Utilidades().numeros_letras(prorroga, formato=None).replace('PESOS M/CTE', ''),
             'fecha_escritura': fecha_escritura,
             'meses_entrega': meses_entrega,
             'oficina': ciudad,
@@ -9571,7 +9502,7 @@ def ajustar_al_peso(request):
                                             interesmora=0,
                                             moralqd=0,
                                             fechaoperacion=datetime.datetime.today(),
-                                            usuario=request.user,
+                                            usuario=usuario_corto(request.user),
                                             estado='Aprobado')
             
             nro_recibo=f'{consecutivo.consecutivo}'

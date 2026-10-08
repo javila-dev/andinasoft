@@ -116,6 +116,12 @@ def eliminar_documento_contrato(proyecto, adj, descripcion_doc):
     ).delete()
 
 
+def abrir_documento_contrato(proyecto, adj, descripcion_doc):
+    """Archivo del PDF del contrato (para servirlo a través de Andinasoft)."""
+    descripcion_doc = _nombre_doc_seguro(descripcion_doc)
+    return media_service.open_media(_clave_doc_contrato(proyecto, adj, descripcion_doc), private=True)
+
+
 def url_documento_contrato(proyecto, adj, descripcion_doc):
     descripcion_doc = _nombre_doc_seguro(descripcion_doc)
     return media_service.url_media(
@@ -191,6 +197,7 @@ def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo
             total_intcte+=intcte_pagado
             total_intmora+=mora_pagada
             nro_recibo=f'{consecutivo}'
+            usuario_recaudo=sm.usuario_corto(request.user)
             Recaudos.objects.using(proyecto).create(recibo=nro_recibo,
                                                     fecha=fecha,
                                                     idcta=cuota.idcta,
@@ -200,7 +207,7 @@ def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo
                                                     interesmora=mora_pagada,
                                                     moralqd=cuota.saldomora,
                                                     fechaoperacion=datetime.datetime.today(),
-                                                    usuario=request.user,
+                                                    usuario=usuario_recaudo,
                                                     estado='Aprobado')
 
     from andinasoft.saldo_favor import (
@@ -216,7 +223,7 @@ def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo
             nro_recibo=nro_recibo,
             fecha=fecha,
             remanente=remanente,
-            usuario=request.user,
+            usuario=sm.usuario_corto(request.user),
             ledger_user=request.user if getattr(request.user, 'pk', None) else None,
         )
 

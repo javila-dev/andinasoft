@@ -1,0 +1,117 @@
+{%extends 'base.html'%}
+{%load humanize%}
+
+{%block title%}Novaciones{%endblock%}
+
+{%block style%}
+<style>
+  .nov-lista { font-size: .8rem; }
+  .nov-lista .form-control, .nov-lista .btn { font-size: .8rem; }
+  #tabla-novaciones td, #tabla-novaciones th { padding: .35rem .5rem; vertical-align: middle; white-space: nowrap; }
+  #tabla-novaciones tbody tr { cursor: pointer; }
+  #tabla-novaciones .badge { font-size: .72rem; font-weight: 500; }
+  .nov-lista .dataTables_wrapper .dataTables_info,
+  .nov-lista .dataTables_wrapper .dataTables_paginate { font-size: .78rem; padding-top: .5rem; }
+</style>
+{%endblock%}
+
+{%block content%}
+<div class="bg-white rounded shadow p-3 nov-lista">
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %} py-2">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="d-flex flex-wrap align-items-center mb-2">
+    <h5 class="mb-0 mr-3">Novaciones</h5>
+    <select id="filtro-estado" class="form-control form-control-sm w-auto mr-2 mb-1 mb-sm-0" aria-label="Estado">
+      <option value="abiertas" selected>Abiertas</option>
+      <option value="">Todos los estados</option>
+      {% for key, label in estados %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+    </select>
+    <select id="filtro-proyecto" class="form-control form-control-sm w-auto mr-2 mb-1 mb-sm-0" aria-label="Proyecto">
+      <option value="">Todos los proyectos</option>
+      {% for p in proyectos %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+    </select>
+    {% if por_revisar %}
+    <button type="button" id="filtro-mias" class="btn btn-sm btn-outline-warning mb-1 mb-sm-0" aria-pressed="false">
+      Por revisar <span class="badge badge-warning">{{ por_revisar }}</span>
+    </button>
+    {% endif %}
+  </div>
+
+  <table id="tabla-novaciones" class="table table-sm table-hover w-100 mb-0">
+    <thead class="thead-light">
+      <tr>
+        <th>#</th>
+        <th>Fecha</th>
+        <th>Cliente</th>
+        <th>Origen</th>
+        <th>Destino</th>
+        <th class="text-right">Trasladado</th>
+        <th>Aprobador</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for n in rows %}
+      <tr data-href="/operaciones/novaciones/{{ n.pk }}" data-estado="{{ n.estado }}"
+          data-origen="{{ n.proyecto_origen_id }}" data-destino="{{ n.proyecto_destino_id }}"
+          data-mia="{% if n.aprobador_id == user.pk and n.estado == 'Por aprobar' %}1{% endif %}">
+        <td><a href="/operaciones/novaciones/{{ n.pk }}">{{ n.pk }}</a></td>
+        <td data-order="{{ n.fecha_solicitud|date:'Y-m-d H:i' }}" title="Registró {{ n.usuario_solicita.username }}">{{ n.fecha_solicitud|date:'Y-m-d' }}</td>
+        <td>{{ n.nombre_titular|truncatechars:32 }}</td>
+        <td title="Lote {{ n.inmueble_origen }}">{{ n.proyecto_origen_id }} · {{ n.adj_origen }}</td>
+        <td title="Lote {{ n.inmueble_destino }}">{{ n.proyecto_destino_id }} · {% if n.adj_destino %}{{ n.adj_destino }}{% else %}venta {{ n.venta_destino }}{% endif %}</td>
+        <td class="text-right" data-order="{{ n.total_trasladado|floatformat:0|stringformat:'s' }}">${{ n.total_trasladado|floatformat:0|intcomma }}</td>
+        <td>{{ n.aprobador_nombre|default:'—' }}</td>
+        <td><span class="badge {% if n.estado == 'Documentacion' %}badge-info{% elif n.estado == 'Por aprobar' %}badge-warning{% elif n.estado == 'Aprobada' %}badge-success{% else %}badge-secondary{% endif %}">{{ n.get_estado_display }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+$(function () {
+  var ABIERTAS = ['Documentacion', 'Por aprobar'];
+  var soloMias = false;
+
+  // Filtros propios (estado, proyecto, por revisar) sobre los data-* de cada fila.
+  $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+    if (settings.nTable.id !== 'tabla-novaciones') { return true; }
+    var fila = settings.aoData[dataIndex].nTr.dataset;
+    var estado = $('#filtro-estado').val();
+    var proyecto = $('#filtro-proyecto').val();
+    if (estado === 'abiertas' && ABIERTAS.indexOf(fila.estado) < 0) { return false; }
+    if (estado && estado !== 'abiertas' && fila.estado !== estado) { return false; }
+    if (proyecto && fila.origen !== proyecto && fila.destino !== proyecto) { return false; }
+    if (soloMias && !fila.mia) { return false; }
+    return true;
+  });
+
+  var tabla = $('#tabla-novaciones').DataTable({
+    language: { url: '/ajax_request/datatable_spanish' },
+    order: [[1, 'desc']],
+    pageLength: 25,
+    lengthMenu: [[25, 50, 100, -1], [25, 50, 100, 'Todas']],
+    autoWidth: false,
+    dom: "<'d-flex flex-wrap justify-content-between align-items-center mb-2'lf>r<'table-responsive't><'d-flex flex-wrap justify-content-between align-items-center'ip>"
+  });
+
+  $('#filtro-estado, #filtro-proyecto').on('change', function () { tabla.draw(); });
+  $('#filtro-mias').on('click', function () {
+    soloMias = !soloMias;
+    $(this).toggleClass('active', soloMias).attr('aria-pressed', soloMias);
+    if (soloMias) { $('#filtro-estado').val(''); }
+    tabla.draw();
+  });
+
+  // Toda la fila abre el detalle.
+  $('#tabla-novaciones tbody').on('click', 'tr[data-href]', function (e) {
+    if (!$(e.target).closest('a').length) { window.location = this.dataset.href; }
+  });
+});
+</script>
+{%endblock%}

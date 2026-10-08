@@ -625,6 +625,52 @@ def build_promesa_rows(proyecto):
     return rows
 
 
+def resumen_promesa(proyecto, adj, hoy=None):
+    """Entrega, escritura y otrosíes de un negocio, con los mismos estados que build_promesa_rows."""
+    hoy = hoy or datetime.date.today()
+    adj_obj = Adjudicacion.objects.using(proyecto).filter(pk=adj).first()
+    if adj_obj is None:
+        return None
+    p = Promesas.objects.using(proyecto).filter(idadjudicacion=adj).first()
+    cump = PromesaCumplimiento.objects.filter(proyecto_id=proyecto, adj=adj).first()
+
+    fechaentrega = _as_date(p.fechaentrega) if p else None
+    fechaescritura = _as_date(p.fechaescritura) if p else None
+    entregado = _boolish(p.entregado) if p else False
+    pipe = pipeline_escritura(cump)
+    dias_firma, alerta_firma = seguimiento_firma_cliente(pipe, hoy)
+    est_entrega = estado_fecha(fechaentrega, entregado, hoy=hoy)
+    est_escritura = estado_fecha(fechaescritura, pipe['completa'], hoy=hoy)
+
+    return {
+        'cliente_id': str(adj_obj.idtercero1 or '').strip(),
+        'tiene_promesa': p is not None,
+        'nropromesa': (p.nropromesa if p and p.nropromesa else None) or (adj_obj.contrato or ''),
+        'fechapromesa': _as_date(p.fechapromesa) if p else _as_date(adj_obj.fechacontrato),
+        'entrega': {
+            'pactada': fechaentrega,
+            'real': _as_date(cump.fecha_entrega_real) if cump else None,
+            'entregado': entregado,
+            'estado': est_entrega,
+            'estado_label': ESTADO_LABEL[est_entrega],
+        },
+        'escritura': {
+            'pactada': fechaescritura,
+            'real': _as_date(cump.fecha_escritura_real) if cump else None,
+            'completa': pipe['completa'],
+            'estado': est_escritura,
+            'estado_label': ESTADO_LABEL[est_escritura],
+            'paso_label': PASO_LABEL.get(pipe['paso'], pipe['paso']),
+            'siguiente_label': pipe['paso_siguiente_label'],
+            'pasos': pipe['pasos_ui'],
+            'dias_firma_cliente': dias_firma,
+            'alerta_firma_empresa': alerta_firma,
+        },
+        'otrosi': listar_otrosi(proyecto, adj),
+        'observaciones': (p.observaciones if p else '') or '',
+    }
+
+
 def ensure_cumplimiento(proyecto, adj):
     from andinasoft.models import proyectos as ProyectosModel
     proy, _ = ProyectosModel.objects.get_or_create(proyecto=proyecto, defaults={'activo': True})

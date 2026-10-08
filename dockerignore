@@ -24,6 +24,10 @@ env
 # Variables de entorno
 .env
 .env.*
+dev.env
+
+# Dump MySQL de desarrollo: nunca entra a la imagen
+dev-data/
 
 # Editor / IDE
 .vscode

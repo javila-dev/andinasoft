@@ -24,6 +24,7 @@ from andinasoft import views_usuarios
 from andinasoft import cartera_gestor_views
 from andinasoft import documento_fechas_views
 from andinasoft import servicio_cliente_views
+from andinasoft import novaciones_views
 from buildingcontrol import views as building_views, pdf as building_pdf
 from crm import views as crm_views
 from accounting import views as account_views
@@ -32,6 +33,7 @@ from mcp_server import urls as mcp_urls
 urlpatterns = [
 
     path('mcp/', include(mcp_urls)),
+    path('chatwoot/', include('chatwoot_panel.urls')),
     path('admin/', admin.site.urls),
     path('welcome',views.welcome,name='welcome'),
     path('pago_exitoso',views.pago_exitoso,name='pago exitoso'),
@@ -122,6 +124,11 @@ urlpatterns = [
     path('graphs/cartera/year/<proyecto>',views.graph_cartera_anual),
     path('operaciones/buscar_cliente',views.buscar_cliente,name='buscar cliente'),
     path('blank_request',views.blank_request),
+    path('operaciones/novaciones', novaciones_views.novaciones_lista, name='novaciones'),
+    path('operaciones/novaciones/ventas_destino', novaciones_views.novacion_ventas_destino, name='novacion ventas destino'),
+    path('operaciones/novaciones/lotes_libres', novaciones_views.novacion_lotes_libres, name='novacion lotes libres'),
+    path('operaciones/novaciones/nueva/<proyecto>/<adj>', novaciones_views.novacion_nueva, name='novacion nueva'),
+    path('operaciones/novaciones/<int:pk>', novaciones_views.novacion_detalle, name='novacion detalle'),
     path('servicio_cliente/dashboard', servicio_cliente_views.sac_dashboard, name='sac dashboard'),
     path('servicio_cliente/dashboard/detalle', servicio_cliente_views.sac_dashboard_detalle, name='sac dashboard detalle'),
     path('servicio_cliente/cliente/<str:cliente_id>', servicio_cliente_views.sac_ficha_cliente, name='sac ficha cliente'),

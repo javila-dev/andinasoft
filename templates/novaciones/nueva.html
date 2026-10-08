@@ -1,0 +1,337 @@
+{%extends 'base.html'%}
+{%load humanize%}
+
+{%block title%}Novación {{ adj }}{%endblock%}
+
+{%block content%}
+<div class="container py-3">
+  {% if messages %}
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{% for e in form.non_field_errors %}{{ e }}<br>{% endfor %}</div>
+  {% endif %}
+
+  <form method="post" id="form-novacion">
+    {% csrf_token %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h4 class="mb-1">Novación de {{ adj }}</h4>
+        <p class="text-muted mb-3">{{ proyecto }} · lote {{ obj_adj.idinmueble }} · {{ nombre_titular }} ({{ obj_adj.idtercero1 }}) · {{ obj_adj.estado }}</p>
+
+        <h6>1. Qué se traslada</h6>
+        <p class="small text-muted">Lo recaudado en la adjudicación de origen. Marca lo que pasa al lote nuevo y ajusta el valor si solo va una parte. Lo que no se traslade se queda en el proyecto de origen.</p>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead class="thead-light">
+              <tr><th></th><th>Concepto</th><th class="text-right">Pagado</th><th style="width:220px">A trasladar</th></tr>
+            </thead>
+            <tbody>
+              {% for c in componentes %}
+              <tr>
+                <td><input type="checkbox" class="chk-comp" data-target="#id_{{ c.key }}" data-pagado="{{ c.pagado_input }}" {% if c.marcado %}checked{% endif %}></td>
+                <td>{{ c.label }}</td>
+                <td class="text-right">${{ c.pagado_input|intcomma }}</td>
+                <td>
+                  <div class="input-group input-group-sm">
+                    <div class="input-group-prepend"><span class="input-group-text">$</span></div>
+                    <input type="text" inputmode="numeric" autocomplete="off" data-max="{{ c.pagado_input }}" name="{{ c.key }}" id="id_{{ c.key }}"
+                           class="form-control text-right val-comp" value="{{ c.valor }}">
+                  </div>
+                  <small class="text-danger d-none" id="tope_{{ c.key }}">Máximo ${{ c.pagado_input|intcomma }}</small>
+                  {% for e in c.errores %}<small class="text-danger">{{ e }}</small>{% endfor %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="font-weight-bold">
+                <td></td><td>Total</td>
+                <td class="text-right">${{ total_pagado|floatformat:0|intcomma }}</td>
+                <td class="text-right">$<span id="total-trasladar">0</span></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h6>2. Venta destino</h6>
+        <p class="small text-muted mb-3">El lote nuevo del cliente. La venta queda pendiente, con el lote reservado y su promesa disponible, y se adjudica sin comisiones al aprobar la novación.</p>
+        <input type="hidden" name="venta_destino" id="id_venta_destino" value="{{ form.venta_destino.value|default_if_none:'' }}">
+        <div class="alert alert-danger py-2 small" id="venta-requerida" {% if not form.venta_destino.errors %}style="display:none"{% endif %}>Elige o crea la venta destino.</div>
+
+        <div class="form-row align-items-end mb-3">
+          <div class="col-md-4 mb-2 mb-md-0">
+            <label for="id_proyecto_destino" class="font-weight-bold small text-uppercase text-muted mb-1">Proyecto destino</label>
+            <select name="proyecto_destino" id="id_proyecto_destino" class="form-control" required>
+              <option value="">Elegir proyecto…</option>
+              {% for value, label in form.fields.proyecto_destino.choices %}
+              <option value="{{ value }}" {% if form.proyecto_destino.value == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <style>@media (min-width: 768px) { .btn-modo { white-space: nowrap; } }</style>
+          <div class="col-md-8" id="modos" style="display:none">
+            <div class="btn-group d-flex" role="group" aria-label="Cómo obtener la venta destino">
+              <button type="button" class="btn btn-outline-primary w-50 btn-modo" data-modo="existente" id="modo-existente" title="Elegir una venta pendiente del cliente">Usar venta pendiente <span class="badge badge-light ml-1" id="cnt-ventas">0</span></button>
+              <button type="button" class="btn btn-outline-primary w-50 btn-modo" data-modo="nueva" id="modo-nueva" title="Armar la venta en un lote libre">Crear venta nueva</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Venta elegida -->
+        <div id="venta-elegida" class="border rounded p-3 mb-2" style="display:none">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="small text-uppercase text-muted">Venta elegida</div>
+              <div class="h6 mb-1" id="ve-titulo"></div>
+              <div class="small" id="ve-detalle"></div>
+            </div>
+            <button type="button" class="btn btn-sm btn-link" id="btn-cambiar-venta">Cambiar</button>
+          </div>
+          <div class="small mt-2" id="ve-chequeo"></div>
+        </div>
+
+        <!-- Elegir o crear -->
+        <div id="elegir-venta" style="display:none">
+
+          <div id="panel-existente" style="display:none">
+            <div class="list-group" id="lista-ventas"></div>
+            <small class="text-muted d-block mt-2">Solo se pueden usar ventas donde el cliente de {{ adj }} es titular.</small>
+          </div>
+
+          <div id="panel-nueva" style="display:none">
+            <div class="form-row align-items-end">
+              <div class="col-md-8 mb-2">
+                <label for="lote-nuevo" class="small text-muted mb-1">Lote libre</label>
+                <select id="lote-nuevo" class="form-control">
+                  <option value="">Elegir lote…</option>
+                </select>
+              </div>
+              <div class="col-md-4 mb-2">
+                <button type="button" class="btn btn-primary btn-block" id="btn-crear-venta" disabled>Armar la venta</button>
+              </div>
+            </div>
+            <small class="text-muted">Se abre el formulario de venta con los titulares de {{ adj }} ya cargados. Arma la cuota inicial para que cubra lo trasladado; al guardar, la venta queda elegida aquí.</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <h6>3. Revisión y aprobación</h6>
+        <div class="form-row">
+          <div class="col-md-5 mb-2">
+            <label for="id_aprobador" class="mb-1">Quién revisa y aprueba</label>
+            <select name="aprobador" id="id_aprobador" class="form-control" required>
+              <option value="">Elegir…</option>
+              {% for pk, etiqueta in aprobadores %}
+              <option value="{{ pk }}" {% if form.aprobador.value|stringformat:'s' == pk %}selected{% endif %}>{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+            {% for e in form.aprobador.errors %}<small class="text-danger d-block">{{ e }}</small>{% endfor %}
+            <small class="text-muted">Se le avisa por correo y WhatsApp cuando envíes la novación con todo cargado.</small>
+          </div>
+          <div class="col-md-7 mb-2">
+            <label for="id_observaciones" class="mb-1">Observaciones <small class="text-muted">(opcional)</small></label>
+            <textarea name="observaciones" id="id_observaciones" class="form-control" rows="2">{{ form.observaciones.value|default_if_none:'' }}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between">
+      <a href="/adjudicaciones/{{ proyecto }}/{{ adj }}/" class="btn btn-outline-secondary">Volver</a>
+      <button class="btn btn-primary">Registrar novación</button>
+    </div>
+    <p class="small text-muted mt-2 text-right">Después de registrarla cargas la nota contable y los documentos firmados. Desde ya, {{ adj }} no recibe recaudos.</p>
+  </form>
+</div>
+
+<div class="modal fade" id="modalNuevaVenta" tabindex="-1" role="dialog" aria-labelledby="modalNuevaVentaTitulo" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document" style="max-width:95vw">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h5 class="modal-title" id="modalNuevaVentaTitulo">Nueva venta destino</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body p-0">
+        <iframe id="frameNuevaVenta" title="Nueva venta" src="about:blank" style="width:100%;height:80vh;border:0"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var fmt = new Intl.NumberFormat('es-CO');
+  var ventas = {};
+
+  // Valores a trasladar: se muestran con separador de miles y se envian como entero.
+  function numero($input) {
+    return parseInt(String($input.val() || '').replace(/\D/g, ''), 10) || 0;
+  }
+  function formatear($input) {
+    var n = numero($input);
+    var max = parseInt($input.data('max'), 10) || 0;
+    var excede = n > max;
+    if (excede) { n = max; }
+    $('#tope_' + $input.attr('name')).toggleClass('d-none', !excede);
+    $input.val(String($input.val() || '').trim() === '' ? '' : fmt.format(n));
+  }
+
+  function recalcular() {
+    var total = 0;
+    $('.chk-comp').each(function () {
+      var $input = $($(this).data('target'));
+      if (this.checked) {
+        $input.prop('disabled', false);
+        total += numero($input);
+      } else {
+        $input.prop('disabled', true);
+      }
+    });
+    $('#total-trasladar').text(fmt.format(total));
+    pintarVenta(total);
+  }
+
+  // Resumen de la venta elegida y chequeo contra la cuota inicial.
+  function pintarVenta(total) {
+    var venta = ventas[$('#id_venta_destino').val()];
+    if (!$('#id_proyecto_destino').val()) { $('#venta-elegida, #elegir-venta, #modos').hide(); return; }
+    if (!venta) { $('#venta-elegida').hide(); $('#elegir-venta, #modos').show(); return; }
+    $('#elegir-venta, #modos').hide();
+    $('#ve-titulo').text('Venta ' + venta.id + ' · lote ' + venta.inmueble);
+    $('#ve-detalle').text(venta.titular + ' · valor $' + fmt.format(venta.valor) + ' · cuota inicial $' + fmt.format(venta.cuota_inicial) + ' · ' + venta.estado);
+    var ok = total <= venta.cuota_inicial;
+    $('#venta-elegida').toggleClass('border-success', ok).toggleClass('border-danger', !ok).show();
+    $('#ve-chequeo')
+      .toggleClass('text-success', ok).toggleClass('text-danger', !ok)
+      .text(ok
+        ? '✓ La cuota inicial cubre lo trasladado ($' + fmt.format(total) + ').'
+        : '✗ Lo trasladado ($' + fmt.format(total) + ') supera la cuota inicial. Elige otra venta o ajusta los valores.');
+  }
+
+  function elegirVenta(id) {
+    $('#id_venta_destino').val(id ? String(id) : '');
+    if (id) { $('#venta-requerida').hide(); }
+    recalcular();
+  }
+
+  $('#form-novacion').on('submit', function (e) {
+    if (!$('#id_venta_destino').val()) {
+      e.preventDefault();
+      $('#venta-requerida').show()[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+      return;
+    }
+    $('.val-comp').each(function () { $(this).val(String(numero($(this)))); });
+  });
+
+  function modo(nombre) {
+    $('#modos [data-modo]').removeClass('active').filter('[data-modo="' + nombre + '"]').addClass('active');
+    $('#panel-existente').toggle(nombre === 'existente');
+    $('#panel-nueva').toggle(nombre === 'nueva');
+  }
+
+  $('.chk-comp').on('change', function () {
+    var $input = $($(this).data('target'));
+    if (this.checked && !numero($input)) { $input.val(String($(this).data('pagado'))); formatear($input); }
+    recalcular();
+  });
+  $('.val-comp').on('input', function () { formatear($(this)); recalcular(); });
+  $('.val-comp').each(function () { formatear($(this)); });
+  $('#modos [data-modo]').on('click', function () { if (!this.disabled) { modo($(this).data('modo')); } });
+  $('#btn-cambiar-venta').on('click', function () { elegirVenta(''); });
+  $('#lista-ventas').on('click', '[data-venta]', function () { elegirVenta($(this).data('venta')); });
+
+  function cargarVentas() {
+    var proyecto = $('#id_proyecto_destino').val();
+    var $lista = $('#lista-ventas').empty();
+    ventas = {};
+    if (!proyecto) { recalcular(); return; }
+    $lista.append('<div class="list-group-item text-muted">Cargando…</div>');
+    $.getJSON('/operaciones/novaciones/ventas_destino', {proyecto: proyecto, titular: '{{ obj_adj.idtercero1|escapejs }}'})
+      .done(function (data) {
+        $lista.empty();
+        // Solo ventas del mismo cliente: las demas no pasan la validacion.
+        var propias = data.ventas.filter(function (v) { return v.es_del_titular; });
+        propias.forEach(function (v) { ventas[v.id] = v; });
+        $('#cnt-ventas').text(propias.length);
+        $('#modo-existente').prop('disabled', !propias.length);
+        if (!propias.length) {
+          $('<div class="list-group-item text-muted">').text('El cliente no tiene ventas pendientes en ' + proyecto + '.').appendTo($lista);
+        }
+        propias.forEach(function (v) {
+          var $item = $('<button type="button" class="list-group-item list-group-item-action">').attr('data-venta', v.id);
+          $('<div class="d-flex justify-content-between">')
+            .append($('<strong>').text('Lote ' + v.inmueble))
+            .append($('<small class="text-muted">').text('Venta ' + v.id + (v.fecha ? ' · ' + v.fecha : '')))
+            .appendTo($item);
+          $('<small>').text(v.titular + ' · valor $' + fmt.format(v.valor) + ' · cuota inicial $' + fmt.format(v.cuota_inicial) + ' · ' + v.estado).appendTo($item);
+          $item.appendTo($lista);
+        });
+        if (!ventas[$('#id_venta_destino').val()]) { $('#id_venta_destino').val(''); }
+        // Si el cliente ya tiene ventas pendientes, lo normal es usar una; si no, crearla.
+        modo(propias.length ? 'existente' : 'nueva');
+        recalcular();
+      })
+      .fail(function () {
+        $lista.empty().append('<div class="list-group-item text-danger">No se pudieron cargar las ventas.</div>');
+      });
+  }
+  function cargarLotes() {
+    var proyecto = $('#id_proyecto_destino').val();
+    var $sel = $('#lote-nuevo');
+    $sel.empty().append('<option value="">Elegir lote…</option>');
+    $('#btn-crear-venta').prop('disabled', true);
+    // Las ventas de fracciones tienen su propio formulario.
+    var fractal = (proyecto || '').toLowerCase() === 'fractal';
+    $('#modo-nueva').prop('disabled', fractal);
+    if (!proyecto || fractal) { return; }
+    $.getJSON('/operaciones/novaciones/lotes_libres', {proyecto: proyecto}).done(function (data) {
+      if (!data.lotes.length) { $sel.empty().append('<option value="">No hay lotes libres</option>'); }
+      data.lotes.forEach(function (l) {
+        $('<option>').val(l.id).text(l.id + ' · Mz ' + l.manzana + ' lote ' + l.lote + ' · ' + fmt.format(l.area) + ' m²').appendTo($sel);
+      });
+    });
+  }
+  $('#lote-nuevo').on('change', function () { $('#btn-crear-venta').prop('disabled', !this.value); });
+  $('#btn-crear-venta').on('click', function () {
+    var proyecto = $('#id_proyecto_destino').val();
+    var lote = $('#lote-nuevo').val();
+    if (!proyecto || !lote) { return; }
+    // Lo marcado para trasladar se propone en Nueva venta como primera cuota inicial.
+    var trasladado = 0;
+    $('.chk-comp:checked').each(function () { trasladado += numero($($(this).data('target'))); });
+    var url = '/venta/' + encodeURIComponent(proyecto) + '/' + encodeURIComponent(lote) +
+      '?nov_proyecto=' + encodeURIComponent('{{ proyecto|escapejs }}') + '&nov_adj=' + encodeURIComponent('{{ adj|escapejs }}') +
+      '&nov_valor=' + trasladado;
+    $('#modalNuevaVentaTitulo').text('Nueva venta destino · ' + proyecto + ' · lote ' + lote);
+    $('#frameNuevaVenta').attr('src', url);
+    $('#modalNuevaVenta').modal('show');
+  });
+  $('#modalNuevaVenta').on('hidden.bs.modal', function () { $('#frameNuevaVenta').attr('src', 'about:blank'); });
+  // Nueva venta avisa al guardar: se cierra el modal y la venta nueva queda seleccionada.
+  window.addEventListener('message', function (event) {
+    if (event.origin !== window.location.origin || !event.data || event.data.tipo !== 'venta_novacion') { return; }
+    $('#modalNuevaVenta').modal('hide');
+    $('#id_proyecto_destino').val(event.data.proyecto);
+    $('#id_venta_destino').val(String(event.data.venta));
+    cargarVentas();
+    cargarLotes();
+  });
+
+  $('#id_proyecto_destino').on('change', function () { $('#id_venta_destino').val(''); cargarVentas(); cargarLotes(); });
+
+  cargarVentas();
+  cargarLotes();
+  recalcular();
+})();
+</script>
+{%endblock%}

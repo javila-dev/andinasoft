@@ -253,6 +253,9 @@ class AbonoCapitalIntegracionTestCase(SimpleTestCase):
         self.user.username = 'testuser'
         self.proyecto = 'Casas de Verano'
         self.adj = 'TEST001'
+        sin_novacion = patch('andinasoft.views.novacion_pendiente_origen', return_value=None)
+        sin_novacion.start()
+        self.addCleanup(sin_novacion.stop)
 
     def test_abono_capital_exitoso_simple(self):
         """Test: Abono a capital exitoso sin cuotas vencidas"""

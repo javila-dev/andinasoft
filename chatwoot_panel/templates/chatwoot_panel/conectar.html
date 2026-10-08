@@ -1,0 +1,33 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Conectar panel · Andinasoft</title>
+  <link rel="stylesheet" href="{% static 'chatwoot_panel/panel.css' %}">
+</head>
+<body>
+  <main class="app">
+    <section class="screen">
+      <div class="empty">
+        {% if permitido %}
+          <div class="empty__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+          <h1 class="empty__title">Autorizar el panel de Chatwoot</h1>
+          <p class="empty__text">Vas a conectar el panel de cartera en Chatwoot con tu usuario <strong>{{ nombre }}</strong>. Verá los proyectos que tienes asignados en Andinasoft. La conexión vence tras unos días sin uso y puedes cerrarla con «Desconectar».</p>
+          <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--solid">Autorizar</button>
+          </form>
+        {% else %}
+          <div class="empty__icon empty__icon--ruby" aria-hidden="true">!</div>
+          <h1 class="empty__title">Sin permiso para el panel</h1>
+          <p class="empty__text">Tu usuario <strong>{{ nombre }}</strong> no tiene el permiso «Puede usar el panel de Chatwoot». Pídelo a un administrador de Andinasoft.</p>
+        {% endif %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

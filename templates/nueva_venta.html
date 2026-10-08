@@ -470,6 +470,34 @@
     /* window.location.replace("{{redirect}}"); */
 </script>
 {%endif%}
+{%if novacion_origen%}
+<script>
+    // Venta para una novación: aviso y titulares de la adjudicación de origen precargados.
+    $(function () {
+        $('#form-venta').before(
+            '<div class="alert alert-info">Venta destino de la novación de <strong>{{novacion_origen.adj|escapejs}}</strong> ' +
+            '({{novacion_origen.proyecto|escapejs}}). Al guardar vuelves a la novación con esta venta seleccionada. ' +
+            'Lo trasladado ya va como primera cuota inicial (una cuota, hoy); reparte el resto de la CI si queda saldo.</div>'
+        );
+        {%for t in novacion_origen.titulares%}
+        $('#{{t.campo}}').val('{{t.id|escapejs}}');
+        $('#nombre-{{t.campo}}').text('{{t.nombre|escapejs}}');
+        {%endfor%}
+        {%if novacion_origen.valor%}
+        // Lo trasladado entra como primera cuota inicial; la CI total no puede ser menor.
+        var trasladado = {{novacion_origen.valor}};
+        if ((parseInt($('#vr_ci').val(), 10) || 0) < trasladado) {
+            $('#vr_ci').val(trasladado);
+            calcular_por_valor();
+        }
+        $('#cant_ci_1').val(1);
+        $('#fecha_ini_ci1').val('{{novacion_origen.hoy}}');
+        $('#valor_ci1').val(trasladado);
+        diferencia_ci();
+        {%endif%}
+    });
+</script>
+{%endif%}
 {%if request.user|has_group:"Asesores"%}
 <script>
     $('#valor').prop('readonly',true)

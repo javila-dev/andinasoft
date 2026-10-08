@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -16,6 +16,11 @@ static_media/
 .env
 .env.*
 !.env.example
+dev.env
+
+# Dump MySQL de desarrollo (descargado por SSH, no va al repo)
+dev-data/*
+!dev-data/.gitkeep
 
 # Virtual environments
 venv/

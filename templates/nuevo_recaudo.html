@@ -78,7 +78,11 @@
         <div class="alert alert-warning d-flex align-items-center mt-3" role="alert">
             <i class="fas fa-exclamation-triangle mr-2"></i>
             <div>
+                {% if novacion_pendiente %}
+                {{adj}} tiene la novación <a href="/operaciones/novaciones/{{novacion_pendiente.pk}}">#{{novacion_pendiente.pk}}</a> pendiente. No se pueden registrar recaudos hasta que se apruebe o rechace.
+                {% else %}
                 Existen recaudos pendientes por aplicar. No puedes generar un nuevo recibo hasta que sean validados.
+                {% endif %}
             </div>
         </div>
         {% endif %}

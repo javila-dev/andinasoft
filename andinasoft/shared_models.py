@@ -808,6 +808,15 @@ class Recaudos_general(models.Model):
         }
         return data
         
+# adjudicacion.Usuario y recaudos.Usuario son VARCHAR(12) en la BD y hay usernames mas largos.
+MAX_USUARIO = 12
+
+
+def usuario_corto(user):
+    """Nombre de usuario recortado al ancho de adjudicacion.Usuario / recaudos.Usuario."""
+    return str(getattr(user, 'username', user) or '')[:MAX_USUARIO]
+
+
 class Recaudos(models.Model):
     idrecaudo = models.IntegerField(primary_key=True,db_column='id')
     recibo = models.CharField(db_column='Recibo', max_length=12, blank=True, null=True)  # Field name made lowercase.

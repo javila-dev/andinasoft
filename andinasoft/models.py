@@ -549,6 +549,131 @@ class PromesaOtrosi(models.Model):
         return f'{self.proyecto_id} {self.adj} {self.tipo} {self.fecha_registro:%Y-%m-%d}'
 
 
+class Novacion(models.Model):
+    """Traslado de un cliente de una adjudicacion (origen) a una venta nueva de otro lote/proyecto.
+
+    Flujo: registro -> En documentacion (nota contable + documentos firmados en la venta
+    nueva) -> Por aprobar -> Aprobada / Rechazada; el aprobador tambien puede devolverla a
+    documentacion. Mientras esta abierta la ADJ de origen queda bloqueada para recaudos y
+    la venta destino no se puede adjudicar por el flujo comercial. Al aprobar, en una sola
+    operacion: se desiste el origen (nota negativa por lo trasladado, lote libre) y se
+    adjudica la venta destino sin comisiones, aplicando lo trasladado a la cuota inicial.
+    """
+
+    ESTADO_DOCUMENTACION = 'Documentacion'
+    ESTADO_POR_APROBAR = 'Por aprobar'
+    ESTADO_APROBADA = 'Aprobada'
+    ESTADO_RECHAZADA = 'Rechazada'
+    ESTADO_CHOICES = (
+        (ESTADO_DOCUMENTACION, 'En documentación'),
+        (ESTADO_POR_APROBAR, 'Por aprobar'),
+        (ESTADO_APROBADA, 'Aprobada'),
+        (ESTADO_RECHAZADA, 'Rechazada'),
+    )
+    ESTADOS_ABIERTOS = (ESTADO_DOCUMENTACION, ESTADO_POR_APROBAR)
+
+    proyecto_origen = models.ForeignKey(
+        proyectos, on_delete=models.PROTECT, related_name='novaciones_origen', db_constraint=False,
+    )
+    adj_origen = models.CharField(max_length=12, db_index=True)
+    inmueble_origen = models.CharField(max_length=50)
+    titular = models.CharField(max_length=255, help_text='Id del titular 1 de la ADJ de origen')
+
+    proyecto_destino = models.ForeignKey(
+        proyectos, on_delete=models.PROTECT, related_name='novaciones_destino', db_constraint=False,
+    )
+    venta_destino = models.IntegerField(help_text='Id de nuevas_ventas en el proyecto destino')
+    inmueble_destino = models.CharField(max_length=50)
+    adj_destino = models.CharField(max_length=12, blank=True, default='')
+
+    # Lo pagado en el origen al momento de la solicitud (referencia) y lo que se traslada.
+    pagado_capital = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    pagado_interes_cte = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    pagado_interes_mora = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    capital_trasladado = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    interes_cte_trasladado = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+    interes_mora_trasladado = models.DecimalField(max_digits=16, decimal_places=2, default=0)
+
+    # Nota contable (informativa); se carga en el paso de documentacion.
+    nro_nota = models.CharField(
+        max_length=12, blank=True, default='', help_text='Numero de la nota contable (se usa como recibo)',
+    )
+    fecha_nota = models.DateField(null=True, blank=True)
+    empresa_nota = models.ForeignKey(
+        empresas, on_delete=models.PROTECT, related_name='novaciones', db_constraint=False,
+        null=True, blank=True,
+    )
+    soporte = models.FileField(
+        upload_to='novaciones/%Y/%m/', storage=PRIVATE_MEDIA_STORAGE, null=True, blank=True,
+    )
+    # Fechas pactadas en la promesa nueva; con ellas se registra la promesa al aprobar.
+    fecha_entrega = models.DateField(null=True, blank=True)
+    fecha_escritura = models.DateField(null=True, blank=True)
+    observaciones = models.TextField(blank=True, default='')
+
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default=ESTADO_DOCUMENTACION, db_index=True)
+    usuario_solicita = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='novaciones_solicitadas', db_constraint=False,
+    )
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    aprobador = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='novaciones_por_revisar', db_constraint=False,
+        null=True, blank=True, help_text='Quien revisa y aprueba; se le avisa al enviar a aprobacion.',
+    )
+    usuario_envia = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='novaciones_enviadas',
+        db_constraint=False, null=True, blank=True,
+    )
+    fecha_envio = models.DateTimeField(null=True, blank=True)
+    usuario_resuelve = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='novaciones_resueltas',
+        db_constraint=False, null=True, blank=True,
+    )
+    fecha_resuelve = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-fecha_solicitud']
+        verbose_name = 'Novacion'
+        verbose_name_plural = 'Novaciones'
+        permissions = (
+            ('aprobar_novacion', 'Puede aprobar o rechazar novaciones'),
+        )
+
+    def __str__(self):
+        return f'{self.proyecto_origen_id} {self.adj_origen} -> {self.proyecto_destino_id} {self.inmueble_destino}'
+
+    @property
+    def total_trasladado(self):
+        return self.capital_trasladado + self.interes_cte_trasladado + self.interes_mora_trasladado
+
+    @property
+    def abierta(self):
+        return self.estado in self.ESTADOS_ABIERTOS
+
+    @property
+    def aprobador_nombre(self):
+        if not self.aprobador_id:
+            return ''
+        return (self.aprobador.get_full_name() or '').strip() or self.aprobador.username
+
+
+class NovacionEvento(models.Model):
+    """Bitacora de una novacion: registro, carga de nota/documentos, envio, devolucion, resolucion."""
+
+    novacion = models.ForeignKey(Novacion, on_delete=models.CASCADE, related_name='eventos')
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+', db_constraint=False)
+    accion = models.CharField(max_length=40)
+    detalle = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-fecha', '-id']
+
+    def __str__(self):
+        return f'#{self.novacion_id} {self.accion} {self.fecha:%Y-%m-%d %H:%M}'
+
+
 class PromesaCumplimiento(models.Model):
     """Fechas reales de entrega y/o escritura (distintas de las fechas pactadas)."""
 

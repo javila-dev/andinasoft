@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'api_auth',
     'mcp_server',
     'alegra_integration',
+    'chatwoot_panel',
 ]
 
 TEMPUS_DOMINUS_LOCALIZE = True
@@ -235,6 +236,17 @@ ACCOUNT_ACTIVATION_DAYS = 7
 REGISTRATION_AUTO_LOGIN = True
 SITE_ID = 1
 
+# ─── Panel de Chatwoot (Dashboard App) ───────────────────────────────────────
+
+# Origen exacto de Chatwoot (https://chat.ejemplo.com): único sitio que puede embeber el panel.
+CHATWOOT_ORIGIN = os.getenv('CHATWOOT_ORIGIN', '').strip().rstrip('/')
+# La conexión del panel vence tras estos días sin uso.
+CHATWOOT_PANEL_TOKEN_IDLE_DAYS = int(os.getenv('CHATWOOT_PANEL_TOKEN_IDLE_DAYS', '5'))
+CHATWOOT_PANEL_RATE_LIMIT = int(os.getenv('CHATWOOT_PANEL_RATE_LIMIT', '120'))
+# API de Chatwoot (solo servidor) para guardar la cédula en el contacto. Vacío = no escribe en Chatwoot.
+CHATWOOT_API_URL = os.getenv('CHATWOOT_API_URL', '').strip().rstrip('/')
+CHATWOOT_API_TOKEN = os.getenv('CHATWOOT_API_TOKEN', '').strip()
+
 # ─── Directorios ─────────────────────────────────────────────────────────────
 
 if LIVE:
@@ -278,6 +290,12 @@ N8N_WEBHOOK_SAC_COMPROMISO = os.getenv(
     f'{N8N_BASE_URL}/webhook/sac-compromiso',
 )
 N8N_SAC_NOTIFICATIONS_ENABLED = env_bool('N8N_SAC_NOTIFICATIONS_ENABLED', LIVE)
+# Novaciones: por aprobar (aprobadores), devuelta / aprobada / rechazada (solicitante).
+N8N_WEBHOOK_NOVACION = os.getenv(
+    'N8N_WEBHOOK_NOVACION',
+    f'{N8N_BASE_URL}/webhook/novacion',
+)
+N8N_NOVACION_NOTIFICATIONS_ENABLED = env_bool('N8N_NOVACION_NOTIFICATIONS_ENABLED', LIVE)
 ANDINA_PUBLIC_BASE_URL = os.getenv('ANDINA_PUBLIC_BASE_URL', '').rstrip('/')
 # Token para llamar webhooks n8n (upload movimientos, gastos Alegra, etc.): header Authorization
 N8N_WEBHOOK_AUTH_TOKEN = os.getenv('N8N_WEBHOOK_AUTH_TOKEN', os.getenv('N8N_API_TOKEN', '')).strip()
