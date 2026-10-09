@@ -3,7 +3,7 @@ UI de gestion de usuarios: cuenta, grupos, perfil, proyectos y alcance contable.
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -25,6 +25,27 @@ from andinasoft.models import Avatars, Profiles, Usuarios_Proyectos, proyectos
 def _require_staff(user):
     if not user.is_authenticated or not user.is_superuser:
         raise PermissionDenied('Solo un superusuario puede gestionar usuarios.')
+
+
+def _permiso_panel_chatwoot():
+    return Permission.objects.filter(
+        content_type__app_label='chatwoot_panel', codename='usar_panel_chatwoot',
+    ).first()
+
+
+def _tiene_panel_chatwoot(user):
+    """Permiso asignado directo al usuario (el superusuario lo tiene implícito)."""
+    return user.user_permissions.filter(content_type__app_label='chatwoot_panel', codename='usar_panel_chatwoot').exists()
+
+
+def _asignar_panel_chatwoot(user, activo):
+    permiso = _permiso_panel_chatwoot()
+    if permiso is None:
+        return
+    if activo:
+        user.user_permissions.add(permiso)
+    else:
+        user.user_permissions.remove(permiso)
 
 
 def _ensure_profile(user):
@@ -121,6 +142,7 @@ def usuarios_lista(request):
             user.is_staff = bool(data.get('is_staff'))
             user.is_superuser = bool(data.get('is_superuser'))
             user.save()
+            _asignar_panel_chatwoot(user, bool(data.get('panel_chatwoot')))
             _ensure_profile(user)
             _ensure_proyectos_rel(user)
             messages.success(request, f'Usuario {user.username} creado.')
@@ -158,6 +180,7 @@ def usuarios_detalle(request, user_id):
             'is_active': user.is_active,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
+            'panel_chatwoot': _tiene_panel_chatwoot(user),
         },
     )
     form_grupos = UsuarioGruposForm(initial={'groups': user.groups.all()})
@@ -196,6 +219,7 @@ def usuarios_detalle(request, user_id):
                 if data.get('password1'):
                     user.set_password(data['password1'])
                 user.save()
+                _asignar_panel_chatwoot(user, bool(data.get('panel_chatwoot')))
                 messages.success(request, 'Cuenta actualizada.')
                 return redirect(f'/configuracion/usuarios/{user.pk}/?tab=cuenta')
 
