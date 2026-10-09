@@ -273,7 +273,7 @@
     api(cfg.apiVincular, { method: 'POST', body: Object.assign(ids, { cedula: ident.cliente.cedula }) })
       .then(function (data) {
         state.aviso = data.chatwoot_sync
-          ? 'Contacto vinculado. La cédula quedó guardada en el contacto de Chatwoot.'
+          ? 'Contacto vinculado. En Chatwoot quedó con el nombre y la cédula de Andinasoft (recarga para verlo).'
           : 'Contacto vinculado en Andinasoft.';
         aplicarIdent(data);
       })

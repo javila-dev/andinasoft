@@ -244,3 +244,27 @@ class PromesaFichaTests(SimpleTestCase):
         import json
         self.assertEqual(json.loads(response.content)['ficha_url'],
                          '/servicio_cliente/cliente/ALT-123?proyecto=Perla+del+Mar&adj=ADJ204')
+
+
+class ContactoChatwootTests(SimpleTestCase):
+    def test_nombre_en_formato_titulo_con_conectores(self):
+        from chatwoot_panel.chatwoot_api import nombre_para_contacto
+        self.assertEqual(nombre_para_contacto('PATRICIA  VELASQUEZ DE LA HOZ'), 'Patricia Velasquez de la Hoz')
+        self.assertEqual(nombre_para_contacto('DE LA CRUZ JUAN'), 'De la Cruz Juan')
+        self.assertEqual(nombre_para_contacto(''), '')
+
+    def test_vincular_envia_nombre_y_cedula(self):
+        from django.test import override_settings
+        from chatwoot_panel import chatwoot_api
+        with override_settings(CHATWOOT_API_TOKEN='x', CHATWOOT_ORIGIN='https://app.lyvio.io'), \
+                patch.object(chatwoot_api, '_request') as req:
+            self.assertTrue(chatwoot_api.guardar_cedula_en_contacto('7', '349', 'ALT-1', 'FLAVIO ESTRADA'))
+        req.assert_called_once_with('PUT', 'accounts/7/contacts/349',
+                                    json={'custom_attributes': {'cedula_andinasoft': 'ALT-1'}, 'name': 'Flavio Estrada'})
+
+    def test_sin_token_no_escribe(self):
+        from django.test import override_settings
+        from chatwoot_panel import chatwoot_api
+        with override_settings(CHATWOOT_API_TOKEN=''), patch.object(chatwoot_api, '_request') as req:
+            self.assertFalse(chatwoot_api.guardar_cedula_en_contacto('7', '349', '1', 'Ana'))
+        req.assert_not_called()

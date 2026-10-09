@@ -29,13 +29,28 @@ def _request(method, path, **kwargs):
     return response
 
 
-def guardar_cedula_en_contacto(account_id, contact_id, cedula):
-    """Escribe el atributo cedula_andinasoft en el contacto. Devuelve True si se guardó."""
+CONECTORES = {'de', 'del', 'la', 'las', 'los', 'y', 'e', 'da', 'van', 'von'}
+
+
+def nombre_para_contacto(nombre):
+    """'PATRICIA VELASQUEZ DE LA HOZ' → 'Patricia Velasquez de la Hoz'."""
+    palabras = ' '.join(str(nombre or '').split()).lower().split(' ')
+    return ' '.join(
+        p if (i and p in CONECTORES) else p[:1].upper() + p[1:]
+        for i, p in enumerate(palabras)
+    ).strip()
+
+
+def guardar_cedula_en_contacto(account_id, contact_id, cedula, nombre=''):
+    """Escribe cedula_andinasoft y, si se da, el nombre del cliente en el contacto. True si se guardó."""
     if not configurado():
         return False
+    datos = {'custom_attributes': {ATRIBUTO_CEDULA: cedula}}
+    nombre = nombre_para_contacto(nombre)
+    if nombre:
+        datos['name'] = nombre
     try:
-        _request('PUT', f'accounts/{int(account_id)}/contacts/{int(contact_id)}',
-                 json={'custom_attributes': {ATRIBUTO_CEDULA: cedula}})
+        _request('PUT', f'accounts/{int(account_id)}/contacts/{int(contact_id)}', json=datos)
         return True
     except Exception:
         logger.exception('chatwoot_panel: no se pudo guardar la cédula en el contacto %s/%s', account_id, contact_id)

@@ -196,7 +196,8 @@ def api_vincular(request):
         chatwoot_account_id=account_id, chatwoot_contact_id=contact_id,
         defaults={'cliente_id': r[0]['cedula'], 'created_by': request.user},
     )
-    sync = guardar_cedula_en_contacto(account_id, contact_id, r[0]['cedula'])
+    # En Lyvio el contacto queda con la cédula y el nombre del cliente en Andinasoft.
+    sync = guardar_cedula_en_contacto(account_id, contact_id, r[0]['cedula'], r[0]['nombre'])
     auditar(request, 'vincular', chatwoot_account_id=account_id, chatwoot_contact_id=contact_id,
             chatwoot_conversation_id=_texto(body.get('conversation_id'), 20), detalle=r[0]['cedula'])
     resultado = resolver_contexto(request.user, cedula=r[0]['cedula'])
