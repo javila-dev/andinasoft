@@ -396,7 +396,7 @@ def cartera_descargar_carta(request, proyecto, adj, checkpoint_id):
     if plantilla is None:
         raise Http404('No hay plantilla activa para este checkpoint')
 
-    html_context = build_carta_context(proyecto, adj, checkpoint, payload=payload)
+    html_context = build_carta_context(proyecto, adj, checkpoint, payload=payload, user=request.user)
     filename = f'carta_cobro_{proyecto}_{adj}_{checkpoint.codigo}.pdf'.replace(' ', '_')
     try:
         result = generar_documento_pdf_directo(

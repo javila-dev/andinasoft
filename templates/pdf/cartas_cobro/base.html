@@ -100,7 +100,8 @@
     page-break-inside: avoid;
   }
   .firma .atenta { margin-bottom: 12pt; }
-  .firma .empresa { font-weight: bold; }
+  .firma .firmante { font-weight: bold; }
+  .firma .empresa { font-weight: bold; margin-top: 2pt; }
   .firma .area { margin-top: 2pt; }
   .firma .contacto { margin-top: 6pt; font-size: 9pt; line-height: 1.35; }
   .pie-banner {
@@ -198,8 +199,9 @@
 
   <div class="firma">
     <p class="atenta">Atentamente,</p>
+    {% if firmante_nombre %}<div class="firmante">{{ firmante_nombre }}</div>{% endif %}
+    <div class="area">{{ firmante_cargo|default:"Departamento de Cartera" }}</div>
     <div class="empresa">{{ firma_nombre }}</div>
-    <div class="area">Departamento de Cartera</div>
     <div class="contacto">
       {% if telefono_cartera %}Teléfono: {{ telefono_cartera }}{% if email_cartera %}<br>{% endif %}{% endif %}
       {% if email_cartera %}Correo: {{ email_cartera }}{% endif %}

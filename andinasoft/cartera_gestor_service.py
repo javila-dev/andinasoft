@@ -2355,7 +2355,15 @@ def plantilla_activa_checkpoint(checkpoint: CarteraCheckpoint):
     )
 
 
-def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, *, today=None, payload=None):
+def firmante_carta_from_user(user) -> str:
+    """Nombre de quien firma la carta (usuario que la genera)."""
+    if user is None:
+        return ''
+    nombre = f'{user.first_name} {user.last_name}'.strip()
+    return nombre or (getattr(user, 'username', '') or '')
+
+
+def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, *, today=None, payload=None, user=None):
     today = today or datetime.date.today()
     payload = payload if payload is not None else timeline_payload(proyecto, adj, today=today)
     if payload is None:
@@ -2400,8 +2408,10 @@ def build_carta_context(proyecto: str, adj: str, checkpoint: CarteraCheckpoint, 
         'logo_static': logo_carta_static(proyecto),
         'fondo_static': fondo_carta_static(proyecto),
         'firma_nombre': contacto['firma_nombre'],
+        'firmante_nombre': firmante_carta_from_user(user),
+        'firmante_cargo': 'Departamento de Cartera',
         'telefono_cartera': contacto['telefono'],
-        'email_cartera': contacto['email'],
+        'email_cartera': (getattr(user, 'email', '') or '').strip() or contacto['email'],
     }
 
 
