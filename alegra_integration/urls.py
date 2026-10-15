@@ -1,6 +1,6 @@
-from django.urls import path
+from django.urls import include, path
 
-from alegra_integration import views
+from alegra_integration import oauth_views, views
 
 
 urlpatterns = [
@@ -13,6 +13,10 @@ urlpatterns = [
     path('webhooks/inbound/import-bill', views.webhooks_inbound_import_bill, name='alegra-webhooks-inbound-import-bill'),
     path('webhooks/', views.webhooks_console, name='alegra-webhooks-console'),
     path('', views.dashboard, name='alegra-dashboard'),
+    path('oauth/', oauth_views.oauth_connections, name='alegra-oauth-connections'),
+    path('oauth/start', oauth_views.oauth_start, name='alegra-oauth-start'),
+    path('conciliacion/', include('conciliacion_terceros.urls')),
+    path('oauth/callback', oauth_views.oauth_callback, name='alegra-oauth-callback'),
     path('references', views.references, name='alegra-references'),
     path('references/data', views.references_data, name='alegra-references-data'),
     path('references/mappings', views.references_mappings, name='alegra-references-mappings'),

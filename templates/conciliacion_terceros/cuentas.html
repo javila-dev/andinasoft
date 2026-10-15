@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Cuentas · {{ fuente.empresa.nombre }}{% endblock %}
+
+{% block style %}
+<style>
+  .ct-wrap { max-width: 900px; }
+  .ct-sel td { vertical-align: middle; font-size: 13px; }
+  .ct-sel tr.ct-off td:not(:first-child) { opacity: .45; }
+  .ct-sel tbody tr { cursor: pointer; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 ct-wrap">
+  <a href="{% url 'conciliacion-terceros-detalle' conciliacion.pk %}" class="small"><i class="fas fa-arrow-left mr-1"></i>Conciliación corte {{ conciliacion.fecha_corte|date:"d/m/Y" }}</a>
+  <h4 class="mt-2 mb-0">Cuentas a sumar · {{ fuente.empresa.nombre }}</h4>
+  <p class="text-muted small mb-3">
+    {{ fuente.get_formato_display }} · {{ fuente.archivo_nombre }} · corte {{ fuente.fecha_corte_archivo|date:"d/m/Y" }}.
+    El saldo de cada tercero es la suma de las cuentas marcadas; las demás se descartan.
+    La selección se recuerda para los próximos archivos de esta empresa.
+  </p>
+
+  {% for m in messages %}
+  <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %}">{{ m }}</div>
+  {% endfor %}
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 ct-sel">
+          <thead class="thead-light">
+            <tr>
+              <th style="width:40px"><input type="checkbox" id="sel-todas" title="Marcar todas"></th>
+              <th style="width:120px">Cuenta</th><th>Nombre</th><th class="num">Terceros</th><th class="num">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for f in filas %}
+            <tr class="{% if not f.usar %}ct-off{% endif %}">
+              <td><input type="checkbox" class="ct-usar" name="usar_{{ f.codigo }}" value="1" {% if f.usar %}checked{% endif %}></td>
+              <td><code>{{ f.codigo }}</code></td>
+              <td>{{ f.nombre }}{% if f.nueva %} <span class="badge badge-warning" title="No estaba en la selección anterior de esta empresa">nueva</span>{% endif %}</td>
+              <td class="num">{{ f.terceros }}</td>
+              <td class="num">${{ f.saldo|floatformat:0|intcomma }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr><td></td><td colspan="2" class="text-right text-muted small">Seleccionado</td><td></td><td class="num" id="tot-sel"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="mt-3 text-right">
+      <button type="submit" class="btn btn-primary btn-sm">Confirmar y conciliar</button>
+    </div>
+  </form>
+</div>
+{{ saldos_json|json_script:"saldos-data" }}
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+(function () {
+  var SALDOS = JSON.parse(document.getElementById('saldos-data').textContent);
+  var fmt = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
+  function refrescar() {
+    var tot = 0, n = 0;
+    $('.ct-usar').each(function () {
+      $(this).closest('tr').toggleClass('ct-off', !this.checked);
+      if (this.checked) { n++; tot += Number(SALDOS[this.name.slice(5)] || 0); }
+    });
+    $('#tot-sel').text(n + ' cuenta(s) · $' + fmt.format(tot));
+    $('#sel-todas').prop('checked', n > 0 && n === $('.ct-usar').length);
+  }
+  $('.ct-sel tbody').on('click', 'tr', function (e) {
+    if (e.target.type === 'checkbox') return;
+    var cb = $(this).find('.ct-usar'); cb.prop('checked', !cb.prop('checked'));
+    refrescar();
+  });
+  $('.ct-usar').on('change', refrescar);
+  $('#sel-todas').on('change', function () { $('.ct-usar').prop('checked', this.checked); refrescar(); });
+  refrescar();
+})();
+</script>
+{% endblock %}

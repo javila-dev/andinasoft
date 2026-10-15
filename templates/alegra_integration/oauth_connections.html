@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Alegra · Conexión de reportes{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <h4 class="mb-1">Conexión de reportes de Alegra</h4>
+  <p class="text-muted mb-3">
+    Los reportes contables de Alegra (balance de prueba por tercero) requieren que un usuario de Alegra autorice
+    a Andinasoft una vez por empresa. La API de recibos, pagos y facturas no cambia.
+  </p>
+
+  {% if message %}
+  <div class="alert {% if status == 'ok' %}alert-success{% else %}alert-danger{% endif %}">{{ message }}</div>
+  {% endif %}
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead class="thead-light">
+          <tr>
+            <th>Empresa</th>
+            <th>Estado</th>
+            <th>Conectada por</th>
+            <th>Última renovación</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.empresa.nombre }} <small class="text-muted">{{ row.empresa.pk }}</small></td>
+            <td>
+              {% if row.token %}
+                <span class="badge badge-success">Conectada</span>
+              {% else %}
+                <span class="badge badge-secondary">Sin conectar</span>
+              {% endif %}
+            </td>
+            <td>{{ row.token.connected_by.get_full_name|default:row.token.connected_by.username|default:"—" }}</td>
+            <td>{{ row.token.updated_at|default:"—" }}</td>
+            <td class="text-right">
+              <a class="btn btn-sm {% if row.token %}btn-outline-secondary{% else %}btn-primary{% endif %}"
+                 href="{% url 'alegra-oauth-start' %}?empresa={{ row.empresa.pk|urlencode }}">
+                {% if row.token %}Reconectar{% else %}Conectar{% endif %}
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">No hay empresas con Alegra habilitado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="small text-muted mt-3 mb-0">
+    Al conectar, inicia sesión en Alegra con un usuario de <strong>la misma empresa</strong> que estás conectando.
+    URL de retorno registrada: <code>{{ redirect_uri }}</code>
+  </p>
+</div>
+{% endblock %}

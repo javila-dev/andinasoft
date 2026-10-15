@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -316,3 +318,51 @@ class AlegraBillGetLog(models.Model):
 
     def __str__(self):
         return f'{self.empresa_id}|bill={self.alegra_bill_id}|pdf={self.pdf_saved}|{self.created_at}'
+
+
+class AlegraOAuthClient(models.Model):
+    """
+    Cliente OAuth registrado dinámicamente en auth-api.alegra.com (RFC 7591).
+    Uno por redirect_uri: el mismo cliente sirve para todas las empresas.
+    """
+    redirect_uri = models.CharField(max_length=255, unique=True)
+    client_id = models.CharField(max_length=255)
+    raw = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Cliente OAuth Alegra'
+        verbose_name_plural = 'Clientes OAuth Alegra'
+
+    def __str__(self):
+        return f'{self.client_id} ({self.redirect_uri})'
+
+
+class AlegraOAuthToken(models.Model):
+    """
+    Token OAuth por empresa para el servidor MCP de Alegra (reportes contables).
+    El token Basic de `empresas.alegra_token` sigue usándose para la API REST.
+    """
+    empresa = models.OneToOneField(empresas, on_delete=models.CASCADE, related_name='alegra_oauth_token', db_constraint=False)
+    client_id = models.CharField(max_length=255)
+    access_token = models.TextField()
+    refresh_token = models.TextField(blank=True, default='')
+    token_type = models.CharField(max_length=30, default='Bearer')
+    scope = models.CharField(max_length=255, blank=True, default='')
+    expires_at = models.DateTimeField(null=True, blank=True)
+    alegra_company = models.JSONField(default=dict, blank=True)
+    connected_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Token OAuth Alegra'
+        verbose_name_plural = 'Tokens OAuth Alegra'
+
+    def __str__(self):
+        return f'{self.empresa_id} (expira {self.expires_at})'
+
+    def is_expired(self, margin_seconds=60):
+        if not self.expires_at:
+            return False
+        return timezone.now() >= self.expires_at - timedelta(seconds=margin_seconds)

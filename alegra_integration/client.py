@@ -38,7 +38,7 @@ def _is_non_idempotent_post(method, path):
     if str(method or '').upper() != 'POST':
         return False
     clean = str(path or '').split('?', 1)[0]
-    if clean in ('/journals', '/bills', '/payments'):
+    if clean in ('/journals', '/bills', '/payments', '/invoices', '/invoices/stamp', '/credit-notes'):
         return True
     if clean.startswith('/bank-accounts/') and clean.endswith('/transfer'):
         return True

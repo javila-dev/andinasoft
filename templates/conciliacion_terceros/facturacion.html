@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+
+{% block title %}Configuración de facturación{% endblock %}
+
+{% block style %}
+<style>
+  #content { min-width: 0; }
+  .ct-wrap { max-width: 1250px; }
+  .ct-tabla td, .ct-tabla th { vertical-align: middle; font-size: 12.5px; }
+  .ct-tabla tbody tr { cursor: pointer; }
+  .ct-tabla tbody tr.sel { background: #eef5f2; }
+  .ct-form { border: 1px solid #d5dbd9; border-radius: 8px; padding: 14px; background: #fbfcfc; }
+  .ct-form label { font-size: 12px; margin-bottom: 2px; }
+  .ct-res-busq { max-height: 200px; overflow-y: auto; border: 1px solid #e3e7e6; border-radius: 6px; background: #fff; }
+  .ct-res-busq .item { padding: 4px 8px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #f0f2f1; }
+  .ct-res-busq .item:hover { background: #eef5f2; }
+  .ct-combo { position: relative; }
+  .ct-combo-btn { cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 22px; }
+  .ct-combo-btn::after { content: "\25BE"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #6c757d; }
+  .ct-combo-btn:disabled { background: #e9ecef; cursor: not-allowed; }
+  .ct-combo-panel { position: absolute; z-index: 30; left: 0; right: 0; min-width: 340px; top: 100%; margin-top: 2px; padding: 6px; background: #fff;
+    border: 1px solid #ced4da; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+  .ct-res-busq { max-height: 240px; }
+  .ct-res-busq .item.activo { background: #eef5f2; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 ct-wrap">
+  <a href="{% url 'conciliacion-terceros' %}" class="small"><i class="fas fa-arrow-left mr-1"></i>Conciliaciones</a>
+  <h4 class="mt-2 mb-0">Configuración de facturación</h4>
+  <p class="text-muted small">
+    Por proyecto: qué empresa factura, si la factura solo se registra (informativa) o se crea en Alegra, y con qué numeración,
+    ítems, impuesto y cuentas. Al facturar en Alegra se registran, en este orden: la factura (cuenta por cobrar contra ingreso), el costo
+    (costo de venta contra inventario del proyecto, a nombre de la empresa) y el RC (anticipos contra la cuenta por cobrar de la factura).
+    Se factura a cada titular en partes iguales.
+  </p>
+
+  {% for m in messages %}
+  <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %} py-2">{{ m }}</div>
+  {% endfor %}
+
+  <div class="card mb-3">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 ct-tabla">
+        <thead class="thead-light"><tr><th>Proyecto</th><th>Empresa</th><th>Modo</th><th>Emisión</th><th>Numeración</th><th>Ítems</th><th>Impuesto</th><th>Cuenta por cobrar</th><th>Costo</th></tr></thead>
+        <tbody>
+          {% for f in filas %}
+          <tr data-proyecto="{{ f.proyecto }}">
+            <td><strong>{{ f.proyecto }}</strong></td>
+            {% if f.cfg %}
+            <td>{{ f.cfg.empresa.nombre }}</td>
+            <td>{{ f.cfg.get_modo_display }}</td>
+            <td>{% if f.cfg.modo == 'alegra' %}{{ f.cfg.get_emision_display }}{% else %}—{% endif %}</td>
+            <td>{{ f.cfg.numeracion_nombre|default:"—" }}</td>
+            <td>{{ f.cfg.item_venta_nombre|default:"—" }}{% if f.cfg.item_intereses_nombre %}<br><small class="text-muted">{{ f.cfg.item_intereses_nombre }}</small>{% endif %}</td>
+            <td>{{ f.cfg.impuesto_nombre|default:"Sin impuesto" }}</td>
+            <td>{% if f.cfg.cuenta_cxc_codigo %}<code>{{ f.cfg.cuenta_cxc_codigo }}</code> {{ f.cfg.cuenta_cxc_nombre }}{% else %}—{% endif %}</td>
+            <td>{% if f.cfg.cuenta_inventario_codigo %}${{ f.cfg.costo_m2|floatformat:0 }}/m²<br><small><code>{{ f.cfg.cuenta_costo_codigo }}</code> → <code>{{ f.cfg.cuenta_inventario_codigo }}</code></small>{% else %}—{% endif %}</td>
+            {% else %}
+            <td colspan="8" class="text-muted">Sin configurar · clic para configurar</td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form method="post" id="form" class="ct-form" style="display:none">
+    {% csrf_token %}
+    <input type="hidden" name="proyecto" id="f-proyecto">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="mb-0" id="f-titulo"></h6>
+      <button type="button" class="close" id="f-cerrar" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="form-row">
+      <div class="col-md-4 mb-2"><label>Empresa que factura</label>
+        <select name="empresa" id="f-empresa" class="form-control form-control-sm">
+          {% for e in empresas %}<option value="{{ e.pk }}" data-alegra="{{ e.alegra_enabled|yesno:'1,0' }}">{{ e.nombre }}{% if e.alegra_enabled %} · Alegra{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 mb-2"><label>Modo</label>
+        <select name="modo" id="f-modo" class="form-control form-control-sm">
+          {% for v, l in modos %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div id="f-alegra" style="display:none">
+      <div class="small text-muted mb-2" id="f-cargando"></div>
+      <div class="form-row">
+        <div class="col-md-4 mb-2"><label>Emisión</label>
+          <select name="emision" id="f-emision" class="form-control form-control-sm">
+            {% for v, l in emisiones %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 mb-2"><label>Numeración de la factura</label><select id="s-numeracion" class="form-control form-control-sm ct-ref" data-campo="numeracion" data-lista="numeraciones_factura"></select></div>
+        <div class="col-md-2 mb-2"><label>Forma de pago</label>
+          <select name="forma_pago" id="f-forma_pago" class="form-control form-control-sm"><option value="CREDIT">Crédito</option><option value="CASH">Contado</option></select>
+        </div>
+        <div class="col-md-2 mb-2"><label>Días de vencimiento</label><input type="number" min="0" name="dias_vencimiento" id="f-dias_vencimiento" class="form-control form-control-sm" value="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="col-md-4 mb-2"><label>Ítem para la venta (capital)</label><select id="s-item_venta" class="form-control form-control-sm ct-ref" data-campo="item_venta" data-lista="items"></select></div>
+        <div class="col-md-4 mb-2"><label>Ítem para los intereses</label><select id="s-item_intereses" class="form-control form-control-sm ct-ref" data-campo="item_intereses" data-lista="items"></select></div>
+        <div class="col-md-4 mb-2"><label>Impuesto</label><select id="s-impuesto" class="form-control form-control-sm ct-ref" data-campo="impuesto" data-lista="impuestos" data-vacio="Sin impuesto (excluido)"></select></div>
+      </div>
+      <div class="form-row">
+        <div class="col-md-4 mb-2"><label>Centro de costo</label><select id="s-centro_costo" class="form-control form-control-sm ct-ref" data-campo="centro_costo" data-lista="centros_costo" data-vacio="Sin centro de costo"></select></div>
+        <div class="col-md-4 mb-2"><label for="h-numeracion_journal_id">Numeración de los journals (costo y cruce)</label>
+          <input type="text" inputmode="numeric" name="numeracion_journal_id" id="h-numeracion_journal_id" class="form-control form-control-sm" placeholder="ID de la numeración en Alegra">
+          <small class="text-muted">Vacío = la numeración predeterminada de Alegra.</small>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="col-md-4 mb-2"><label for="f-costo_m2">Costo por m² (para sugerir el costo del lote)</label>
+          <input type="number" min="0" step="0.01" name="costo_m2" id="f-costo_m2" class="form-control form-control-sm" value="0">
+          <small class="text-muted">Se multiplica por el área del lote; al facturar se puede cambiar.</small>
+        </div>
+        <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_costo">
+          <label>Cuenta de costo de venta (débito, 6)</label>
+          <div class="ct-combo">
+            <button type="button" class="form-control form-control-sm ct-combo-btn text-left"></button>
+            <div class="ct-combo-panel" style="display:none">
+              <input type="search" class="form-control form-control-sm ct-cta-q" placeholder="Escribe código o nombre…" autocomplete="off">
+              <div class="ct-res-busq mt-1"></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_inventario">
+          <label>Cuenta de inventario del proyecto (crédito, 15)</label>
+          <div class="ct-combo">
+            <button type="button" class="form-control form-control-sm ct-combo-btn text-left"></button>
+            <div class="ct-combo-panel" style="display:none">
+              <input type="search" class="form-control form-control-sm ct-cta-q" placeholder="Escribe código o nombre…" autocomplete="off">
+              <div class="ct-res-busq mt-1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="col-md-6 mb-2 ct-cuenta" data-campo="cuenta_cxc">
+          <label>Cuenta por cobrar de la factura (crédito del cruce)</label>
+          <small class="d-block text-muted mb-1">El débito del cruce va a la cuenta de anticipos donde cada tercero tiene el saldo; se elige al facturar.</small>
+          <div class="ct-combo">
+            <button type="button" class="form-control form-control-sm ct-combo-btn text-left"></button>
+            <div class="ct-combo-panel" style="display:none">
+              <input type="search" class="form-control form-control-sm ct-cta-q" placeholder="Escribe código o nombre…" autocomplete="off">
+              <div class="ct-res-busq mt-1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="f-info" class="small text-muted mb-2">En modo informativo solo se registran facturas ya emitidas (número, fecha y valor). No se envía nada a Alegra.</div>
+
+    <input type="hidden" name="numeracion_id" id="h-numeracion_id"><input type="hidden" name="numeracion_nombre" id="h-numeracion_nombre">
+    <input type="hidden" name="item_venta_id" id="h-item_venta_id"><input type="hidden" name="item_venta_nombre" id="h-item_venta_nombre">
+    <input type="hidden" name="item_intereses_id" id="h-item_intereses_id"><input type="hidden" name="item_intereses_nombre" id="h-item_intereses_nombre">
+    <input type="hidden" name="impuesto_id" id="h-impuesto_id"><input type="hidden" name="impuesto_nombre" id="h-impuesto_nombre">
+    <input type="hidden" name="centro_costo_id" id="h-centro_costo_id"><input type="hidden" name="centro_costo_nombre" id="h-centro_costo_nombre">
+    <input type="hidden" name="cuenta_costo_id" id="h-cuenta_costo_id"><input type="hidden" name="cuenta_costo_codigo" id="h-cuenta_costo_codigo"><input type="hidden" name="cuenta_costo_nombre" id="h-cuenta_costo_nombre">
+    <input type="hidden" name="cuenta_inventario_id" id="h-cuenta_inventario_id"><input type="hidden" name="cuenta_inventario_codigo" id="h-cuenta_inventario_codigo"><input type="hidden" name="cuenta_inventario_nombre" id="h-cuenta_inventario_nombre">
+    <input type="hidden" name="cuenta_cxc_id" id="h-cuenta_cxc_id"><input type="hidden" name="cuenta_cxc_codigo" id="h-cuenta_cxc_codigo"><input type="hidden" name="cuenta_cxc_nombre" id="h-cuenta_cxc_nombre">
+    <div class="text-right"><button type="submit" class="btn btn-primary btn-sm">Guardar</button></div>
+  </form>
+</div>
+{{ configs_json|json_script:"configs-data" }}
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+(function () {
+  var CONFIGS = JSON.parse(document.getElementById('configs-data').textContent);
+  var URL_REFS = "{% url 'conciliacion-terceros-facturacion-referencias' %}";
+  var refs = null, actual = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function val(k) { return actual ? (actual[k] || '') : ''; }
+
+  function llenarSelects() {
+    $('.ct-ref').each(function () {
+      var campo = $(this).data('campo'), lista = (refs && refs[$(this).data('lista')]) || [], vacio = $(this).data('vacio');
+      var sel = $('#h-' + campo + '_id').val();
+      var html = '<option value="">' + esc(vacio || '— Selecciona —') + '</option>' + lista.map(function (x) {
+        return '<option value="' + esc(x.id) + '"' + (String(x.id) === String(sel) ? ' selected' : '') + '>' + esc(x.nombre) + '</option>';
+      }).join('');
+      if (sel && !lista.some(function (x) { return String(x.id) === String(sel); })) {
+        html += '<option value="' + esc(sel) + '" selected>' + esc($('#h-' + campo + '_nombre').val() || sel) + '</option>';
+      }
+      $(this).html(html);
+    });
+  }
+  $('.ct-ref').on('change', function () {
+    var campo = $(this).data('campo');
+    $('#h-' + campo + '_id').val(this.value);
+    $('#h-' + campo + '_nombre').val(this.value ? $(this).find('option:selected').text() : '');
+  });
+  function mostrarCuenta(campo) {
+    var cod = $('#h-' + campo + '_codigo').val(), nom = $('#h-' + campo + '_nombre').val(), id = $('#h-' + campo + '_id').val();
+    var hay = !!(refs && refs.cuentas), $b = $('.ct-cuenta[data-campo="' + campo + '"] .ct-combo-btn');
+    $b.prop('disabled', !hay);
+    $b.html(id ? '<code>' + esc(cod) + '</code> ' + esc(nom) : '<span class="text-muted">' + (hay ? '— Selecciona una cuenta —' : 'Cargando cuentas…') + '</span>');
+  }
+  function mostrarCuentas() { ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(mostrarCuenta); }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function filtrarCuentas($c) {
+    var q = norm($c.find('.ct-cta-q').val()).trim(), todas = (refs && refs.cuentas) || [], sel = $('#h-' + $c.data('campo') + '_id').val();
+    var palabras = q ? q.split(/\s+/) : [];
+    var cs = todas.filter(function (c) { var h = norm(c.codigo + ' ' + c.nombre); return palabras.every(function (w) { return h.indexOf(w) >= 0; }); }).slice(0, 80);
+    var html = (sel ? '<div class="item text-danger" data-quitar="1"><i class="fas fa-times mr-1"></i>Quitar la cuenta seleccionada</div>' : '') +
+      (cs.length ? cs.map(function (c, i) {
+        return '<div class="item' + (String(c.id) === String(sel) ? ' font-weight-bold' : '') + '" data-i="' + i + '"><code>' + esc(c.codigo) + '</code> ' + esc(c.nombre) + '</div>';
+      }).join('') : '<div class="item text-muted">Sin resultados</div>');
+    $c.find('.ct-res-busq').html(html).data('cs', cs);
+  }
+  function cerrarCombos() { $('.ct-combo-panel').hide(); }
+  function cargarRefs() {
+    var emp = $('#f-empresa').val();
+    var alegra = $('#f-empresa option:selected').data('alegra') == 1;
+    var modo = $('#f-modo').val();
+    $('#f-alegra').toggle(modo === 'alegra'); $('#f-info').toggle(modo !== 'alegra');
+    if (modo !== 'alegra') return;
+    if (!alegra) { $('#f-cargando').html('<span class="text-danger">Esta empresa no tiene integración con Alegra: elige modo informativo.</span>'); return; }
+    $('#f-cargando').text('Cargando numeraciones, ítems, impuestos y cuentas de Alegra…');
+    $.getJSON(URL_REFS, { empresa: emp }).done(function (r) {
+      if (emp !== $('#f-empresa').val()) return;  // cambiaron de empresa mientras cargaba
+      refs = r.referencias; $('#f-cargando').text(''); llenarSelects(); mostrarCuentas();
+    }).fail(function (x) { $('#f-cargando').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo consultar Alegra.') + '</span>'); });
+  }
+  $('#f-empresa').on('change', function () {
+    // Las cuentas son de la empresa: al cambiarla se limpian las elegidas.
+    refs = null;
+    ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(function (c) {
+      ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(''); });
+    });
+    cerrarCombos(); llenarSelects(); mostrarCuentas(); cargarRefs();
+  });
+  $('#f-modo').on('change', cargarRefs);
+  $('.ct-combo-btn').on('click', function () {
+    var $c = $(this).closest('.ct-cuenta'), $p = $c.find('.ct-combo-panel'), abierto = $p.is(':visible');
+    cerrarCombos(); if (abierto || !(refs && refs.cuentas)) return;
+    $p.show(); $c.find('.ct-cta-q').val(''); filtrarCuentas($c); $c.find('.ct-cta-q').trigger('focus');
+  });
+  $('.ct-cta-q').on('input', function () { filtrarCuentas($(this).closest('.ct-cuenta')); })
+    .on('keydown', function (e) {
+      var $c = $(this).closest('.ct-cuenta'), $its = $c.find('.item[data-i]'), $a = $its.filter('.activo'), i = $its.index($a);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(i + 1, $its.length - 1) : Math.max(i - 1, 0);
+        $its.removeClass('activo'); var el = $its.eq(i).addClass('activo')[0]; if (el) el.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') { e.preventDefault(); ($a.length ? $a : $its.first()).trigger('click'); }
+      else if (e.key === 'Escape') { cerrarCombos(); $c.find('.ct-combo-btn').trigger('focus'); }
+    });
+  $('.ct-res-busq').on('click', '.item[data-i], .item[data-quitar]', function () {
+    var $c = $(this).closest('.ct-cuenta'), campo = $c.data('campo');
+    var c = $(this).data('quitar') ? { id: '', codigo: '', nombre: '' } : $c.find('.ct-res-busq').data('cs')[$(this).data('i')];
+    $('#h-' + campo + '_id').val(c.id); $('#h-' + campo + '_codigo').val(c.codigo); $('#h-' + campo + '_nombre').val(c.nombre);
+    cerrarCombos(); mostrarCuenta(campo);
+  });
+  $(document).on('mousedown', function (e) { if (!$(e.target).closest('.ct-combo').length) cerrarCombos(); });
+
+  $('.ct-tabla tbody').on('click', 'tr', function () {
+    var p = $(this).data('proyecto'); actual = CONFIGS[p] || null;
+    $('.ct-tabla tbody tr').removeClass('sel'); $(this).addClass('sel');
+    $('#f-proyecto').val(p); $('#f-titulo').text('Facturación · ' + p);
+    $('#f-empresa').val(val('empresa') || $('#f-empresa option').first().val());
+    $('#f-modo').val(val('modo') || 'informativa'); $('#f-emision').val(val('emision') || 'borrador');
+    $('#f-forma_pago').val(val('forma_pago') || 'CREDIT'); $('#f-dias_vencimiento').val(val('dias_vencimiento') || 0);
+    $('#h-numeracion_journal_id').val(val('numeracion_journal_id'));
+    ['numeracion', 'item_venta', 'item_intereses', 'impuesto', 'centro_costo'].forEach(function (c) {
+      $('#h-' + c + '_id').val(val(c + '_id')); $('#h-' + c + '_nombre').val(val(c + '_nombre'));
+    });
+    $('#f-costo_m2').val(val('costo_m2') || 0);
+    ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(function (c) {
+      ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(val(c + '_' + k)); });
+    });
+    refs = null; cerrarCombos(); llenarSelects(); mostrarCuentas(); $('#form').show(); cargarRefs();
+    document.getElementById('form').scrollIntoView({ behavior: 'smooth' });
+  });
+  $('#f-cerrar').on('click', function () { $('#form').hide(); $('.ct-tabla tbody tr').removeClass('sel'); });
+})();
+</script>
+{% endblock %}

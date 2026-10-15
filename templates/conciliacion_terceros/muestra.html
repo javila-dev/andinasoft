@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Muestra de formato{% endblock %}
+
+{% block content %}
+<div class="container py-3" style="max-width: 640px;">
+  <a href="{% url 'conciliacion-terceros' %}" class="small"><i class="fas fa-arrow-left mr-1"></i>Conciliaciones</a>
+  <h4 class="mt-2 mb-1">Cargar muestra de formato</h4>
+  <p class="text-muted small">Sube el reporte de saldos por tercero tal como lo exporta el sistema contable (por ejemplo SIIGO) para analizar su estructura.</p>
+  {% for m in messages %}<div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %}">{{ m }}</div>{% endfor %}
+  {% if guardado %}<div class="alert alert-success">Archivo recibido: <code>{{ guardado }}</code></div>{% endif %}
+  <form method="post" enctype="multipart/form-data" class="card card-body">
+    {% csrf_token %}
+    <div class="form-group">
+      <input type="file" name="archivo" accept=".xlsx,.xls,.csv,.txt" class="form-control-file" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Subir</button>
+  </form>
+</div>
+{% endblock %}

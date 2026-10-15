@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'api_auth',
     'mcp_server',
     'alegra_integration',
+    'conciliacion_terceros',
     'chatwoot_panel',
 ]
 
