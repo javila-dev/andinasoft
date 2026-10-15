@@ -99,8 +99,9 @@ class ValidarNovacionTests(SimpleTestCase):
     def test_algo_hay_que_trasladar(self):
         self.assertRechaza('al menos un valor', capital=0, interes_cte=0)
 
-    def test_no_supera_la_cuota_inicial_destino(self):
-        self.assertRechaza('supera la cuota inicial', venta=_venta(cant_ci1=1, valor_ci1=500))
+    def test_puede_superar_la_cuota_inicial_destino(self):
+        # Solo se advierte en el formulario; no bloquea el registro.
+        self._validar(venta=_venta(cant_ci1=1, valor_ci1=500))
 
     def test_el_cliente_debe_ser_titular_de_la_venta(self):
         self.assertRechaza('no es titular', venta=_venta(id_t1='999', cant_ci1=1, valor_ci1=2000))

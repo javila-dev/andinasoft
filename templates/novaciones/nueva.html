@@ -168,6 +168,26 @@
   </div>
 </div>
 
+<div class="modal fade" id="modalDiferenciaCI" tabindex="-1" role="dialog" aria-labelledby="modalDiferenciaCITitulo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalDiferenciaCITitulo">La cuota inicial no coincide</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body">
+        <p id="modalDiferenciaCI-texto" class="mb-2"></p>
+        <p class="small text-muted mb-0" id="modalDiferenciaCI-excede">Al aprobar, el excedente abona las cuotas siguientes de la venta destino.</p>
+        <p class="small text-muted mb-0">¿Registrar la novación de todas formas?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Revisar valores</button>
+        <button type="button" class="btn btn-warning" id="btn-confirmar-ci">Registrar de todas formas</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   var fmt = new Intl.NumberFormat('es-CO');
@@ -209,13 +229,25 @@
     $('#elegir-venta, #modos').hide();
     $('#ve-titulo').text('Venta ' + venta.id + ' · lote ' + venta.inmueble);
     $('#ve-detalle').text(venta.titular + ' · valor $' + fmt.format(venta.valor) + ' · cuota inicial $' + fmt.format(venta.cuota_inicial) + ' · ' + venta.estado);
-    var ok = total <= venta.cuota_inicial;
-    $('#venta-elegida').toggleClass('border-success', ok).toggleClass('border-danger', !ok).show();
+    var ok = total === Number(venta.cuota_inicial);
+    $('#venta-elegida').toggleClass('border-success', ok).toggleClass('border-warning', !ok).show();
     $('#ve-chequeo')
-      .toggleClass('text-success', ok).toggleClass('text-danger', !ok)
+      .toggleClass('text-success', ok).toggleClass('text-warning', !ok)
       .text(ok
-        ? '✓ La cuota inicial cubre lo trasladado ($' + fmt.format(total) + ').'
-        : '✗ Lo trasladado ($' + fmt.format(total) + ') supera la cuota inicial. Elige otra venta o ajusta los valores.');
+        ? '✓ Lo trasladado ($' + fmt.format(total) + ') es igual a la cuota inicial.'
+        : '⚠ ' + diferenciaCI(total, venta));
+  }
+
+  function diferenciaCI(total, venta) {
+    var ci = Number(venta.cuota_inicial);
+    return 'Lo trasladado ($' + fmt.format(total) + ') ' + (total > ci ? 'supera' : 'es menor que') +
+      ' la cuota inicial ($' + fmt.format(ci) + ') por $' + fmt.format(Math.abs(total - ci)) + '.';
+  }
+
+  function totalTrasladar() {
+    var total = 0;
+    $('.chk-comp:checked').each(function () { total += numero($($(this).data('target'))); });
+    return total;
   }
 
   function elegirVenta(id) {
@@ -224,14 +256,30 @@
     recalcular();
   }
 
+  var ciConfirmada = false;
   $('#form-novacion').on('submit', function (e) {
     if (!$('#id_venta_destino').val()) {
       e.preventDefault();
       $('#venta-requerida').show()[0].scrollIntoView({behavior: 'smooth', block: 'center'});
       return;
     }
+    var venta = ventas[$('#id_venta_destino').val()];
+    var total = totalTrasladar();
+    if (venta && total !== Number(venta.cuota_inicial) && !ciConfirmada) {
+      e.preventDefault();
+      $('#modalDiferenciaCI-texto').text(diferenciaCI(total, venta));
+      $('#modalDiferenciaCI-excede').toggle(total > Number(venta.cuota_inicial));
+      $('#modalDiferenciaCI').modal('show');
+      return;
+    }
     $('.val-comp').each(function () { $(this).val(String(numero($(this)))); });
   });
+  $('#btn-confirmar-ci').on('click', function () {
+    ciConfirmada = true;
+    $('#modalDiferenciaCI').modal('hide');
+    $('#form-novacion').trigger('submit');
+  });
+  $('#modalDiferenciaCI').on('hidden.bs.modal', function () { ciConfirmada = false; });
 
   function modo(nombre) {
     $('#modos [data-modo]').removeClass('active').filter('[data-modo="' + nombre + '"]').addClass('active');

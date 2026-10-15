@@ -22,7 +22,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from andinasoft.adjudicacion_service import crear_plan_pagos, total_cuota_inicial
+from andinasoft.adjudicacion_service import crear_plan_pagos
 from andinasoft.handlers_functions import aplicar_pago
 from andinasoft.handlers_functions import (
     eliminar_documento_contrato,
@@ -237,11 +237,7 @@ def validar(
     total = sum(trasladado.values())
     if total <= 0:
         raise NovacionError('Selecciona al menos un valor a trasladar.')
-    tope_ci = Decimal(total_cuota_inicial(venta))
-    if total > tope_ci:
-        raise NovacionError(
-            f'Lo trasladado ({_money(total)}) supera la cuota inicial de la venta destino ({_money(tope_ci)}).'
-        )
+    # Que lo trasladado no cuadre con la cuota inicial destino solo se advierte en el formulario.
 
     if nro_nota is not None:
         validar_nota(nro_nota, proyecto_origen, proyecto_destino, novacion_actual)
@@ -610,13 +606,15 @@ def _adjudicar_destino(request, novacion, venta, deshacer, *, oficina, gestor_ca
     deshacer.registrar(lambda: PlanPagos.objects.using(destino).filter(adj=adj).delete())
     crear_plan_pagos(destino, venta, adj)
 
-    # Lo trasladado entra como un recibo con el numero de la nota, solo a cuotas CI y sin mora.
-    cuotas_ci = list(
-        saldos_adj.objects.using(destino).filter(adj=adj, tipocta='CI', saldocuota__gt=0).order_by('nrocta')
-    )
+    # Lo trasladado entra como un recibo con el numero de la nota, primero a cuotas CI y sin mora.
+    cuotas = saldos_adj.objects.using(destino).filter(adj=adj, saldocuota__gt=0)
+    cuotas_ci = list(cuotas.filter(tipocta='CI').order_by('nrocta'))
     if not cuotas_ci:
         raise NovacionError('La venta destino no genera cuotas de cuota inicial para aplicar lo trasladado.')
     total = novacion.total_trasladado
+    if total > sum(c.saldocuota for c in cuotas_ci):
+        # Si supera la cuota inicial, el excedente abona las cuotas siguientes en orden de vencimiento.
+        cuotas_ci += list(cuotas.exclude(tipocta='CI').order_by('fecha', 'idcta'))
     aplicar_pago(
         request=request, adj=adj, fecha=novacion.fecha_nota, forma_pago=FORMA_PAGO_NOVACION,
         valor_pagado=total, concepto=CONCEPTO_NOVACION, valor_recibo=total,
