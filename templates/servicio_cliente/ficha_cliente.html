@@ -381,6 +381,7 @@
           {% if sp.requiere_archivo %}
           <label class="small mb-1">PDF {{ sp.archivo_label|default:'documento' }}</label>
           <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
+          {% if sp.codigo == 'firma_cliente' %}<small class="form-text text-muted">La notaría envía la factura cuando firma el cliente.</small>{% endif %}
           {% endif %}
         </div>
         <div class="modal-footer">

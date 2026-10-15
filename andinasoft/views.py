@@ -7232,7 +7232,6 @@ def promesas(request,proyecto):
                 'pasos_rama': serialize_steps(pipe['pasos_rama']),
                 'pipeline_completo': pipe['completa'],
                 'carga_pendiente': pipe['carga_pendiente'],
-                'factura_pendiente': pipe['factura_pendiente'],
             }
 
             formaci, formasaldo = resolver_forma_pago_impresion(proyecto, p, adj=adj)

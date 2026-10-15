@@ -630,18 +630,6 @@ def dashboard_sac(user, *, proyecto=None, tipo='', today=None):
             elif estado['entrega_por_vencer']:
                 kpis['entregas_por_vencer'] += 1
             paso = r.get('paso_escritura') or PromesaCumplimiento.PASO_PENDIENTE
-            if r.get('factura_pendiente'):
-                cola_atrasados.append(_item(
-                    'escritura', 'Factura notaria',
-                    f"{r['inmueble']} — cargar factura de notaria",
-                    cliente_id=cliente_id,
-                    cliente=r['titular'],
-                    proyecto=proy,
-                    adj=r['adj'],
-                    fecha=r.get('fechaescritura'),
-                    pasos_ui=r.get('pasos_ui'),
-                    factura_pendiente=True,
-                ))
             if r.get('carga_pendiente'):
                 cola_atrasados.append(_item(
                     'escritura', 'Carga escritura',
@@ -657,9 +645,7 @@ def dashboard_sac(user, *, proyecto=None, tipo='', today=None):
             if estado['escritura_tramite']:
                 kpis['escrituras_pendientes'] += 1
                 chip = PASO_LABEL.get(paso, paso)
-                if r.get('factura_pendiente'):
-                    chip = 'Factura notaria'
-                elif r.get('carga_pendiente'):
+                if r.get('carga_pendiente'):
                     chip = 'Carga escritura'
                 escrituras.append(_item(
                     'escritura', chip,

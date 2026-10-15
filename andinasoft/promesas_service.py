@@ -53,9 +53,11 @@ PASO_FECHA_FIELD = {
     PromesaCumplimiento.PASO_REGISTRO: 'fecha_registro',
     PromesaCumplimiento.PASO_FACTURADO: 'fecha_facturado',
 }
+# La factura de notaria llega cuando firma el cliente: se carga en ese mismo paso
+# (PASO_FACTURA_NOTARIA queda solo para historial y datos anteriores).
 PASOS_ARCHIVO = {
-    PromesaCumplimiento.PASO_FACTURA_NOTARIA: (
-        'Cargue el PDF de la factura de notaria',
+    PromesaCumplimiento.PASO_FIRMA_CLIENTE: (
+        'Cargue el PDF de la factura de notaria (la notaria la envia cuando firma el cliente)',
         'Factura notaria',
     ),
     PromesaCumplimiento.PASO_CARGA: (
@@ -65,7 +67,6 @@ PASOS_ARCHIVO = {
 }
 PASOS_LINEA_UI = (
     (PromesaCumplimiento.PASO_FIRMA_CLIENTE, 'Firma cliente', 'fa-pen', False),
-    (PromesaCumplimiento.PASO_FACTURA_NOTARIA, 'Factura notaria', 'fa-file-invoice', True),
     (PromesaCumplimiento.PASO_FIRMA_EMPRESA, 'Firma empresa', 'fa-building', False),
 )
 PASOS_RAMA_UI = (
@@ -75,8 +76,7 @@ PASOS_RAMA_UI = (
 )
 REQUISITOS_PASO = {
     PromesaCumplimiento.PASO_FIRMA_CLIENTE: set(),
-    PromesaCumplimiento.PASO_FACTURA_NOTARIA: {PromesaCumplimiento.PASO_FIRMA_CLIENTE},
-    PromesaCumplimiento.PASO_FIRMA_EMPRESA: {PromesaCumplimiento.PASO_FACTURA_NOTARIA},
+    PromesaCumplimiento.PASO_FIRMA_EMPRESA: {PromesaCumplimiento.PASO_FIRMA_CLIENTE},
     PromesaCumplimiento.PASO_CARGA: {PromesaCumplimiento.PASO_FIRMA_EMPRESA},
     PromesaCumplimiento.PASO_REGISTRO: {PromesaCumplimiento.PASO_FIRMA_EMPRESA},
     PromesaCumplimiento.PASO_FACTURADO: {PromesaCumplimiento.PASO_FIRMA_EMPRESA},
@@ -140,7 +140,7 @@ def hechos_from_cumplimiento(cump):
     if cump.fecha_firma_cliente:
         hechos.add(PromesaCumplimiento.PASO_FIRMA_CLIENTE)
     if getattr(cump, 'fecha_factura_notaria', None) or (getattr(cump, 'documento_factura_notaria', '') or ''):
-        hechos.add(PromesaCumplimiento.PASO_FACTURA_NOTARIA)
+        hechos.add(PromesaCumplimiento.PASO_FIRMA_CLIENTE)
     if cump.fecha_firma_empresa:
         hechos.add(PromesaCumplimiento.PASO_FIRMA_EMPRESA)
     if getattr(cump, 'fecha_carga_escritura', None) or (getattr(cump, 'documento_escritura', '') or ''):
@@ -163,11 +163,11 @@ def hechos_from_cumplimiento(cump):
             hechos.add(PromesaCumplimiento.PASO_FIRMA_CLIENTE)
             hechos.add(PromesaCumplimiento.PASO_FACTURA_NOTARIA)
             hechos.add(PromesaCumplimiento.PASO_FIRMA_EMPRESA)
-        elif actual == PromesaCumplimiento.PASO_FACTURA_NOTARIA:
+        elif actual in (PromesaCumplimiento.PASO_FACTURA_NOTARIA, PromesaCumplimiento.PASO_FIRMA_CLIENTE):
             hechos.add(PromesaCumplimiento.PASO_FIRMA_CLIENTE)
-            hechos.add(PromesaCumplimiento.PASO_FACTURA_NOTARIA)
-        elif actual == PromesaCumplimiento.PASO_FIRMA_CLIENTE:
-            hechos.add(PromesaCumplimiento.PASO_FIRMA_CLIENTE)
+    # La factura de notaria va con la firma del cliente: son el mismo paso.
+    if PromesaCumplimiento.PASO_FIRMA_CLIENTE in hechos:
+        hechos.add(PromesaCumplimiento.PASO_FACTURA_NOTARIA)
     return hechos
 
 
@@ -187,10 +187,8 @@ def resumen_paso(hechos):
         if PromesaCumplimiento.PASO_REGISTRO not in hechos:
             return PromesaCumplimiento.PASO_REGISTRO
         return PromesaCumplimiento.PASO_FACTURADO
-    if PromesaCumplimiento.PASO_FACTURA_NOTARIA in hechos:
-        return PromesaCumplimiento.PASO_FACTURA_NOTARIA
     if PromesaCumplimiento.PASO_FIRMA_CLIENTE in hechos:
-        return PromesaCumplimiento.PASO_FACTURA_NOTARIA
+        return PromesaCumplimiento.PASO_FIRMA_CLIENTE
     return PromesaCumplimiento.PASO_PENDIENTE
 
 
@@ -209,7 +207,6 @@ def siguientes_pasos(hechos):
     return [
         codigo for codigo in (
             PromesaCumplimiento.PASO_FIRMA_CLIENTE,
-            PromesaCumplimiento.PASO_FACTURA_NOTARIA,
             PromesaCumplimiento.PASO_FIRMA_EMPRESA,
             PromesaCumplimiento.PASO_CARGA,
             PromesaCumplimiento.PASO_REGISTRO,
@@ -227,10 +224,7 @@ def siguientes_detalle(hechos):
             'label': PASO_LABEL.get(codigo, codigo),
             'requiere_archivo': codigo in PASOS_ARCHIVO,
             'archivo_label': PASOS_ARCHIVO[codigo][1] if codigo in PASOS_ARCHIVO else '',
-            'interno': codigo in (
-                PromesaCumplimiento.PASO_CARGA,
-                PromesaCumplimiento.PASO_FACTURA_NOTARIA,
-            ),
+            'interno': codigo == PromesaCumplimiento.PASO_CARGA,
         })
     return out
 
@@ -334,10 +328,6 @@ def pipeline_escritura(cump):
         'carga_pendiente': (
             PromesaCumplimiento.PASO_FIRMA_EMPRESA in hechos
             and PromesaCumplimiento.PASO_CARGA not in hechos
-        ),
-        'factura_pendiente': (
-            PromesaCumplimiento.PASO_FIRMA_CLIENTE in hechos
-            and PromesaCumplimiento.PASO_FACTURA_NOTARIA not in hechos
         ),
         'hechos': hechos,
     }
@@ -600,7 +590,6 @@ def build_promesa_rows(proyecto):
             'pasos_siguientes': pipe['siguientes'],
             'escritura_completa': pipe['completa'],
             'carga_pendiente': pipe['carga_pendiente'],
-            'factura_pendiente': pipe['factura_pendiente'],
             'dias_firma_cliente': dias_firma,
             'alerta_firma_empresa': alerta_firma,
             'entrega_ui': ent_ui,
@@ -693,7 +682,9 @@ def marcar_hito_escritura(proyecto, adj, paso, fecha, usuario, *, nota='', docum
         setattr(cumplimiento, field, fecha)
     if paso == PromesaCumplimiento.PASO_CARGA:
         cumplimiento.documento_escritura = documento or cumplimiento.documento_escritura
-    if paso == PromesaCumplimiento.PASO_FACTURA_NOTARIA:
+    if paso == PromesaCumplimiento.PASO_FIRMA_CLIENTE:
+        # La factura de notaria se carga con la firma del cliente.
+        cumplimiento.fecha_factura_notaria = fecha
         cumplimiento.documento_factura_notaria = documento or cumplimiento.documento_factura_notaria
     hechos.add(paso)
     cumplimiento.paso_escritura_actual = resumen_paso(hechos)

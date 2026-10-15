@@ -68,36 +68,37 @@ class HitoEscrituraTests(SimpleTestCase):
         self.assertEqual(linea[0]['codigo'], PromesaCumplimiento.PASO_FIRMA_CLIENTE)
         self.assertEqual([s['codigo'] for s in linea], [
             PromesaCumplimiento.PASO_FIRMA_CLIENTE,
-            PromesaCumplimiento.PASO_FACTURA_NOTARIA,
             PromesaCumplimiento.PASO_FIRMA_EMPRESA,
         ])
-        self.assertEqual([s['estado'] for s in linea], ['next', 'locked', 'locked'])
+        self.assertEqual([s['estado'] for s in linea], ['next', 'locked'])
         self.assertEqual([s['estado'] for s in rama], ['locked', 'locked', 'locked'])
         self.assertEqual(
             siguiente_paso(PromesaCumplimiento.PASO_FIRMA_CLIENTE),
-            PromesaCumplimiento.PASO_FACTURA_NOTARIA,
+            PromesaCumplimiento.PASO_FIRMA_EMPRESA,
         )
         self.assertEqual(
             siguiente_paso(PromesaCumplimiento.PASO_FACTURA_NOTARIA),
             PromesaCumplimiento.PASO_FIRMA_EMPRESA,
         )
         linea2, rama2 = pasos_escritura_ui(PromesaCumplimiento.PASO_FIRMA_EMPRESA)
-        self.assertEqual([s['estado'] for s in linea2], ['done', 'done', 'done'])
+        self.assertEqual([s['estado'] for s in linea2], ['done', 'done'])
         self.assertEqual([s['estado'] for s in rama2], ['next', 'next', 'next'])
-        self.assertTrue(linea2[1]['interno'])
+        self.assertFalse(linea2[0]['interno'])
         self.assertTrue(rama2[0]['interno'])
 
-    def test_factura_notaria_bloquea_firma_empresa(self):
+    def test_factura_notaria_va_con_firma_cliente(self):
         from andinasoft.promesas_service import hechos_hasta, siguientes_pasos
+        # Ya no es un paso aparte: tras la firma del cliente sigue la firma de la empresa.
         hechos = hechos_hasta(PromesaCumplimiento.PASO_FIRMA_CLIENTE)
-        self.assertTrue(puede_avanzar_paso(
+        self.assertFalse(puede_avanzar_paso(
             None, PromesaCumplimiento.PASO_FACTURA_NOTARIA, hechos=hechos,
         ))
-        self.assertFalse(puede_avanzar_paso(
+        self.assertTrue(puede_avanzar_paso(
             None, PromesaCumplimiento.PASO_FIRMA_EMPRESA, hechos=hechos,
         ))
-        self.assertIn(PromesaCumplimiento.PASO_FACTURA_NOTARIA, siguientes_pasos(hechos))
-        self.assertNotIn(PromesaCumplimiento.PASO_FIRMA_EMPRESA, siguientes_pasos(hechos))
+        self.assertNotIn(PromesaCumplimiento.PASO_FACTURA_NOTARIA, siguientes_pasos(hechos))
+        self.assertIn(PromesaCumplimiento.PASO_FIRMA_EMPRESA, siguientes_pasos(hechos))
+        self.assertEqual(siguientes_pasos(set()), [PromesaCumplimiento.PASO_FIRMA_CLIENTE])
 
     def test_alerta_si_pasa_un_mes_sin_firma_empresa(self):
         from andinasoft.promesas_service import pipeline_escritura, seguimiento_firma_cliente
@@ -127,8 +128,17 @@ class HitoEscrituraTests(SimpleTestCase):
         self.assertEqual(dias_rec, 14)
         self.assertFalse(alerta_rec)
 
-    def test_factura_pendiente_despues_de_cliente(self):
+    def test_firma_cliente_pide_factura_y_sigue_firma_empresa(self):
         from andinasoft.promesas_service import pipeline_escritura
+        vacio = SimpleNamespace(
+            fecha_firma_cliente=None, fecha_factura_notaria=None, documento_factura_notaria='',
+            fecha_firma_empresa=None, fecha_carga_escritura=None, documento_escritura='',
+            fecha_registro=None, fecha_facturado=None, paso_escritura_actual=PromesaCumplimiento.PASO_PENDIENTE,
+        )
+        pipe0 = pipeline_escritura(vacio)
+        self.assertEqual(pipe0['siguientes'][0]['codigo'], PromesaCumplimiento.PASO_FIRMA_CLIENTE)
+        self.assertTrue(pipe0['siguientes'][0]['requiere_archivo'])
+        self.assertEqual(pipe0['siguientes'][0]['archivo_label'], 'Factura notaria')
         cump = SimpleNamespace(
             fecha_firma_cliente=timezone.datetime(2026, 9, 1).date(),
             fecha_factura_notaria=None,
@@ -141,28 +151,28 @@ class HitoEscrituraTests(SimpleTestCase):
             paso_escritura_actual=PromesaCumplimiento.PASO_FIRMA_CLIENTE,
         )
         pipe = pipeline_escritura(cump)
-        self.assertTrue(pipe['factura_pendiente'])
-        self.assertEqual(pipe['paso_siguiente'], PromesaCumplimiento.PASO_FACTURA_NOTARIA)
-        self.assertTrue(pipe['siguientes'][0]['requiere_archivo'])
-        self.assertFalse(puede_avanzar_paso(
+        self.assertNotIn('factura_pendiente', pipe)
+        self.assertEqual(pipe['paso_siguiente'], PromesaCumplimiento.PASO_FIRMA_EMPRESA)
+        self.assertFalse(pipe['siguientes'][0]['requiere_archivo'])
+        self.assertTrue(puede_avanzar_paso(
             None, PromesaCumplimiento.PASO_FIRMA_EMPRESA, hechos=pipe['hechos'],
         ))
 
     def test_nombre_documento_factura_requiere_pdf(self):
         from andinasoft.promesas_service import nombre_documento_paso
         with self.assertRaises(ValueError):
-            nombre_documento_paso(PromesaCumplimiento.PASO_FACTURA_NOTARIA, None)
+            nombre_documento_paso(PromesaCumplimiento.PASO_FIRMA_CLIENTE, None)
         with self.assertRaises(ValueError):
             nombre_documento_paso(
-                PromesaCumplimiento.PASO_FACTURA_NOTARIA,
+                PromesaCumplimiento.PASO_FIRMA_CLIENTE,
                 SimpleNamespace(name='foto.jpg'),
             )
         nombre = nombre_documento_paso(
-            PromesaCumplimiento.PASO_FACTURA_NOTARIA,
+            PromesaCumplimiento.PASO_FIRMA_CLIENTE,
             SimpleNamespace(name='factura.pdf'),
         )
         self.assertTrue(nombre.startswith('Factura notaria_'))
-        self.assertEqual(nombre_documento_paso(PromesaCumplimiento.PASO_FIRMA_CLIENTE, None), '')
+        self.assertEqual(nombre_documento_paso(PromesaCumplimiento.PASO_FIRMA_EMPRESA, None), '')
 
     def test_fechas_incompletas_no_registran(self):
         from andinasoft.promesas_service import registrar_fechas_firmadas
