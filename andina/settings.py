@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'alegra_integration',
     'conciliacion_terceros',
     'chatwoot_panel',
+    'telefonia',
 ]
 
 TEMPUS_DOMINUS_LOCALIZE = True
@@ -247,6 +248,22 @@ CHATWOOT_PANEL_RATE_LIMIT = int(os.getenv('CHATWOOT_PANEL_RATE_LIMIT', '120'))
 # API de Chatwoot (solo servidor) para guardar la cédula en el contacto. Vacío = no escribe en Chatwoot.
 CHATWOOT_API_URL = os.getenv('CHATWOOT_API_URL', '').strip().rstrip('/')
 CHATWOOT_API_TOKEN = os.getenv('CHATWOOT_API_TOKEN', '').strip()
+
+# ─── Telefonía: llamadas salientes desde el panel de Chatwoot (Twilio) ───────
+# Ver docs/telefonia.md. Sin estos valores el botón Llamar avisa que falta configurar.
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', '').strip()
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN', '').strip()  # valida la firma de los webhooks
+TWILIO_API_KEY_SID = os.getenv('TWILIO_API_KEY_SID', '').strip()  # firma los tokens del softphone
+TWILIO_API_KEY_SECRET = os.getenv('TWILIO_API_KEY_SECRET', '').strip()
+TWILIO_TWIML_APP_SID = os.getenv('TWILIO_TWIML_APP_SID', '').strip()
+TWILIO_VOICE_SDK_URL = os.getenv('TWILIO_VOICE_SDK_URL', '').strip()
+# Número que ve el cliente (E.164, +57…): un número de Twilio o uno verificado en Twilio.
+TELEFONIA_CALLER_ID = os.getenv('TELEFONIA_CALLER_ID', '').strip()
+TELEFONIA_GRABAR = env_bool('TELEFONIA_GRABAR', False)
+TELEFONIA_MAX_LLAMADAS_HORA = int(os.getenv('TELEFONIA_MAX_LLAMADAS_HORA', '40'))
+TELEFONIA_DURACION_MAXIMA = int(os.getenv('TELEFONIA_DURACION_MAXIMA', '3600'))
+# URL pública con la que Twilio llama a Andinasoft (para validar la firma). Vacío = ANDINA_PUBLIC_BASE_URL.
+TELEFONIA_PUBLIC_BASE_URL = os.getenv('TELEFONIA_PUBLIC_BASE_URL', '').strip().rstrip('/')
 
 # ─── Directorios ─────────────────────────────────────────────────────────────
 

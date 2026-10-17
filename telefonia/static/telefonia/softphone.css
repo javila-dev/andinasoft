@@ -1,0 +1,115 @@
+/* Softphone: usa los colores y componentes de chatwoot_panel/panel.css. */
+
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.phone__header {
+  text-align: center;
+}
+
+.phone__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: rgb(var(--slate-12));
+  overflow-wrap: anywhere;
+}
+
+.phone__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.phone__option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgb(var(--border-strong));
+  border-radius: var(--radius-sm);
+  background: rgb(var(--solid-1));
+  cursor: pointer;
+}
+
+.phone__option:has(input:checked) {
+  border-color: rgb(var(--blue-9));
+  background: rgb(var(--blue-3));
+}
+
+.phone__option input {
+  margin: 0;
+  accent-color: rgb(var(--blue-9));
+}
+
+.phone__option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.phone__option-label {
+  font-weight: 500;
+  color: rgb(var(--slate-12));
+}
+
+.phone__main {
+  width: 100%;
+  justify-content: center;
+}
+
+.phone__note {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+.phone__status {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgb(var(--slate-12));
+}
+
+.phone__timer {
+  margin: 0;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--slate-12));
+}
+
+.phone__controls {
+  display: flex;
+  gap: 12px;
+}
+
+.phone__controls .btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.phone__hangup {
+  background: rgb(var(--ruby-9));
+  border-color: rgb(var(--ruby-9));
+  color: #fff;
+}
+
+.phone__hangup:hover:not(:disabled) {
+  background: rgb(var(--ruby-11));
+  border-color: rgb(var(--ruby-11));
+}
+
+.btn[aria-pressed="true"] {
+  background: rgb(var(--amber-3));
+  color: rgb(var(--amber-11));
+}

@@ -28,3 +28,4 @@ pypdf
 django-storages
 boto3
 whitenoise
+twilio==9.11.1

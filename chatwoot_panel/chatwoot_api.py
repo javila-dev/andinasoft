@@ -57,6 +57,18 @@ def guardar_cedula_en_contacto(account_id, contact_id, cedula, nombre=''):
         return False
 
 
+def obtener_conversacion(account_id, conversation_id):
+    """La conversación tal como la ve Chatwoot (dict), o None si no existe o no se pudo leer."""
+    if not configurado() or not account_id or not conversation_id:
+        return None
+    try:
+        data = _request('GET', f'accounts/{int(account_id)}/conversations/{int(conversation_id)}').json()
+    except Exception:
+        logger.warning('chatwoot_panel: no se pudo leer la conversación %s/%s', account_id, conversation_id)
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def nota_privada(account_id, conversation_id, texto):
     """Deja una nota privada (solo la ven los agentes) en la conversación. True si se creó."""
     if not configurado() or not account_id or not conversation_id:

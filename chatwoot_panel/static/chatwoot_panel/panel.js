@@ -15,6 +15,11 @@
   var TOKEN_KEY = 'andinasoft.chatwootPanel.token';
   var TOKEN_MESSAGE = 'andinasoft-panel-token';
   var ATRIBUTO_CEDULA = 'cedula_andinasoft';
+  // Softphone (app telefonia): ventana aparte porque el iframe no tiene micrófono.
+  var SOFTPHONE_LISTO = 'andinasoft-softphone-listo';
+  var SOFTPHONE_SOLICITUD = 'andinasoft-softphone-solicitud';
+  var SOFTPHONE_RECIBIDO = 'andinasoft-softphone-recibido';
+  var SOFTPHONE_FIN = 'andinasoft-softphone-fin';
 
   var cfg = document.body.dataset;
   var chatwootOrigin = cfg.chatwootOrigin || '';
@@ -54,6 +59,8 @@
     segForm: null, // nodo del formulario, se conserva entre renders para no perder lo escrito
     tab: 'cartera',
     aviso: '',
+    llamadaPendiente: null, // solicitud para el softphone hasta que la ventana la reciba
+    segLlamada: false, // al volver de una llamada: preseleccionar «Llamada» en el seguimiento
   };
 
   var money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -381,8 +388,9 @@
           ]),
         ]),
         el('div', { class: 'cliente__actions' }, vinculado
-          ? [el('button', { type: 'button', class: 'btn btn--ghost btn--sm', disabled: state.identLoading, onclick: desvincular }, 'Desvincular')]
+          ? [botonLlamar(), el('button', { type: 'button', class: 'btn btn--ghost btn--sm', disabled: state.identLoading, onclick: desvincular }, 'Desvincular')]
           : [
+            botonLlamar(),
             el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: function () {
               state.ident = Object.assign({}, state.ident, { cliente: null, estado: 'ninguno', negocios: [] });
               seleccionarNegocio(null);
@@ -402,7 +410,86 @@
       nodes.push(el('p', { class: 'cliente__hint', text: 'No encontramos al cliente por el teléfono. Búscalo por cédula o nombre:' }));
     }
     nodes.push(renderBuscador());
+    if (chatwootIds().conversation_id) {
+      nodes.push(el('div', { class: 'cliente__row' }, [
+        el('span', { class: 'muted', text: 'También puedes llamar al número de la conversación.' }),
+        el('div', { class: 'cliente__actions' }, botonLlamar()),
+      ]));
+    }
     mount(root, nodes);
+  }
+
+  // ---------- llamadas (app telefonia) ----------
+  function botonLlamar() {
+    if (!cfg.softphoneUrl || !chatwootIds().conversation_id) return null;
+    return el('button', {
+      type: 'button', class: 'btn-llamar', title: 'Llamar al cliente', 'aria-label': 'Llamar al cliente', onclick: llamar,
+    }, iconoTelefono());
+  }
+
+  function iconoTelefono() {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '18');
+    svg.setAttribute('height', '18');
+    svg.setAttribute('aria-hidden', 'true');
+    var path = document.createElementNS(ns, 'path');
+    path.setAttribute('fill', 'currentColor');
+    path.setAttribute('d', 'M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z');
+    svg.appendChild(path);
+    return svg;
+  }
+
+  /* Abre (o reutiliza) la ventana del softphone y le pasa la conversación. El servidor decide el número. */
+  function llamar() {
+    var ids = chatwootIds();
+    var contact = chatwootContact();
+    var cliente = (state.ident && state.ident.cliente) || null;
+    state.llamadaPendiente = {
+      account_id: ids.account_id,
+      conversation_id: ids.conversation_id,
+      contact_id: ids.contact_id,
+      cedula: cliente ? cliente.cedula : '',
+      nombre: (cliente && cliente.nombre) || contact.name || '',
+    };
+    // Sin URL para no recargar una ventana que ya existe (cortaría la llamada en curso).
+    var ventana = window.open('', 'andinasoft-softphone', 'width=400,height=640');
+    if (!ventana) {
+      state.llamadaPendiente = null;
+      state.aviso = 'El navegador bloqueó la ventana para llamar. Permite ventanas emergentes para este sitio e intenta de nuevo.';
+      render();
+      return;
+    }
+    var nueva;
+    try {
+      nueva = ventana.location.href === 'about:blank';
+    } catch (e) {
+      nueva = true;
+    }
+    if (nueva) ventana.location.href = cfg.softphoneUrl; // avisará que está lista y ahí recibe la solicitud
+    else enviarSolicitud(ventana);
+    ventana.focus();
+  }
+
+  function enviarSolicitud(ventana) {
+    if (!state.llamadaPendiente || !ventana) return;
+    try {
+      ventana.postMessage({ type: SOFTPHONE_SOLICITUD, solicitud: state.llamadaPendiente }, window.location.origin);
+    } catch (e) {
+      /* la ventana todavía está cargando: la pedirá al avisar que está lista */
+    }
+  }
+
+  /* Al volver de una llamada: pestaña Seguimiento con «Llamada» como forma de contacto. */
+  function aplicarSeguimientoLlamada() {
+    if (!state.segLlamada || !state.segForm || !state.seg) return;
+    state.segLlamada = false;
+    var forma = (state.seg.formas || []).filter(function (f) {
+      return String(f).toLowerCase() === 'llamada';
+    })[0];
+    if (forma) $('seg-forma').value = forma;
+    $('seg-comentario').focus();
   }
 
   function nombreCliente(cliente) {
@@ -452,6 +539,15 @@
     return el('div', {}, nodes);
   }
 
+  /* Estados de Vista_Adjudicacion: Aprobado, Pagado, Juridico, Desistido, DesistidoJuridico. */
+  function esDesistido(estado) {
+    return /^desistido/i.test(String(estado || ''));
+  }
+
+  function textoEstado(estado) {
+    return String(estado || '') === 'DesistidoJuridico' ? 'Desistido (jurídico)' : String(estado || '');
+  }
+
   function renderNegocios(ident) {
     var negocios = ident.negocios || [];
     var nodes = [];
@@ -460,15 +556,27 @@
         ? 'El cliente tiene negocios solo en proyectos que no tienes asignados en Andinasoft.'
         : 'El cliente no tiene negocios.' }));
     } else if (negocios.length > 1) {
-      nodes.push(el('div', { class: 'chips', role: 'listbox', 'aria-label': 'Negocios del cliente' }, negocios.map(function (n) {
+      // Los desistidos van al final y se distinguen a simple vista.
+      var ordenados = negocios.filter(function (n) { return !esDesistido(n.estado); })
+        .concat(negocios.filter(function (n) { return esDesistido(n.estado); }));
+      nodes.push(el('div', { class: 'chips', role: 'listbox', 'aria-label': 'Negocios del cliente' }, ordenados.map(function (n) {
         var activo = state.negocio && state.negocio.proyecto === n.proyecto && state.negocio.adj === n.adj;
+        var desistido = esDesistido(n.estado);
         return el('button', {
-          type: 'button', class: 'chip' + (activo ? ' is-active' : ''), role: 'option', 'aria-selected': activo ? 'true' : 'false',
+          type: 'button', class: 'chip' + (desistido ? ' chip--desistido' : '') + (activo ? ' is-active' : ''),
+          role: 'option', 'aria-selected': activo ? 'true' : 'false',
+          title: desistido ? 'Negocio ' + textoEstado(n.estado).toLowerCase() : null,
           onclick: function () {
             seleccionarNegocio(n);
             render();
           },
-        }, [el('span', { class: 'chip__title', text: n.proyecto }), el('span', { class: 'chip__meta', text: n.inmueble + ' · ' + n.adj })]);
+        }, [
+          el('span', { class: 'chip__top' }, [
+            el('span', { class: 'chip__title', text: n.proyecto }),
+            desistido ? el('span', { class: 'chip__badge', text: textoEstado(n.estado) }) : null,
+          ]),
+          el('span', { class: 'chip__meta', text: n.inmueble + ' · ' + n.adj }),
+        ]);
       })));
     }
     if (negocios.length && ident.negocios_otros_proyectos) {
@@ -671,14 +779,19 @@
     if (!c) return mount(root, cargando('Calculando la cartera…'));
 
     var alDia = Number(c.total_vencido) <= 0;
+    var desistido = esDesistido(c.estado);
     var nodes = [];
+    if (desistido) {
+      nodes.push(el('div', { class: 'banner banner--ruby banner--inline', role: 'note' },
+        'Este negocio está ' + textoEstado(c.estado).toLowerCase() + '. Revisa que sea el negocio correcto antes de gestionar el cobro.'));
+    }
     nodes.push(el('div', { class: 'negocio' }, [
       el('div', {}, [
         el('div', { class: 'negocio__title', text: c.proyecto + ' · ' + c.inmueble }),
         el('div', { class: 'negocio__meta', text: c.adj + (c.titulares.length ? ' · ' + c.titulares.join(', ') : '') }),
       ]),
       el('div', { class: 'negocio__labels' }, [
-        c.estado ? el('span', { class: 'label label--slate', text: c.estado }) : null,
+        c.estado ? el('span', { class: 'label ' + (desistido ? 'label--ruby' : 'label--slate'), text: textoEstado(c.estado) }) : null,
         el('span', { class: 'label ' + (alDia ? 'label--teal' : 'label--ruby'), text: alDia ? 'Al día' : c.dias_mora + ' días de mora' }),
       ]),
     ]));
@@ -1129,6 +1242,7 @@
       mount(root, [state.segForm, el('div', { class: 'card', id: 'seguimiento-historial' })]);
     }
     renderHistorial();
+    aplicarSeguimientoLlamada();
   }
 
   // ---------- pestañas ----------
@@ -1211,6 +1325,20 @@
 
   // ---------- mensajes ----------
   function onMessage(event) {
+    // Softphone (/telefonia/softphone/, mismo origen que este panel).
+    if (event.origin === window.location.origin && event.data && typeof event.data.type === 'string' &&
+        event.data.type.indexOf('andinasoft-softphone-') === 0) {
+      if (event.data.type === SOFTPHONE_LISTO) enviarSolicitud(event.source);
+      else if (event.data.type === SOFTPHONE_RECIBIDO) state.llamadaPendiente = null;
+      else if (event.data.type === SOFTPHONE_FIN &&
+               String(event.data.conversation_id || '') === String(chatwootIds().conversation_id)) {
+        state.segLlamada = true;
+        if (!state.negocio) state.aviso = 'Elige el negocio para registrar el seguimiento de la llamada.';
+        selectTab('seguimiento');
+      }
+      return;
+    }
+
     // Token entregado por /chatwoot/conectar/ (mismo origen que este panel).
     if (event.origin === window.location.origin && event.data && event.data.type === TOKEN_MESSAGE) {
       if (typeof event.data.token === 'string' && event.data.token) {

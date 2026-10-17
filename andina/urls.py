@@ -34,6 +34,7 @@ urlpatterns = [
 
     path('mcp/', include(mcp_urls)),
     path('chatwoot/', include('chatwoot_panel.urls')),
+    path('telefonia/', include('telefonia.urls')),
     path('admin/', admin.site.urls),
     path('welcome',views.welcome,name='welcome'),
     path('pago_exitoso',views.pago_exitoso,name='pago exitoso'),
