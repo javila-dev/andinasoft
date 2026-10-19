@@ -90,10 +90,16 @@ class VerificarConversacionTests(SimpleTestCase):
 
 
 class DestinosTests(SimpleTestCase):
-    def _destinos(self, fila, telefono='+573505810975', cedula='123'):
-        with patch.object(servicio.clientes, 'objects') as objects:
+    def _destinos(self, fila, telefono='+573505810975', cedula='123', descartados=()):
+        with patch.object(servicio.clientes, 'objects') as objects, \
+                patch.object(servicio, 'descartados', return_value=set(descartados)):
             objects.filter.return_value.values.return_value.first.return_value = fila
-            return servicio.destinos({'telefono': telefono}, cedula)
+            return servicio.destinos({'id': '5', 'telefono': telefono}, cedula)
+
+    def test_no_ofrece_numeros_equivocados(self):
+        lista = self._destinos({'celular1': '3001234567', 'celular2': '3109876543'}, descartados={'3505810975',
+                                                                                                  '3109876543'})
+        self.assertEqual([d['id'] for d in lista], ['celular1'])
 
     def test_chatwoot_y_cliente_sin_repetir(self):
         lista = self._destinos({'celular1': '350 581 0975', 'celular2': '3001234567 / 3109876543',
@@ -133,6 +139,7 @@ class IniciarTests(SimpleTestCase):
         linea = {'id': '2', 'nombre': 'Oficina Medellín', 'numero': '+576041111111'}
         with patch.object(Llamada, 'objects') as objects, \
                 patch.object(servicio, 'verificar_conversacion', return_value=contacto), \
+                patch.object(servicio, 'descartados', return_value=set()), \
                 patch.object(servicio, 'elegir_linea', return_value=linea) as elegir:
             objects.filter.return_value.count.return_value = 0
             servicio.iniciar(_user(), account_id='1', conversation_id='9', contact_id='5', cedula='',
@@ -318,6 +325,73 @@ class WebhooksTests(SimpleTestCase):
         self.assertEqual(finalizar.call_args.args[1], Llamada.CANCELADA)
 
 
+class ResultadoTests(SimpleTestCase):
+    def _registrar(self, llamada=None, user=None, actualiza=1, negocios=({'adj': 'ADJ1'},), **kw):
+        llamada = llamada or _llamada(estado=Llamada.COMPLETADA, duracion=75, cliente_id='123', resultado='',
+                                      chatwoot_contact_id='5')
+        datos = dict(resultado=Llamada.R_NO_CONTESTO, proyecto='Oasis', adj='ADJ1')
+        datos.update(kw)
+        with patch.object(Llamada, 'objects') as objects, \
+                patch.object(servicio, 'puede_ver_proyecto', return_value=True), \
+                patch.object(servicio, 'negocios_de', return_value=list(negocios)), \
+                patch.object(servicio.seguimientos_service, 'registrar',
+                             return_value=(SimpleNamespace(seguimiento_id=55), True)) as registrar, \
+                patch.object(servicio.NumeroDescartado, 'objects') as descartados, \
+                patch.object(servicio, 'nota_privada', return_value=True) as nota:
+            objects.filter.return_value.update.return_value = actualiza
+            resultado = servicio.registrar_resultado(user or _user(), llamada, **datos)
+        return resultado, registrar, descartados, nota
+
+    def test_compromiso_crea_seguimiento_de_llamada(self):
+        manana = (timezone.localdate() + timedelta(days=1)).isoformat()
+        resultado, registrar, _, nota = self._registrar(
+            resultado=Llamada.R_COMPROMISO, comentario='Paga el viernes', compromiso={'fecha': manana, 'valor': '150000'})
+        self.assertEqual(resultado, {'seguimiento': True, 'nota_privada': True, 'descartado': False})
+        proyecto, adj, datos, _ = registrar.call_args.args
+        self.assertEqual((proyecto, adj), ('Oasis', 'ADJ1'))
+        self.assertEqual((datos['tipo'], datos['forma']), ('Cobro', 'LLamada'))
+        self.assertEqual(datos['comentario'], 'Llamada (1:15): Compromiso de pago. Paga el viernes')
+        self.assertEqual((datos['compromiso'], datos['valor_compromiso']), (True, 150000))
+        self.assertEqual(datos['idempotency_key'], 'telefonia-llamada-12')
+        self.assertIn('Compromiso de pago: $150.000', nota.call_args.args[2])
+
+    def test_compromiso_sin_fecha_no_guarda(self):
+        with self.assertRaises(servicio.seguimientos_service.DatosInvalidos):
+            self._registrar(resultado=Llamada.R_COMPROMISO, compromiso={'fecha': '', 'valor': '1000'})
+
+    def test_sin_negocio_solo_nota(self):
+        resultado, registrar, _, nota = self._registrar(proyecto='', adj='')
+        registrar.assert_not_called()
+        self.assertFalse(resultado['seguimiento'])
+        nota.assert_called_once()
+
+    def test_negocio_de_otro_cliente(self):
+        with self.assertRaises(servicio.NoPermitido):
+            self._registrar(negocios=())
+
+    def test_numero_equivocado_lo_descarta_para_el_contacto(self):
+        llamada = _llamada(estado=Llamada.SIN_RESPUESTA, cliente_id='123', resultado='', fuente='chatwoot',
+                           chatwoot_contact_id='5')
+        resultado, registrar, descartados, _ = self._registrar(llamada=llamada, resultado=Llamada.R_NUMERO_EQUIVOCADO)
+        self.assertTrue(resultado['descartado'])
+        kwargs = descartados.create.call_args.kwargs
+        self.assertEqual((kwargs['numero'], kwargs['cliente_id'], kwargs['chatwoot_contact_id']),
+                         ('+573505810975', '', '5'))
+        self.assertEqual(registrar.call_args.args[2]['tipo'], 'Anotacion')
+
+    def test_validaciones(self):
+        casos = [
+            dict(user=_user(pk=8)),
+            dict(llamada=_llamada(estado=Llamada.INICIANDO, resultado='')),
+            dict(llamada=_llamada(estado=Llamada.COMPLETADA, resultado=Llamada.R_OTRO)),
+            dict(resultado='inventado'),
+            dict(actualiza=0),  # otro clic ya lo guardó
+        ]
+        for caso in casos:
+            with self.assertRaises(servicio.NoPermitido, msg=caso):
+                self._registrar(**caso)
+
+
 class UrlsTests(SimpleTestCase):
     def test_webhooks_con_y_sin_barra(self):
         from django.urls import resolve
@@ -348,6 +422,7 @@ class SoftphoneApiTests(SimpleTestCase):
         lineas = [{'id': '1', 'nombre': 'Medellín', 'numero': '+576041111111'},
                   {'id': '2', 'nombre': 'Bogotá', 'numero': '+576011111111'}]
         with patch.object(servicio, 'verificar_conversacion', return_value=contacto), \
+                patch.object(servicio, 'descartados', return_value=set()), \
                 patch.object(servicio, 'lineas', return_value=lineas):
             response = views.api_destinos(request)
         self.assertEqual(response.status_code, 200)

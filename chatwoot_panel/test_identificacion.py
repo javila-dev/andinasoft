@@ -152,7 +152,7 @@ class CarteraPermisoTests(SimpleTestCase):
 class EstadoCuentaViewTests(SimpleTestCase):
     def _get(self, permitido=True, respuesta=None, error=None):
         request = RequestFactory().get('/x', HTTP_AUTHORIZATION='Bearer t')
-        build = patch.object(views, 'build_account_statement_response', return_value=respuesta, side_effect=error)
+        build = patch.object(views, 'estado_cuenta_pdf', return_value=respuesta, side_effect=error)
         with patch.object(auth, 'validar_token', return_value=_token()), patch.object(auth, 'renovar'),                 patch.object(views, 'puede_ver_proyecto', return_value=permitido),                 patch.object(views, 'auditar') as auditar, build as gen:
             return views.api_estado_cuenta(request, 'Oasis', 'ADJ1'), gen, auditar
 
@@ -168,6 +168,16 @@ class EstadoCuentaViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Cache-Control'], 'no-store')
         auditar.assert_called_once()
+
+    def test_usa_la_plantilla_de_detalle_adj_en_todos_los_proyectos(self):
+        for proyecto in ('Casas de Verano', 'Fractal', 'Oasis'):
+            with patch.object(views, 'build_estado_cuenta_context', return_value=({'adj': 'x'}, None)), \
+                    patch.object(views, 'pdf_gen', return_value={'root': 'tmp/x.pdf'}) as gen, \
+                    patch.object(views, 'file_response_from_pdf_root', return_value='pdf') as respuesta:
+                self.assertEqual(views.estado_cuenta_pdf(proyecto, 'ADJ1', None), 'pdf')
+            self.assertEqual(gen.call_args.args[0], 'pdf/statement_of_account.html', proyecto)
+            self.assertEqual(respuesta.call_args.kwargs['filename'],
+                             f"Estado_de_cuenta_ADJ1_{proyecto.replace(' ', '_')}.pdf")
 
     def test_falla_del_generador_responde_502(self):
         response, _, auditar = self._get(error=Exception('pisa'))

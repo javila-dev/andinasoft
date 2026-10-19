@@ -248,6 +248,12 @@ CHATWOOT_PANEL_RATE_LIMIT = int(os.getenv('CHATWOOT_PANEL_RATE_LIMIT', '120'))
 # API de Chatwoot (solo servidor) para guardar la cédula en el contacto. Vacío = no escribe en Chatwoot.
 CHATWOOT_API_URL = os.getenv('CHATWOOT_API_URL', '').strip().rstrip('/')
 CHATWOOT_API_TOKEN = os.getenv('CHATWOOT_API_TOKEN', '').strip()
+# Links de pago Wompi desde el panel. Llaves privadas por comercio: "alias=prv_prod_...;alias2=prv_prod_...".
+# El alias se asigna a los proyectos en Admin → Panel de Chatwoot → Comercios Wompi. prv_test_ = sandbox.
+WOMPI_LLAVES_PRIVADAS = os.getenv('WOMPI_LLAVES_PRIVADAS', '').strip()
+WOMPI_LINK_VIGENCIA_HORAS = int(os.getenv('WOMPI_LINK_VIGENCIA_HORAS', '72'))
+WOMPI_LINK_VALOR_MINIMO = int(os.getenv('WOMPI_LINK_VALOR_MINIMO', '1500'))
+WOMPI_LINK_REDIRECT_URL = os.getenv('WOMPI_LINK_REDIRECT_URL', '').strip()
 
 # ─── Telefonía: llamadas salientes desde el panel de Chatwoot (Twilio) ───────
 # Ver docs/telefonia.md. Sin estos valores el botón Llamar avisa que falta configurar.

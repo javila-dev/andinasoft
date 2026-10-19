@@ -291,9 +291,101 @@
     $('fin-numero').textContent = state.llamada.etiqueta + ' · ' + state.llamada.numero;
     $('fin-estado').textContent = error || (hablada ? 'Llamada terminada' : 'No contestó');
     $('fin-detalle').textContent = 'Consultando el resultado…';
-    $('btn-seguimiento').hidden = !window.opener;
     state.contestada = null;
+    prepararResultado(hablada);
     consultarResultado(state.llamada.id, 0);
+  }
+
+  // ---------- resultado en un clic ----------
+  var money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+
+  function negocio() {
+    return (state.solicitud && state.solicitud.negocio) || null;
+  }
+
+  function prepararResultado(hablada) {
+    var n = negocio();
+    state.resultado = hablada ? '' : 'no_contesto';
+    state.resultadoGuardado = false;
+    $('resultado-form').removeAttribute('aria-disabled');
+    $('resultado-negocio').textContent = n
+      ? 'Se guarda como seguimiento en ' + n.proyecto + ' · ' + (n.inmueble ? n.inmueble + ' · ' : '') + n.adj + '.'
+      : 'No hay un negocio elegido en el panel: quedará en la llamada y en la conversación, no como seguimiento.';
+    $('btn-seguimiento').hidden = !(window.opener && !n);
+    $('resultado-comentario').value = '';
+    $('resultado-fecha').value = '';
+    $('resultado-fecha').min = cfg.hoy || '';
+    $('resultado-valor').value = n && n.vencido > 0 ? money.format(n.vencido) : '';
+    $('resultado-msg').hidden = true;
+    pintarResultado();
+  }
+
+  function pintarResultado() {
+    document.querySelectorAll('.resultado__op').forEach(function (b) {
+      var activo = b.dataset.resultado === state.resultado;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', activo ? 'true' : 'false');
+      b.disabled = state.resultadoGuardado;
+    });
+    $('resultado-compromiso').hidden = state.resultado !== 'compromiso';
+    $('btn-resultado').disabled = !state.resultado || state.resultadoGuardado;
+  }
+
+  function mensajeResultado(tipo, texto) {
+    var msg = $('resultado-msg');
+    msg.className = 'form__msg form__msg--' + tipo;
+    msg.textContent = texto;
+    msg.hidden = false;
+  }
+
+  function guardarResultado(event) {
+    event.preventDefault();
+    if (!state.llamada || !state.resultado || state.resultadoGuardado) return;
+    var n = negocio();
+    var boton = $('btn-resultado');
+    boton.disabled = true;
+    boton.textContent = 'Guardando…';
+    api(cfg.apiLlamada + state.llamada.id + '/resultado/', {
+      resultado: state.resultado,
+      comentario: $('resultado-comentario').value,
+      compromiso: state.resultado === 'compromiso'
+        ? { fecha: $('resultado-fecha').value, valor: $('resultado-valor').value.replace(/\D/g, '') }
+        : null,
+      proyecto: n ? n.proyecto : '',
+      adj: n ? n.adj : '',
+    })
+      .then(function (data) {
+        state.resultadoGuardado = true;
+        $('resultado-form').setAttribute('aria-disabled', 'true');
+        $('btn-seguimiento').hidden = true;
+        var partes = ['Resultado guardado'];
+        if (data.seguimiento) partes.push('como seguimiento');
+        if (data.nota_privada) partes.push('y anotado en la conversación');
+        mensajeResultado('ok', partes.join(' ') + '.' + (data.descartado ? ' El número ya no se ofrecerá para este cliente.' : ''));
+        avisarPanel({ registrado: true, seguimiento: !!data.seguimiento });
+      })
+      .catch(function (err) {
+        mensajeResultado('error', err.message);
+      })
+      .then(function () {
+        boton.textContent = 'Guardar resultado';
+        pintarResultado();
+      });
+  }
+
+  function avisarPanel(extra) {
+    if (!window.opener || !state.llamada) return;
+    try {
+      window.opener.postMessage(Object.assign({
+        type: FIN,
+        conversation_id: state.solicitud && state.solicitud.conversation_id,
+        llamada: state.llamada.id,
+        estado: state.llamada.estado || '',
+        duracion: state.llamada.duracion || 0,
+      }, extra || {}), ORIGEN);
+    } catch (e) {
+      /* el panel se cerró */
+    }
   }
 
   /* Twilio confirma por webhook unos segundos después de colgar. */
@@ -320,15 +412,9 @@
       });
   }
 
+  /* Sin negocio elegido: el agente lo elige en el panel y registra el seguimiento allá. */
   function registrarSeguimiento() {
-    if (!window.opener || !state.llamada) return;
-    window.opener.postMessage({
-      type: FIN,
-      conversation_id: state.solicitud && state.solicitud.conversation_id,
-      llamada: state.llamada.id,
-      estado: state.llamada.estado || '',
-      duracion: state.llamada.duracion || 0,
-    }, ORIGEN);
+    avisarPanel({ abrir: true });
     $('btn-seguimiento').hidden = true;
     $('fin-detalle').textContent = 'Completa el seguimiento en el panel de Chatwoot.';
   }
@@ -345,6 +431,12 @@
       contact_id: String(s.contact_id || ''),
       cedula: String(s.cedula || ''),
       nombre: String(s.nombre || ''),
+      negocio: s.negocio && s.negocio.proyecto && s.negocio.adj ? {
+        proyecto: String(s.negocio.proyecto),
+        adj: String(s.negocio.adj),
+        inmueble: String(s.negocio.inmueble || ''),
+        vencido: Number(s.negocio.vencido) || 0,
+      } : null,
     };
     state.llamada = null;
     state.destinos = [];
@@ -357,6 +449,18 @@
   $('btn-silenciar').addEventListener('click', silenciar);
   $('btn-colgar').addEventListener('click', colgar);
   $('btn-seguimiento').addEventListener('click', registrarSeguimiento);
+  $('resultado-form').addEventListener('submit', guardarResultado);
+  document.querySelectorAll('.resultado__op').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (state.resultadoGuardado) return;
+      state.resultado = b.dataset.resultado;
+      pintarResultado();
+    });
+  });
+  $('resultado-valor').addEventListener('input', function () {
+    var digitos = this.value.replace(/\D/g, '');
+    this.value = digitos ? money.format(Number(digitos)) : '';
+  });
   $('btn-otra').addEventListener('click', function () {
     if (state.solicitud) cargarDestinos();
     else show('esperando');

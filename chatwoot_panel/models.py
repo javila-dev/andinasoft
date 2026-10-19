@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from andina.storage.media_policy import PUBLIC_MEDIA_STORAGE
+
 
 class ChatwootPanelToken(models.Model):
     """Acceso del panel embebido en Chatwoot.
@@ -107,3 +109,72 @@ class ChatwootPanelAudit(models.Model):
 
     def __str__(self):
         return f'{self.created_at:%Y-%m-%d %H:%M} {self.user} {self.accion}'
+
+
+class ComercioWompi(models.Model):
+    """Cuenta (comercio) de Wompi que recauda los pagos de unos proyectos.
+
+    La llave privada no se guarda aquí: va en WOMPI_LLAVES_PRIVADAS (alias=llave) del entorno.
+    """
+
+    nombre = models.CharField(max_length=100)
+    alias = models.SlugField(max_length=40, unique=True, help_text='Nombre de la llave en WOMPI_LLAVES_PRIVADAS.')
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = 'Comercio Wompi'
+        verbose_name_plural = 'Comercios Wompi'
+        ordering = ('nombre',)
+        permissions = (
+            ('enviar_link_pago', 'Puede enviar links de pago Wompi desde el panel de Chatwoot'),
+        )
+
+    def __str__(self):
+        return self.nombre
+
+
+class ProyectoWompi(models.Model):
+    """Qué comercio Wompi cobra cada proyecto (el nombre del proyecto como en `proyectos`)."""
+
+    proyecto = models.CharField(max_length=60, unique=True)
+    comercio = models.ForeignKey(ComercioWompi, on_delete=models.CASCADE, related_name='proyectos')
+    # Wompi lo muestra en la página del link (image_url): tiene que ser una URL pública.
+    logo = models.ImageField(upload_to='wompi_logos', storage=PUBLIC_MEDIA_STORAGE, blank=True,
+                             help_text='Logo del proyecto que ve el cliente en el link de pago.')
+
+    class Meta:
+        verbose_name = 'Proyecto del comercio'
+        verbose_name_plural = 'Proyectos del comercio'
+        ordering = ('proyecto',)
+
+    def __str__(self):
+        return f'{self.proyecto} → {self.comercio}'
+
+
+class LinkPagoWompi(models.Model):
+    """Link de pago creado desde el panel. `link_id` es el que trae WompiMovement.id_link_pago al conciliar."""
+
+    idempotency_key = models.CharField(max_length=64, unique=True)
+    comercio = models.ForeignKey(ComercioWompi, on_delete=models.PROTECT, related_name='links')
+    proyecto = models.CharField(max_length=60)
+    adj = models.CharField(max_length=30)
+    valor = models.PositiveIntegerField(help_text='COP')
+    link_id = models.CharField(max_length=40, blank=True, default='', db_index=True)
+    url = models.URLField(blank=True, default='')
+    vence = models.DateTimeField()
+    enviado = models.BooleanField(default=False, help_text='Se envió como mensaje en la conversación.')
+    chatwoot_account_id = models.CharField(max_length=20, blank=True, default='')
+    chatwoot_conversation_id = models.CharField(max_length=20, blank=True, default='')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, db_constraint=False, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Link de pago Wompi'
+        verbose_name_plural = 'Links de pago Wompi'
+        ordering = ('-created_at',)
+        indexes = [models.Index(fields=('proyecto', 'adj'))]
+
+    def __str__(self):
+        return f'{self.proyecto} {self.adj} ${self.valor:,} ({self.link_id or "sin crear"})'

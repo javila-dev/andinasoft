@@ -1,6 +1,6 @@
 # Telefonía: llamadas salientes desde el panel de Chatwoot (Twilio)
 
-App `telefonia`. El agente pulsa **📞 Llamar** en el panel de Andinasoft dentro de Chatwoot y llama al cliente desde el navegador, con el número de Andinasoft como identificador. Al colgar, la llamada queda como nota privada en la conversación y, si el agente quiere, como seguimiento del negocio.
+App `telefonia`. El agente pulsa **Llamar** (el botón verde redondo) en el panel de Andinasoft dentro de Chatwoot y llama al cliente desde el navegador, con una línea de Andinasoft como identificador. Al colgar, la llamada queda como nota privada en la conversación y el resultado, con un clic, como seguimiento del negocio.
 
 Por ahora solo hay llamadas **salientes** y solo a Colombia (celulares 3XX y fijos 60X).
 
@@ -14,7 +14,29 @@ Por ahora solo hay llamadas **salientes** y solo a Colombia (celulares 3XX y fij
    - Devuelve un token de Twilio que sirve solo para llamadas salientes y dura 10 minutos.
 4. **Twilio → `twilio/voz/`.** Solo marca si la `Llamada` existe, es de ese usuario, sigue en `iniciando`, se pidió hace menos de 2 minutos y no se usó antes. Responde `<Dial callerId=TELEFONIA_CALLER_ID>` al número guardado.
 5. **Twilio → `twilio/estado/`.** Recibe los estados `initiated`, `answered` y `completed` del tramo hacia el cliente, más el estado del tramo del navegador, configurado en la TwiML App. Cierra la llamada **una sola vez** (completada, ocupado, no contestó, cancelada o fallida) y deja la nota privada en la conversación.
-6. **Fin.** El softphone muestra el resultado y ofrece «Registrar seguimiento». El panel abre la pestaña Seguimiento con «Llamada» como forma de contacto.
+6. **Resultado en un clic.** Al colgar, el agente elige: No contestó, Compromiso de pago (fecha y valor), Volver a llamar, Dice que ya pagó, Número equivocado u Otro, con un comentario opcional. `api/llamadas/<id>/resultado/` hace esto **una sola vez por llamada**:
+   - guarda el resultado en la `Llamada`;
+   - crea el seguimiento del negocio elegido en el panel: forma «LLamada», tipo «Cobro» («Anotacion» si el número es equivocado), con el compromiso si lo hay;
+   - deja una nota privada en la conversación.
+
+   El negocio tiene que ser del cliente de la llamada y de un proyecto del usuario. Si en el panel no se eligió negocio, el resultado queda en la llamada y en la nota, y el botón «Completar en el panel» abre la pestaña Seguimiento.
+7. **Número equivocado.** Queda en *Números descartados*, para ese cliente o, si salió de Chatwoot, para ese contacto, y el softphone deja de ofrecerlo. Para volver a ofrecerlo, se borra en el admin.
+
+## Links de pago Wompi (panel, pestaña Cartera)
+
+Botón **«Enviar link de pago»**. Aparece si el usuario tiene el permiso **«Puede enviar links de pago Wompi desde el panel de Chatwoot»** y el proyecto tiene un comercio Wompi configurado. No aparece en negocios desistidos.
+
+- El agente pone el valor (por defecto el vencido; atajos «Vencido» y «Cancelar hoy») y elige **Enviar al cliente** o **Solo crear el link**.
+- El servidor rechaza valores por debajo de `WOMPI_LINK_VALOR_MINIMO` o por encima de lo que el negocio cancela hoy, con las mismas cifras del estado de cuenta.
+- El link es de **un solo pago**, con valor fijo, `sku` = ADJ y vencimiento a `WOMPI_LINK_VIGENCIA_HORAS` (72 h).
+- El mensaje se envía por la API de Chatwoot. En WhatsApp, si pasaron más de 24 h desde el último mensaje del cliente, Chatwoot no lo entrega: el panel lo avisa y ofrece copiar el link o el mensaje.
+- Cada link queda en *Links de pago Wompi* (proyecto, ADJ, valor, agente, conversación). Su `link_id` es el `id_link_pago` que trae `WompiMovement` al conciliar, así se sabe a qué negocio corresponde el pago.
+
+Configuración:
+1. Variable `WOMPI_LLAVES_PRIVADAS="alias1=prv_prod_…;alias2=prv_prod_…"`, una llave privada por comercio Wompi. Con `prv_test_…` se usa el sandbox.
+2. En **Admin → Panel de Chatwoot → Comercios Wompi**, crear cada comercio con su alias y elegir sus proyectos de la lista. A cada proyecto se le puede subir su **logo**: se guarda en el almacenamiento público y va como `image_url` en el link, así el cliente ve el logo del proyecto en la página de pago. Sin S3, la URL se completa con `ANDINA_PUBLIC_BASE_URL`, que tiene que ser `https`; si no, el link sale sin logo.
+3. Dar el permiso a los agentes.
+4. Opcional: `WOMPI_LINK_REDIRECT_URL`, la página a la que vuelve el cliente después de pagar.
 
 Todos los webhooks de Twilio exigen la firma `X-Twilio-Signature`. Twilio firma la URL pública exacta, así que hay que configurar `TELEFONIA_PUBLIC_BASE_URL` (o `ANDINA_PUBLIC_BASE_URL`) con el `https://dominio` que ve Twilio.
 

@@ -82,6 +82,22 @@ def nota_privada(account_id, conversation_id, texto):
         return False
 
 
+def enviar_mensaje(account_id, conversation_id, texto):
+    """Mensaje al cliente en la conversación (no privado). True si Chatwoot lo aceptó.
+
+    En WhatsApp, fuera de la ventana de 24 h Chatwoot lo rechaza o no se entrega (exige plantilla).
+    """
+    if not configurado() or not account_id or not conversation_id:
+        return False
+    try:
+        _request('POST', f'accounts/{int(account_id)}/conversations/{int(conversation_id)}/messages',
+                 json={'content': texto, 'message_type': 'outgoing', 'private': False})
+        return True
+    except Exception:
+        logger.exception('chatwoot_panel: no se pudo enviar el mensaje en %s/%s', account_id, conversation_id)
+        return False
+
+
 def borrar_cedula_de_contacto(account_id, contact_id):
     if not configurado():
         return False

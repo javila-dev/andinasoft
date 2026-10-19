@@ -9,6 +9,7 @@ urlpatterns = [
     path('api/destinos/', views.api_destinos, name='api_destinos'),
     path('api/llamar/', views.api_llamar, name='api_llamar'),
     path('api/llamadas/<int:pk>/', views.api_llamada, name='api_llamada'),
+    path('api/llamadas/<int:pk>/resultado/', views.api_resultado, name='api_resultado'),
     path('twilio/voz/', views.twilio_voz, name='twilio_voz'),
     path('twilio/estado/', views.twilio_estado, name='twilio_estado'),
     path('twilio/grabacion/', views.twilio_grabacion, name='twilio_grabacion'),

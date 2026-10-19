@@ -162,7 +162,33 @@ def api_llamada(request, pk):
         'finalizada': llamada.finalizada,
         'duracion': llamada.duracion,
         'nota_privada': llamada.nota_privada,
+        'resultado': llamada.resultado,
     })
+
+
+@require_POST
+@_api
+def api_resultado(request, pk):
+    """Resultado de la llamada en un clic: seguimiento del negocio y nota en Chatwoot."""
+    llamada = Llamada.objects.select_related('user').filter(pk=pk, user=request.user).first()
+    if llamada is None:
+        return JsonResponse({'detail': 'Llamada no encontrada.'}, status=404)
+    body = _json_body(request)
+    compromiso = body.get('compromiso') if isinstance(body.get('compromiso'), dict) else {}
+    try:
+        resultado = servicio.registrar_resultado(
+            request.user, llamada,
+            resultado=_texto(body.get('resultado'), 20),
+            comentario=_texto(body.get('comentario'), 400),
+            compromiso={'fecha': _texto(compromiso.get('fecha'), 10), 'valor': _texto(compromiso.get('valor'), 15)},
+            proyecto=_texto(body.get('proyecto'), 60),
+            adj=_texto(body.get('adj'), 30),
+        )
+    except servicio.NoPermitido as exc:
+        return _error(exc)
+    except servicio.seguimientos_service.DatosInvalidos as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    return JsonResponse(resultado, status=201)
 
 
 # ---------- webhooks de Twilio ----------

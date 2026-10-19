@@ -113,3 +113,57 @@
   background: rgb(var(--amber-3));
   color: rgb(var(--amber-11));
 }
+
+/* Resultado de la llamada (un clic) */
+.resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(var(--border-weak));
+}
+
+.resultado__titulo {
+  margin: 0;
+  font-weight: 600;
+  color: rgb(var(--slate-12));
+}
+
+.resultado__opciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.resultado__op {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid rgb(var(--border-strong));
+  border-radius: var(--radius-sm);
+  background: rgb(var(--solid-1));
+  color: rgb(var(--slate-12));
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.resultado__op:hover {
+  background: rgb(var(--slate-2));
+}
+
+.resultado__op[aria-checked="true"] {
+  border-color: rgb(var(--blue-9));
+  background: rgb(var(--blue-3));
+  color: rgb(var(--blue-11));
+  font-weight: 500;
+}
+
+.resultado__op:focus-visible {
+  outline: 2px solid rgb(var(--blue-9));
+  outline-offset: 2px;
+}
+
+.resultado[aria-disabled="true"] .resultado__op {
+  cursor: default;
+  opacity: 0.6;
+}

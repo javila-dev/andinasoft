@@ -53,6 +53,22 @@ class Llamada(models.Model):
     )
     FINALES = {COMPLETADA, OCUPADO, SIN_RESPUESTA, FALLIDA, CANCELADA}
 
+    # Resultado que marca el agente al colgar (un clic).
+    R_NO_CONTESTO = 'no_contesto'
+    R_COMPROMISO = 'compromiso'
+    R_VOLVER_A_LLAMAR = 'volver_a_llamar'
+    R_YA_PAGO = 'ya_pago'
+    R_NUMERO_EQUIVOCADO = 'numero_equivocado'
+    R_OTRO = 'otro'
+    RESULTADOS = (
+        (R_NO_CONTESTO, 'No contestó'),
+        (R_COMPROMISO, 'Compromiso de pago'),
+        (R_VOLVER_A_LLAMAR, 'Volver a llamar'),
+        (R_YA_PAGO, 'Dice que ya pagó'),
+        (R_NUMERO_EQUIVOCADO, 'Número equivocado'),
+        (R_OTRO, 'Otro'),
+    )
+
     # auth_user es MyISAM: sin constraint en la BD.
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='llamadas', db_constraint=False,
@@ -79,6 +95,11 @@ class Llamada(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     contestada_at = models.DateTimeField(null=True, blank=True)
     finalizada_at = models.DateTimeField(null=True, blank=True)
+    resultado = models.CharField(max_length=20, choices=RESULTADOS, blank=True, default='', db_index=True)
+    resultado_comentario = models.CharField(max_length=500, blank=True, default='')
+    proyecto = models.CharField(max_length=60, blank=True, default='', help_text='Negocio elegido en el panel.')
+    adj = models.CharField(max_length=30, blank=True, default='')
+    seguimiento_id = models.IntegerField(null=True, blank=True, help_text='Seguimiento creado con el resultado.')
 
     class Meta:
         verbose_name = 'Llamada'
@@ -94,3 +115,24 @@ class Llamada(models.Model):
     @property
     def finalizada(self):
         return self.estado in self.FINALES
+
+
+class NumeroDescartado(models.Model):
+    """Número que un agente marcó como equivocado: el softphone deja de ofrecerlo para ese cliente o contacto."""
+
+    numero = models.CharField(max_length=20, db_index=True, help_text='E.164 (+57…).')
+    cliente_id = models.CharField(max_length=255, blank=True, default='', db_index=True)
+    chatwoot_contact_id = models.CharField(max_length=20, blank=True, default='')
+    llamada = models.ForeignKey(Llamada, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, db_constraint=False, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Número descartado'
+        verbose_name_plural = 'Números descartados'
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.numero} ({self.cliente_id or "contacto " + self.chatwoot_contact_id})'

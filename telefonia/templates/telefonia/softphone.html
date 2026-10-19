@@ -12,7 +12,8 @@
   data-csrf="{{ csrf_token }}"
   data-api-destinos="{% url 'telefonia:api_destinos' %}"
   data-api-llamar="{% url 'telefonia:api_llamar' %}"
-  data-api-llamada="/telefonia/api/llamadas/">
+  data-api-llamada="/telefonia/api/llamadas/"
+  data-hoy="{% now 'Y-m-d' %}">
   <main class="app">
     {% if not permitido %}
       <section class="screen">
@@ -81,7 +82,31 @@
           </header>
           <p class="phone__status" id="fin-estado" role="status" aria-live="polite">Llamada terminada</p>
           <p class="muted phone__note" id="fin-detalle"></p>
-          <button type="button" class="btn btn--solid phone__main" id="btn-seguimiento" hidden>Registrar seguimiento</button>
+
+          <form class="resultado" id="resultado-form" novalidate>
+            <p class="resultado__titulo">¿Cómo te fue?</p>
+            <p class="muted phone__note" id="resultado-negocio"></p>
+            <div class="resultado__opciones" id="resultado-opciones" role="radiogroup" aria-label="Resultado de la llamada">
+              <button type="button" class="resultado__op" data-resultado="no_contesto">No contestó</button>
+              <button type="button" class="resultado__op" data-resultado="compromiso">Compromiso de pago</button>
+              <button type="button" class="resultado__op" data-resultado="volver_a_llamar">Volver a llamar</button>
+              <button type="button" class="resultado__op" data-resultado="ya_pago">Dice que ya pagó</button>
+              <button type="button" class="resultado__op" data-resultado="numero_equivocado">Número equivocado</button>
+              <button type="button" class="resultado__op" data-resultado="otro">Otro</button>
+            </div>
+            <div class="form__row" id="resultado-compromiso" hidden>
+              <label class="field"><span class="field__label">Fecha</span><input class="input" type="date" id="resultado-fecha"></label>
+              <label class="field"><span class="field__label">Valor</span><input class="input" type="text" id="resultado-valor" inputmode="numeric" autocomplete="off" placeholder="$ 0"></label>
+            </div>
+            <label class="field">
+              <span class="field__label">Comentario (opcional)</span>
+              <textarea class="input input--area" id="resultado-comentario" rows="2" maxlength="400" placeholder="¿Qué dijo el cliente?"></textarea>
+            </label>
+            <p class="form__msg" id="resultado-msg" role="status" hidden></p>
+            <button type="submit" class="btn btn--solid phone__main" id="btn-resultado" disabled>Guardar resultado</button>
+          </form>
+
+          <button type="button" class="btn btn--ghost phone__main" id="btn-seguimiento" hidden>Completar en el panel</button>
           <button type="button" class="btn btn--ghost phone__main" id="btn-otra">Llamar otra vez</button>
         </div>
       </section>

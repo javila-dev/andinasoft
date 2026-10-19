@@ -16,14 +16,18 @@ from andinasoft.handlers_functions import abrir_documento_contrato
 from andinasoft.promesas_service import resumen_promesa
 from andinasoft.servicio_cliente_service import url_ficha
 from andinasoft.shared_models import documentos_contratos
-from chatwoot_panel import seguimientos_service
+from andinasoft.utilities import file_response_from_pdf_root, pdf_gen
+from chatwoot_panel import pagos_wompi, seguimientos_service
 from chatwoot_panel.auth import auditar, emitir_token, panel_api, puede_usar_panel, revocar
 from chatwoot_panel.chatwoot_api import borrar_cedula_de_contacto, guardar_cedula_en_contacto, nota_privada
 from chatwoot_panel.identificacion import (
     buscar_manual, enmascarar, puede_ver_proyecto, resolver_cliente, resolver_contexto,
 )
 from chatwoot_panel.models import ChatwootContactLink
-from client_portal.services.documents import build_account_statement_response
+
+# Misma plantilla que el botón «Estado de Cuenta» de detalle_adj (andinasoft.views.detalle_adjudicacion).
+# No se usa el generador del portal de clientes: ese cambia de plantilla en Fractal y Casas de Verano.
+PLANTILLA_ESTADO_CUENTA = 'pdf/statement_of_account.html'
 
 logger = logging.getLogger(__name__)
 
@@ -266,17 +270,60 @@ def api_cartera(request, proyecto, adj):
             'valor': _dinero(ultimo[0]['valor']),
             'forma_pago': ultimo[0]['formapago'] or '',
         } if ultimo else None,
+        # Botón «Enviar link de pago»: comercio Wompi configurado para el proyecto y permiso del usuario.
+        'link_pago': pagos_wompi.puede_enviar(request.user) and pagos_wompi.disponible(proyecto),
     })
+
+
+@require_POST
+@panel_api
+def api_link_pago(request, proyecto, adj):
+    """Crea un link de pago Wompi de un solo uso y, si se pide, lo envía al cliente en la conversación."""
+    body = _json_body(request)
+    try:
+        link, mensaje, enviado = pagos_wompi.crear_link(
+            request.user, proyecto, adj,
+            valor=_texto(body.get('valor'), 15),
+            account_id=_texto(body.get('account_id'), 20),
+            conversation_id=_texto(body.get('conversation_id'), 20),
+            idempotency_key=_texto(body.get('idempotency_key'), 64),
+            enviar=bool(body.get('enviar')),
+        )
+    except pagos_wompi.LinkError as exc:
+        return JsonResponse({'detail': str(exc)}, status=exc.status)
+    auditar(request, 'link_pago', proyecto=proyecto, adj=adj, chatwoot_account_id=link.chatwoot_account_id,
+            chatwoot_conversation_id=link.chatwoot_conversation_id,
+            detalle=f'{link.link_id} ${link.valor} {"enviado" if enviado else "sin enviar"}')
+    return JsonResponse({
+        'url': link.url,
+        'valor': link.valor,
+        'vence': link.vence.isoformat(),
+        'enviado': enviado,
+        'mensaje': mensaje,
+        'sin_logo': getattr(link, 'sin_logo', False),
+    }, status=201)
+
+
+def estado_cuenta_pdf(proyecto, adj, user):
+    """El PDF tal como lo genera detalle_adj: mismo contexto, misma plantilla, mismo generador."""
+    context, error = build_estado_cuenta_context(proyecto, adj, user)
+    if error or not context:
+        return None
+    filename = f'Estado_de_cuenta_{adj}_{proyecto}.pdf'
+    ruta = pdf_gen(PLANTILLA_ESTADO_CUENTA, context, filename).get('root')
+    if not ruta:
+        return None
+    return file_response_from_pdf_root(ruta, filename=filename.replace(' ', '_'))
 
 
 @require_GET
 @panel_api
 def api_estado_cuenta(request, proyecto, adj):
-    """PDF del estado de cuenta: mismo generador y plantillas que el portal de clientes."""
+    """PDF del estado de cuenta, idéntico al del botón de detalle_adj."""
     if not puede_ver_proyecto(request.user, proyecto):
         return _sin_permiso_proyecto()
     try:
-        response = build_account_statement_response(proyecto, adj, actor_label=request.user)
+        response = estado_cuenta_pdf(proyecto, adj, request.user)
     except Exception:
         logger.exception('chatwoot_panel: no se pudo generar el estado de cuenta %s %s', proyecto, adj)
         response = None

@@ -9,13 +9,15 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from andinasoft.models import clientes
+from chatwoot_panel import seguimientos_service
 from chatwoot_panel.chatwoot_api import nota_privada, obtener_conversacion
+from chatwoot_panel.identificacion import negocios_de, puede_ver_proyecto
 from telefonia import numeros
-from telefonia.models import LineaSaliente, Llamada
+from telefonia.models import LineaSaliente, Llamada, NumeroDescartado
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +82,19 @@ def verificar_conversacion(account_id, conversation_id, contact_id=''):
     }
 
 
+def descartados(contacto, cedula=''):
+    """Números (10 dígitos) marcados como equivocados para este cliente o este contacto."""
+    filtro = Q(chatwoot_contact_id=contacto.get('id')) if contacto.get('id') else Q(pk__in=[])
+    if cedula:
+        filtro |= Q(cliente_id=cedula)
+    return {n[-10:] for n in NumeroDescartado.objects.filter(filtro).values_list('numero', flat=True)}
+
+
 def destinos(contacto, cedula=''):
-    """Números para llamar: [{'id', 'etiqueta', 'numero' (10 dígitos)}], sin repetir números."""
+    """Números para llamar: [{'id', 'etiqueta', 'numero' (10 dígitos)}], sin repetir ni equivocados."""
     lista = []
-    vistos = set()
+    cedula = str(cedula or '').strip()
+    vistos = descartados(contacto, cedula)
 
     def agregar(id_, etiqueta, diez):
         if diez in vistos:
@@ -94,7 +105,6 @@ def destinos(contacto, cedula=''):
     for diez in numeros.numeros_en(contacto.get('telefono')):
         agregar(FUENTE_CHATWOOT, 'Número de la conversación', diez)
 
-    cedula = str(cedula or '').strip()
     if cedula:
         fila = clientes.objects.filter(pk=cedula).values(*numeros.CAMPOS).first()
         for campo in numeros.CAMPOS if fila else ():
@@ -217,3 +227,107 @@ def anotar(llamada):
         return True
     Llamada.objects.filter(pk=llamada.pk).update(nota_privada=False)
     return False
+
+
+# ---------- resultado de la llamada (un clic al colgar) ----------
+
+ETIQUETA_RESULTADO = dict(Llamada.RESULTADOS)
+TIPO_POR_RESULTADO = {Llamada.R_NUMERO_EQUIVOCADO: 'Anotacion'}  # el resto: 'Cobro'
+
+
+def _forma_llamada():
+    """Valor de forma_contacto para llamadas (en form_seguimiento es 'LLamada')."""
+    return next((f for f in seguimientos_service.FORMAS if f.lower() == 'llamada'), seguimientos_service.FORMAS[0])
+
+
+def comentario_resultado(llamada, resultado, comentario=''):
+    partes = [f'Llamada ({_duracion(llamada.duracion)})' if llamada.estado == Llamada.COMPLETADA else 'Llamada',
+              ETIQUETA_RESULTADO[resultado]]
+    texto = ': '.join(partes) + '.'
+    comentario = ' '.join(str(comentario or '').split())
+    if comentario:
+        texto += ' ' + comentario
+    return texto[:seguimientos_service.MAX_COMENTARIO]
+
+
+def _negocio_del_cliente(user, llamada, proyecto, adj):
+    """El negocio tiene que ser del cliente de la llamada y de un proyecto del usuario."""
+    if not proyecto or not adj:
+        return False
+    if not llamada.cliente_id:
+        raise NoPermitido('La llamada no tiene un cliente identificado: registra el seguimiento desde el panel.')
+    if not puede_ver_proyecto(user, proyecto):
+        raise NoPermitido('No tienes acceso a ese proyecto en Andinasoft.', status=403)
+    if not any(n['adj'] == adj for n in negocios_de([llamada.cliente_id], [proyecto])):
+        raise NoPermitido('Ese negocio no es del cliente de la llamada.')
+    return True
+
+
+def registrar_resultado(user, llamada, *, resultado, comentario='', compromiso=None, proyecto='', adj=''):
+    """Guarda el resultado, el seguimiento del negocio (si hay) y la nota en Chatwoot. Una sola vez.
+
+    compromiso: {'fecha': 'AAAA-MM-DD', 'valor': '150000'} cuando resultado es compromiso de pago.
+    Devuelve {'seguimiento': bool, 'nota_privada': bool, 'descartado': bool}.
+    """
+    if llamada.user_id != user.pk:
+        raise NoPermitido('Esa llamada no es tuya.', status=403)
+    if resultado not in ETIQUETA_RESULTADO:
+        raise NoPermitido('Elige el resultado de la llamada.')
+    if llamada.estado == Llamada.INICIANDO:
+        raise NoPermitido('La llamada no llegó a salir.')
+    if llamada.resultado:
+        raise NoPermitido('Ya registraste el resultado de esta llamada.', status=409)
+
+    proyecto, adj = str(proyecto or '').strip()[:60], str(adj or '').strip()[:30]
+    con_negocio = _negocio_del_cliente(user, llamada, proyecto, adj)
+    compromiso = compromiso or {}
+    es_compromiso = resultado == Llamada.R_COMPROMISO
+    datos = seguimientos_service.validar({
+        'tipo': TIPO_POR_RESULTADO.get(resultado, 'Cobro'),
+        'forma': _forma_llamada(),
+        'comentario': comentario_resultado(llamada, resultado, comentario),
+        'compromiso': es_compromiso,
+        'fecha_compromiso': compromiso.get('fecha') if es_compromiso else '',
+        'valor_compromiso': compromiso.get('valor') if es_compromiso else '',
+        'idempotency_key': f'telefonia-llamada-{llamada.pk}',
+    })
+
+    # Reserva el resultado primero: si dos clics llegan juntos, solo uno sigue.
+    if not Llamada.objects.filter(pk=llamada.pk, resultado='').update(
+            resultado=resultado, resultado_comentario=datos['comentario'], proyecto=proyecto, adj=adj):
+        raise NoPermitido('Ya registraste el resultado de esta llamada.', status=409)
+    llamada.resultado, llamada.proyecto, llamada.adj = resultado, proyecto, adj
+
+    seguimiento = False
+    if con_negocio:
+        try:
+            ref, _ = seguimientos_service.registrar(
+                proyecto, adj, datos, user,
+                account_id=llamada.chatwoot_account_id, conversation_id=llamada.chatwoot_conversation_id,
+            )
+        except seguimientos_service.NoDisponible:
+            ref = None
+        if ref is not None:
+            seguimiento = True
+            Llamada.objects.filter(pk=llamada.pk).update(seguimiento_id=ref.seguimiento_id)
+
+    descartado = False
+    if resultado == Llamada.R_NUMERO_EQUIVOCADO:
+        desde_chatwoot = llamada.fuente == FUENTE_CHATWOOT
+        NumeroDescartado.objects.create(
+            numero=llamada.numero, llamada=llamada, user=user,
+            cliente_id='' if desde_chatwoot else llamada.cliente_id,
+            chatwoot_contact_id=llamada.chatwoot_contact_id if desde_chatwoot else '',
+        )
+        descartado = True
+
+    texto = f'📌 Resultado de la llamada por {nombre_usuario(user)}: {datos["comentario"]}'
+    if datos['compromiso']:
+        texto += (f"\nCompromiso de pago: ${datos['valor_compromiso']:,} para el "
+                  f"{datos['fecha_compromiso']:%d/%m/%Y}").replace(',', '.')
+    if con_negocio:
+        texto += f'\nSeguimiento en {proyecto} · {adj}' + ('' if seguimiento else ' (no se pudo registrar)')
+    if descartado:
+        texto += '\nEl número quedó descartado para este cliente.'
+    nota = nota_privada(llamada.chatwoot_account_id, llamada.chatwoot_conversation_id, texto)
+    return {'seguimiento': seguimiento, 'nota_privada': nota, 'descartado': descartado}

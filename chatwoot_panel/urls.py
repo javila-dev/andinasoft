@@ -18,4 +18,5 @@ urlpatterns = [
     path('api/negocio/<str:proyecto>/<str:adj>/documentos/', views.api_documentos, name='api_documentos'),
     path('api/negocio/<str:proyecto>/<str:adj>/documentos/<int:doc_id>/', views.api_documento, name='api_documento'),
     path('api/negocio/<str:proyecto>/<str:adj>/seguimientos/', views.api_seguimientos, name='api_seguimientos'),
+    path('api/negocio/<str:proyecto>/<str:adj>/link-pago/', views.api_link_pago, name='api_link_pago'),
 ]

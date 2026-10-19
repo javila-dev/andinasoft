@@ -59,6 +59,7 @@
     segForm: null, // nodo del formulario, se conserva entre renders para no perder lo escrito
     tab: 'cartera',
     aviso: '',
+    linkPagoNode: null, // formulario del link de pago Wompi (se conserva entre renders)
     llamadaPendiente: null, // solicitud para el softphone hasta que la ventana la reciba
     segLlamada: false, // al volver de una llamada: preseleccionar «Llamada» en el seguimiento
   };
@@ -452,6 +453,7 @@
       contact_id: ids.contact_id,
       cedula: cliente ? cliente.cedula : '',
       nombre: (cliente && cliente.nombre) || contact.name || '',
+      negocio: cliente ? negocioParaLlamada() : null, // el resultado se guarda como seguimiento de este negocio
     };
     // Sin URL para no recargar una ventana que ya existe (cortaría la llamada en curso).
     var ventana = window.open('', 'andinasoft-softphone', 'width=400,height=640');
@@ -470,6 +472,22 @@
     if (nueva) ventana.location.href = cfg.softphoneUrl; // avisará que está lista y ahí recibe la solicitud
     else enviarSolicitud(ventana);
     ventana.focus();
+  }
+
+  function negocioParaLlamada() {
+    var n = state.negocio;
+    if (!n) return null;
+    var info = ((state.ident && state.ident.negocios) || []).filter(function (x) {
+      return x.proyecto === n.proyecto && x.adj === n.adj;
+    })[0] || {};
+    var c = state.cartera;
+    var cartera = c && c.proyecto === n.proyecto && c.adj === n.adj ? c : null;
+    return {
+      proyecto: n.proyecto,
+      adj: n.adj,
+      inmueble: info.inmueble || '',
+      vencido: cartera ? Number(cartera.total_vencido) || 0 : 0,
+    };
   }
 
   function enviarSolicitud(ventana) {
@@ -602,6 +620,7 @@
     state.segError = '';
     state.segMsg = null;
     state.segForm = null;
+    state.linkPagoNode = null;
     if (nuevo) cargarCartera();
   }
 
@@ -830,11 +849,103 @@
     var botonPdf = el('button', { type: 'button', class: 'btn btn--solid btn--sm', onclick: function () {
       descargarEstadoCuenta(state.negocio, botonPdf);
     } }, 'Descargar estado de cuenta');
+    var botonLink = c.link_pago && !desistido && !state.linkPagoNode
+      ? el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: function () {
+        state.linkPagoNode = construirLinkPago(c);
+        render();
+      } }, 'Enviar link de pago')
+      : null;
+    if (state.linkPagoNode) nodes.push(state.linkPagoNode);
     nodes.push(el('div', { class: 'footer-row' }, [
       el('span', { class: 'muted', text: 'Corte ' + fmtDate(c.fecha_corte) + ' · mismas cifras del estado de cuenta' }),
-      el('div', { class: 'footer-row__actions' }, [botonCopiar, botonPdf]),
+      el('div', { class: 'footer-row__actions' }, [botonCopiar, botonLink, botonPdf]),
     ]));
     mount(root, nodes);
+  }
+
+  /* Link de pago Wompi: el nodo se conserva entre renders para no perder lo escrito. */
+  function construirLinkPago(c) {
+    var negocio = state.negocio;
+    var key = nuevaLlave();
+    var sugerido = Number(c.total_vencido) > 0 ? Number(c.total_vencido) : '';
+    var valor = el('input', {
+      class: 'input', type: 'text', id: 'link-valor', inputmode: 'numeric', autocomplete: 'off', placeholder: '$ 0',
+      value: sugerido ? fmtMoney(sugerido) : '',
+    });
+    valor.addEventListener('input', function () {
+      var digitos = valor.value.replace(/\D/g, '');
+      valor.value = digitos ? fmtMoney(digitos) : '';
+    });
+    var atajo = function (texto, monto) {
+      return Number(monto) > 0 ? el('button', { type: 'button', class: 'chip chip--sm', onclick: function () {
+        valor.value = fmtMoney(monto);
+      } }, texto + ' ' + fmtMoney(monto)) : null;
+    };
+    var mensaje = el('p', { class: 'form__msg', role: 'status', hidden: true });
+    var resultado = el('div', { class: 'link-pago__resultado', hidden: true });
+    var enviar = el('button', { type: 'button', class: 'btn btn--solid btn--sm' }, 'Enviar al cliente');
+    var soloCrear = el('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Solo crear el link');
+    var cerrar = el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: function () {
+      state.linkPagoNode = null;
+      render();
+    } }, 'Cerrar');
+
+    var crear = function (alCliente) {
+      var ids = chatwootIds();
+      var monto = valor.value.replace(/\D/g, '');
+      enviar.disabled = soloCrear.disabled = valor.disabled = true;
+      mensaje.hidden = true;
+      (alCliente ? enviar : soloCrear).textContent = 'Creando…';
+      api(negocioUrl(negocio, 'link-pago'), { method: 'POST', body: {
+        valor: monto, enviar: alCliente, idempotency_key: key,
+        account_id: ids.account_id, conversation_id: ids.conversation_id,
+      } })
+        .then(function (data) {
+          enviar.hidden = soloCrear.hidden = true;
+          var url = el('a', { class: 'link', href: data.url, target: '_blank', rel: 'noopener', text: data.url });
+          var copiarLink = el('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Copiar link');
+          copiarLink.addEventListener('click', function () { copiar(data.url, copiarLink); });
+          var copiarMensaje = el('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Copiar mensaje');
+          copiarMensaje.addEventListener('click', function () { copiar(data.mensaje || data.url, copiarMensaje); });
+          mount(resultado, [
+            el('div', { class: 'link-pago__url' }, url),
+            el('div', { class: 'footer-row__actions' }, [copiarLink, data.mensaje ? copiarMensaje : null]),
+          ]);
+          resultado.hidden = false;
+          mensaje.className = 'form__msg ' + (data.enviado || !alCliente ? 'form__msg--ok' : 'form__msg--error');
+          mensaje.textContent = data.enviado
+            ? 'Link de ' + fmtMoney(data.valor) + ' enviado al cliente en la conversación.'
+            : alCliente
+              ? 'El link se creó pero Chatwoot no pudo enviarlo. Si pasaron más de 24 h desde el último mensaje del cliente, WhatsApp exige una plantilla: copia el mensaje y envíalo por otro medio.'
+              : 'Link de ' + fmtMoney(data.valor) + ' creado. Cópialo para enviarlo.';
+          if (data.sin_logo) mensaje.textContent += ' Wompi no aceptó el logo del proyecto, así que el link salió sin logo.';
+          mensaje.hidden = false;
+        })
+        .catch(function (err) {
+          if (err.message === 'no-autorizado') return;
+          enviar.disabled = soloCrear.disabled = valor.disabled = false;
+          mensaje.className = 'form__msg form__msg--error';
+          mensaje.textContent = err.message;
+          mensaje.hidden = false;
+        })
+        .then(function () {
+          enviar.textContent = 'Enviar al cliente';
+          soloCrear.textContent = 'Solo crear el link';
+        });
+    };
+    enviar.addEventListener('click', function () { crear(true); });
+    soloCrear.addEventListener('click', function () { crear(false); });
+
+    return el('div', { class: 'card form link-pago' }, [
+      el('div', { class: 'card__header' }, el('h3', { class: 'card__title', text: 'Link de pago Wompi' })),
+      el('div', { class: 'form__body' }, [
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: 'Valor a cobrar' }), valor]),
+        el('div', { class: 'chips' }, [atajo('Vencido', c.total_vencido), atajo('Cancelar hoy', c.pago_total_hoy)]),
+        el('p', { class: 'field__hint', text: 'Un solo pago, valor fijo y vence en unos días. El cliente paga en la página de Wompi.' }),
+        resultado,
+        el('div', { class: 'form__actions' }, [mensaje, cerrar, soloCrear, enviar]),
+      ]),
+    ]);
   }
 
   function tabla(headers, rows, numeric) {
@@ -1332,9 +1443,19 @@
       else if (event.data.type === SOFTPHONE_RECIBIDO) state.llamadaPendiente = null;
       else if (event.data.type === SOFTPHONE_FIN &&
                String(event.data.conversation_id || '') === String(chatwootIds().conversation_id)) {
-        state.segLlamada = true;
-        if (!state.negocio) state.aviso = 'Elige el negocio para registrar el seguimiento de la llamada.';
-        selectTab('seguimiento');
+        if (event.data.registrado) {
+          // El softphone ya guardó el resultado: recargar el historial de seguimientos.
+          if (event.data.seguimiento) {
+            state.seg = null;
+            state.segForm = null;
+          }
+          state.aviso = 'Resultado de la llamada guardado' + (event.data.seguimiento ? ' como seguimiento.' : '.');
+          render();
+        } else if (event.data.abrir) {
+          state.segLlamada = true;
+          if (!state.negocio) state.aviso = 'Elige el negocio para registrar el seguimiento de la llamada.';
+          selectTab('seguimiento');
+        }
       }
       return;
     }

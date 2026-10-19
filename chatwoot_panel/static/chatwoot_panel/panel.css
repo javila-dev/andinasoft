@@ -644,6 +644,20 @@ code {
   outline-offset: 2px;
 }
 
+.chip--sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* Link de pago Wompi */
+.link-pago__url {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgb(var(--slate-3));
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .chip__top {
   display: flex;
   align-items: center;
