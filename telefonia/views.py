@@ -114,14 +114,10 @@ def api_destinos(request):
         lista = servicio.destinos(contacto, ids['cedula'])
     except servicio.NoPermitido as exc:
         return _error(exc)
-    lineas = servicio.lineas()
     return JsonResponse({
         'contacto': contacto['nombre'],
         'destinos': [{'id': d['id'], 'etiqueta': d['etiqueta'], 'numero': numeros.enmascarar(d['numero'])}
                      for d in lista],
-        # Los números de la empresa no se enmascaran: el agente necesita saber desde cuál llama.
-        'lineas': lineas,
-        'linea_auto': len(lineas) > 1,
         'grabar': twilio_service.grabar(),
     })
 
@@ -134,9 +130,9 @@ def api_llamar(request):
         return JsonResponse({'detail': 'La telefonía no está configurada. Avisa a sistemas.'}, status=503)
     body = _json_body(request)
     try:
+        # La línea de salida la elige el servidor (rotación automática), nunca el navegador.
         llamada, destino = servicio.iniciar(
-            request.user, destino_id=_texto(body.get('destino'), 30), linea_id=_texto(body.get('linea'), 20),
-            ip=client_ip(request), **_ids(body),
+            request.user, destino_id=_texto(body.get('destino'), 30), ip=client_ip(request), **_ids(body),
         )
     except servicio.NoPermitido as exc:
         return _error(exc)

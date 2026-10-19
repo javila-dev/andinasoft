@@ -85,8 +85,7 @@ Permiso: **un solo permiso para todo el panel**, «Puede usar el panel de Chatwo
 
 Las líneas se configuran en **Admin → Telefonía → Líneas salientes**, cada una con nombre, número E.164, si está activa y su orden. Cada número tiene que estar **comprado o verificado en Twilio**; si no, Twilio rechaza la llamada y queda como fallida.
 
-- En el softphone, **«Llamar desde»** ofrece **Automático (rota entre las líneas)** y cada línea activa. La elección se recuerda en el navegador del agente.
-- En automático se usa la línea activa que lleva más tiempo sin usarse, así las llamadas se reparten.
+- **La línea siempre es automática**: el agente no la elige. El servidor usa la línea activa que lleva más tiempo sin usarse, así las llamadas se reparten entre todas. El softphone muestra por cuál salió.
 - Cada llamada guarda el número y el nombre de la línea que vio el cliente, y la nota en Chatwoot dice «desde <línea>».
 - Si no hay ninguna línea activa, se usa `TELEFONIA_CALLER_ID`.
 

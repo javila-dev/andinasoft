@@ -151,8 +151,8 @@ class IniciarTests(SimpleTestCase):
                 patch.object(servicio, 'elegir_linea', return_value=linea) as elegir:
             objects.filter.return_value.count.return_value = 0
             servicio.iniciar(_user(), account_id='1', conversation_id='9', contact_id='5', cedula='',
-                             destino_id='chatwoot', linea_id='2', ip='1.2.3.4')
-        elegir.assert_called_once_with('2')
+                             destino_id='chatwoot', ip='1.2.3.4')
+        elegir.assert_called_once_with()  # rotación automática: el agente no elige la línea
         kwargs = objects.create.call_args.kwargs
         self.assertEqual(kwargs['numero'], '+573505810975')
         self.assertEqual(kwargs['fuente'], 'chatwoot')
@@ -161,42 +161,29 @@ class IniciarTests(SimpleTestCase):
 
 
 class ElegirLineaTests(SimpleTestCase):
-    def _elegir(self, linea_id, encontrada=None, hay_activas=False):
+    def _elegir(self, encontrada=None):
         with patch.object(servicio.transaction, 'atomic', MagicMock()), \
                 patch.object(servicio.LineaSaliente, 'objects') as objects:
             activas = objects.select_for_update.return_value.filter.return_value
             activas.order_by.return_value.first.return_value = encontrada
-            activas.filter.return_value.first.return_value = encontrada
-            objects.filter.return_value.exists.return_value = hay_activas
-            return servicio.elegir_linea(linea_id), activas, objects
+            return servicio.elegir_linea(), activas, objects
 
-    def test_automatico_usa_la_menos_usada_y_marca_el_uso(self):
+    def test_rota_a_la_menos_usada_y_marca_el_uso(self):
         linea = SimpleNamespace(pk=3, nombre='Bogotá', numero='+576011111111')
-        elegida, activas, objects = self._elegir('auto', linea)
+        elegida, activas, objects = self._elegir(linea)
         self.assertEqual(elegida, {'id': '3', 'nombre': 'Bogotá', 'numero': '+576011111111'})
         self.assertEqual(activas.order_by.call_args.args[1:], ('orden', 'pk'))
         self.assertIn('ultimo_uso', objects.filter.return_value.update.call_args.kwargs)
 
-    def test_linea_elegida(self):
-        linea = SimpleNamespace(pk=4, nombre='Cali', numero='+576021111111')
-        elegida, activas, _ = self._elegir('4', linea)
-        activas.filter.assert_called_with(pk='4')
-        self.assertEqual(elegida['numero'], '+576021111111')
-
     @override_settings(TELEFONIA_CALLER_ID='+573505810975')
     def test_sin_lineas_usa_el_numero_del_env(self):
-        elegida, _, _ = self._elegir('auto')
+        elegida, _, _ = self._elegir()
         self.assertEqual(elegida, {'id': 'defecto', 'nombre': 'Línea principal', 'numero': '+573505810975'})
-
-    @override_settings(TELEFONIA_CALLER_ID='+573505810975')
-    def test_linea_desactivada_no_cae_al_env(self):
-        with self.assertRaises(servicio.NoPermitido):
-            self._elegir('4', None, hay_activas=True)
 
     @override_settings(TELEFONIA_CALLER_ID='')
     def test_sin_ninguna_linea(self):
         with self.assertRaises(servicio.NoPermitido) as ctx:
-            self._elegir('auto')
+            self._elegir()
         self.assertEqual(ctx.exception.status, 503)
 
 
@@ -427,15 +414,12 @@ class SoftphoneApiTests(SimpleTestCase):
                                         content_type='application/json')
         request.user = _user()
         contacto = {'id': '5', 'nombre': 'Pedro', 'telefono': '+573505810975'}
-        lineas = [{'id': '1', 'nombre': 'Medellín', 'numero': '+576041111111'},
-                  {'id': '2', 'nombre': 'Bogotá', 'numero': '+576011111111'}]
         with patch.object(servicio, 'verificar_conversacion', return_value=contacto), \
-                patch.object(servicio, 'descartados', return_value=set()), \
-                patch.object(servicio, 'lineas', return_value=lineas):
+                patch.object(servicio, 'descartados', return_value=set()):
             response = views.api_destinos(request)
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
-        self.assertEqual((data['lineas'], data['linea_auto']), (lineas, True))
+        self.assertNotIn('lineas', data)  # el agente no elige la línea
         self.assertEqual(json.loads(response.content)['destinos'][0]['numero'], '350 ••• 0975')
         self.assertNotIn('3505810975', response.content.decode('utf-8'))
 

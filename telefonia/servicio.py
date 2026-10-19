@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 PERMISO = PERMISO_PANEL  # sin permisos aparte: quien usa el panel puede llamar
 FUENTE_CHATWOOT = 'chatwoot'
-LINEA_AUTO = 'auto'
 LINEA_DEFECTO = 'defecto'  # TELEFONIA_CALLER_ID, si no hay líneas en el admin
 
 # CallStatus de Twilio (tramo hacia el cliente) → estado final.
@@ -130,38 +129,24 @@ def _linea_defecto():
     return {'id': LINEA_DEFECTO, 'nombre': 'Línea principal', 'numero': numero} if numero else None
 
 
-def lineas():
-    """Líneas para «Llamar desde»: las activas del admin o, si no hay, TELEFONIA_CALLER_ID."""
-    activas = [{'id': str(l.pk), 'nombre': l.nombre, 'numero': l.numero}
-               for l in LineaSaliente.objects.filter(activa=True)]
-    if activas:
-        return activas
-    defecto = _linea_defecto()
-    return [defecto] if defecto else []
+def elegir_linea():
+    """Rotación automática: la línea activa que lleva más tiempo sin usarse. Marca el uso.
 
-
-def elegir_linea(linea_id):
-    """La línea pedida o, en automático, la activa que lleva más tiempo sin usarse. Marca el uso."""
-    linea_id = str(linea_id or LINEA_AUTO)
+    El agente no elige la línea. Sin líneas activas en el admin se usa TELEFONIA_CALLER_ID.
+    """
     with transaction.atomic():
-        activas = LineaSaliente.objects.select_for_update().filter(activa=True)
-        if linea_id == LINEA_AUTO:
-            linea = activas.order_by(F('ultimo_uso').asc(nulls_first=True), 'orden', 'pk').first()
-        else:
-            linea = activas.filter(pk=linea_id).first() if linea_id.isdigit() else None
+        linea = (LineaSaliente.objects.select_for_update().filter(activa=True)
+                 .order_by(F('ultimo_uso').asc(nulls_first=True), 'orden', 'pk').first())
         if linea is not None:
             LineaSaliente.objects.filter(pk=linea.pk).update(ultimo_uso=timezone.now())
             return {'id': str(linea.pk), 'nombre': linea.nombre, 'numero': linea.numero}
-
     defecto = _linea_defecto()
-    if defecto and linea_id in (LINEA_AUTO, LINEA_DEFECTO) and not LineaSaliente.objects.filter(activa=True).exists():
+    if defecto:
         return defecto
-    if linea_id != LINEA_AUTO:
-        raise NoPermitido('Esa línea ya no está disponible. Elige otra.')
     raise NoPermitido('No hay líneas para llamar. Avisa a sistemas.', status=503)
 
 
-def iniciar(user, *, account_id, conversation_id, contact_id, cedula, destino_id, linea_id='', ip=''):
+def iniciar(user, *, account_id, conversation_id, contact_id, cedula, destino_id, ip=''):
     """Valida todo y deja la llamada lista para marcar. Devuelve (Llamada, destino)."""
     if not puede_llamar(user):
         raise NoPermitido('Tu usuario no tiene permiso para hacer llamadas.', status=403)
@@ -171,7 +156,7 @@ def iniciar(user, *, account_id, conversation_id, contact_id, cedula, destino_id
 
     contacto = verificar_conversacion(account_id, conversation_id, contact_id)
     destino = resolver_destino(contacto, cedula, destino_id)
-    linea = elegir_linea(linea_id)
+    linea = elegir_linea()
     llamada = Llamada.objects.create(
         user=user,
         numero=numeros.e164(destino['numero']),

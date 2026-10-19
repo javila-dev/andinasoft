@@ -16,8 +16,6 @@
   var RECIBIDO = 'andinasoft-softphone-recibido';
   var FIN = 'andinasoft-softphone-fin';
   var ORIGEN = window.location.origin;
-  var LINEA_KEY = 'andinasoft.softphone.linea';
-  var LINEA_AUTO = 'auto';
 
   var cfg = document.body.dataset;
   var state = {
@@ -90,7 +88,6 @@
         state.destinos = data.destinos || [];
         state.destino = state.destinos.length ? state.destinos[0].id : '';
         $('elegir-grabar').hidden = !data.grabar;
-        renderLineas(data.lineas || [], data.linea_auto);
         renderDestinos();
       })
       .catch(function (err) {
@@ -140,42 +137,8 @@
     $('btn-llamar').disabled = false;
   }
 
-  /* «Llamar desde»: automático (rota entre las líneas) o una línea fija. Se recuerda en este navegador. */
-  function renderLineas(lineas, auto) {
-    var select = $('elegir-linea');
-    select.textContent = '';
-    var opciones = (auto ? [{ id: LINEA_AUTO, nombre: 'Automático (rota entre las líneas)', numero: '' }] : []).concat(lineas);
-    opciones.forEach(function (l) {
-      var option = document.createElement('option');
-      option.value = l.id;
-      option.textContent = l.numero ? l.nombre + ' · ' + l.numero : l.nombre;
-      select.appendChild(option);
-    });
-    var guardada = '';
-    try {
-      guardada = window.localStorage.getItem(LINEA_KEY) || '';
-    } catch (e) {
-      /* almacenamiento bloqueado */
-    }
-    var ids = opciones.map(function (l) {
-      return l.id;
-    });
-    if (ids.indexOf(guardada) >= 0) select.value = guardada;
-    // Con una sola línea no hay nada que elegir.
-    $('elegir-linea-campo').hidden = opciones.length < 2;
-  }
-
-  function lineaElegida() {
-    var valor = $('elegir-linea').value || '';
-    try {
-      if (valor) window.localStorage.setItem(LINEA_KEY, valor);
-    } catch (e) {
-      /* almacenamiento bloqueado */
-    }
-    return valor;
-  }
-
   // ---------- llamada ----------
+  // La línea de salida (caller ID) la elige el servidor por rotación: el agente no la escoge.
   function llamar() {
     var s = state.solicitud;
     if (!s || !state.destino || enLlamada()) return;
@@ -184,7 +147,6 @@
     api(cfg.apiLlamar, {
       account_id: s.account_id, conversation_id: s.conversation_id, contact_id: s.contact_id, cedula: s.cedula,
       destino: state.destino,
-      linea: lineaElegida(),
     })
       .then(function (data) {
         state.llamada = { id: data.llamada, numero: data.numero, etiqueta: data.etiqueta, linea: data.linea };
