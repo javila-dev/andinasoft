@@ -24,7 +24,7 @@ Por ahora solo hay llamadas **salientes** y solo a Colombia (celulares 3XX y fij
 
 ## Links de pago Wompi (panel, pestaña Cartera)
 
-Botón **«Enviar link de pago»**. Aparece si el usuario tiene el permiso **«Puede enviar links de pago Wompi desde el panel de Chatwoot»** y el proyecto tiene un comercio Wompi configurado. No aparece en negocios desistidos.
+Botón **«Enviar link de pago»**. Aparece si el proyecto tiene un comercio Wompi configurado. Usa el mismo permiso del panel («Puede usar el panel de Chatwoot»): no hay permisos aparte. No aparece en negocios desistidos.
 
 - El agente pone el valor (por defecto el vencido; atajos «Vencido» y «Cancelar hoy») y elige **Enviar al cliente** o **Solo crear el link**.
 - El servidor rechaza valores por debajo de `WOMPI_LINK_VALOR_MINIMO` o por encima de lo que el negocio cancela hoy, con las mismas cifras del estado de cuenta.
@@ -35,7 +35,7 @@ Botón **«Enviar link de pago»**. Aparece si el usuario tiene el permiso **«P
 Configuración:
 1. Variable `WOMPI_LLAVES_PRIVADAS="alias1=prv_prod_…;alias2=prv_prod_…"`, una llave privada por comercio Wompi. Con `prv_test_…` se usa el sandbox.
 2. En **Admin → Panel de Chatwoot → Comercios Wompi**, crear cada comercio con su alias y elegir sus proyectos de la lista. A cada proyecto se le puede subir su **logo**: se guarda en el almacenamiento público y va como `image_url` en el link, así el cliente ve el logo del proyecto en la página de pago. Sin S3, la URL se completa con `ANDINA_PUBLIC_BASE_URL`, que tiene que ser `https`; si no, el link sale sin logo.
-3. Dar el permiso a los agentes.
+3. Los agentes solo necesitan el permiso del panel («Puede usar el panel de Chatwoot»).
 4. Opcional: `WOMPI_LINK_REDIRECT_URL`, la página a la que vuelve el cliente después de pagar.
 
 Todos los webhooks de Twilio exigen la firma `X-Twilio-Signature`. Twilio firma la URL pública exacta, así que hay que configurar `TELEFONIA_PUBLIC_BASE_URL` (o `ANDINA_PUBLIC_BASE_URL`) con el `https://dominio` que ve Twilio.
@@ -79,7 +79,7 @@ pip install -r requirements.txt
 python manage.py migrate telefonia
 ```
 
-Permiso: dar **«telefonia | Llamada | Puede hacer llamadas desde el panel de Chatwoot»** a los usuarios o grupos que llaman. El panel de Chatwoot sigue pidiendo su propio permiso.
+Permiso: **un solo permiso para todo el panel**, «Puede usar el panel de Chatwoot» (`chatwoot_panel.usar_panel_chatwoot`). Quien lo tiene ve la cartera, llama y envía links de pago; no hay permisos individuales.
 
 ### Líneas salientes (varios números)
 

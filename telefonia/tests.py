@@ -42,6 +42,14 @@ def _llamada(**kw):
     return SimpleNamespace(**datos)
 
 
+class PermisoUnicoTests(SimpleTestCase):
+    def test_llamadas_y_links_usan_el_permiso_del_panel(self):
+        from chatwoot_panel import auth, pagos_wompi
+        self.assertEqual(servicio.PERMISO, 'chatwoot_panel.usar_panel_chatwoot')
+        self.assertEqual(servicio.PERMISO, auth.PERMISO)
+        self.assertEqual(pagos_wompi.PERMISO, auth.PERMISO)
+
+
 class NumerosTests(SimpleTestCase):
     def test_formatos_libres(self):
         self.assertEqual(numeros.numeros_en('350 581 09 75'), ['3505810975'])

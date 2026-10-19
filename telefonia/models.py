@@ -105,9 +105,6 @@ class Llamada(models.Model):
         verbose_name = 'Llamada'
         verbose_name_plural = 'Llamadas'
         ordering = ('-created_at',)
-        permissions = (
-            ('llamar', 'Puede hacer llamadas desde el panel de Chatwoot'),
-        )
 
     def __str__(self):
         return f'{self.created_at:%Y-%m-%d %H:%M} {self.user} → {self.numero} ({self.estado})'

@@ -125,9 +125,6 @@ class ComercioWompi(models.Model):
         verbose_name = 'Comercio Wompi'
         verbose_name_plural = 'Comercios Wompi'
         ordering = ('nombre',)
-        permissions = (
-            ('enviar_link_pago', 'Puede enviar links de pago Wompi desde el panel de Chatwoot'),
-        )
 
     def __str__(self):
         return self.nombre

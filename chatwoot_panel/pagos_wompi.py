@@ -15,13 +15,14 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
+from chatwoot_panel.auth import PERMISO as PERMISO_PANEL
 from chatwoot_panel.chatwoot_api import enviar_mensaje, nombre_para_contacto, obtener_conversacion
 from chatwoot_panel.identificacion import puede_ver_proyecto
 from chatwoot_panel.models import LinkPagoWompi, ProyectoWompi
 
 logger = logging.getLogger(__name__)
 
-PERMISO = 'chatwoot_panel.enviar_link_pago'
+PERMISO = PERMISO_PANEL  # sin permisos aparte: quien usa el panel puede enviar links
 API_PRODUCCION = 'https://production.wompi.co/v1'
 API_SANDBOX = 'https://sandbox.wompi.co/v1'
 CHECKOUT = 'https://checkout.wompi.co/l/'

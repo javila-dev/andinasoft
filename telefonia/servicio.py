@@ -1,6 +1,7 @@
 """Qué se puede llamar desde una conversación y cómo se cierra cada llamada.
 
-Frontera de seguridad: el usuario de Andinasoft con el permiso `telefonia.llamar`.
+Frontera de seguridad: el usuario de Andinasoft con el permiso del panel de Chatwoot
+(un solo permiso para todo el panel: cartera, llamadas y links de pago).
 La conversación se confirma con la API de Chatwoot (token del servidor) y el número
 siempre sale de Chatwoot o de `clientes`: el navegador solo elige de qué campo.
 """
@@ -14,6 +15,7 @@ from django.utils import timezone
 
 from andinasoft.models import clientes
 from chatwoot_panel import seguimientos_service
+from chatwoot_panel.auth import PERMISO as PERMISO_PANEL
 from chatwoot_panel.chatwoot_api import nota_privada, obtener_conversacion
 from chatwoot_panel.identificacion import negocios_de, puede_ver_proyecto
 from telefonia import numeros
@@ -21,7 +23,7 @@ from telefonia.models import LineaSaliente, Llamada, NumeroDescartado
 
 logger = logging.getLogger(__name__)
 
-PERMISO = 'telefonia.llamar'
+PERMISO = PERMISO_PANEL  # sin permisos aparte: quien usa el panel puede llamar
 FUENTE_CHATWOOT = 'chatwoot'
 LINEA_AUTO = 'auto'
 LINEA_DEFECTO = 'defecto'  # TELEFONIA_CALLER_ID, si no hay líneas en el admin
