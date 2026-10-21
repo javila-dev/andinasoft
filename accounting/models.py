@@ -636,7 +636,59 @@ class saldos_cuentas_tesoreria(models.Model):
         verbose_name = 'Saldo inicio dia'
         verbose_name_plural = 'Saldos inicio dia'
         unique_together =['cuenta','fecha']
-    
+
+
+class CierreCaja(models.Model):
+    """Cierre diario de una cuenta de efectivo de tesorería (planilla diaria).
+
+    Guarda el saldo teórico calculado por movimientos y el arqueo físico. Si
+    hay diferencia, queda pendiente hasta que alguien con permiso la apruebe
+    como ajuste (entra al saldo teórico de los días siguientes) o reabra el
+    cierre para corregir los movimientos.
+    """
+    AJUSTE_SIN_DIFERENCIA = 'Sin diferencia'
+    AJUSTE_PENDIENTE = 'Pendiente'
+    AJUSTE_APROBADO = 'Aprobado'
+    ESTADOS_AJUSTE = (
+        (AJUSTE_SIN_DIFERENCIA, AJUSTE_SIN_DIFERENCIA),
+        (AJUSTE_PENDIENTE, AJUSTE_PENDIENTE),
+        (AJUSTE_APROBADO, AJUSTE_APROBADO),
+    )
+
+    cuenta = models.ForeignKey(cuentas_pagos, on_delete=models.PROTECT, related_name='cierres_caja',
+                               db_constraint=False)
+    fecha = models.DateField()
+    es_apertura = models.BooleanField(default=False)
+    saldo_inicial = models.DecimalField(max_digits=15, decimal_places=2)
+    movimientos = models.JSONField(default=dict)
+    saldo_teorico = models.DecimalField(max_digits=15, decimal_places=2)
+    saldo_fisico = models.DecimalField(max_digits=15, decimal_places=2)
+    forma = models.TextField(blank=True, default='{}')
+    diferencia = models.DecimalField(max_digits=15, decimal_places=2)
+    motivo_diferencia = models.TextField(blank=True, default='')
+    estado_ajuste = models.CharField(max_length=20, choices=ESTADOS_AJUSTE, default=AJUSTE_SIN_DIFERENCIA)
+    ajuste_revisado_por = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True,
+                                            related_name='ajustes_caja_revisados', db_constraint=False)
+    ajuste_revisado_en = models.DateTimeField(null=True, blank=True)
+    usuario = models.ForeignKey(User, on_delete=models.PROTECT, related_name='cierres_caja',
+                               db_constraint=False)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Cierre de caja'
+        verbose_name_plural = 'Cierres de caja'
+        unique_together = ['cuenta', 'fecha']
+        permissions = [
+            ('aprobar_ajuste_cierrecaja', 'Puede aprobar ajustes de arqueo y reabrir cierres de caja'),
+        ]
+
+    @property
+    def saldo_base_siguiente(self):
+        """Saldo teórico desde el que parte el día siguiente."""
+        if self.estado_ajuste == self.AJUSTE_APROBADO:
+            return self.saldo_fisico
+        return self.saldo_teorico
+
 class distribucion_centros_costos(models.Model):
     cedula = models.CharField(max_length=255)
     centro = models.CharField(max_length=255)

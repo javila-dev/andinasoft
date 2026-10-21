@@ -9422,8 +9422,7 @@ class GenerarPDF():
     def planillaMovimientos(self,empresa,fecha,cuentas,
                             obj_ingresos,obj_transf,obj_intercomp,
                             obj_anticipos,obj_pagos,obj_otrosing,
-                            cuenta_efectivo,obj_saldo_ini,usuario,
-                            pagos_efectivo,has_efectivo,ruta):
+                            usuario,cuadres_efectivo,ruta):
       story = []
       frames = []
      #encabelzados
@@ -9793,7 +9792,12 @@ class GenerarPDF():
       story.append(tabla)
       
      #arqueo
-      if has_efectivo:
+      import json, pytz
+      from decimal import Decimal
+      from xml.sax.saxutils import escape
+      for item in cuadres_efectivo:
+        cuenta_efectivo = item['cuenta']
+        cierre = item['cierre']
         story.append(PageBreak())
         titulo = Paragraph(f'<b>ARQUEO DE CAJA<br/>{empresa.nombre.upper()}<br/>{cuenta_efectivo.cuentabanco}</b>',headerStyle_center)
         data_table =[
@@ -9813,106 +9817,104 @@ class GenerarPDF():
         tabla._argH[0]=16*mm
         tabla._argH[1]=8*mm
         story.append(tabla)
-        
+
         story.append(Spacer(0,20))
-        ultimo_reg = obj_saldo_ini.filter(fecha__lt=fecha).order_by('-fecha')
-        if ultimo_reg.exists():
-          fecha_ultimo_reg = ultimo_reg.first().fecha
-          saldo_ultimo_reg = ultimo_reg.first().saldo_inicial
+        # Libro de la caja: desde el último cierre hasta el día de la planilla, con saldo acumulado.
+        libro = item['libro']
+        base = libro['cierre_base']
+        pesos = lambda v: '-' if v is None else f'$ {v:,.0f}'
+        if base is not None:
+          titulo_libro = (f'<b>MOVIMIENTOS DESDE EL ÚLTIMO CIERRE ({base.fecha:%d/%m/%Y}) '
+                          f'HASTA EL {fecha_date:%d/%m/%Y}</b>')
+          etiqueta_inicial = f'Saldo al cierre del {base.fecha:%d/%m/%Y}'
         else:
-          fecha_ultimo_reg = 'NO HAY REGISTROS PREVIOS'
-          saldo_ultimo_reg = 0
-          
-        story.append(
-          Paragraph(f'<b>SALDO INICIAL</b> (Saldo a {fecha_ultimo_reg}): ${saldo_ultimo_reg:,}',
-                    detailStyle)
-        )
-        story.append(Spacer(0,10))
-        
-        titulo =Paragraph('<b>MOVIMIENTOS</b>',detailStyle_gc)
-        ingresos = pagos_efectivo.get('ingresos')
-        otros_ingresos = pagos_efectivo.get('otros_ingresos')
-        transf_entra = pagos_efectivo.get('transferencias_entra')
-        transf_sale = pagos_efectivo.get('transferencias_sale')
-        inter_entra = pagos_efectivo.get('intercompañia_entra')
-        inter_sale = pagos_efectivo.get('intercompañia_sale')
-        anticipos = pagos_efectivo.get('anticipos')
-        pagos = pagos_efectivo.get('pagos')
-        from decimal import Decimal
-        saldo_final = Decimal(saldo_ultimo_reg) + ingresos + otros_ingresos + (transf_entra-transf_sale) + (inter_entra-inter_sale) - anticipos - pagos
-        
+          titulo_libro = '<b>MOVIMIENTOS DEL DÍA</b>'
+          etiqueta_inicial = ('Saldo inicial: SIN CIERRE DE APERTURA. Registra el primer cierre de esta caja '
+                              'desde la planilla diaria.' if libro['saldo_inicial'] is None
+                              else 'Saldo inicial (cierre de apertura)')
+        detailStyle_vr = ParagraphStyle('valor libro',parent=detailStyle_r,fontSize=6)
         data_table = [
-          [titulo,''],
-          [Paragraph('(+) Ingresos',detailStyle),
-          Paragraph(f'$ {ingresos:,}',detailStyle_r)],
-          [Paragraph('(+) Otros ingresos',detailStyle),
-          Paragraph(f'$ {otros_ingresos:,}',detailStyle_r)],
-          [Paragraph('(+) Transferencias entra',detailStyle),
-          Paragraph(f'$ {transf_entra:,}',detailStyle_r)],
-          [Paragraph('(-) Transferencias sale',detailStyle),
-          Paragraph(f'$ {transf_sale:,}',detailStyle_r)],
-          [Paragraph('(+) Intercompañia entra',detailStyle),
-          Paragraph(f'$ {inter_entra:,}',detailStyle_r)],
-          [Paragraph('(-) Intercompañia sale',detailStyle),
-          Paragraph(f'$ {inter_sale:,}',detailStyle_r)],
-          [Paragraph('(-) Anticipos',detailStyle),
-          Paragraph(f'$ {anticipos:,}',detailStyle_r)],
-          [Paragraph('(-) Pagos',detailStyle),
-          Paragraph(f'$ {pagos:,}',detailStyle_r)],
-          [Paragraph(f'<b>(=) SALDO FINAL TEORICO</b>:',detailStyle),
-            Paragraph(f'<b>{saldo_final:,}</b>',detailStyle_r)]
+          [Paragraph(titulo_libro,detailStyle_gc),'','','','','',''],
+          [Paragraph(f'<b>{t}</b>',detailStyle_p) for t in
+           ('Fecha','Concepto','Documento','Detalle')] +
+          [Paragraph(f'<b>{t}</b>',detailStyle_vr) for t in ('Entradas (débito)','Salidas (crédito)','Saldo')],
+          [Paragraph(f'<b>{etiqueta_inicial}</b>',detailStyle_p),'','','','','',
+           Paragraph(f'<b>{pesos(libro["saldo_inicial"])}</b>',detailStyle_vr)],
         ]
         styles=[
           ('BOX',(0,0),(-1,-1),0.5,colors.black),
           ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
           ('SPAN',(0,0),(-1,0)),
           ('BACKGROUND',(0,0),(-1,0),colors.slategray),
+          ('LINEBELOW',(0,1),(-1,1),0.5,colors.black),
+          ('SPAN',(0,2),(5,2)),
+          ('BACKGROUND',(0,2),(-1,2),colors.whitesmoke),
+          ('TOPPADDING',(0,1),(-1,-1),1),
+          ('BOTTOMPADDING',(0,1),(-1,-1),1),
         ]
-        
+        for fila in libro['filas']:
+          if fila['fecha'] != fecha_date.date():
+            styles.append(('BACKGROUND',(0,len(data_table)),(-1,len(data_table)),colors.HexColor('#f4f4f4')))
+          data_table.append([
+            Paragraph(f"{fila['fecha']:%d/%m/%Y}",detailStyle_p),
+            Paragraph(fila['concepto'],detailStyle_p),
+            Paragraph(fila['documento'],detailStyle_p),
+            Paragraph(escape(fila['detalle']),detailStyle_p),
+            Paragraph(pesos(fila['entrada']) if fila['entrada'] else '',detailStyle_vr),
+            Paragraph(pesos(fila['salida']) if fila['salida'] else '',detailStyle_vr),
+            Paragraph(pesos(fila['saldo']),detailStyle_vr),
+          ])
+        if not libro['filas']:
+          data_table.append([Paragraph('Sin movimientos de efectivo en el periodo',detailStyle_p),'','','','','',''])
+          styles.append(('SPAN',(0,len(data_table)-1),(-1,len(data_table)-1)))
+        styles.append(('LINEABOVE',(0,len(data_table)),(-1,len(data_table)),0.5,colors.black))
+        data_table.append([
+          Paragraph(f"<b>Totales ({len(libro['filas'])} movimientos)</b>",detailStyle_p),'','','',
+          Paragraph(f"<b>{pesos(libro['total_entradas'])}</b>",detailStyle_vr),
+          Paragraph(f"<b>{pesos(libro['total_salidas'])}</b>",detailStyle_vr),
+          '',
+        ])
+        styles.append(('SPAN',(0,len(data_table)-1),(3,len(data_table)-1)))
+        data_table.append([
+          Paragraph(f'<b>(=) SALDO FINAL TEÓRICO DEL {fecha_date:%d/%m/%Y}</b>',detailStyle_p),'','','','','',
+          Paragraph(f"<b>{pesos(libro['saldo_final'])}</b>",detailStyle_vr),
+        ])
+        styles += [
+          ('SPAN',(0,len(data_table)-1),(5,len(data_table)-1)),
+          ('BACKGROUND',(0,len(data_table)-1),(-1,len(data_table)-1),colors.whitesmoke),
+        ]
         tabla=Table(data_table,
-                    colWidths=["20%","30%"],
-                    style=styles
+                    colWidths=["9%","13%","9%","36%","11%","11%","11%"],
+                    style=styles,
+                    repeatRows=2
         )
         story.append(tabla)
         story.append(Spacer(0,20))
-        
-        import json, pytz
+
         titulo =Paragraph('<b>ARQUEO FISICO DE CAJA</b>',detailStyle_gc)
-        saldo_dia = obj_saldo_ini.filter(fecha=fecha)
-        if saldo_dia.exists():
-          usuario_forma = saldo_dia[0].usuario.username
-          fecha_forma = pytz.timezone('America/Bogota').normalize(saldo_dia[0].fecha_registro)
-          valor_dia = saldo_dia[0].saldo_inicial
-          forma = json.loads(saldo_dia[0].forma)
-          m50 = forma.get('50',0)
-          m100 = forma.get('100',0)
-          m200 = forma.get('200',0)
-          m500 = forma.get('500',0)
-          m1000 = forma.get('1.000',0)
-          b1k = forma.get('1000',0)
-          b2k = forma.get('2000',0)
-          b5k = forma.get('5000',0)
-          b10k = forma.get('10000',0)
-          b20k = forma.get('20000',0)
-          b50k = forma.get('50000',0)
-          b100k = forma.get('100000',0)
+        if cierre is not None:
+          usuario_forma = cierre.usuario.username
+          fecha_forma = pytz.timezone('America/Bogota').normalize(cierre.fecha_registro)
+          valor_dia = cierre.saldo_fisico
+          forma = json.loads(cierre.forma or '{}')
         else:
           usuario_forma = 'NO REGISTRADO'
           fecha_forma = 'NO REGISTRADO '
           valor_dia = 0
-          m50 = 0
-          m100 = 0
-          m200 = 0
-          m500 = 0
-          m1000 = 0
-          b1k = 0
-          b2k = 0
-          b5k = 0
-          b10k = 0
-          b20k = 0
-          b50k = 0
-          b100k = 0 
-          
+          forma = {}
+        m50 = forma.get('50',0)
+        m100 = forma.get('100',0)
+        m200 = forma.get('200',0)
+        m500 = forma.get('500',0)
+        m1000 = forma.get('1.000',0)
+        b1k = forma.get('1000',0)
+        b2k = forma.get('2000',0)
+        b5k = forma.get('5000',0)
+        b10k = forma.get('10000',0)
+        b20k = forma.get('20000',0)
+        b50k = forma.get('50000',0)
+        b100k = forma.get('100000',0)
+
         data_table = [
           [titulo,'','',''],
           [Paragraph('<b>Monedas</b>',detailStyle_c),'',Paragraph('<b>Billetes</b>',detailStyle_c),''],
@@ -9928,8 +9930,8 @@ class GenerarPDF():
           ,Paragraph('20.000',detailStyle),Paragraph(str(b20k),detailStyle_r)],
           ['','',Paragraph('50.000',detailStyle),Paragraph(str(b50k),detailStyle_r)],
           ['','',Paragraph('100.000',detailStyle),Paragraph(str(b100k),detailStyle_r)],
-          [Paragraph(f'<b>TOTAL EN CAJA: ${valor_dia:,}</b><br/><small>*Arqueo fisico registrado por {usuario_forma} el {fecha_forma}<small>',detailStyle_c),'','',''],
-          
+          [Paragraph(f'<b>TOTAL EN CAJA: ${valor_dia:,.0f}</b><br/><small>*Arqueo fisico registrado por {usuario_forma} el {fecha_forma}<small>',detailStyle_c),'','',''],
+
         ]
         styles=[
           ('BOX',(0,0),(-1,-1),0.5,colors.black),
@@ -9941,22 +9943,30 @@ class GenerarPDF():
           ('SPAN',(2,1),(3,1)),
           ('BACKGROUND',(0,0),(-1,0),colors.slategray),
         ]
-        
+
         tabla=Table(data_table,
                     colWidths=["12.5%","12.5%","12.5%","12.5%"],
                     style=styles
         )
         story.append(tabla)
-        
+
         story.append(Spacer(0,20))
-        diferencia = Decimal(valor_dia) - saldo_final
-        story.append(
-          Paragraph(f'<b>DIFERENCIA EN SALDOS: </b> {diferencia:,}',
-                    detailStyle)
-        )
+        if cierre is None:
+          texto_dif = ('<b>CAJA SIN CERRAR:</b> los valores teóricos se calcularon al generar la planilla '
+                       'y pueden cambiar si se registran más movimientos en esta fecha.')
+        else:
+          texto_dif = f'<b>DIFERENCIA EN SALDOS: </b> ${cierre.diferencia:,.0f}'
+          if cierre.estado_ajuste == cierre.AJUSTE_PENDIENTE:
+            texto_dif += ' (ajuste pendiente de aprobación)'
+          elif cierre.estado_ajuste == cierre.AJUSTE_APROBADO:
+            revisado_en = pytz.timezone('America/Bogota').normalize(cierre.ajuste_revisado_en)
+            texto_dif += (f' (ajuste aprobado por {cierre.ajuste_revisado_por.username} el '
+                          f'{revisado_en:%d/%m/%Y %H:%M})')
+        story.append(Paragraph(texto_dif, detailStyle))
         story.append(Spacer(0,20))
+        motivo = cierre.motivo_diferencia if cierre is not None else ''
         data_table=(
-          [Paragraph('<b>OBSERVACIONES:</b>',detailStyle)],
+          [Paragraph(f'<b>OBSERVACIONES:</b> {escape(motivo)}',detailStyle)],
         )
         styles=[
           ('BOX',(0,0),(-1,-1),0.5,colors.black),
@@ -9968,10 +9978,10 @@ class GenerarPDF():
         tabla._argH[0]=25*mm
         story.append(tabla)
         story.append(Spacer(0,20))
-        
-        
-        
-        story.append(Spacer(0,60))
+
+
+
+        story.append(Spacer(0,40))
         data_table = [
           ('____________________','','____________________'),
           ('ELABORÓ','','RECIBIÓ')
@@ -9984,7 +9994,7 @@ class GenerarPDF():
                     style=styles
         )
         story.append(tabla)
-      
+
      #generar doc
     
       texto = f'Movimiento diario generado por {usuario.username} el {datetime.now()}'

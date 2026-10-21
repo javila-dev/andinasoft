@@ -86,6 +86,7 @@ from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, file_respon
 from andinasoft.passes_test import perms_test
 from buildingcontrol import models as building_model
 from accounting import forms as forms_accounting
+from accounting.saldo_caja import CajaCerrada, validar_recaudo_caja_abierta
 from finance.models import recibos_internos
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
@@ -1361,6 +1362,19 @@ def _guardar_recaudo(
     valor_recibo = valor_pagado
     concepto = form_recibo.cleaned_data.get('concepto')
     procentaje_condonado = form_recibo.cleaned_data.get('condonacion_porc')
+    try:
+        validar_recaudo_caja_abierta(proyecto, forma_pago, fecha)
+    except CajaCerrada as exc:
+        context_updates['alerta'] = True
+        context_updates['titulo'] = 'Caja cerrada'
+        context_updates['mensaje'] = str(exc)
+        context_updates['link'] = False
+        alerts.append({
+            'code': 'CAJA_CERRADA',
+            'message': context_updates['mensaje'],
+            'severity': 'error'
+        })
+        return context_updates, alerts, True
     numsolic = form_recibo.cleaned_data.get('numsolicitud')
     if numsolic:
         try:
@@ -4823,6 +4837,7 @@ def acciones_venta(request,proyecto,contrato):
                         concepto=form_rec.cleaned_data.get('Concepto')
                         valor=form_rec.cleaned_data.get('Valor')
                         formapago=form_rec.cleaned_data.get('formapago')
+                        validar_recaudo_caja_abierta(proyecto, formapago, today)
                         soporte = form_rec.cleaned_data.get('soporte')
                         name_doc = f'soporte_rc_{obj_consecutivo.consecutivo}_{proyecto}_CTR{contrato}'
                         typedoc = soporte.name.split('.')[-1].lower()
@@ -5202,6 +5217,7 @@ def inventario_comercial(request,proyecto):
 
 @group_perm_required(perms=('andinasoft.view_recaudosnoradicados',),raise_exception=True)
 def recaudos_noradicados(request,proyecto):
+    alerta_caja = None
     if request.method == 'POST':
         formapago=request.POST.get('forma_pago')
         nro_recibo=request.POST.get('nro-recibo')
@@ -5228,8 +5244,13 @@ def recaudos_noradicados(request,proyecto):
                 valor=form_nuevoRC.cleaned_data.get('valor')
                 formapago=form_nuevoRC.cleaned_data.get('formapago')
                 concepto=form_nuevoRC.cleaned_data.get('concepto')
-                RecaudosNoradicados.objects.using(proyecto).create(fecha=fecha_recibo,contrato=contrato,formapago=formapago,
-                                                valor=valor,concepto=concepto,recibo=nro_recibo)
+                try:
+                    validar_recaudo_caja_abierta(proyecto, formapago, fecha_recibo)
+                except CajaCerrada as exc:
+                    alerta_caja = {'alert':True,'title':'Caja cerrada','message':str(exc),'class':'alert-danger'}
+                else:
+                    RecaudosNoradicados.objects.using(proyecto).create(fecha=fecha_recibo,contrato=contrato,formapago=formapago,
+                                                    valor=valor,concepto=concepto,recibo=nro_recibo)
         """ form_nuevoRC=form_nuevo_recaudoNR(request.POST,proyecto=proyecto)
         if form_nuevoRC.is_valid():
             if request.POST.get('crearRecibo'):
@@ -5249,6 +5270,8 @@ def recaudos_noradicados(request,proyecto):
         'form_nuevoRnr':form_nuevo_recaudoNR(proyecto=proyecto),
         'recaudos':obj_rec_nr,
     }
+    if alerta_caja:
+        context['topalert'] = alerta_caja
     return render(request,'recaudos_noradicados.html',context)
 
 
@@ -9295,7 +9318,8 @@ def acciones_venta_fractal(request):
                 valor = request.POST.get('valor_recibo')
                 fp = request.POST.get('formapagorecibo')
                 soporte = request.FILES.get('soporterecibo')
-                
+                validar_recaudo_caja_abierta(proyecto, fp, datetime.date.today())
+
                 obj_consecutivo=consecutivos.objects.using(proyecto).get(documento='RC')
                 consecutivo = obj_consecutivo.consecutivo
                 

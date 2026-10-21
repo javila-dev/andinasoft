@@ -29,6 +29,56 @@
     .dt-buttons {
         padding-left: 8px;
     }
+
+    #tablaCierre td {
+        font-size: small;
+    }
+
+    .libro-caja {
+        max-height: 45vh;
+        overflow-y: auto;
+    }
+
+    #tablaLibro th,
+    #tablaLibro td {
+        font-size: small;
+        vertical-align: middle;
+    }
+
+    #tablaLibro thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+    }
+
+    #tablaLibro .col-valor {
+        text-align: right;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    #tablaLibro .col-debito {
+        color: #1e7e34;
+    }
+
+    #tablaLibro .col-credito {
+        color: #bd2130;
+    }
+
+    #tablaLibro tr.dia-anterior td {
+        color: #6c757d;
+    }
+
+    #tablaLibro tr.fila-saldo td {
+        font-weight: bold;
+        background: #f1f3f5;
+    }
+
+    #tablaLibro tr.fila-totales td {
+        font-weight: bold;
+        border-top: 2px solid #adb5bd;
+    }
 </style>
 {%endblock%}
 {%block js%}
@@ -60,7 +110,7 @@
                 <i class="fas fa-file-download"></i>
             </button>
             <button class='btn btn-circle btn-primary shadow m-2 float-right' 
-                id='btnSaldosInciales' data-toggle="tooltip" data-placement="bottom" title="Registrar saldo final"
+                id='btnSaldosInciales' data-toggle="tooltip" data-placement="bottom" title="Cierre de caja"
                 style='bottom:14px;right:14px'>
                 <i class="fas fa-dollar-sign"></i>
             </button>
@@ -222,10 +272,10 @@
     </div>
 </div>
 <div class="modal fade" id="modalSaldoInicial" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-xl">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="staticBackdropLabel">Saldo</h5>
+          <h5 class="modal-title" id="staticBackdropLabel">Cierre de caja</h5>
           <button type="button" class="close" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
@@ -233,17 +283,49 @@
         <div class="modal-body">
             <ul class="nav nav-tabs" id="myTab" role="tablist">
                 <li class="nav-item" role="presentation">
-                  <a class="nav-link active" id="home-tab" data-toggle="tab" 
-                    href="#home" role="tab" aria-controls="home" aria-selected="true">Registrar</a>
+                  <a class="nav-link active" id="home-tab" data-toggle="tab"
+                    href="#home" role="tab" aria-controls="home" aria-selected="true">Cierre del día</a>
                 </li>
                 <li class="nav-item" role="presentation">
-                  <a class="nav-link" id="profile-tab" data-toggle="tab" 
+                  <a class="nav-link" id="profile-tab" data-toggle="tab"
                     href="#profile" role="tab" aria-controls="profile" aria-selected="false">Historico</a>
                 </li>
               </ul>
               <div class="tab-content" id="myTabContent">
                 <div class="tab-pane fade show active" id="home" role="tabpanel">
+                    <div id='cierreAviso' class='alert mt-3 mb-0 d-none'></div>
+                    <p class='font-weight-bold mt-3 mb-2' id='libroTitulo'>Movimientos</p>
+                    <div class='libro-caja border rounded'>
+                        <table class='table table-sm table-hover mb-0' id='tablaLibro'>
+                            <thead>
+                                <tr>
+                                    <th class='text-left'>Fecha</th>
+                                    <th class='text-left'>Concepto</th>
+                                    <th class='text-left'>Documento</th>
+                                    <th class='text-left'>Detalle</th>
+                                    <th class='col-valor'>Entradas (débito)</th>
+                                    <th class='col-valor'>Salidas (crédito)</th>
+                                    <th class='col-valor'>Saldo</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class='row mt-3'>
+                        <div class='col-md-8'>
+                            <div id='cierreRegistrado' class='d-none'>
+                                <table class='table table-sm mb-2' id='tablaCierre'>
+                                    <tbody></tbody>
+                                </table>
+                                <div class='d-flex'>
+                                    <button type='button' class='btn btn-sm btn-success mr-2 d-none' id='btnAprobarAjuste'>Aprobar ajuste</button>
+                                    <button type='button' class='btn btn-sm btn-outline-danger d-none' id='btnReabrirCierre'>Reabrir cierre</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <form class='form mt-3' id='formSaldoIni' method='post'>{%csrf_token%}
+                        <p class='font-weight-bold mb-2'>Arqueo físico</p>
                         <div class='row'>
                             <div class='col-md-6'>
                                 <div class='row'>
@@ -251,7 +333,7 @@
                                         <p>50</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='50' id='mnd50' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='50' id='mnd50' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -259,7 +341,7 @@
                                         <p>100</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='100' id='mnd100' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='100' id='mnd100' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -267,7 +349,7 @@
                                         <p>200</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='200' id='mnd200' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='200' id='mnd200' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -275,7 +357,7 @@
                                         <p>500</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='500' id='mnd500' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='500' id='mnd500' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -283,7 +365,7 @@
                                         <p>1000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='1.000' id='mnd1000' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='1.000' id='mnd1000' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                             </div>
@@ -293,7 +375,7 @@
                                         <p>1.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='1000' id='bll1k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='1000' id='bll1k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -301,7 +383,7 @@
                                         <p>2.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='2000' id='bll2k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='2000' id='bll2k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -309,7 +391,7 @@
                                         <p>5.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='5000' id='bll5k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='5000' id='bll5k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -317,7 +399,7 @@
                                         <p>10.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='10000' id='bll10k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='10000' id='bll10k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -325,7 +407,7 @@
                                         <p>20.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='20000' id='bll20k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='20000' id='bll20k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -333,7 +415,7 @@
                                         <p>50.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='50000' id='bll50k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='50000' id='bll50k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                                 <div class='row'>
@@ -341,20 +423,30 @@
                                         <p>100.000</p>
                                     </div>
                                     <div class='col-6'>
-                                        <input type='number' data-denom='100000' id='bll100k' class='arqueofisico form-control text-center'>
+                                        <input type='number' min='0' data-denom='100000' id='bll100k' class='arqueofisico form-control text-center'>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class='row  mt-3'>
-                            <div class='col-md-6'>  
-                                <input name="saldoinicial" class='form-control text-center mr-3' 
+                        <div class='row mt-3'>
+                            <div class='col-md-6'>
+                                <label for='saldoinicial' class='small mb-1'>Total contado en caja</label>
+                                <input name="saldo_fisico" class='form-control text-center'
                                 id='saldoinicial' placeholder="Valor" required>
                             </div>
-                            <div class='col-md-6 d-flex'>
-                            <button type="submit" class="btn btn-primary ml-auto">Registrar</button>
+                            <div class='col-md-6'>
+                                <label class='small mb-1'>Diferencia (contado − teórico)</label>
+                                <p class='form-control-plaintext font-weight-bold text-center' id='cierreDiferencia'>-</p>
                             </div>
+                        </div>
+                        <div class='mt-2 d-none' id='grupoMotivo'>
+                            <label for='motivoDiferencia' class='small mb-1'>Motivo de la diferencia</label>
+                            <textarea name='motivo' id='motivoDiferencia' class='form-control' rows='2'
+                                placeholder='Explica el sobrante o faltante; quedará pendiente de aprobación'></textarea>
+                        </div>
+                        <div class='d-flex mt-3'>
+                            <button type="submit" class="btn btn-primary ml-auto" id='btnCerrarCaja'>Cerrar caja</button>
                         </div>
                       </form>
                 </div>
@@ -364,8 +456,11 @@
                             <thead>
                                 <tr>
                                     <th>Fecha</th>
+                                    <th>Teórico</th>
+                                    <th>Físico</th>
+                                    <th>Diferencia</th>
+                                    <th>Ajuste</th>
                                     <th>Usuario</th>
-                                    <th>Saldo</th>
                                 </tr>
                             </thead>
                         </table>
@@ -739,18 +834,30 @@
             language: {
                 url: '/ajax_request/datatable_spanish'
             },
-            ajax: {
-                url: '/accounting/ajax/saldosiniciales',
-                dataSrc: 'data'
-            },
+            data: [],
             columns: [{
                     'data': 'fecha'
                 },
                 {
-                    'data': 'usuario'
+                    'data': 'saldo_teorico',
+                    'render': formatoPesos
                 },
                 {
-                    'data': 'saldo'
+                    'data': 'saldo_fisico',
+                    'render': formatoPesos
+                },
+                {
+                    'data': 'diferencia',
+                    'render': formatoPesos
+                },
+                {
+                    'data': 'estado_ajuste',
+                    'render': function (data, type, row) {
+                        return row.es_apertura ? 'Apertura' : data
+                    }
+                },
+                {
+                    'data': 'usuario'
                 },
             ],
             order: [
@@ -758,10 +865,9 @@
             ],
             columnDefs: [
                 {
-                "targets": [2],
+                "targets": [1, 2, 3],
                 "className": "dt-body-right"
                 },
-                { type: 'date-uk', targets: 0 }
             ],
         })
         var tablaOtrosIngresos = $('#tablaOtrosIngresos').DataTable({
@@ -830,34 +936,176 @@
         })
         $('#formSaldoIni').on('submit',function(e){
             e.preventDefault();
-            data = new FormData(this)
-            let empresa = $('#id_empresa').val()
-            let fecha =$('#id_fecha').val()
-            let cuenta = $('#listaCuentas .active').data('pk')
-            data.append('empresa',empresa)
-            data.append('fecha',fecha)
-            data.append('cuenta',cuenta)
-            let arqueo = []
+            let data = new FormData(this)
+            data.append('accion','cerrar')
+            data.append('fecha',$('#id_fecha').val())
+            data.append('cuenta',$('#listaCuentas .active').data('pk'))
+            let arqueo = {}
             $('.arqueofisico').each(function(index,elem){
-                let cantidad = $(elem).val()
-                let denom = $(elem).data('denom')
-                if (cantidad>0) arqueo.push(`"${denom}":${cantidad}`)
+                let cantidad = parseInt($(elem).val())
+                if (cantidad>0) arqueo[$(elem).attr('data-denom')] = cantidad
             })
-            data.append('forma',`{${arqueo}}`)
+            data.append('forma',JSON.stringify(arqueo))
+            $('#btnCerrarCaja').prop('disabled',true)
             $.ajax({
                 type:'post',
-                url:'/accounting/ajax/saldosiniciales',
+                url:'/accounting/ajax/cierrecaja',
                 data:data,
                 contentType:false,
                 processData:false,
                 success:function(response){
-                    $('#alert-title').text(response.title)
-                    $('#alert-data').text(response.msj)
-                    $('#general-right-alert').toggleClass('show').toggleClass(response.class)
-                    $('#modalSaldoInicial').modal('hide')
+                    mostrarAlerta(response)
+                    if (response.ok) cargarCierre()
+                },
+                complete:function(){
+                    $('#btnCerrarCaja').prop('disabled',false)
                 }
             })
         })
+        $('#btnAprobarAjuste').click(function(){
+            accionCierre('aprobar','¿Aprobar el ajuste? El saldo teórico continuará desde el valor contado.')
+        })
+        $('#btnReabrirCierre').click(function(){
+            accionCierre('reabrir','¿Reabrir este cierre? Se borrará el arqueo registrado y habrá que cerrar la caja de nuevo.')
+        })
+        $('#profile-tab').on('shown.bs.tab',function(){
+            tablaSaldos.columns.adjust()
+        })
+        function accionCierre(accion, confirmacion){
+            if (!cierreActual || !cierreActual.cierre) return
+            if (!confirm(confirmacion)) return
+            let data = new FormData()
+            data.append('accion',accion)
+            data.append('cierre',cierreActual.cierre.pk)
+            data.append('csrfmiddlewaretoken',$('#formSaldoIni [name=csrfmiddlewaretoken]').val())
+            $.ajax({
+                type:'post',
+                url:'/accounting/ajax/cierrecaja',
+                data:data,
+                contentType:false,
+                processData:false,
+                success:function(response){
+                    mostrarAlerta(response)
+                    if (response.ok) cargarCierre()
+                }
+            })
+        }
+        function cargarCierre(){
+            $.ajax({
+                type:'GET',
+                url:'/accounting/ajax/cierrecaja',
+                data:{
+                    'cuenta':$('#listaCuentas .active').data('pk'),
+                    'fecha':$('#id_fecha').val()
+                },
+                success:function(response){
+                    if (!response.ok){
+                        $('#modalSaldoInicial').modal('hide')
+                        mostrarAlerta(response)
+                        return
+                    }
+                    pintarCierre(response)
+                    $('#modalSaldoInicial').modal('show')
+                }
+            })
+        }
+        function filaHtml(etiqueta, valor, negrita){
+            let celda = $('<td class="text-right">').text(valor)
+            let fila = $('<tr>').append($('<td class="text-left">').text(etiqueta)).append(celda)
+            if (negrita) fila.addClass('font-weight-bold')
+            return fila
+        }
+        function fechaCorta(iso){
+            let partes = iso.split('-')
+            return partes[2] + '/' + partes[1] + '/' + partes[0]
+        }
+        function celdaValor(valor, clase){
+            return $('<td class="col-valor">').addClass(clase || '').text(valor ? formatoPesos(valor) : '')
+        }
+        function filaSaldoLibro(etiqueta, saldo){
+            return $('<tr class="fila-saldo">')
+                .append($('<td class="text-left" colspan="6">').text(etiqueta))
+                .append($('<td class="col-valor">').text(saldo === null ? '-' : formatoPesos(saldo)))
+        }
+        function pintarLibro(libro, fecha){
+            let cuerpo = $('#tablaLibro tbody').empty()
+            if (libro.base_fecha){
+                $('#libroTitulo').text('Movimientos desde el último cierre (' + fechaCorta(libro.base_fecha) + ') hasta el ' + fechaCorta(fecha))
+                cuerpo.append(filaSaldoLibro('Saldo al cierre del ' + fechaCorta(libro.base_fecha), libro.saldo_inicial))
+            } else {
+                $('#libroTitulo').text('Movimientos del ' + fechaCorta(fecha))
+                cuerpo.append(filaSaldoLibro(libro.saldo_inicial === null ? 'Saldo inicial: sin cierre previo' : 'Saldo inicial (apertura)', libro.saldo_inicial))
+            }
+            libro.filas.forEach(function(f){
+                $('<tr>').toggleClass('dia-anterior', f.fecha != fecha)
+                    .append($('<td class="text-left text-nowrap">').text(fechaCorta(f.fecha)))
+                    .append($('<td class="text-left text-nowrap">').text(f.concepto))
+                    .append($('<td class="text-left text-nowrap">').text(f.documento))
+                    .append($('<td class="text-left">').text(f.detalle))
+                    .append(celdaValor(f.entrada, 'col-debito'))
+                    .append(celdaValor(f.salida, 'col-credito'))
+                    .append(celdaValor(f.saldo))
+                    .appendTo(cuerpo)
+            })
+            if (libro.filas.length == 0){
+                cuerpo.append($('<tr>').append($('<td class="text-center text-muted" colspan="7">').text('Sin movimientos de efectivo en el periodo')))
+            }
+            $('<tr class="fila-totales">')
+                .append($('<td class="text-left" colspan="4">').text('Totales (' + libro.filas.length + ' movimientos)'))
+                .append($('<td class="col-valor col-debito">').text(formatoPesos(libro.total_entradas)))
+                .append($('<td class="col-valor col-credito">').text(formatoPesos(libro.total_salidas)))
+                .append($('<td class="col-valor">'))
+                .appendTo(cuerpo)
+            cuerpo.append(filaSaldoLibro('(=) Saldo final teórico del ' + fechaCorta(fecha), libro.saldo_final))
+        }
+        function pintarCierre(data){
+            cierreActual = data
+            tablaSaldos.clear().rows.add(data.historial).draw()
+            let cierre = data.cierre
+            pintarLibro(data.libro, data.fecha)
+
+            let aviso = $('#cierreAviso').removeClass('alert-info alert-warning').addClass('d-none').text('')
+            if (cierre){
+                $('#formSaldoIni').addClass('d-none')
+                $('#cierreRegistrado').removeClass('d-none')
+                let detalle = $('#tablaCierre tbody').empty()
+                detalle.append(filaHtml('Contado en caja', formatoPesos(cierre.saldo_fisico), true))
+                detalle.append(filaHtml('Diferencia', formatoPesos(cierre.diferencia), true))
+                detalle.append(filaHtml('Ajuste', cierre.es_apertura ? 'Apertura' : cierre.estado_ajuste))
+                if (cierre.motivo) detalle.append(filaHtml('Motivo', cierre.motivo))
+                detalle.append(filaHtml('Cerró', cierre.usuario + ' · ' + cierre.registrado))
+                if (cierre.revisado_por) detalle.append(filaHtml('Aprobó ajuste', cierre.revisado_por))
+                $('#btnAprobarAjuste').toggleClass('d-none', !(data.puede_aprobar && cierre.estado_ajuste == 'Pendiente'))
+                $('#btnReabrirCierre').toggleClass('d-none', !(data.puede_aprobar && data.ultimo_cierre_pk == cierre.pk))
+                return
+            }
+            $('#cierreRegistrado').addClass('d-none')
+            $('#formSaldoIni').removeClass('d-none').trigger('reset')
+            $('#btnCerrarCaja').prop('disabled', !!data.bloqueo)
+            if (data.bloqueo){
+                aviso.removeClass('d-none').addClass('alert-warning').text(data.bloqueo)
+            } else if (data.es_apertura){
+                aviso.removeClass('d-none').addClass('alert-info').text(
+                    'Esta caja no tiene cierres anteriores. El conteo que registres será el saldo de apertura '
+                    + 'y desde ahí se calculará el saldo teórico de los días siguientes.')
+            }
+            actualizarDiferencia()
+        }
+        function actualizarDiferencia(){
+            let fisico = parseFloat(($('#saldoinicial').val() || '').replace(/,/g,''))
+            let teorico = cierreActual ? cierreActual.saldo_teorico : null
+            if (isNaN(fisico) || teorico === null || teorico === undefined){
+                $('#cierreDiferencia').text('-').removeClass('text-danger text-success')
+                $('#grupoMotivo').addClass('d-none')
+                $('#motivoDiferencia').prop('required', false)
+                return
+            }
+            let diferencia = Math.round(fisico - teorico)
+            $('#cierreDiferencia').text(formatoPesos(diferencia))
+                .toggleClass('text-danger', diferencia != 0).toggleClass('text-success', diferencia == 0)
+            $('#grupoMotivo').toggleClass('d-none', diferencia == 0)
+            $('#motivoDiferencia').prop('required', diferencia != 0)
+        }
 
         $('#id_empresa').on('change',function(){
             var empresa = $(this).val()
@@ -905,17 +1153,8 @@
         $('#btnDownloadPlanilla').click(function(){
             let empresa = $('#id_empresa').val()
             let fecha =$('#id_fecha').val()
-            let conteo_cajas = 0
             let cuentas = []
             $('#listaCuentas .active').each(function(index,element){
-                let tipo_cta = $(element).text()
-                if (tipo_cta.includes('Efectivo')) conteo_cajas += 1
-                if (conteo_cajas > 1){
-                    $('#alert-title').text('Oh Oh!')
-                    $('#alert-data').text('Solo puedes generar movimientos diarios con 1 cuenta de efectivo')
-                    $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
-                    return;
-                }
                 cuentas.push($(element).data('pk'))
             })
             if (empresa==""||fecha==""||cuentas.length==0){
@@ -982,11 +1221,9 @@
             setTimeout(function(){cerrarAlerta();},800)
         }
         $('#btnSaldosInciales').click(function(){
-            $('#formSaldoIni').trigger('reset')
             let empresa = $('#id_empresa').val()
             let fecha =$('#id_fecha').val()
             let cuenta_select = $('#listaCuentas .active').text()
-            let cuenta_select_pk = $('#listaCuentas .active').data('pk')
             let cuentas = []
             $('#listaCuentas .active').each(function(index,element){
                 cuentas.push($(element).data('pk'))
@@ -998,15 +1235,15 @@
                 if (cuentas.length==0) mensaje += 'la cuenta, '
                 if (cuentas.length>1) mensaje = 'solo una cuenta, '
                 $('#alert-title').text('Oh Oh!')
-                $('#alert-data').text('Debes escoger '+mensaje+'para cargar el saldo inicial')
+                $('#alert-data').text('Debes escoger '+mensaje+'para hacer el cierre de caja')
                 $('#general-right-alert').toggleClass('show').toggleClass('alert-danger')
                 return false;
             }
-            tablaSaldos.ajax.url(`/accounting/ajax/saldosiniciales?cuenta=${cuenta_select_pk}`).load()
-            $('#modalSaldoInicial').find('.modal-title').text(`Saldo ${cuenta_select} el ${fecha}`)
-            $('#modalSaldoInicial').modal('show')
+            $('#modalSaldoInicial').find('.modal-title').text(`Cierre de caja ${cuenta_select} el ${fecha}`)
+            $('#myTab a:first').tab('show')
+            cargarCierre()
         });
-        $('.arqueofisico').on('change',function(e){
+        $('.arqueofisico').on('change input',function(e){
             let valor = 0
             $('.arqueofisico').each(function(index,elem){
                 let cantidad = $(elem).val()
@@ -1016,9 +1253,19 @@
             })
             valor = new Intl.NumberFormat('en-EN').format(valor)
             $('#saldoinicial').val(valor)
+            actualizarDiferencia()
         })
         $('#saldoinicial').mask("#,##0", {reverse: true});
+        $('#saldoinicial').on('input',actualizarDiferencia)
     })
+    var cierreActual = null
+    function formatoPesos(valor){
+        if (valor === null || valor === undefined) return '-'
+        return '$' + new Intl.NumberFormat('en-EN', {maximumFractionDigits: 0}).format(valor)
+    }
+    function mostrarAlerta(response){
+        showAndinaToast(response.title, $('<div>').text(response.msj).html(), response['class'])
+    }
     function selectCuenta(element){
         if (element.hasClass('active')){
             element.removeClass('active')

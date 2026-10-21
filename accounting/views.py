@@ -41,7 +41,7 @@ from accounting.models import (distribucion_centros_costos, egresos_contable, eg
                                pago_detallado_relacionado, saldos_cuentas_tesoreria, info_facturas,
                                solicitud_anticipos, legalizacion_anticipos, conceptos_legalizacion,
                                reintegros_anticipos, Partners, Countries, States, Cities, archivo_contable,
-                               PlinkMovement, WompiMovement)
+                               PlinkMovement, WompiMovement, CierreCaja)
 from andinasoft.ajax_request import JSONRender
 from andinasoft.utilities import get_text_from_file, pdf_gen, Utilidades
 from andinasoft.handlers_functions import envio_notificacion
@@ -64,6 +64,8 @@ from accounting.alcance import (
 )
 from accounting.cash_accounts import cuenta_es_caja_efectivo
 from accounting.gasto_aprobacion import alegra_sin_aprobacion_q
+from accounting.cierre_caja_views import ajax_cierre_caja
+from accounting.saldo_caja import CajaCerrada, es_caja_planilla, libro_caja, validar_caja_abierta
 from accounting.gasto_aprobacion_views import (
     gastos_alegra_asignar,
     gastos_alegra_aprobar,
@@ -1550,7 +1552,20 @@ def causar_factura(request):
                     soporte = request.FILES['soporte_rad_int']
                 except MultiValueDictKeyError:
                     soporte= None
-                
+
+                if check_pagado == 'on':
+                    try:
+                        validar_caja_abierta([request.POST.get('cuenta_pago_rad')],
+                                             request.POST.get('fecha_pago_rad'))
+                    except CajaCerrada as exc:
+                        context['topalert'] = {
+                            'alert':True,
+                            'title':'Caja cerrada',
+                            'message':str(exc),
+                            'class':'alert-danger'
+                        }
+                        return render(request,'accounting/causar_factura.html',context)
+
                 radicado = Facturas.objects.create(
                     empresa=obj_empresa,descripcion=descripcion,
                     fechafactura=fecha,nrofactura=nrofact,
@@ -3695,17 +3710,6 @@ def ajax_print_planilla(request):
             try: list_cuentas = cuentas.split(',')
             except AttributeError: list_cuentas = []
             
-            list_efectivo = {
-                'ingresos':0,
-                'otros_ingresos':0,
-                'transferencias_entra':0,
-                'intercompañia_entra':0,
-                'transferencias_sale':0,
-                'intercompañia_sale':0,
-                'anticipos':0,
-                'pagos':0
-            }
-            
             try:
                 #ingresos
                 list_ingresos = {}
@@ -3744,8 +3748,6 @@ def ajax_print_planilla(request):
                                             'cuenta':mvto.formapago,
                                         }]
                                     })
-                                if 'EFECTIVO' in mvto.formapago.upper():
-                                    list_efectivo['ingresos'] += mvto.valor
                                     
                             obj_noradicados = RecaudosNoradicados.objects.using(nombre_proy).filter(
                                     fecha=fecha,formapago=cuenta_pago_asociado[0].descripcion
@@ -3777,8 +3779,6 @@ def ajax_print_planilla(request):
                                             'cuenta':mvto.formapago,
                                         }]
                                     })
-                                if 'EFECTIVO' in mvto.formapago.upper():
-                                    list_efectivo['ingresos'] += mvto.valor
                                 
                 #otros ingresos
                 list_otrosingresos = []
@@ -3800,8 +3800,6 @@ def ajax_print_planilla(request):
                             'valor':f'{int(mvto.valor):,}',
                             'consecutivo':f'{oficinas[mvto.oficina]}-{consecutivo}',
                         })
-                        if 'EFECTIVO' in mvto.cuenta.cuentabanco.upper():
-                            list_efectivo['otros_ingresos'] += mvto.valor
                 #transferencias
                 list_transfer = []
                 for cuenta in list_cuentas:
@@ -3825,10 +3823,6 @@ def ajax_print_planilla(request):
                                 'empresa':mvto.empresa_sale.nombre,
                                 'tipo':'transferencias'
                             })
-                            if 'EFECTIVO' in mvto.cuenta_entra.cuentabanco.upper():
-                                list_efectivo['transferencias_entra'] += mvto.valor
-                            elif 'EFECTIVO' in mvto.cuenta_sale.cuentabanco.upper():
-                                list_efectivo['transferencias_sale'] += mvto.valor
                 #intercompañia
                 list_intercomp = []
                 for cuenta in list_cuentas:
@@ -3856,10 +3850,6 @@ def ajax_print_planilla(request):
                                 'empresa':mvto.empresa_sale.nombre,
                                 'tipo':tipo
                                 })
-                            if 'EFECTIVO' in mvto.cuenta_entra.cuentabanco.upper() and tipo=='entra':
-                                list_efectivo['intercompañia_entra'] += mvto.valor
-                            elif 'EFECTIVO' in mvto.cuenta_sale.cuentabanco.upper() and tipo=='sale':
-                                list_efectivo['intercompañia_sale'] += mvto.valor
                 #anticipos
                 list_anticipos = []
                 for cuenta in list_cuentas:
@@ -3878,8 +3868,6 @@ def ajax_print_planilla(request):
                             'valor':f'{int(mvto.valor):,}',
                             'tipo':'anticipos'
                         })
-                        if 'EFECTIVO' in mvto.cuenta.cuentabanco.upper():
-                            list_efectivo['anticipos'] += mvto.valor
                 #pagos
                 list_pagos = []
                 for cuenta in list_cuentas:
@@ -3900,20 +3888,18 @@ def ajax_print_planilla(request):
                             'valor':f'{int(mvto.valor):,}',
                             'tipo':'pagos'
                         })
-                        if 'EFECTIVO' in mvto.cuenta.cuentabanco.upper():
-                            list_efectivo['pagos'] += mvto.valor
                 
-                has_efectivo =False
-                cuenta_efectivo=None
-                obj_saldo_ini=None
                 cuentas_seleccionadas = []
+                cuadres_efectivo = []
                 for cuenta in list_cuentas:
-                    nombre_cta = cuentas_pagos.objects.get(pk=cuenta).cuentabanco
-                    cuentas_seleccionadas.append(nombre_cta)
-                    if 'EFECTIVO' in nombre_cta.upper():
-                        has_efectivo=True
-                        cuenta_efectivo = cuentas_pagos.objects.get(pk=cuenta)
-                        obj_saldo_ini=saldos_cuentas_tesoreria.objects.filter(cuenta=cuenta_efectivo.pk).order_by('-fecha')
+                    obj_cuenta = cuentas_pagos.objects.get(pk=cuenta)
+                    cuentas_seleccionadas.append(obj_cuenta.cuentabanco)
+                    if es_caja_planilla(obj_cuenta):
+                        cuadres_efectivo.append({
+                            'cuenta': obj_cuenta,
+                            'cierre': CierreCaja.objects.filter(cuenta=obj_cuenta, fecha=fecha).first(),
+                            'libro': libro_caja(obj_cuenta.pk, fecha),
+                        })
                 
                 obj_empresa = empresas.objects.get(pk=empresa)
                 filename = f'Planilla_Mvtos_{empresa}_{fecha}.pdf'
@@ -3928,10 +3914,7 @@ def ajax_print_planilla(request):
                     obj_anticipos = list_anticipos,
                     obj_pagos = list_pagos,
                     usuario = request.user,
-                    has_efectivo = has_efectivo,
-                    cuenta_efectivo =cuenta_efectivo,
-                    pagos_efectivo=list_efectivo,
-                    obj_saldo_ini = obj_saldo_ini,
+                    cuadres_efectivo = cuadres_efectivo,
                     ruta = ruta_pdf
                 )
                 ruta_dw = settings.MEDIA_URL+f'tmp/pdf/{filename}'
@@ -7913,6 +7896,7 @@ urls = [
     path('ajax/transferlist',ajax_lista_transf),
     path('ajax/anticiposlista',ajax_lista_ant),
     path('ajax/saldosiniciales',ajax_saldos_iniciales),
+    path('ajax/cierrecaja',ajax_cierre_caja),
     path('ajax/otrospagosdetallados',ajax_otros_detalle),
     path('ajax/nominadetallada',ajax_nomina_detalle),
     path('ajax/interfazbanco',ajax_print_interfaz_banco),

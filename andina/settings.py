@@ -76,6 +76,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'accounting.cierre_caja_middleware.CajaCerradaMiddleware',
 ]
 
 ROOT_URLCONF = 'andina.urls'

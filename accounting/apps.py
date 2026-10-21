@@ -22,6 +22,9 @@ class AccountingConfig(AppConfig):
         Cubre tanto post_migrate (contenttypes) como create_permissions (auth),
         que internamente también llama create_contenttypes.
         """
+        from accounting import cierre_caja_signals
+        cierre_caja_signals.conectar()
+
         if getattr(contenttypes_management, "_andina_safe_ct_patch", False):
             return
 
