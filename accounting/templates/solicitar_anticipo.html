@@ -1085,6 +1085,10 @@
         $('#modalLegalizarAnticipo').modal('hide')
         $("#modalcreatepartner").modal('show')
       })
+      $('#id_nit_tercero').on('fstadd', function(){
+        $('#modalNuevaLegalizacion').modal('hide')
+        $('#modalcreatepartner').modal('show')
+      })
       $('#btn-change-concept').click(function(e){
         let row = table_legalizacion.row('.selected').data()
         let new_concept = $('#modalchangeconcept').find('select').val()

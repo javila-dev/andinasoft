@@ -5063,7 +5063,7 @@ def solicitud_de_anticipos(request):
     context = {
         'form_solicitar_ant':forms.form_solicitar_anticipos,
         'form_anticipo':forms.form_anticipos_tesor,
-        'form_leg_anticipo':forms.form_legalizar_anticipo,
+        'form_leg_anticipo':forms.form_legalizar_anticipo(con_detalle=False),
         'form_partners':forms.form_partners,
         'form_taxes':forms.form_taxes,
     }

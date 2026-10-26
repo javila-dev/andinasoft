@@ -947,10 +947,26 @@ class form_legalizar_anticipo(forms.Form):
         label='Tipo de soporte',
     )
 
-    def __init__(self,*args,**kwargs):
+    def __init__(self,*args,con_detalle=True,**kwargs):
         super().__init__(*args,**kwargs)
-        self.helper = FormHelper() 
+        self.helper = FormHelper()
         self.helper.form_id = 'form-legalizar-anticipo'
+        if not con_detalle:
+            # Legalización de anticipos: no guarda líneas ni retenciones ni
+            # lee el PDF con IA; esa interfaz solo existe en cajas_efectivo.
+            del self.fields['tipo_documento_soporte']
+            self.helper.layout = Layout(
+                customfields.filepicker('soporte'),
+                Row(
+                    Column(Field('nit_tercero', css_class='fstdropdown-select'), css_class='col-md-4'),
+                    Column(Field('fecha'), css_class='col-md-2'),
+                    Column(PrependedText('valor', '$', css_class='text-center money'), css_class='col-md-2'),
+                    Column(Field('concepto'), css_class='col-md-4'),
+                ),
+                Field('descripcion'),
+                Submit('registrar-leg','Registrar',css_class='float-right mt-2 btn-success'),
+            )
+            return
         self.helper.layout = Layout(
             HTML('<input type="hidden" name="id_gasto" id="id_gasto_edit" value="">'),
             HTML('<div class="card" id="leg_block"><div class="card-body">'),
