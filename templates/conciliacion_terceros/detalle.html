@@ -96,6 +96,17 @@
   .ct-hist { font-size: 12px; }
   .ct-hist tr.anulado td { color: #9aa5a1; text-decoration: line-through; }
   .ct-hist tr.anulado td.acc { text-decoration: none; }
+  /* Pasos de una factura en Alegra: factura → costo → cruce, cada uno con su estado y su reintento */
+  .ct-pasos { list-style: none; padding: 0; margin: 0; min-width: 230px; }
+  .ct-pasos li { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
+  .ct-pasos li > i { width: 14px; text-align: center; flex: none; }
+  .ct-pasos .ok > i { color: #2e7d32; } .ct-pasos .bad > i { color: #c62828; } .ct-pasos .wait > i { color: #b26a00; } .ct-pasos .off { color: #9aa5a1; }
+  .ct-pasos .det { display: block; font-size: 11px; color: #6c7a76; }
+  .ct-pasos .bad .det { color: #c62828; }
+  .ct-pasos .btn-link { font-size: 11.5px; padding: 0; vertical-align: baseline; }
+  .ct-previas { border: 1px solid #f0c36d; background: #fffaf0; border-radius: 6px; padding: 8px 10px; }
+  .ct-previas table { font-size: 12px; margin: 4px 0 0; }
+  .ct-previas td, .ct-previas th { padding: 3px 6px; }
   .ct-badge-ic { background: #fff3e0; color: #b26a00; }
   .ct-fac { border: 1px solid #9ec5e8; border-radius: 8px; padding: 10px 12px; background: #f5f9fd; }
   .ct-fac table { font-size: 12px; }
@@ -484,13 +495,14 @@
                 <div class="col-md-3 mb-2"><label class="small mb-1" for="m-fac-fecha">Fecha de la factura</label><input type="date" id="m-fac-fecha" class="form-control form-control-sm"></div>
               </div>
               <div id="m-fac-aviso" class="small mb-2"></div>
+              <div id="m-fac-previas" class="ct-previas small mb-2" style="display:none"></div>
               <div id="m-fac-costo" class="form-row align-items-end mb-2" style="display:none">
                 <div class="col-md-8 mb-1">
                   <div class="small font-weight-bold">Costo del inmueble <span class="font-weight-normal text-muted">· un solo asiento a nombre de la empresa (costo de venta contra inventario del proyecto)</span></div>
                   <div class="small text-muted" id="m-fac-costo-calc"></div>
                 </div>
                 <div class="col-md-4 mb-1"><label class="small mb-1" for="m-fac-costo-valor">Costo a registrar</label>
-                  <input type="number" min="0" step="0.01" id="m-fac-costo-valor" class="form-control form-control-sm text-right"></div>
+                  <input type="text" inputmode="numeric" autocomplete="off" id="m-fac-costo-valor" class="form-control form-control-sm text-right" placeholder="0"></div>
               </div>
               <div class="table-responsive">
                 <table class="table table-sm table-bordered bg-white mb-2">
@@ -1277,6 +1289,16 @@
     });
     return out;
   }
+  // Todas las facturas del negocio para esos titulares, menos las anuladas (incluye las que quedaron con error).
+  function facturasPreviasNegocio(proyecto, ref, titulares) {
+    var out = [];
+    titulares.forEach(function (t) {
+      ((BY_IDENT[t] || {}).facturas || []).forEach(function (f) {
+        if (f.proyecto === proyecto && f.negocio_ref === ref && f.estado !== 'anulada') out.push(f);
+      });
+    });
+    return out.sort(function (a, b) { return a.id - b.id; });
+  }
   function negociosFacturables(l) {
     return l.negocios.filter(function (n) { return n.suma && n.situacion !== 'factura' && Number(n.total_negocio) > 0; });
   }
@@ -1308,12 +1330,34 @@
     var avisos = [];
     if (!cfg) avisos.push('El proyecto no tiene configuración de facturación: solo se puede registrar como informativa.');
     else if (cfg.modo === 'alegra' && (cfg.faltantes || []).length) avisos.push('Para crear en Alegra falta configurar: ' + cfg.faltantes.join(', ') + '.');
-    var previas = facturasNegocio(proyecto, ref, n.titulares);
-    if (previas.length) avisos.push('Este negocio ya tiene ' + previas.length + ' factura(s) registrada(s): ' + previas.map(function (f) { return f.numero || ('#' + f.id); }).join(', ') + '.');
+    var previas = facturasPreviasNegocio(proyecto, ref, n.titulares);
+    var sinTerminar = previas.filter(function (f) { return f.estado === 'error' || f.estado === 'pendiente'; });
+    $('#m-fac-previas').toggle(previas.length > 0).html(previas.length ? (
+      '<strong><i class="fas fa-exclamation-triangle text-warning mr-1"></i>Este negocio ya tiene ' + previas.length + ' factura(s)</strong>' +
+      '<table class="table table-sm bg-white mb-1"><thead><tr><th>Titular</th><th>Factura</th><th>Fecha</th><th class="num">Total</th><th>Estado</th></tr></thead><tbody>' +
+      previas.map(function (f) {
+        var x = BY_IDENT[f.identificacion] || {};
+        return '<tr><td>' + esc(f.identificacion) + ' ' + esc(x.nombre || '') + '</td><td>' + esc(f.numero || ('#' + f.id)) + '<br><small class="text-muted">' + esc(f.tipo_label) + '</small></td>' +
+          '<td class="text-nowrap">' + esc(f.fecha) + '</td><td class="num">' + money(f.total) + '</td><td>' + esc(f.estado_label) + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      (sinTerminar.length ? '<div class="text-danger">Hay facturas que no terminaron de crearse: reintenta esas en el historial de facturas en vez de crear otra.</div>'
+                          : '<div class="text-muted">Si registras otra, el sistema te pedirá confirmarlo.</div>')) : '');
     $('#m-fac-aviso').html(avisos.map(function (a) { return '<div class="text-warning"><i class="fas fa-exclamation-triangle mr-1"></i>' + esc(a) + '</div>'; }).join(''));
     pintarFilasFac();
     $('#m-fac').show();
   }
+  // Costo del inmueble: se muestra con separador de miles (33.861.000) y se envía como número.
+  function costoValor() { return Number(String($('#m-fac-costo-valor').val() || '').replace(/\D/g, '')) || 0; }
+  function ponerCosto(v) { $('#m-fac-costo-valor').val(v ? fmt.format(Math.round(v)) : ''); }
+  $('#m-fac-costo-valor').on('input', function () {
+    var el = this, digitosDer = el.value.slice(el.selectionStart || 0).replace(/\D/g, '').length;
+    var n = Number(el.value.replace(/\D/g, ''));
+    el.value = el.value.replace(/\D/g, '') ? fmt.format(n) : '';
+    // Deja el cursor en el mismo lugar respecto a los dígitos de la derecha.
+    var pos = el.value.length, cuenta = 0;
+    while (pos > 0 && cuenta < digitosDer) { pos--; if (/\d/.test(el.value[pos])) cuenta++; }
+    try { el.setSelectionRange(pos, pos); } catch (e) {}
+  });
   function cuentasEmpresa(emp) { return CATALOGO.filter(function (c) { return c.empresa === emp; }); }
   function pintarFilasFac() {
     if (!fac) return;
@@ -1330,7 +1374,7 @@
         var area = Number(r.area), m2 = Number(r.costo_m2), sug = Number(r.sugerido);
         $('#m-fac-costo-calc').text(m2 ? ('Sugerido: lote ' + (r.inmueble || '') + ' de ' + fmt.format(area) + ' m² × $' + fmt.format(m2) + '/m² = $' + fmt.format(sug) + '. Puedes cambiarlo.')
                                        : 'El proyecto no tiene costo por m² configurado: escribe el costo.');
-        if (!$('#m-fac-costo-valor').val()) $('#m-fac-costo-valor').val(sug ? sug.toFixed(2) : '');
+        if (!$('#m-fac-costo-valor').val()) ponerCosto(sug);
       }).fail(function () { $('#m-fac-costo-calc').text('No se pudo calcular el costo sugerido: escríbelo.'); });
     }
     var k = fac.negocio.titulares.length;
@@ -1391,60 +1435,118 @@
       if (tipo === 'informativa' && !t.numero.trim()) error = 'Indica el número de factura de cada titular.';
       return t;
     }).get();
-    if (!error && tipo === 'alegra' && !(Number($('#m-fac-costo-valor').val()) > 0)
+    if (!error && tipo === 'alegra' && !(costoValor() > 0)
         && !confirm('No escribiste el costo del inmueble: no se registrará el asiento de costo. ¿Continuar?')) return;
     if (error) { alert(error); return; }
     var msg = tipo === 'alegra'
       ? '¿Crear ' + titulares.length + ' factura(s) en Alegra' + (fac.cfg.emision === 'emitir' ? ' y EMITIRLAS ante la DIAN' : ' como borrador') + '?\nEs un cambio inmediato en producción.'
       : '¿Registrar ' + titulares.length + ' factura(s) informativa(s)?';
     if (!confirm(msg)) return;
-    var $b = $(this).prop('disabled', true).text('Registrando…');
-    $.ajax({ url: URL_FAC, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
-      data: JSON.stringify({ tipo: tipo, empresa: $('#m-fac-empresa').val(), proyecto: fac.proyecto, negocio_ref: fac.ref,
-        concepto: $('#m-fac-concepto').val(), fecha: $('#m-fac-fecha').val(), nota: $('#m-fac-nota').val(), titulares: titulares,
-        costo: tipo === 'alegra' ? ($('#m-fac-costo-valor').val() || 0) : 0 }) })
-      .done(function (r) {
-        var errores = r.facturas.filter(function (f) { return f.estado === 'error' || f.error; });
-        if (errores.length) alert(errores.map(function (f) { return f.identificacion + ': ' + f.error; }).join('\n'));
-        else if (r.facturas.some(function (f) { return f.escritura_marcada; })) alert('Factura registrada. La ' + fac.ref + ' quedó marcada como escriturada (paso "Facturado").');
-        aplicarRespuesta(r);
-      })
-      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo registrar la factura.'); })
-      .always(function () { $b.prop('disabled', false).text('Registrar factura(s)'); });
+    var $b = $(this);
+    if ($b.prop('disabled')) return;  // doble clic
+    var datos = { tipo: tipo, empresa: $('#m-fac-empresa').val(), proyecto: fac.proyecto, negocio_ref: fac.ref,
+      concepto: $('#m-fac-concepto').val(), fecha: $('#m-fac-fecha').val(), nota: $('#m-fac-nota').val(), titulares: titulares,
+      costo: tipo === 'alegra' ? costoValor() : 0 };
+    function enviar() {
+      $b.prop('disabled', true).text(tipo === 'alegra' ? 'Enviando a Alegra…' : 'Registrando…');
+      $.ajax({ url: URL_FAC, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify(datos) })
+        .done(function (r) {
+          var fallos = [];
+          r.facturas.forEach(function (f) {
+            if (f.error) fallos.push(f.identificacion + ' · factura: ' + f.error);
+            if (f.error_costo) fallos.push(f.identificacion + ' · costo: ' + f.error_costo);
+            if (f.error_cruce) fallos.push(f.identificacion + ' · cruce: ' + f.error_cruce);
+          });
+          if (fallos.length) alert('Algunos pasos no se completaron. Puedes reintentar cada uno en el historial de facturas:\n\n' + fallos.join('\n'));
+          else if (r.facturas.some(function (f) { return f.escritura_marcada; })) alert('Factura registrada. La ' + fac.ref + ' quedó marcada como escriturada (paso "Facturado").');
+          aplicarRespuesta(r);
+          var h = document.getElementById('m-historial'); if (h) { h.open = true; }
+        })
+        .fail(function (x) {
+          var j = x.responseJSON || {};
+          if (x.status === 409 && j.confirmar) {
+            if (confirm(j.detail)) { datos.confirmar_duplicado = true; enviar(); return; }
+          } else alert(j.detail || 'No se pudo registrar la factura.');
+          $b.prop('disabled', false).text('Registrar factura(s)');
+        })
+        .done(function () { $b.prop('disabled', false).text('Registrar factura(s)'); });
+    }
+    enviar();
   });
+  // Cada paso con su estado y, si falló o quedó pendiente, su propio botón: se reintenta solo ese paso.
+  function pasosFactura(f) {
+    function li(clase, icono, texto, det, boton) {
+      return '<li class="' + clase + '"><i class="fas ' + icono + '" aria-hidden="true"></i><span>' + texto +
+        (det ? '<span class="det">' + esc(det) + '</span>' : '') + (boton || '') + '</span></li>';
+    }
+    function btn(acc, txt) { return CERRADA ? '' : ' <button type="button" class="btn btn-link fac-acc" data-acc="' + acc + '" data-id="' + f.id + '">' + txt + '</button>'; }
+    var enviando = '<i class="fas fa-spinner fa-spin mr-1"></i>Enviando…';
+    if (f.estado === 'anulada') return '<span class="text-muted">Anulada</span>';
+    if (f.tipo !== 'alegra') {
+      return '<ul class="ct-pasos">' + li('ok', 'fa-check-circle', 'Factura registrada') +
+        li(f.cruce_estado === 'no_aplica' ? 'off' : 'ok', f.cruce_estado === 'no_aplica' ? 'fa-minus-circle' : 'fa-check-circle',
+           f.cruce_estado === 'no_aplica' ? 'Sin cruce (ya está en contabilidad)' : 'Cruce descontado de la cuenta ' + esc(f.cruce_cuenta)) + '</ul>';
+    }
+    var emitida = f.estado === 'emitida', h = '';
+    // 1. Factura
+    if (f.paso_en_curso === 'factura') h += li('wait', 'fa-clock', enviando);
+    else if (emitida) h += li('ok', 'fa-check-circle', 'Factura ' + esc(f.numero) + ' emitida');
+    else if (f.estado === 'borrador') h += li('wait', 'fa-pause-circle', 'Factura en borrador en Alegra', 'Al emitirla se registran el costo y el cruce.', btn('emitir', 'Emitir'));
+    else h += li('bad', 'fa-times-circle', 'Factura no creada', f.error || 'Pendiente de enviar.', btn('reintentar', 'Reintentar factura'));
+    // 2. Costo (solo en la primera factura del negocio)
+    if (Number(f.costo) > 0) {
+      var tc = 'Costo ' + fmt.format(Number(f.costo));
+      if (f.paso_en_curso === 'costo') h += li('wait', 'fa-clock', enviando);
+      else if (f.costo_estado === 'registrado') h += li('ok', 'fa-check-circle', tc + ' registrado');
+      else if (!emitida) h += li('off', 'fa-circle', tc + ' · espera la factura');
+      else if (f.error_costo) h += li('bad', 'fa-times-circle', tc + ' no registrado', f.error_costo, btn('costo', 'Reintentar costo'));
+      else h += li('wait', 'fa-circle', tc + ' pendiente', '', btn('costo', 'Registrar costo'));
+    }
+    // 3. Cruce del anticipo (RC)
+    var tr = 'Cruce del anticipo' + (f.cruce_cuenta ? ' (' + esc(f.cruce_cuenta) + ')' : '');
+    if (f.cruce_estado === 'no_aplica') h += li('off', 'fa-minus-circle', 'Sin cruce');
+    else if (f.paso_en_curso === 'cruce') h += li('wait', 'fa-clock', enviando);
+    else if (f.cruce_estado === 'registrado') h += li('ok', 'fa-check-circle', tr + ' registrado');
+    else if (!emitida) h += li('off', 'fa-circle', tr + ' · espera la factura');
+    else if (f.error_cruce) h += li('bad', 'fa-times-circle', tr + ' no registrado', f.error_cruce, btn('cruzar', 'Reintentar cruce'));
+    else h += li('wait', 'fa-circle', tr + ' pendiente', '', btn('cruzar', 'Registrar cruce'));
+    return '<ul class="ct-pasos">' + h + '</ul>';
+  }
   function renderFacturas(l) {
     var fs = l.facturas || [];
     if (!fs.length) { $('#m-fac-hist').html(''); return; }
-    $('#m-fac-hist').html('<div class="ct-sub-h">Facturas</div><table class="table table-sm table-bordered ct-hist mb-0"><thead class="thead-light"><tr><th>Fecha</th><th>Negocio</th><th>Factura</th><th class="num">Total</th><th>Estado</th><th>Cruce (RC) y costo</th><th></th></tr></thead><tbody>' +
+    $('#m-fac-hist').html('<div class="ct-sub-h">Facturas</div><table class="table table-sm table-bordered ct-hist mb-0"><thead class="thead-light"><tr><th>Fecha</th><th>Negocio</th><th>Factura</th><th class="num">Total</th><th>Pasos</th><th></th></tr></thead><tbody>' +
       fs.map(function (f) {
         var acc = [];
-        if (!CERRADA) {
-          if (f.estado === 'borrador') acc.push('<button type="button" class="btn btn-sm btn-link p-0 fac-acc" data-acc="emitir" data-id="' + f.id + '">Emitir</button>');
-          if (f.tipo === 'alegra' && f.estado === 'emitida' && f.costo_estado === 'pendiente') acc.push('<button type="button" class="btn btn-sm btn-link p-0 fac-acc" data-acc="costo" data-id="' + f.id + '">Registrar costo</button>');
-          if (f.tipo === 'alegra' && f.estado === 'emitida' && f.cruce_estado === 'pendiente') acc.push('<button type="button" class="btn btn-sm btn-link p-0 fac-acc" data-acc="cruzar" data-id="' + f.id + '">Registrar cruce</button>');
-          if (f.estado === 'error' && !f.alegra_invoice_id) acc.push('<button type="button" class="btn btn-sm btn-link p-0 fac-acc" data-acc="reintentar" data-id="' + f.id + '">Reintentar</button>');
-          if (['anulada', 'emitida', 'borrador'].indexOf(f.estado) < 0 || (f.tipo === 'informativa' && f.estado !== 'anulada'))
-            acc.push('<button type="button" class="btn btn-sm btn-link text-danger p-0 fac-acc" data-acc="anular" data-id="' + f.id + '">Anular registro</button>');
-        }
+        if (!CERRADA && (['anulada', 'emitida', 'borrador'].indexOf(f.estado) < 0 || (f.tipo === 'informativa' && f.estado !== 'anulada')))
+          acc.push('<button type="button" class="btn btn-sm btn-link text-danger p-0 fac-acc" data-acc="anular" data-id="' + f.id + '">Anular registro</button>');
         return '<tr class="' + (f.estado === 'anulada' ? 'anulado' : '') + '"><td class="text-nowrap">' + esc(f.fecha) + '<br><small class="text-muted">' + esc(f.creado_por) + '</small></td>' +
-          '<td>' + esc(f.proyecto) + ' · ' + esc(f.negocio_ref) + '<br><small>' + esc(f.concepto_label) + '</small>' +
+          '<td>' + esc(f.proyecto) + ' · ' + esc(f.negocio_ref) + '<br><small>' + esc(f.identificacion) + ' · ' + esc(f.concepto_label) + '</small>' +
           (f.escritura_marcada ? '<br><small class="ct-ok"><i class="fas fa-check mr-1"></i>ADJ marcada como escriturada</small>' : '') + '</td>' +
           '<td>' + esc(f.numero || '—') + '<br><small class="text-muted">' + esc(f.tipo_label) + '</small></td><td class="num">' + money(f.total) + '</td>' +
-          '<td>' + esc(f.estado_label) + (f.error ? '<br><small class="text-danger">' + esc(f.error) + '</small>' : '') + '</td>' +
-          '<td>' + esc(f.cruce_label) + (f.cruce_cuenta && f.cruce_estado !== 'no_aplica' ? '<br><small>Cuenta ' + esc(f.cruce_cuenta) + '</small>' : '') +
-          (Number(f.costo) ? '<br><small>Costo ' + money(f.costo) + ': ' + esc(f.costo_label) + '</small>' : '') + '</td>' +
+          '<td>' + pasosFactura(f) + '</td>' +
           '<td class="acc">' + acc.join('<br>') + '</td></tr>';
       }).join('') + '</tbody></table>');
   }
   $('#m-linea').on('click', '.fac-acc', function () {
     var acc = $(this).data('acc');
     var txt = { emitir: '¿Emitir la factura ante la DIAN? Es un cambio inmediato en producción.',
-                costo: '¿Registrar en Alegra el asiento de costo (costo de venta contra inventario)?', cruzar: '¿Registrar en Alegra el journal de cruce del anticipo?',
-                reintentar: '¿Reintentar la creación en Alegra? Verifica antes que no haya quedado un borrador.', anular: '¿Anular el registro de esta factura?' }[acc];
+                costo: '¿Registrar en Alegra el asiento de costo (costo de venta contra inventario)?\nAntes de crearlo se verifica que no exista ya.',
+                cruzar: '¿Registrar en Alegra el journal de cruce del anticipo?\nAntes de crearlo se verifica que no exista ya.',
+                reintentar: '¿Reintentar solo la factura en Alegra?\nAntes de crearla se busca si quedó creada en el intento anterior; si está, se enlaza sin crear otra.',
+                anular: '¿Anular el registro de esta factura?' }[acc];
     if (!confirm(txt)) return;
-    $.ajax({ url: URL_FAC_ACC.replace('__ID__', $(this).data('id')).replace('__ACC__', acc), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
-      .done(aplicarRespuesta)
-      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo completar la acción.'); });
+    var $b = $(this);
+    if ($b.prop('disabled')) return;
+    $b.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Enviando…');
+    $.ajax({ url: URL_FAC_ACC.replace('__ID__', $b.data('id')).replace('__ACC__', acc), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+      .done(function (r) {
+        var f = (r.facturas || [])[0] || {}, err = { costo: f.error_costo, cruzar: f.error_cruce, reintentar: f.error, emitir: f.error }[acc];
+        if (err) alert(err);
+        aplicarRespuesta(r);
+        var h = document.getElementById('m-historial'); if (h) { h.open = true; }
+      })
+      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo completar la acción.'); $b.prop('disabled', false).text('Reintentar'); });
   });
 
   // ---- Corrección de identificación ----

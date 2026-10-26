@@ -12,11 +12,14 @@ Se factura a cada titular en partes iguales.
 """
 import datetime
 import logging
+import re
 import uuid
 from collections import Counter
+from contextlib import contextmanager
 from decimal import ROUND_DOWN, Decimal
 
 from django.core.cache import cache
+from django.db.models import Q
 from django.utils import timezone
 
 from andinasoft.models import empresas
@@ -28,6 +31,10 @@ CENT = Decimal('0.01')
 
 class FacturacionError(Exception):
     pass
+
+
+class RequiereConfirmacion(FacturacionError):
+    """El negocio ya tiene facturas para esos titulares: se registra otra solo si el usuario lo confirma."""
 
 
 def partes_iguales(total, n):
@@ -161,6 +168,25 @@ def registrar(conciliacion, datos, user):
                 motivo = 'no existe en Alegra como cuenta de movimiento' if not codigos[cta] else 'está repetida en Alegra con el mismo código'
                 raise FacturacionError(f'{t.get("identificacion")}: la cuenta {cta} {motivo}; elige otra cuenta de anticipos para el cruce.')
 
+    # Protecciones contra duplicados al registrar.
+    idents = [str(t.get('identificacion') or '').strip() for t in titulares]
+    if len(set(idents)) != len(idents):
+        raise FacturacionError('Hay titulares repetidos en la factura.')
+    previas = list(FacturaConciliacion.objects.filter(
+        proyecto=datos.get('proyecto') or '', negocio_ref=datos.get('negocio_ref') or '', identificacion__in=idents,
+    ).exclude(estado=FacturaConciliacion.ESTADO_ANULADA).order_by('id'))
+    sin_terminar = [p for p in previas if p.estado in (FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR)]
+    if sin_terminar:
+        raise FacturacionError(
+            'Ya hay facturas de este negocio que no terminaron de crearse (' +
+            ', '.join(f'{p.identificacion} #{p.pk}' for p in sin_terminar) +
+            '). Reintenta esas desde el historial o anula su registro; no se crea otra para no duplicar.')
+    if previas and not datos.get('confirmar_duplicado'):
+        raise RequiereConfirmacion(
+            'Este negocio ya tiene ' + str(len(previas)) + ' factura(s) para estos titulares: ' +
+            ', '.join(f'{p.identificacion} {p.numero or "#" + str(p.pk)} por ${p.total:,.0f} ({p.get_estado_display().lower()})' for p in previas) +
+            '. ¿Registrar otra de todos modos?')
+
     grupo = str(uuid.uuid4())
     creadas = []
     for t in titulares:
@@ -257,128 +283,276 @@ def _numero(resp):
     return nt.get('fullNumber') or f"{nt.get('prefix') or ''}{nt.get('number') or ''}" or str((resp or {}).get('id') or '')
 
 
-def crear_en_alegra(f, config, user=None):
+# ---------------------------------------------------------------------------
+# Protección contra duplicados
+#
+# Cada paso (factura, costo, cruce) es independiente y se puede reintentar solo. Antes de crear algo en Alegra:
+#   1. Se toma un bloqueo del paso en la base (dos clics, dos pestañas o dos personas no envían a la vez).
+#   2. Se busca en Alegra si el documento ya existe (factura con «FC-<id>» en observaciones; journal con la
+#      referencia exacta). Si existe uno se enlaza sin crear otro; si hay varios se detiene para revisión manual;
+#      si no se puede consultar Alegra, no se envía.
+#   3. Si el envío falla sin respuesta clara (timeout, 5xx) se vuelve a buscar: si quedó creado, se enlaza.
+# ---------------------------------------------------------------------------
+
+BLOQUEO_MINUTOS = 10
+ESTADOS_ALEGRA_EMITIDA = ('open', 'closed')
+
+
+@contextmanager
+def _bloqueo(f, paso):
+    ahora = timezone.now()
+    libre = Q(paso_en_curso='') | Q(paso_en_curso_desde__lt=ahora - datetime.timedelta(minutes=BLOQUEO_MINUTOS))
+    if not FacturaConciliacion.objects.filter(libre, pk=f.pk).update(paso_en_curso=paso, paso_en_curso_desde=ahora):
+        raise FacturacionError('Este paso ya se está enviando a Alegra (otra pestaña u otra persona). '
+                               'Espera un momento y recarga la página antes de volver a intentarlo.')
     try:
-        contacto = _contacto(f.empresa, f.identificacion)
-        payload = payload_factura(f, config, contacto)
-        resp = _client(f.empresa).rest('POST', '/invoices', json_payload=payload)
-        f.alegra_invoice_id = str(resp.get('id') or '')
-        f.numero = _numero(resp)
-        f.estado = FacturaConciliacion.ESTADO_EMITIDA if resp.get('status') == 'open' else FacturaConciliacion.ESTADO_BORRADOR
-        f.respuesta = {'factura': resp}
-        f.error = ''
-        f.save()
+        f.refresh_from_db()  # estado fresco: otro proceso pudo completarlo
+        yield
+    finally:
+        FacturaConciliacion.objects.filter(pk=f.pk, paso_en_curso=paso).update(paso_en_curso='', paso_en_curso_desde=None)
+        f.paso_en_curso, f.paso_en_curso_desde = '', None
+
+
+def _lista(resp):
+    data = resp.get('data') if isinstance(resp, dict) and 'data' in resp else resp
+    return data if isinstance(data, list) else []
+
+
+def _token_factura(pk):
+    return re.compile(r'(?<![\w-])FC-%d(?!\d)' % pk)
+
+
+def _buscar_facturas_alegra(f, contacto_id):
+    """Facturas del cliente en esa fecha cuyas observaciones traen «FC-<id>» (las que creó este registro)."""
+    client, token, hallados, start = _client(f.empresa), _token_factura(f.pk), [], 0
+    for _ in range(10):
+        data = _lista(client.rest('GET', f'/invoices?start={start}&limit=30&client_id={contacto_id}&date={f.fecha.isoformat()}'))
+        hallados += [i for i in data if isinstance(i, dict) and token.search(i.get('observations') or '')]
+        if len(data) < 30:
+            return hallados
+        start += 30
+    raise FacturacionError('El cliente tiene demasiadas facturas en esa fecha para verificar duplicados; revisa en Alegra.')
+
+
+def _ya_enlazada(campo, alegra_id, f):
+    return bool(alegra_id) and FacturaConciliacion.objects.filter(empresa_id=f.empresa_id, **{campo: str(alegra_id)}).exclude(pk=f.pk).exists()
+
+
+def _journal_idempotente(f, referencia, construir_payload):
+    """Devuelve (journal, ya_existia). Nunca crea un segundo journal con la misma referencia."""
+    from alegra_integration.journal_reconcile import _journal_reference, list_journals_by_reference
+
+    client = _client(f.empresa)
+
+    def buscar():
+        return [j for j in list_journals_by_reference(client, referencia) if _journal_reference(j) == referencia]
+
+    try:
+        hallados = buscar()
     except Exception as exc:
-        f.estado = FacturaConciliacion.ESTADO_ERROR
-        f.error = (f'{exc}. Antes de reintentar, revisa en Alegra si la factura quedó creada como borrador '
-                   f'(observaciones «FC-{f.pk}»).')[:4000]
-        f.save()
+        raise FacturacionError(f'No se pudo verificar en Alegra si el journal «{referencia}» ya existe ({exc}); '
+                               'no se envió nada. Intenta de nuevo en un momento.')
+    if len(hallados) > 1:
+        raise FacturacionError(f'En Alegra hay {len(hallados)} journals con la referencia «{referencia}». '
+                               'Elimina los sobrantes en Alegra y vuelve a intentar.')
+    if hallados:
+        return hallados[0], True
+    payload = construir_payload()
+    try:
+        return client.rest('POST', '/journals', json_payload=payload), False
+    except Exception:
+        try:
+            hallados = buscar()
+        except Exception:
+            hallados = []
+        if len(hallados) == 1:
+            return hallados[0], True
+        raise
+
+
+def _aplicar_factura_alegra(f, inv, reconciliada=False):
+    status = (inv or {}).get('status')
+    if status == 'voided':
+        raise FacturacionError(f'La factura {_numero(inv)} está anulada en Alegra.')
+    f.alegra_invoice_id = str(inv.get('id') or '')
+    f.numero = _numero(inv) or f.numero
+    f.estado = FacturaConciliacion.ESTADO_EMITIDA if status in ESTADOS_ALEGRA_EMITIDA else FacturaConciliacion.ESTADO_BORRADOR
+    f.respuesta = dict(f.respuesta or {}, factura=inv, **({'factura_reconciliada': True} if reconciliada else {}))
+    f.error = ''
+
+
+def _encadenar(f, config, usuario):
+    """Tras la factura emitida: escritura, costo y cruce. Cada uno guarda su propio resultado."""
+    if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
         return f
-    if f.estado == FacturaConciliacion.ESTADO_EMITIDA:
-        marcar_escritura(f, getattr(user, 'username', '') or getattr(f.created_by, 'username', ''))
-        registrar_costo(f, config)
-        cruzar(f, config)
+    marcar_escritura(f, usuario)
+    for paso in (registrar_costo, cruzar):
+        try:
+            paso(f, config)
+        except FacturacionError as exc:
+            logger.warning('Factura %s: %s', f.pk, exc)
     return f
 
 
+def crear_en_alegra(f, config, user=None):
+    """Paso 1: la factura. Si ya existe en Alegra (por un intento anterior) se enlaza en vez de crear otra."""
+    usuario = getattr(user, 'username', '') or getattr(f.created_by, 'username', '')
+    with _bloqueo(f, 'factura'):
+        if f.alegra_invoice_id and f.estado in (FacturaConciliacion.ESTADO_BORRADOR, FacturaConciliacion.ESTADO_EMITIDA):
+            pass  # otro proceso ya la creó
+        else:
+            try:
+                contacto = _contacto(f.empresa, f.identificacion)
+                try:
+                    existentes = _buscar_facturas_alegra(f, contacto)
+                except FacturacionError:
+                    raise
+                except Exception as exc:
+                    raise FacturacionError(f'No se pudo verificar en Alegra si la factura ya existe ({exc}); no se envió nada.')
+                if len(existentes) > 1:
+                    raise FacturacionError(f'En Alegra hay {len(existentes)} facturas con «FC-{f.pk}» en observaciones: '
+                                           'anula las sobrantes en Alegra y vuelve a intentar.')
+                if existentes:
+                    _aplicar_factura_alegra(f, existentes[0], reconciliada=True)
+                else:
+                    payload = payload_factura(f, config, contacto)
+                    try:
+                        inv = _client(f.empresa).rest('POST', '/invoices', json_payload=payload)
+                        reconciliada = False
+                    except Exception:
+                        try:
+                            existentes = _buscar_facturas_alegra(f, contacto)
+                        except Exception:
+                            existentes = []
+                        if len(existentes) != 1:
+                            raise
+                        inv, reconciliada = existentes[0], True
+                    _aplicar_factura_alegra(f, inv, reconciliada)
+                if _ya_enlazada('alegra_invoice_id', f.alegra_invoice_id, f):
+                    raise FacturacionError(f'La factura {f.numero} de Alegra ya está enlazada a otro registro.')
+                f.save()
+            except Exception as exc:
+                f.estado = FacturaConciliacion.ESTADO_ERROR
+                f.error = (f'{exc} Al reintentar, el sistema busca primero en Alegra la factura «FC-{f.pk}» para no duplicarla.')[:4000]
+                f.save()
+                return f
+    return _encadenar(f, config, usuario)
+
+
 def emitir(f):
+    """Emite (DIAN) una factura que quedó en borrador. Si ya está emitida en Alegra, solo se actualiza aquí."""
     if f.estado != FacturaConciliacion.ESTADO_BORRADOR or not f.alegra_invoice_id:
         raise FacturacionError('Solo se puede emitir una factura en borrador de Alegra.')
-    resp = _client(f.empresa).rest('POST', '/invoices/stamp', json_payload={'ids': [f.alegra_invoice_id]})
-    filas = resp if isinstance(resp, list) else (resp.get('data') or resp.get('results') or [resp]) if isinstance(resp, dict) else []
-    ok = any(str(r.get('id')) == f.alegra_invoice_id and r.get('success') for r in filas if isinstance(r, dict))
-    f.respuesta = dict(f.respuesta or {}, emision=resp)
-    if not ok:
-        f.error = f'Alegra no emitió la factura: {resp}'[:4000]
-        f.save(update_fields=['respuesta', 'error'])
-        raise FacturacionError(f.error)
-    inv = _client(f.empresa).rest('GET', f'/invoices/{f.alegra_invoice_id}')
-    f.numero = _numero(inv) or f.numero
-    f.estado = FacturaConciliacion.ESTADO_EMITIDA
-    f.error = ''
-    f.save()
-    marcar_escritura(f, getattr(f.created_by, 'username', ''))
+    with _bloqueo(f, 'factura'):
+        if f.estado != FacturaConciliacion.ESTADO_BORRADOR:
+            return f
+        client = _client(f.empresa)
+        inv = client.rest('GET', f'/invoices/{f.alegra_invoice_id}')
+        if (inv or {}).get('status') == 'draft':
+            resp = client.rest('POST', '/invoices/stamp', json_payload={'ids': [f.alegra_invoice_id]})
+            filas = resp if isinstance(resp, list) else (resp.get('data') or resp.get('results') or [resp]) if isinstance(resp, dict) else []
+            ok = any(str(r.get('id')) == f.alegra_invoice_id and r.get('success') for r in filas if isinstance(r, dict))
+            f.respuesta = dict(f.respuesta or {}, emision=resp)
+            inv = client.rest('GET', f'/invoices/{f.alegra_invoice_id}')
+            if not ok and (inv or {}).get('status') not in ESTADOS_ALEGRA_EMITIDA:
+                f.error = f'Alegra no emitió la factura: {resp}'[:4000]
+                f.save(update_fields=['respuesta', 'error'])
+                raise FacturacionError(f.error)
+        _aplicar_factura_alegra(f, inv)
+        f.save()
     config = config_de(f.proyecto)
     if config:
-        registrar_costo(f, config)
-        if f.cruce_estado == FacturaConciliacion.CRUCE_PENDIENTE:
-            cruzar(f, config)
+        _encadenar(f, config, getattr(f.created_by, 'username', ''))
     return f
 
 
 def registrar_costo(f, config):
-    """Journal de costo de venta: débito a costo (6), crédito al inventario del proyecto (15), a nombre de la empresa."""
+    """Paso 2: journal de costo de venta (débito costo 6, crédito inventario 15), a nombre de la empresa."""
     if f.costo_estado != FacturaConciliacion.CRUCE_PENDIENTE or f.costo <= 0:
         return f
     if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
         raise FacturacionError('El costo se registra cuando la factura está emitida.')
-    try:
-        from alegra_integration.mapping import MappingResolver
+    with _bloqueo(f, 'costo'):
+        if f.costo_estado != FacturaConciliacion.CRUCE_PENDIENTE:
+            return f
+        referencia = f'COSTO-FC-{f.pk}'
+
+        def construir():
+            from alegra_integration.mapping import MappingResolver
+            try:
+                empresa_contacto = {'client': {'id': int(MappingResolver(f.empresa).contact_for_empresa(f.empresa.pk))}}
+            except Exception:
+                empresa_contacto = {}
+            cc = {'costCenter': {'id': int(config.centro_costo_id)}} if config.centro_costo_id else {}
+            desc = f'Costo de venta {f.proyecto} {f.negocio_ref} · factura {f.numero}'
+            payload = {
+                'date': f.fecha.isoformat(),
+                'observations': f'{desc} · FC-{f.pk}'[:500],
+                'reference': referencia,
+                'entries': [
+                    dict({'id': int(config.cuenta_costo_id), 'debit': float(f.costo), 'credit': 0, 'description': desc[:255]}, **empresa_contacto, **cc),
+                    dict({'id': int(config.cuenta_inventario_id), 'debit': 0, 'credit': float(f.costo), 'description': desc[:255]}, **empresa_contacto, **cc),
+                ],
+            }
+            if config.numeracion_journal_id:
+                payload['numberTemplate'] = {'id': int(config.numeracion_journal_id)}
+            return payload
+
         try:
-            empresa_contacto = {'client': {'id': int(MappingResolver(f.empresa).contact_for_empresa(f.empresa.pk))}}
-        except Exception:
-            empresa_contacto = {}
-        cc = {'costCenter': {'id': int(config.centro_costo_id)}} if config.centro_costo_id else {}
-        desc = f'Costo de venta {f.proyecto} {f.negocio_ref} · factura {f.numero}'
-        payload = {
-            'date': f.fecha.isoformat(),
-            'observations': f'{desc} · FC-{f.pk}'[:500],
-            'reference': f'COSTO-FC-{f.pk}',
-            'entries': [
-                dict({'id': int(config.cuenta_costo_id), 'debit': float(f.costo), 'credit': 0, 'description': desc[:255]}, **empresa_contacto, **cc),
-                dict({'id': int(config.cuenta_inventario_id), 'debit': 0, 'credit': float(f.costo), 'description': desc[:255]}, **empresa_contacto, **cc),
-            ],
-        }
-        if config.numeracion_journal_id:
-            payload['numberTemplate'] = {'id': int(config.numeracion_journal_id)}
-        resp = _client(f.empresa).rest('POST', '/journals', json_payload=payload)
-        f.alegra_costo_journal_id = str(resp.get('id') or '')
-        f.costo_estado = FacturaConciliacion.CRUCE_REGISTRADO
-        f.respuesta = dict(f.respuesta or {}, costo=resp)
-    except Exception as exc:
-        f.error = (f'Factura creada pero el asiento de costo falló: {exc}. Revisa en Alegra si existe el journal '
-                   f'«COSTO-FC-{f.pk}» antes de reintentar.')[:4000]
-    f.save()
+            resp, ya = _journal_idempotente(f, referencia, construir)
+            f.alegra_costo_journal_id = str(resp.get('id') or '')
+            f.costo_estado = FacturaConciliacion.CRUCE_REGISTRADO
+            f.respuesta = dict(f.respuesta or {}, costo=resp, **({'costo_reconciliado': True} if ya else {}))
+            f.error_costo = ''
+        except Exception as exc:
+            f.error_costo = (f'{exc} Al reintentar, el sistema busca primero en Alegra el journal «{referencia}».')[:4000]
+        f.save()
     return f
 
 
 def cruzar(f, config):
-    """Journal de cruce: débito a la cuenta de anticipos del tercero (la elegida en la factura) / crédito CxC asociado a la factura."""
+    """Paso 3: RC. Débito a la cuenta de anticipos del tercero, crédito a la CxC asociado a la factura."""
     if f.cruce_estado != FacturaConciliacion.CRUCE_PENDIENTE:
         return f
     if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado != FacturaConciliacion.ESTADO_EMITIDA:
         raise FacturacionError('El cruce por journal se hace sobre una factura emitida en Alegra.')
-    try:
-        halladas = [c for c in cuentas_alegra(f.empresa) if f.cruce_cuenta and c['codigo'] == f.cruce_cuenta]
-        if len(halladas) != 1:
-            raise FacturacionError(f'la cuenta de anticipos {f.cruce_cuenta or "(vacía)"} '
-                                   + ('no existe en Alegra como cuenta de movimiento' if not halladas else 'está repetida en Alegra con el mismo código'))
-        cuenta = halladas[0]
-        contacto = {'id': int(_contacto(f.empresa, f.identificacion))}
-        cc = {'costCenter': {'id': int(config.centro_costo_id)}} if config.centro_costo_id else {}
-        payload = {
-            'date': f.fecha.isoformat(),
-            'observations': f'Cruce anticipo factura {f.numero} · {f.proyecto} {f.negocio_ref} · FC-{f.pk}'[:500],
-            'reference': f'CRUCE-FC-{f.pk}',
-            'entries': [
-                dict({'id': int(cuenta['id']), 'debit': float(f.total), 'credit': 0, 'client': contacto,
-                      'description': f'Cruce anticipo {f.proyecto} {f.negocio_ref}'}, **cc),
-                dict({'id': int(config.cuenta_cxc_id), 'debit': 0, 'credit': float(f.total), 'client': contacto,
-                      'description': f'Factura {f.numero}',
-                      'associatedDocument': {'idResource': int(f.alegra_invoice_id), 'resourceType': 'invoice'}}, **cc),
-            ],
-        }
-        if config.numeracion_journal_id:
-            payload['numberTemplate'] = {'id': int(config.numeracion_journal_id)}
-        resp = _client(f.empresa).rest('POST', '/journals', json_payload=payload)
-        f.alegra_journal_id = str(resp.get('id') or '')
-        f.cruce_estado = FacturaConciliacion.CRUCE_REGISTRADO
-        f.respuesta = dict(f.respuesta or {}, cruce=resp)
-        f.error = ''
-    except Exception as exc:
-        f.error = (f'Factura creada pero el cruce falló: {exc}. Revisa en Alegra si existe el journal «CRUCE-FC-{f.pk}» '
-                   f'antes de reintentar.')[:4000]
-    f.save()
+    with _bloqueo(f, 'cruce'):
+        if f.cruce_estado != FacturaConciliacion.CRUCE_PENDIENTE:
+            return f
+        referencia = f'CRUCE-FC-{f.pk}'
+
+        def construir():
+            halladas = [c for c in cuentas_alegra(f.empresa) if f.cruce_cuenta and c['codigo'] == f.cruce_cuenta]
+            if len(halladas) != 1:
+                raise FacturacionError(f'La cuenta de anticipos {f.cruce_cuenta or "(vacía)"} '
+                                       + ('no existe en Alegra como cuenta de movimiento.' if not halladas else 'está repetida en Alegra con el mismo código.'))
+            contacto = {'id': int(_contacto(f.empresa, f.identificacion))}
+            cc = {'costCenter': {'id': int(config.centro_costo_id)}} if config.centro_costo_id else {}
+            payload = {
+                'date': f.fecha.isoformat(),
+                'observations': f'Cruce anticipo factura {f.numero} · {f.proyecto} {f.negocio_ref} · FC-{f.pk}'[:500],
+                'reference': referencia,
+                'entries': [
+                    dict({'id': int(halladas[0]['id']), 'debit': float(f.total), 'credit': 0, 'client': contacto,
+                          'description': f'Cruce anticipo {f.proyecto} {f.negocio_ref}'}, **cc),
+                    dict({'id': int(config.cuenta_cxc_id), 'debit': 0, 'credit': float(f.total), 'client': contacto,
+                          'description': f'Factura {f.numero}',
+                          'associatedDocument': {'idResource': int(f.alegra_invoice_id), 'resourceType': 'invoice'}}, **cc),
+                ],
+            }
+            if config.numeracion_journal_id:
+                payload['numberTemplate'] = {'id': int(config.numeracion_journal_id)}
+            return payload
+
+        try:
+            resp, ya = _journal_idempotente(f, referencia, construir)
+            f.alegra_journal_id = str(resp.get('id') or '')
+            f.cruce_estado = FacturaConciliacion.CRUCE_REGISTRADO
+            f.respuesta = dict(f.respuesta or {}, cruce=resp, **({'cruce_reconciliado': True} if ya else {}))
+            f.error_cruce = ''
+        except Exception as exc:
+            f.error_cruce = (f'{exc} Al reintentar, el sistema busca primero en Alegra el journal «{referencia}».')[:4000]
+        f.save()
     return f
 
 

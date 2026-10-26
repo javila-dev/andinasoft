@@ -241,7 +241,8 @@ def _factura_json(f):
         'estado': f.estado, 'estado_label': f.get_estado_display(), 'alegra_invoice_id': f.alegra_invoice_id,
         'alegra_journal_id': f.alegra_journal_id, 'error': f.error, 'nota': f.nota,
         'escritura_marcada': bool((f.respuesta or {}).get('escritura')),
-        'costo': str(f.costo), 'costo_estado': f.costo_estado,
+        'costo': str(f.costo), 'costo_estado': f.costo_estado, 'error_costo': f.error_costo, 'error_cruce': f.error_cruce,
+        'alegra_costo_journal_id': f.alegra_costo_journal_id, 'paso_en_curso': f.paso_en_curso,
         'costo_label': {'no_aplica': '', 'pendiente': 'Pendiente', 'registrado': 'Registrado'}.get(f.costo_estado, ''),
         'creado_por': f.created_by.get_username() if f.created_by else '',
         'creado_en': timezone.localtime(f.created_at).strftime('%d/%m/%Y %H:%M') if f.created_at else '',
@@ -465,6 +466,8 @@ def factura_crear(request, pk):
         facturas = facturacion.registrar(conc, datos, request.user)
     except ValueError:
         return JsonResponse({'detail': 'JSON inválido.'}, status=400)
+    except facturacion.RequiereConfirmacion as exc:
+        return JsonResponse({'detail': str(exc), 'confirmar': True}, status=409)
     except facturacion.FacturacionError as exc:
         return JsonResponse({'detail': str(exc)}, status=400)
     return _factura_respuesta(conc, facturas)
@@ -492,9 +495,11 @@ def factura_accion(request, pk, factura_id, accion):
                 raise facturacion.FacturacionError('El proyecto no tiene configuración de facturación.')
             facturacion.cruzar(f, cfg)
         elif accion == 'reintentar':
-            if f.estado != FacturaConciliacion.ESTADO_ERROR or f.alegra_invoice_id:
-                raise facturacion.FacturacionError('Solo se reintenta una factura con error que no alcanzó a crearse en Alegra.')
+            if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado not in (FacturaConciliacion.ESTADO_ERROR, FacturaConciliacion.ESTADO_PENDIENTE):
+                raise facturacion.FacturacionError('Solo se reintenta una factura de Alegra que no alcanzó a crearse.')
             cfg = facturacion.config_de(f.proyecto)
+            if not cfg:
+                raise facturacion.FacturacionError('El proyecto no tiene configuración de facturación.')
             facturacion.crear_en_alegra(f, cfg, request.user)
         elif accion == 'anular':
             facturacion.anular_registro(f, request.user)

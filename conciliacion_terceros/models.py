@@ -357,7 +357,13 @@ class FacturaConciliacion(models.Model):
     costo_estado = models.CharField(max_length=20, choices=CRUCE_CHOICES, default=CRUCE_NO_APLICA)
     alegra_costo_journal_id = models.CharField(max_length=40, blank=True, default='')
     respuesta = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
+    # Un error por paso (factura, costo, cruce) para reintentar solo el que falló.
     error = models.TextField(blank=True, default='')
+    error_costo = models.TextField(blank=True, default='')
+    error_cruce = models.TextField(blank=True, default='')
+    # Bloqueo del paso que se está enviando a Alegra (evita dobles envíos simultáneos).
+    paso_en_curso = models.CharField(max_length=20, blank=True, default='')
+    paso_en_curso_desde = models.DateTimeField(null=True, blank=True)
     nota = models.TextField(blank=True, default='')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
     created_at = models.DateTimeField(auto_now_add=True)
