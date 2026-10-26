@@ -65,6 +65,8 @@ PASOS_ARCHIVO = {
         'Escritura',
     ),
 }
+# En el historico no estan todas las facturas: se puede firmar sin ella y cargarla despues.
+PASOS_ARCHIVO_OPCIONAL = {PromesaCumplimiento.PASO_FIRMA_CLIENTE}
 PASOS_LINEA_UI = (
     (PromesaCumplimiento.PASO_FIRMA_CLIENTE, 'Firma cliente', 'fa-pen', False),
     (PromesaCumplimiento.PASO_FIRMA_EMPRESA, 'Firma empresa', 'fa-building', False),
@@ -224,6 +226,7 @@ def siguientes_detalle(hechos):
             'label': PASO_LABEL.get(codigo, codigo),
             'requiere_archivo': codigo in PASOS_ARCHIVO,
             'archivo_label': PASOS_ARCHIVO[codigo][1] if codigo in PASOS_ARCHIVO else '',
+            'archivo_opcional': codigo in PASOS_ARCHIVO_OPCIONAL,
             'interno': codigo == PromesaCumplimiento.PASO_CARGA,
         })
     return out
@@ -235,6 +238,8 @@ def nombre_documento_paso(paso, archivo):
         return ''
     msg, prefijo = PASOS_ARCHIVO[paso]
     if not archivo:
+        if paso in PASOS_ARCHIVO_OPCIONAL:
+            return ''
         raise ValueError(msg)
     name = str(getattr(archivo, 'name', '') or '')
     if not name.lower().endswith('.pdf'):
@@ -313,6 +318,12 @@ def pipeline_escritura(cump):
         for codigo, field in PASO_FECHA_FIELD.items():
             fechas[codigo] = getattr(cump, field, None)
     linea, rama = pasos_escritura_ui(hechos=hechos, fechas=fechas)
+    falta_factura = falta_factura_notaria(cump, hechos)
+    if falta_factura:
+        # La firma ya esta hecha, pero el paso sigue abriendo la carga de la factura.
+        for s in linea:
+            if s['codigo'] == PromesaCumplimiento.PASO_FIRMA_CLIENTE:
+                s['falta_factura'] = True
     siguientes = siguientes_detalle(hechos)
     paso = resumen_paso(hechos)
     next_paso = siguientes[0]['codigo'] if siguientes else None
@@ -329,8 +340,49 @@ def pipeline_escritura(cump):
             PromesaCumplimiento.PASO_FIRMA_EMPRESA in hechos
             and PromesaCumplimiento.PASO_CARGA not in hechos
         ),
+        'falta_factura_notaria': falta_factura,
         'hechos': hechos,
     }
+
+
+def falta_factura_notaria(cump, hechos=None):
+    """El cliente ya firmo pero no se ha cargado el PDF de la factura de notaria."""
+    if not cump:
+        return False
+    if hechos is None:
+        hechos = hechos_from_cumplimiento(cump)
+    return (
+        PromesaCumplimiento.PASO_FIRMA_CLIENTE in hechos
+        and not (getattr(cump, 'documento_factura_notaria', '') or '').strip()
+    )
+
+
+def validar_carga_factura_notaria(proyecto, adj):
+    cump = PromesaCumplimiento.objects.filter(proyecto_id=proyecto, adj=adj).first()
+    if not falta_factura_notaria(cump):
+        raise ValueError('La factura de notaria solo se carga cuando el cliente ya firmo y aun no tiene factura.')
+    return cump
+
+
+def cargar_factura_notaria(proyecto, adj, documento, usuario):
+    """Carga la factura despues de la firma del cliente sin cambiar fechas ni el paso de la escritura."""
+    cump = validar_carga_factura_notaria(proyecto, adj)
+    if not (documento or '').strip():
+        raise ValueError(PASOS_ARCHIVO[PromesaCumplimiento.PASO_FIRMA_CLIENTE][0])
+    cump.documento_factura_notaria = documento
+    if not cump.fecha_factura_notaria and cump.fecha_firma_cliente:
+        cump.fecha_factura_notaria = cump.fecha_firma_cliente
+    cump.save(update_fields=['documento_factura_notaria', 'fecha_factura_notaria', 'actualizado'])
+    PromesaHito.objects.create(
+        proyecto=cump.proyecto,
+        adj=adj,
+        paso=PromesaCumplimiento.PASO_FACTURA_NOTARIA,
+        fecha=cump.fecha_firma_cliente or datetime.date.today(),
+        usuario=str(usuario or ''),
+        nota='Factura de notaria cargada despues de la firma del cliente.',
+        documento=documento,
+    )
+    return cump
 
 
 def pasos_from_cumplimiento(cump):
@@ -590,6 +642,7 @@ def build_promesa_rows(proyecto):
             'pasos_siguientes': pipe['siguientes'],
             'escritura_completa': pipe['completa'],
             'carga_pendiente': pipe['carga_pendiente'],
+            'falta_factura_notaria': pipe['falta_factura_notaria'],
             'dias_firma_cliente': dias_firma,
             'alerta_firma_empresa': alerta_firma,
             'entrega_ui': ent_ui,
@@ -672,7 +725,7 @@ def marcar_hito_escritura(proyecto, adj, paso, fecha, usuario, *, nota='', docum
     hechos = hechos_from_cumplimiento(cumplimiento)
     if not puede_avanzar_paso(None, paso, hechos=hechos, es_superuser=es_superuser):
         raise ValueError('No se puede marcar ese paso todavia. Complete el anterior.')
-    if paso in PASOS_ARCHIVO and not (documento or '').strip():
+    if paso in PASOS_ARCHIVO and paso not in PASOS_ARCHIVO_OPCIONAL and not (documento or '').strip():
         raise ValueError(PASOS_ARCHIVO[paso][0])
     fecha = _as_date(fecha)
     if not fecha:
@@ -683,9 +736,10 @@ def marcar_hito_escritura(proyecto, adj, paso, fecha, usuario, *, nota='', docum
     if paso == PromesaCumplimiento.PASO_CARGA:
         cumplimiento.documento_escritura = documento or cumplimiento.documento_escritura
     if paso == PromesaCumplimiento.PASO_FIRMA_CLIENTE:
-        # La factura de notaria se carga con la firma del cliente.
-        cumplimiento.fecha_factura_notaria = fecha
-        cumplimiento.documento_factura_notaria = documento or cumplimiento.documento_factura_notaria
+        # La factura de notaria se carga con la firma del cliente (si ya se tiene).
+        if documento:
+            cumplimiento.fecha_factura_notaria = fecha
+            cumplimiento.documento_factura_notaria = documento
     hechos.add(paso)
     cumplimiento.paso_escritura_actual = resumen_paso(hechos)
     if paso in (

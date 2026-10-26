@@ -184,11 +184,20 @@
                 {% if promesa.dias_firma_cliente != None %}
                 <span class="badge {% if promesa.alerta_firma_empresa %}badge-danger{% else %}badge-info{% endif %}" title="Dias desde la firma del cliente">{% if promesa.dias_firma_cliente == 1 %}1 dia{% else %}{{ promesa.dias_firma_cliente }} dias{% endif %}</span>
                 {% endif %}
+                {% if promesa.falta_factura_notaria %}
+                <span class="badge badge-warning" title="El cliente ya firmó pero no se ha cargado la factura de notaría">Falta factura</span>
+                {% endif %}
                 <span class="badge {{ promesa.estado_escritura_badge }}">{{ promesa.estado_escritura_label }}</span>
               </span>
             </div>
             {% if puede_gestionar_promesa %}
             <p class="small text-muted mb-2">Haga click en el paso para registrar la informacion.</p>
+            {% endif %}
+            {% if promesa.falta_factura_notaria and puede_gestionar_promesa %}
+            <div class="alert alert-warning py-2 small mb-2 d-flex flex-wrap justify-content-between align-items-center">
+              <span>El cliente ya firmó, pero falta cargar la factura de notaría.</span>
+              <button type="button" class="btn btn-sm btn-warning py-0" data-toggle="modal" data-target="#modal-factura-notaria">Cargar factura</button>
+            </div>
             {% endif %}
             {% if promesa.alerta_firma_empresa %}
             <div class="alert alert-danger py-2 small mb-2">Mas de un mes sin firma de la empresa. Se acerca el plazo para registrarla.</div>
@@ -362,6 +371,32 @@
 </div>
 {% endif %}
 {% endfor %}
+{% if promesa.falta_factura_notaria %}
+<div class="modal fade" id="modal-factura-notaria" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="/servicio_cliente/promesa/{{ proyecto }}/{{ adj }}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <input type="hidden" name="accion" value="factura_notaria">
+        <div class="modal-header">
+          <h5 class="modal-title">Cargar factura de notaría</h5>
+          <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">Se adjunta a la firma del cliente. No cambia la fecha de la firma ni el paso de la escritura.</p>
+          <label class="small mb-1">PDF Factura notaría</label>
+          <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancelar</button>
+          <button class="btn btn-sm btn-primary">Cargar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% for sp in promesa.pasos_siguientes %}
 <div class="modal fade" id="modal-hito-{{ sp.codigo }}" tabindex="-1">
   <div class="modal-dialog">
@@ -379,9 +414,9 @@
           <label class="small mb-1">Fecha del paso</label>
           <input type="date" name="fecha" class="form-control form-control-sm mb-2" required>
           {% if sp.requiere_archivo %}
-          <label class="small mb-1">PDF {{ sp.archivo_label|default:'documento' }}</label>
-          <input type="file" name="documento" class="form-control-file" accept="application/pdf" required>
-          {% if sp.codigo == 'firma_cliente' %}<small class="form-text text-muted">La notaría envía la factura cuando firma el cliente.</small>{% endif %}
+          <label class="small mb-1">PDF {{ sp.archivo_label|default:'documento' }}{% if sp.archivo_opcional %} (opcional){% endif %}</label>
+          <input type="file" name="documento" class="form-control-file" accept="application/pdf"{% if not sp.archivo_opcional %} required{% endif %}>
+          {% if sp.codigo == 'firma_cliente' %}<small class="form-text text-muted">La notaría envía la factura cuando firma el cliente. Si aún no la tienes, puedes cargarla después.</small>{% endif %}
           {% endif %}
         </div>
         <div class="modal-footer">

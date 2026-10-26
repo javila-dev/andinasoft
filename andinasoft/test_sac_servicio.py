@@ -139,6 +139,9 @@ class HitoEscrituraTests(SimpleTestCase):
         self.assertEqual(pipe0['siguientes'][0]['codigo'], PromesaCumplimiento.PASO_FIRMA_CLIENTE)
         self.assertTrue(pipe0['siguientes'][0]['requiere_archivo'])
         self.assertEqual(pipe0['siguientes'][0]['archivo_label'], 'Factura notaria')
+        self.assertTrue(pipe0['siguientes'][0]['archivo_opcional'])
+        self.assertFalse(pipe0['falta_factura_notaria'])
+        self.assertFalse(any(s.get('falta_factura') for s in pipe0['pasos_linea']))
         cump = SimpleNamespace(
             fecha_firma_cliente=timezone.datetime(2026, 9, 1).date(),
             fecha_factura_notaria=None,
@@ -152,6 +155,10 @@ class HitoEscrituraTests(SimpleTestCase):
         )
         pipe = pipeline_escritura(cump)
         self.assertNotIn('factura_pendiente', pipe)
+        self.assertTrue(pipe['falta_factura_notaria'])
+        firma = next(s for s in pipe['pasos_linea'] if s['codigo'] == PromesaCumplimiento.PASO_FIRMA_CLIENTE)
+        self.assertEqual(firma['estado'], 'done')
+        self.assertTrue(firma['falta_factura'])
         self.assertEqual(pipe['paso_siguiente'], PromesaCumplimiento.PASO_FIRMA_EMPRESA)
         self.assertFalse(pipe['siguientes'][0]['requiere_archivo'])
         self.assertTrue(puede_avanzar_paso(
@@ -160,8 +167,10 @@ class HitoEscrituraTests(SimpleTestCase):
 
     def test_nombre_documento_factura_requiere_pdf(self):
         from andinasoft.promesas_service import nombre_documento_paso
+        # La factura es opcional en la firma del cliente (historico sin facturas).
+        self.assertEqual(nombre_documento_paso(PromesaCumplimiento.PASO_FIRMA_CLIENTE, None), '')
         with self.assertRaises(ValueError):
-            nombre_documento_paso(PromesaCumplimiento.PASO_FIRMA_CLIENTE, None)
+            nombre_documento_paso(PromesaCumplimiento.PASO_CARGA, None)
         with self.assertRaises(ValueError):
             nombre_documento_paso(
                 PromesaCumplimiento.PASO_FIRMA_CLIENTE,
@@ -173,6 +182,22 @@ class HitoEscrituraTests(SimpleTestCase):
         )
         self.assertTrue(nombre.startswith('Factura notaria_'))
         self.assertEqual(nombre_documento_paso(PromesaCumplimiento.PASO_FIRMA_EMPRESA, None), '')
+
+    def test_falta_factura_notaria(self):
+        from andinasoft.promesas_service import falta_factura_notaria
+        base = dict(
+            fecha_factura_notaria=None, fecha_firma_empresa=None, fecha_carga_escritura=None,
+            documento_escritura='', fecha_registro=None, fecha_facturado=None,
+            paso_escritura_actual=PromesaCumplimiento.PASO_FIRMA_CLIENTE,
+        )
+        firmado = SimpleNamespace(fecha_firma_cliente=timezone.datetime(2026, 9, 1).date(), documento_factura_notaria='', **base)
+        self.assertTrue(falta_factura_notaria(firmado))
+        con_factura = SimpleNamespace(fecha_firma_cliente=timezone.datetime(2026, 9, 1).date(), documento_factura_notaria='Factura notaria_x', **base)
+        self.assertFalse(falta_factura_notaria(con_factura))
+        sin_firma = SimpleNamespace(fecha_firma_cliente=None, documento_factura_notaria='',
+                                    **dict(base, paso_escritura_actual=PromesaCumplimiento.PASO_PENDIENTE))
+        self.assertFalse(falta_factura_notaria(sin_firma))
+        self.assertFalse(falta_factura_notaria(None))
 
     def test_fechas_incompletas_no_registran(self):
         from andinasoft.promesas_service import registrar_fechas_firmadas

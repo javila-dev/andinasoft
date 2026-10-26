@@ -1,5 +1,7 @@
 {% if clickable and s.estado == 'next' %}
 <button type="button" class="hito-card {{ s.estado }}{% if s.interno %} interno{% endif %}" data-toggle="modal" data-target="#modal-hito-{{ s.codigo }}" title="Registrar {{ s.label }}">
+{% elif clickable and s.falta_factura %}
+<button type="button" class="hito-card {{ s.estado }} falta-factura" data-toggle="modal" data-target="#modal-factura-notaria" title="Cargar factura de notaría">
 {% else %}
 <div class="hito-card {{ s.estado }}{% if s.interno %} interno{% endif %}" title="{{ s.label }}{% if s.interno %} (interno){% endif %}{% if s.fecha %} · {% if s.fecha.year %}{{ s.fecha|date:'Y-m-d' }}{% else %}{{ s.fecha }}{% endif %}{% endif %}">
 {% endif %}
@@ -12,6 +14,7 @@
       {% elif s.estado == 'next' %}Pendiente
       {% elif s.estado == 'done' %}Hecho
       {% else %}Bloqueado{% endif %}
+      {% if s.falta_factura %}<span class="hito-chip falta-factura">Falta factura</span>{% endif %}
     </div>
   </div>
-{% if clickable and s.estado == 'next' %}</button>{% else %}</div>{% endif %}
+{% if clickable and s.estado == 'next' or clickable and s.falta_factura %}</button>{% else %}</div>{% endif %}

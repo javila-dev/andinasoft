@@ -24,6 +24,7 @@ from andinasoft.pqrs_service import (
 )
 from andinasoft.promesas_service import (
     PASO_LABEL,
+    cargar_factura_notaria,
     marcar_entrega,
     marcar_hito_escritura,
     nombre_documento_paso,
@@ -31,6 +32,7 @@ from andinasoft.promesas_service import (
     registrar_fechas_firmadas,
     registrar_novacion,
     registrar_otrosi,
+    validar_carga_factura_notaria,
 )
 from andinasoft.servicio_cliente_service import dashboard_sac, detalle_kpi_sac, ficha_cliente, url_ficha
 from andinasoft.shared_models import documentos_contratos
@@ -332,6 +334,14 @@ def actualizar_promesa_view(request, proyecto, adj):
                 documento=doc_name,
             )
             messages.success(request, 'Otrosi registrado.')
+        elif accion == 'factura_notaria':
+            validar_carga_factura_notaria(proyecto, adj)
+            doc_name = _guardar_pdf_contrato(
+                request.FILES.get('documento'), adj, proyecto, request.user,
+                'Factura notaria', requerido=True,
+            )
+            cargar_factura_notaria(proyecto, adj, doc_name, request.user)
+            messages.success(request, 'Factura de notaria cargada.')
         elif accion == 'novacion':
             registrar_novacion(
                 proyecto, adj,
