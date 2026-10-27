@@ -216,6 +216,9 @@ class documentos_contrato(forms.Form):
         ('Comunicados','Comunicados'),
         ('Acta de reunion','Acta de reunion'),
         ('Compromiso','Compromiso'),
+        ('Terminacion de contrato','Terminacion de contrato'),
+        ('Paz y salvo','Paz y salvo'),
+        ('Soporte de envio','Soporte de envio'),
     )
     tipo_doc=forms.ChoiceField(choices=tipos_docs)
     documento_cargar.widget.attrs.update(id='nombredoc')
