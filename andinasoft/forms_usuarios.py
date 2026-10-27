@@ -15,7 +15,7 @@ class UsuarioCuentaForm(forms.Form):
     is_superuser = forms.BooleanField(required=False, label='Superusuario')
     panel_chatwoot = forms.BooleanField(
         required=False,
-        label='Puede usar el panel de Chatwoot',
+        label='Puede usar el panel de Lyvio',
         help_text='Pestaña Andinasoft en Lyvio. Los superusuarios ya lo tienen.',
     )
     password1 = forms.CharField(

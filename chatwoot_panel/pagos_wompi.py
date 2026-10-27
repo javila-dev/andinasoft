@@ -217,7 +217,7 @@ def crear_link(user, proyecto, adj, *, valor, account_id, conversation_id, idemp
         raise LinkError('Este proyecto no tiene un comercio Wompi configurado. Avisa a sistemas.', status=503)
     if not str(account_id).isdigit() or not str(conversation_id).isdigit() \
             or obtener_conversacion(account_id, conversation_id) is None:
-        raise LinkError('No se pudo confirmar la conversación con Chatwoot.', status=502)
+        raise LinkError('No se pudo confirmar la conversación con Lyvio.', status=502)
 
     try:
         valor = int(str(valor or '').replace('.', '').replace(',', '').strip())

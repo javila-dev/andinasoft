@@ -106,7 +106,7 @@
     var lista = $('elegir-lista');
     lista.textContent = '';
     if (!state.destinos.length) {
-      aviso('Este contacto no tiene un número colombiano válido en Chatwoot ni en Andinasoft.');
+      aviso('Este contacto no tiene un número colombiano válido en Lyvio ni en Andinasoft.');
       return;
     }
     state.destinos.forEach(function (d) {
@@ -378,7 +378,7 @@
   function registrarSeguimiento() {
     avisarPanel({ abrir: true });
     $('btn-seguimiento').hidden = true;
-    $('fin-detalle').textContent = 'Completa el seguimiento en el panel de Chatwoot.';
+    $('fin-detalle').textContent = 'Completa el seguimiento en el panel de Lyvio.';
   }
 
   // ---------- mensajes del panel ----------
@@ -429,5 +429,5 @@
   });
 
   if (window.opener) window.opener.postMessage({ type: LISTO }, ORIGEN);
-  else $('esperando-texto').textContent = 'Abre esta ventana desde el botón «Llamar» del panel de Andinasoft en Chatwoot.';
+  else $('esperando-texto').textContent = 'Abre esta ventana desde el botón «Llamar» del panel de Andinasoft en Lyvio.';
 })();

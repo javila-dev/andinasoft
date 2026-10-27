@@ -12,6 +12,6 @@
     }, 600);
   } else {
     document.getElementById('conectado-texto').textContent =
-      'No se encontró el panel de Chatwoot que abrió esta ventana. Ciérrala y pulsa «Conectar con Andinasoft» de nuevo.';
+      'No se encontró el panel de Lyvio que abrió esta ventana. Ciérrala y pulsa «Conectar con Andinasoft» de nuevo.';
   }
 })();

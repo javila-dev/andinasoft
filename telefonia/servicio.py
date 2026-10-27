@@ -67,13 +67,13 @@ def nombre_usuario(user):
 def verificar_conversacion(account_id, conversation_id, contact_id=''):
     """Confirma con Chatwoot la conversación y devuelve su contacto: {'id', 'nombre', 'telefono'}."""
     if not str(account_id).isdigit() or not str(conversation_id).isdigit():
-        raise NoPermitido('Abre la conversación del cliente en Chatwoot.')
+        raise NoPermitido('Abre la conversación del cliente en Lyvio.')
     data = obtener_conversacion(account_id, conversation_id)
     if data is None:
-        raise NoPermitido('No se pudo confirmar la conversación con Chatwoot.', status=502)
+        raise NoPermitido('No se pudo confirmar la conversación con Lyvio.', status=502)
     sender = (data.get('meta') or {}).get('sender') or {}
     if str(data.get('id')) != str(conversation_id) or not sender.get('id'):
-        raise NoPermitido('No se pudo confirmar la conversación con Chatwoot.', status=502)
+        raise NoPermitido('No se pudo confirmar la conversación con Lyvio.', status=502)
     if contact_id and str(sender['id']) != str(contact_id):
         raise NoPermitido('El contacto no corresponde a esa conversación. Recarga el panel.')
     return {

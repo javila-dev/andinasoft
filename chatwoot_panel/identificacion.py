@@ -170,7 +170,7 @@ def resolver_contexto(user, *, account_id='', contact_id='', telefono='', cedula
                 return _respuesta(user, 'identificado', r[0], r[1], via='vinculo')
 
     if not telefono:
-        return _respuesta(user, 'ninguno', avisos=['El contacto no tiene teléfono en Chatwoot.'])
+        return _respuesta(user, 'ninguno', avisos=['El contacto no tiene teléfono en Lyvio.'])
 
     titulares, conyuges, es_asesor = buscar_clientes(telefono)
     avisos = []
