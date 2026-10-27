@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/negocio/<str:proyecto>/<str:adj>/estado-cuenta/', views.api_estado_cuenta, name='api_estado_cuenta'),
     path('api/negocio/<str:proyecto>/<str:adj>/promesa/', views.api_promesa, name='api_promesa'),
     path('api/negocio/<str:proyecto>/<str:adj>/documentos/', views.api_documentos, name='api_documentos'),
+    path('api/negocio/<str:proyecto>/<str:adj>/recibos/', views.api_recibos, name='api_recibos'),
     path('api/negocio/<str:proyecto>/<str:adj>/documentos/<int:doc_id>/', views.api_documento, name='api_documento'),
     path('api/negocio/<str:proyecto>/<str:adj>/seguimientos/', views.api_seguimientos, name='api_seguimientos'),
     path('api/negocio/<str:proyecto>/<str:adj>/link-pago/', views.api_link_pago, name='api_link_pago'),

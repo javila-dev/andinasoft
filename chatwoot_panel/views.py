@@ -16,7 +16,10 @@ from andinasoft.handlers_functions import abrir_documento_contrato
 from andinasoft.promesas_service import resumen_promesa
 from andinasoft.servicio_cliente_service import url_ficha
 from andinasoft.shared_models import documentos_contratos
+from andinasoft.shared_models import Recaudos_general
 from andinasoft.utilities import file_response_from_pdf_root, pdf_gen
+from finance import recibo_link, solicitudes_service
+from finance.models import recibos_internos
 from chatwoot_panel import pagos_wompi, seguimientos_service
 from chatwoot_panel.auth import auditar, emitir_token, panel_api, puede_usar_panel, revocar
 from chatwoot_panel.chatwoot_api import borrar_cedula_de_contacto, guardar_cedula_en_contacto, nota_privada
@@ -184,7 +187,7 @@ def api_vincular(request):
     account_id = _texto(body.get('account_id'), 20)
     contact_id = _texto(body.get('contact_id'), 20)
     if not account_id or not contact_id:
-        return JsonResponse({'detail': 'Falta el contacto de Chatwoot.'}, status=400)
+        return JsonResponse({'detail': 'Falta el contacto de Lyvio.'}, status=400)
 
     if request.method == 'DELETE':
         ChatwootContactLink.objects.filter(chatwoot_account_id=account_id, chatwoot_contact_id=contact_id).delete()
@@ -479,6 +482,76 @@ def api_promesa(request, proyecto, adj):
 # ---------- Documentos del contrato ----------
 
 _SELLO_CARGA = re.compile(r'\s*\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$')
+
+
+LIMITE_RECIBOS = 40
+
+
+def _crear_solicitud_recibo(request, proyecto, adj):
+    if not request.user.has_perm('finance.add_recibos_internos'):
+        return JsonResponse({'detail': 'No tienes permiso para solicitar recibos.'}, status=403)
+    try:
+        s = solicitudes_service.crear_solicitud(
+            proyecto=proyecto, adj=adj, usuario=request.user,
+            fecha_pago=request.POST.get('fecha_pago'), valor=request.POST.get('valor'),
+            soporte=request.FILES.get('soporte'),
+            abono_capital=request.POST.get('abono_capital') == '1',
+            condona_mora=request.POST.get('condona_mora') == '1',
+            confirmar_duplicado=request.POST.get('confirmar_duplicado') == '1',
+        )
+    except solicitudes_service.SolicitudError as exc:
+        status = 409 if exc.code == 'posible_duplicado' else 400
+        return JsonResponse({'detail': str(exc), 'code': exc.code}, status=status)
+    auditar(request, 'solicitar_recibo', proyecto=proyecto, adj=adj, detalle=f'#{s.pk} ${s.valor}')
+    return JsonResponse({'ok': True, 'id': s.pk}, status=201)
+
+
+@require_http_methods(['GET', 'POST'])
+@panel_api
+def api_recibos(request, proyecto, adj):
+    """
+    GET: solicitudes de recibo del negocio. Las que ya tienen recibo traen el enlace público firmado del PDF,
+    para pegarlo en la plantilla de WhatsApp. POST: crea una solicitud (multipart, con el soporte en PDF).
+    """
+    if not puede_ver_proyecto(request.user, proyecto):
+        return _sin_permiso_proyecto()
+    if request.method == 'POST':
+        return _crear_solicitud_recibo(request, proyecto, adj)
+    filas = list(recibos_internos.objects.filter(proyecto_id=proyecto, cliente=adj)
+                 .order_by('-fecha', '-id')[:LIMITE_RECIBOS]
+                 .values('id', 'fecha', 'fecha_pago', 'valor', 'recibo_asociado', 'anulado', 'requiere_revision_manual'))
+    numeros = {str(f['recibo_asociado']).strip() for f in filas if f['recibo_asociado']}
+    try:
+        existentes = {str(n) for n in Recaudos_general.objects.using(proyecto)
+                      .filter(numrecibo__in=numeros).values_list('numrecibo', flat=True)} if numeros else set()
+    except Exception:
+        logger.exception('chatwoot_panel: recibos no disponibles en %s', proyecto)
+        return _no_disponible('recibos de caja')
+    recibos = []
+    for f in filas:
+        numero = str(f['recibo_asociado'] or '').strip()
+        if f['anulado']:
+            estado = 'anulada'
+        elif numero:
+            estado = 'realizado' if numero in existentes else 'sin_recibo'
+        elif f['requiere_revision_manual']:
+            estado = 'revision'
+        else:
+            estado = 'pendiente'
+        recibos.append({
+            'id': f['id'],
+            'fecha': _fecha(f['fecha']),
+            'fecha_pago': _fecha(f['fecha_pago']),
+            'valor': _dinero(f['valor']),
+            'recibo': numero,
+            'estado': estado,
+            'url': recibo_link.url_recibo(request, proyecto, numero) if estado == 'realizado' else '',
+        })
+    auditar(request, 'recibos', proyecto=proyecto, adj=adj)
+    return JsonResponse({
+        'recibos': recibos, 'dias_vigencia': recibo_link.DIAS_VIGENCIA, 'limite': LIMITE_RECIBOS,
+        'puede_solicitar': request.user.has_perm('finance.add_recibos_internos'),
+    })
 
 
 def _nombre_documento(descripcion):

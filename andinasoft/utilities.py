@@ -275,7 +275,7 @@ def pdf_gen_weasy(template_path, context, filename):
     }
 
 
-def file_response_from_pdf_root(root_path, *, filename):
+def file_response_from_pdf_root(root_path, *, filename, as_attachment=True):
     """
     pdf_gen/pdf_gen_weasy return a storage key as `root` (e.g. tmp/<file>.pdf) when using default_storage.
     Fall back to local filesystem when `root` is a real path.
@@ -284,9 +284,10 @@ def file_response_from_pdf_root(root_path, *, filename):
 
     root_str = str(root_path or "")
     normalized = root_str.replace("\\", "/")
+    kwargs = {"as_attachment": as_attachment, "filename": filename, "content_type": "application/pdf"}
     if normalized.startswith("tmp/"):
-        return FileResponse(default_storage.open(root_str, "rb"), as_attachment=True, filename=filename)
-    return FileResponse(open(root_str, "rb"), as_attachment=True, filename=filename)
+        return FileResponse(default_storage.open(root_str, "rb"), **kwargs)
+    return FileResponse(open(root_str, "rb"), **kwargs)
 
 
 def get_text_from_file(file_path):

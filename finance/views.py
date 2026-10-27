@@ -1,7 +1,8 @@
 import unicodedata
 import hashlib
 from django.shortcuts import render
-from django.http import JsonResponse, FileResponse
+from django.core import signing
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.db.models import Avg, Max, Min, Sum, Q
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -10,6 +11,7 @@ from andinasoft.create_pdf import GenerarPDF
 from andinasoft.utilities import Utilidades, pdf_gen, pdf_gen_weasy, file_response_from_pdf_root
 from andinasoft.models import clientes, proyectos
 from andinasoft.shared_models import Recaudos_general, Vista_Adjudicacion
+from finance import recibo_link
 from finance.models import recibos_internos
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
@@ -575,30 +577,46 @@ def solicitud_fractal(request):
     
     return render(request,'recibos_fractal.html',context)
     
+def _pdf_recibo(proyecto, recibo, filename):
+    """Genera el PDF del recibo de caja y devuelve su ruta (storage o disco)."""
+    obj_recibo = Recaudos_general.objects.using(proyecto).get(numrecibo=recibo)
+    context = {
+        'recibo': obj_recibo
+    }
+    # Oasis receipts are rendered with WeasyPrint.
+    if proyecto == 'Oasis':
+        pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
+    else:
+        pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context, filename)
+    return pdf.get('root')
+
+
 @login_required
 def imprimir_recibo(request):
     if request.method =='GET':
         proyecto = request.GET.get('proyecto')
         recibo = request.GET.get('recibo')
-
-
         filename = f'Recibo_caja_{recibo}_{proyecto}.pdf'
+        return file_response_from_pdf_root(_pdf_recibo(proyecto, recibo, filename), filename=filename)
 
-        obj_recibo = Recaudos_general.objects.using(proyecto).get(numrecibo = recibo)
 
-
-        context = {
-            'recibo':obj_recibo
-        }
-
-        # Oasis receipts are rendered with WeasyPrint.
-        if proyecto == 'Oasis':
-            pdf = pdf_gen_weasy(f'pdf/{proyecto}/recibo.html', context, filename)
-        else:
-            pdf = pdf_gen(f'pdf/{proyecto}/recibo.html', context,filename)
-
-        file = pdf.get('root')
-        return file_response_from_pdf_root(file, filename=filename)
+def recibo_publico(request, token, filename):
+    """PDF del recibo sin iniciar sesión, solo con un token firmado vigente."""
+    try:
+        proyecto, recibo = recibo_link.leer_token(token)
+    except signing.SignatureExpired:
+        return HttpResponse('El enlace del recibo venció. Solicita uno nuevo.', status=410, content_type='text/plain; charset=utf-8')
+    except signing.BadSignature:
+        raise Http404
+    if filename != recibo_link.nombre_archivo(recibo) or proyecto not in settings.DATABASES or proyecto == 'default':
+        raise Http404
+    if not Recaudos_general.objects.using(proyecto).filter(numrecibo=recibo).exists():
+        raise Http404
+    root = _pdf_recibo(proyecto, recibo, f'Recibo_caja_{recibo}_{proyecto}.pdf')
+    response = file_response_from_pdf_root(root, filename=filename, as_attachment=False)
+    response['Cache-Control'] = 'private, max-age=300'
+    response['X-Robots-Tag'] = 'noindex'
+    return response
 
 
 @csrf_exempt

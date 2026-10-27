@@ -46,6 +46,10 @@
     documentos: null,
     documentosLoading: false,
     documentosError: '',
+    recibos: null,
+    recibosLoading: false,
+    recibosError: '',
+    reciboForm: null, // formulario de nueva solicitud (se conserva entre renders para no perder lo escrito)
     docActivo: null,
     docLoading: false,
     docError: '',
@@ -141,11 +145,12 @@
     headers.Authorization = 'Bearer ' + state.token;
     // Solo en desarrollo: el túnel gratuito de ngrok intercepta las peticiones con una página de aviso.
     if (debug) headers['ngrok-skip-browser-warning'] = '1';
-    if (options.body) headers['Content-Type'] = 'application/json';
+    var esForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (options.body && !esForm) headers['Content-Type'] = 'application/json';
     return fetch(url, {
       method: options.method || 'GET',
       headers: headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: options.body ? (esForm ? options.body : JSON.stringify(options.body)) : undefined,
       credentials: 'omit',
       cache: 'no-store',
     }).then(function (res) {
@@ -157,7 +162,12 @@
       }
       return res.json().then(
         function (data) {
-          if (!res.ok) throw new Error(data.detail || 'Error ' + res.status);
+          if (!res.ok) {
+            var error = new Error(data.detail || 'Error ' + res.status);
+            error.status = res.status;
+            error.code = data.code || '';
+            throw error;
+          }
           return data;
         },
         function () {
@@ -206,6 +216,7 @@
     renderTabs();
     renderCartera();
     renderPromesa();
+    renderRecibos();
     renderDocumentos();
     renderSeguimiento();
   }
@@ -223,7 +234,7 @@
     banner.hidden = !mismatch;
     if (mismatch) {
       $('banner-agente-text').textContent =
-        'Estás en Chatwoot como ' + agent.email + ' pero el panel está conectado como ' +
+        'Estás en Lyvio como ' + agent.email + ' pero el panel está conectado como ' +
         state.user.email + '. Si no eres tú, pulsa «Desconectar».';
     }
   }
@@ -273,7 +284,7 @@
     if (!ident || !ident.cliente) return;
     var ids = chatwootIds();
     if (!ids.account_id || !ids.contact_id) {
-      state.aviso = 'No se puede vincular: Chatwoot no envió el contacto.';
+      state.aviso = 'No se puede vincular: Lyvio no envió el contacto.';
       return render();
     }
     state.identLoading = true;
@@ -281,7 +292,7 @@
     api(cfg.apiVincular, { method: 'POST', body: Object.assign(ids, { cedula: ident.cliente.cedula }) })
       .then(function (data) {
         state.aviso = data.chatwoot_sync
-          ? 'Contacto vinculado. En Chatwoot quedó con el nombre y la cédula de Andinasoft (recarga para verlo).'
+          ? 'Contacto vinculado. En Lyvio quedó con el nombre y la cédula de Andinasoft (recarga para verlo).'
           : 'Contacto vinculado en Andinasoft.';
         aplicarIdent(data);
       })
@@ -335,7 +346,7 @@
 
   var VIA = {
     vinculo: 'Vinculado',
-    atributo: 'Cédula en Chatwoot',
+    atributo: 'Cédula en Lyvio',
     telefono: 'Identificado por teléfono',
     seleccion: 'Elegido por ti',
   };
@@ -615,6 +626,9 @@
     state.promesaError = '';
     state.documentos = null;
     state.documentosError = '';
+    state.recibos = null;
+    state.recibosError = '';
+    state.reciboForm = null;
     liberarVisor();
     state.seg = null;
     state.segError = '';
@@ -916,7 +930,7 @@
           mensaje.textContent = data.enviado
             ? 'Link de ' + fmtMoney(data.valor) + ' enviado al cliente en la conversación.'
             : alCliente
-              ? 'El link se creó pero Chatwoot no pudo enviarlo. Si pasaron más de 24 h desde el último mensaje del cliente, WhatsApp exige una plantilla: copia el mensaje y envíalo por otro medio.'
+              ? 'El link se creó pero Lyvio no pudo enviarlo. Si pasaron más de 24 h desde el último mensaje del cliente, WhatsApp exige una plantilla: copia el mensaje y envíalo por otro medio.'
               : 'Link de ' + fmtMoney(data.valor) + ' creado. Cópialo para enviarlo.';
           if (data.sin_logo) mensaje.textContent += ' Wompi no aceptó el logo del proyecto, así que el link salió sin logo.';
           mensaje.hidden = false;
@@ -1155,6 +1169,140 @@
     return el('div', { class: 'card' }, [cabecera, cuerpo]);
   }
 
+  // ---------- recibos ----------
+  var ESTADO_RECIBO = {
+    realizado: ['Realizado', 'teal'],
+    pendiente: ['Pendiente', 'amber'],
+    revision: ['Revisión manual', 'amber'],
+    sin_recibo: ['Recibo no encontrado', 'ruby'],
+    anulada: ['Anulada', 'slate'],
+  };
+
+  function renderRecibos() {
+    var root = $('recibos-root');
+    if (state.tab !== 'recibos') return;
+    if (!state.negocio) return mount(root, sinNegocio());
+    if (state.recibosError) return mount(root, vacio('Recibos no disponibles', state.recibosError));
+    var data = state.recibos;
+    if (!data) {
+      cargarRecurso('recibos', 'recibos');
+      return mount(root, cargando('Cargando solicitudes de recibo…'));
+    }
+    var filas = data.recibos || [];
+    var lista = filas.length
+      ? el('div', { class: 'recibos' }, tabla(['Pago', 'Recibo', 'Valor', ''], filas.map(function (r) {
+        var est = ESTADO_RECIBO[r.estado] || [r.estado, 'slate'];
+        var accion;
+        if (r.url) {
+          var copiarLink = el('button', { type: 'button', class: 'btn btn--ghost btn--xs recibos__copiar', title: 'Copiar el enlace del PDF' }, 'Copiar enlace');
+          copiarLink.addEventListener('click', function () { copiar(r.url, copiarLink); });
+          accion = el('span', { class: 'recibos__acciones' }, [
+            copiarLink,
+            el('a', { class: 'btn btn--ghost btn--xs', href: r.url, target: '_blank', rel: 'noopener', title: 'Ver el PDF' }, 'PDF'),
+          ]);
+        } else {
+          accion = el('span', { class: 'label label--' + est[1], text: est[0] });
+        }
+        var fila = [fmtDmy(r.fecha_pago), r.recibo || '—', fmtMoney(r.valor), accion];
+        fila.className = r.estado === 'anulada' ? 'is-muted' : '';
+        return fila;
+      }), [false, false, true, false]))
+      : el('p', { class: 'card__body muted', text: 'El negocio no tiene solicitudes de recibo.' });
+    var nueva = data.puede_solicitar && !state.reciboForm ? el('button', {
+      type: 'button', class: 'btn btn--ghost btn--xs recibos__copiar', onclick: function () {
+        state.reciboForm = formularioSolicitud(state.negocio);
+        render();
+      },
+    }, '+ Nueva solicitud') : null;
+    mount(root, el('div', { class: 'card' }, [
+      el('div', { class: 'card__header recibos__header' }, [el('h3', { class: 'card__title', text: 'Solicitudes de recibo' }), nueva]),
+      state.reciboForm,
+      lista,
+      filas.length ? el('p', { class: 'recibos__nota muted', text:
+        'El enlace abre el PDF sin iniciar sesión (sirve para la plantilla de WhatsApp) y vence en ' + data.dias_vigencia + ' días.' +
+        (filas.length >= data.limite ? ' Se muestran las ' + data.limite + ' más recientes.' : '') }) : null,
+    ]));
+  }
+
+  function formularioSolicitud(negocio) {
+    var fecha = el('input', { class: 'input', type: 'date', name: 'fecha_pago', max: hoyIso(), value: hoyIso(), required: true });
+    var valor = el('input', { class: 'input', type: 'text', name: 'valor', inputmode: 'numeric', autocomplete: 'off', placeholder: '$ 0', required: true });
+    valor.addEventListener('input', function () {
+      var digitos = valor.value.replace(/\D/g, '');
+      valor.value = digitos ? fmtMoney(digitos) : '';
+    });
+    var soporte = el('input', { class: 'input input--file', type: 'file', name: 'soporte', accept: 'application/pdf,.pdf', required: true });
+    var abono = el('input', { type: 'checkbox', name: 'abono_capital' });
+    var condona = el('input', { type: 'checkbox', name: 'condona_mora' });
+    var mensaje = el('p', { class: 'form__msg', role: 'status', hidden: true });
+    var confirmar = el('button', { type: 'button', class: 'btn btn--ghost btn--sm', hidden: true }, 'No es duplicado, crear');
+    var guardar = el('button', { type: 'submit', class: 'btn btn--solid btn--sm' }, 'Crear solicitud');
+    var cancelar = el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: function () {
+      state.reciboForm = null;
+      render();
+    } }, 'Cancelar');
+    var aviso = function (tipo, texto) {
+      mensaje.className = 'form__msg form__msg--' + tipo;
+      mensaje.textContent = texto;
+      mensaje.hidden = false;
+    };
+    var enviar = function (confirmado) {
+      var monto = valor.value.replace(/\D/g, '');
+      if (!fecha.value || !monto || !soporte.files.length) return aviso('error', 'Completa la fecha, el valor y el soporte en PDF.');
+      var datos = new FormData();
+      datos.append('fecha_pago', fecha.value);
+      datos.append('valor', monto);
+      datos.append('soporte', soporte.files[0]);
+      if (abono.checked) datos.append('abono_capital', '1');
+      if (condona.checked) datos.append('condona_mora', '1');
+      if (confirmado) datos.append('confirmar_duplicado', '1');
+      guardar.disabled = confirmar.disabled = true;
+      guardar.textContent = 'Creando…';
+      mensaje.hidden = true;
+      api(negocioUrl(negocio, 'recibos'), { method: 'POST', body: datos })
+        .then(function () {
+          if (state.negocio !== negocio) return;
+          state.reciboForm = null;
+          state.recibos = null; // recarga la lista con la nueva solicitud
+          state.aviso = '';
+          render();
+        })
+        .catch(function (err) {
+          if (err.message === 'no-autorizado') return;
+          aviso('error', err.message);
+          confirmar.hidden = err.code !== 'posible_duplicado';
+        })
+        .then(function () {
+          guardar.disabled = confirmar.disabled = false;
+          guardar.textContent = 'Crear solicitud';
+        });
+    };
+    confirmar.addEventListener('click', function () { enviar(true); });
+    return el('form', { class: 'form recibos__form', onsubmit: function (event) {
+      event.preventDefault();
+      confirmar.hidden = true;
+      enviar(false);
+    } }, el('div', { class: 'form__body' }, [
+      el('div', { class: 'form__row' }, [
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: 'Fecha del pago' }), fecha]),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: 'Valor' }), valor]),
+      ]),
+      el('label', { class: 'field' }, [el('span', { class: 'field__label', text: 'Soporte del pago (PDF)' }), soporte]),
+      el('div', { class: 'recibos__checks' }, [
+        el('label', { class: 'check' }, [abono, el('span', { text: 'Abono a capital' })]),
+        el('label', { class: 'check' }, [condona, el('span', { text: 'Condonar la mora' })]),
+      ]),
+      mensaje,
+      el('div', { class: 'form__actions' }, [cancelar, confirmar, guardar]),
+    ]));
+  }
+
+  // dd/mm/yyyy a partir de 'yyyy-mm-dd'
+  function fmtDmy(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : '—';
+  }
+
   function renderDocumentos() {
     var root = $('documentos-root');
     if (state.tab !== 'documentos') return;
@@ -1321,7 +1469,7 @@
               el('span', { class: 'timeline__date', text: fmtDate(s.fecha) }),
               el('span', { text: s.tipo + ' · ' + s.forma }),
               el('span', { class: 'muted', text: s.usuario }),
-              s.desde_chatwoot ? el('span', { class: 'label label--blue', text: 'Desde Chatwoot' }) : null,
+              s.desde_chatwoot ? el('span', { class: 'label label--blue', text: 'Desde Lyvio' }) : null,
             ]),
             el('p', { class: 'timeline__text', text: s.comentario }),
             s.valor_compromiso ? el('span', {
@@ -1362,6 +1510,7 @@
       var active = tab.dataset.tab === state.tab;
       tab.classList.toggle('is-active', active);
       tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active && tab.scrollIntoView) tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     });
     document.querySelectorAll('.tabpanel').forEach(function (panel) {
       panel.hidden = panel.dataset.panel !== state.tab;
