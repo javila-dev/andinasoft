@@ -56,14 +56,23 @@
     <h3 class='section-title text-white text-center'>Recaudos por tercero</h3>
     <form method='GET' action=''>
         <div class='row mx-0'>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 {{form.Proyecto|as_crispy_field}}
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 {{form.Fecha_Desde|as_crispy_field}}
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 {{form.Fecha_Hasta|as_crispy_field}}
+            </div>
+            <div class="col-md-3">
+                <div class="form-group">
+                    <label for="vista">Vista:</label>
+                    <select name="vista" id="vista" class="form-control">
+                        <option value="tercero" {%if vista != 'recibo'%}selected{%endif%}>Por tercero</option>
+                        <option value="recibo" {%if vista == 'recibo'%}selected{%endif%}>Por recibo</option>
+                    </select>
+                </div>
             </div>
             <div class="col-md-2 mt-md-2">
                 <input type="submit" class="btn btn-primary mt-4" value='Generar'>
@@ -83,14 +92,81 @@
             </div>
         </div>
         <div class="d-flex mt-2 mt-md-0">
+            {%if vista == 'recibo'%}
+            <input type="search" id="filtro-tercero" class="form-control form-control-sm mr-2"
+                placeholder="Filtrar por recibo, contrato, NIT o nombre"
+                aria-label="Filtrar por recibo, contrato, NIT o nombre">
+            {%else%}
             <input type="search" id="filtro-tercero" class="form-control form-control-sm mr-2"
                 placeholder="Filtrar por NIT o nombre" aria-label="Filtrar por NIT o nombre">
+            {%endif%}
             <a href="?{{querystring}}&excel=1" class="btn btn-sm btn-success text-nowrap">
                 <i class="fas fa-file-excel"></i>&nbsp;Exportar Excel</a>
         </div>
     </div>
 
     {%if informe.terceros%}
+    {%if vista == 'recibo'%}
+    <div class='table-responsive mt-3' style="max-height: 70vh;">
+        <table class='table table-sm table-bordered aux-tercero mb-0'>
+            <thead class='thead-light'>
+                <tr>
+                    <th>NIT</th>
+                    <th>Nombre</th>
+                    <th class="num">% Part.</th>
+                    <th class="num">Capital</th>
+                    <th class="num">Int. corriente</th>
+                    <th class="num">Int. mora</th>
+                    <th class="num">Saldo a favor</th>
+                    <th class="num">Sin aplicar</th>
+                    <th class="num">Total</th>
+                </tr>
+            </thead>
+            {%for r in informe.recibos%}
+            <tbody class="grupo-tercero"
+                data-buscar="{{r.recibo|lower}} {{r.contrato|lower}}{%for m in r.lineas%} {{m.nit}} {{m.nombre|lower}}{%endfor%}">
+                <tr class="grupo">
+                    <td colspan="9">Recibo {{r.recibo}} &nbsp;·&nbsp; {{r.fecha|date:'d/m/Y'}} &nbsp;·&nbsp;
+                        {{r.contrato}} &nbsp;·&nbsp; {{r.forma_pago|default:'Sin forma de pago'}}</td>
+                </tr>
+                {%for m in r.lineas%}
+                <tr>
+                    <td>{{m.nit|default:'—'}}</td>
+                    <td>{{m.nombre}}</td>
+                    <td class="num">{{m.participacion|floatformat:"-2"}}%</td>
+                    <td class="num{%if not m.capital%} cero{%endif%}">{{m.capital|floatformat:2}}</td>
+                    <td class="num{%if not m.interescte%} cero{%endif%}">{{m.interescte|floatformat:2}}</td>
+                    <td class="num{%if not m.interesmora%} cero{%endif%}">{{m.interesmora|floatformat:2}}</td>
+                    <td class="num{%if not m.saldo_favor%} cero{%endif%}">{{m.saldo_favor|floatformat:2}}</td>
+                    <td class="num{%if not m.sin_aplicar%} cero{%endif%}">{{m.sin_aplicar|floatformat:2}}</td>
+                    <td class="num">{{m.total|floatformat:2}}</td>
+                </tr>
+                {%endfor%}
+                <tr class="subtotal">
+                    <td colspan="3">Total recibo {{r.recibo}}</td>
+                    <td class="num">{{r.totales.capital|floatformat:2}}</td>
+                    <td class="num">{{r.totales.interescte|floatformat:2}}</td>
+                    <td class="num">{{r.totales.interesmora|floatformat:2}}</td>
+                    <td class="num">{{r.totales.saldo_favor|floatformat:2}}</td>
+                    <td class="num">{{r.totales.sin_aplicar|floatformat:2}}</td>
+                    <td class="num">{{r.totales.total|floatformat:2}}</td>
+                </tr>
+            </tbody>
+            {%endfor%}
+            <tfoot>
+                <tr>
+                    <td colspan="3">TOTAL GENERAL</td>
+                    <td class="num">{{informe.totales.capital|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.interescte|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.interesmora|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.saldo_favor|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.sin_aplicar|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.total|floatformat:2}}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {%else%}
     <div class='table-responsive mt-3' style="max-height: 70vh;">
         <table class='table table-sm table-bordered aux-tercero mb-0'>
             <thead class='thead-light'>
@@ -152,6 +228,7 @@
             </tfoot>
         </table>
     </div>
+    {%endif%}
 
     <h5 class="mt-4 px-3">Resumen contable</h5>
     <div class='table-responsive px-3'>

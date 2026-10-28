@@ -2886,7 +2886,8 @@ def lista_recaudos(request):
 @group_perm_required(perms=('andinasoft.view_recaudos_general',),raise_exception=True)
 def recaudos_por_tercero(request):
     form = form_lista_recaudos(request.GET or None)
-    context = {'form': form}
+    vista = 'recibo' if request.GET.get('vista') == 'recibo' else 'tercero'
+    context = {'form': form, 'vista': vista}
     if form.is_valid():
         proyecto = str(form.cleaned_data.get('Proyecto'))
         desde = form.cleaned_data.get('Fecha_Desde')
@@ -2895,7 +2896,7 @@ def recaudos_por_tercero(request):
         if request.GET.get('excel'):
             filename = f'Recaudos_por_tercero_{proyecto}_{desde:%Y-%m-%d}_{hasta:%Y-%m-%d}.xlsx'
             response = HttpResponse(
-                excel_recaudos_terceros(informe, proyecto, desde, hasta),
+                excel_recaudos_terceros(informe, proyecto, desde, hasta, vista),
                 content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             )
             response['Content-Disposition'] = f'attachment; filename="{filename}"'

@@ -1,10 +1,14 @@
+import io
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
+import openpyxl
 from django.test import SimpleTestCase
 
-from andinasoft.recaudos_terceros_service import agrupar_por_tercero, excel_recaudos_terceros, repartir
+from andinasoft.recaudos_terceros_service import (
+    agrupar_por_tercero, datos_basicos_terceros, excel_recaudos_terceros, orden_recibo, repartir,
+)
 
 D = Decimal
 
@@ -59,7 +63,37 @@ class AgruparPorTerceroTests(SimpleTestCase):
         self.assertEqual(grupo['nit'], '77')
         self.assertEqual(grupo['totales']['sin_aplicar'], D('10'))
 
-    def test_excel_se_genera(self):
-        informe = agrupar_por_tercero([_recibo('M1', 'ADJ1', '10')], {}, {'ADJ1': ['1']}, {'1': 'Ana'}, {})
-        contenido = excel_recaudos_terceros(informe, 'Oasis', date(2026, 10, 1), date(2026, 10, 31))
-        self.assertTrue(contenido.startswith(b'PK'))
+    def test_vista_por_recibo_en_orden_con_sus_titulares(self):
+        recibos = [_recibo('10', 'ADJ1', '100'), _recibo('9', 'ADJ2', '40')]
+        detalle = {'10': {'capital': D('100')}, '9': {'capital': D('40')}}
+        informe = agrupar_por_tercero(
+            recibos, detalle, {'ADJ1': ['1', '2'], 'ADJ2': ['3']}, {'1': 'Ana', '2': 'Luis', '3': 'Eva'}, {},
+        )
+        self.assertEqual([r['recibo'] for r in informe['recibos']], ['9', '10'])
+        diez = informe['recibos'][1]
+        self.assertEqual([(m['nit'], m['nombre'], m['capital']) for m in diez['lineas']],
+                         [('1', 'ANA', D('50')), ('2', 'LUIS', D('50'))])
+        self.assertEqual(diez['totales']['total'], D('100'))
+
+    def test_orden_recibo_natural(self):
+        self.assertEqual(sorted(['M10', '10', 'M9', '9', '100'], key=orden_recibo), ['9', '10', '100', 'M9', 'M10'])
+
+    def test_excel_lineas_con_tercero_y_hoja_de_terceros(self):
+        informe = agrupar_por_tercero([_recibo('M1', 'ADJ1', '10')], {}, {'ADJ1': ['1', '2']},
+                                      {'1': 'Ana', '2': 'Luis'}, {})
+        informe['datos_terceros'] = datos_basicos_terceros(informe['terceros'], {
+            '1': {'tipo_doc': '13', 'domicilio': 'Calle 1', 'ciudad': 'MONTERIA', 'email': 'ana@x.co',
+                  'celular1': '300'},
+        })
+        for vista, activa in (('tercero', 'Por tercero'), ('recibo', 'Por recibo')):
+            contenido = excel_recaudos_terceros(informe, 'Oasis', date(2026, 10, 1), date(2026, 10, 31), vista)
+            book = openpyxl.load_workbook(io.BytesIO(contenido))
+            self.assertEqual(book.active.title, activa)
+        hoja = book['Por recibo']
+        self.assertEqual([hoja.cell(4, c).value for c in (5, 6)], ['Id tercero', 'Nombre tercero'])
+        self.assertEqual([(hoja.cell(r, 2).value, hoja.cell(r, 5).value, hoja.cell(r, 6).value) for r in (5, 6)],
+                         [('M1', '1', 'ANA'), ('M1', '2', 'LUIS')])
+        terceros = book['Terceros']
+        self.assertEqual([c.value for c in terceros[2]],
+                         ['Cédula de ciudadanía', '1', 'ANA', 'Calle 1', 'MONTERIA', None, None, 'ana@x.co', '300', None])
+        self.assertEqual(terceros.cell(3, 3).value, 'LUIS')
