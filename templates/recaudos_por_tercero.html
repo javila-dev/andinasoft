@@ -1,0 +1,206 @@
+{%extends 'base.html'%}
+{%load crispy_forms_tags%}
+{%block title%}Contabilidad | Recaudos por tercero{%endblock%}
+{%block style%}
+<style>
+    label {
+        padding-right: 0.5rem;
+        font-weight: bold;
+        width: 100%;
+    }
+
+    .aux-tercero {
+        font-size: 0.85rem;
+    }
+
+    .aux-tercero thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        white-space: nowrap;
+    }
+
+    .aux-tercero td {
+        white-space: nowrap;
+    }
+
+    .aux-tercero td.num,
+    .aux-tercero th.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .aux-tercero tr.grupo td {
+        background: #e8eef8;
+        font-weight: 600;
+        border-top: 2px solid #9fb3d6;
+    }
+
+    .aux-tercero tr.subtotal td {
+        background: #f5f5f5;
+        font-weight: 600;
+    }
+
+    .aux-tercero tfoot td {
+        font-weight: 700;
+        border-top: 3px double #555;
+    }
+
+    .aux-tercero .cero {
+        color: #b5b5b5;
+    }
+</style>
+{%endblock%}
+{%block content%}
+<div class="bg-white rounded shadow-sm p-2">
+    <h3 class='section-title text-white text-center'>Recaudos por tercero</h3>
+    <form method='GET' action=''>
+        <div class='row mx-0'>
+            <div class="col-md-4">
+                {{form.Proyecto|as_crispy_field}}
+            </div>
+            <div class="col-md-3">
+                {{form.Fecha_Desde|as_crispy_field}}
+            </div>
+            <div class="col-md-3">
+                {{form.Fecha_Hasta|as_crispy_field}}
+            </div>
+            <div class="col-md-2 mt-md-2">
+                <input type="submit" class="btn btn-primary mt-4" value='Generar'>
+            </div>
+        </div>
+    </form>
+
+    {%if informe%}
+    <div class="d-flex flex-wrap align-items-center justify-content-between px-3 mt-3">
+        <div>
+            <strong>{{proyecto|upper}}</strong> · {{desde|date:'d/m/Y'}} a {{hasta|date:'d/m/Y'}} ·
+            {{informe.num_recibos}} recibo{{informe.num_recibos|pluralize}} ·
+            {{informe.terceros|length}} tercero{{informe.terceros|length|pluralize}}
+            <div class="text-muted small">
+                Cada recibo se reparte en partes iguales entre los titulares del contrato, igual que en la interfaz
+                contable. No incluye recibos anulados.
+            </div>
+        </div>
+        <div class="d-flex mt-2 mt-md-0">
+            <input type="search" id="filtro-tercero" class="form-control form-control-sm mr-2"
+                placeholder="Filtrar por NIT o nombre" aria-label="Filtrar por NIT o nombre">
+            <a href="?{{querystring}}&excel=1" class="btn btn-sm btn-success text-nowrap">
+                <i class="fas fa-file-excel"></i>&nbsp;Exportar Excel</a>
+        </div>
+    </div>
+
+    {%if informe.terceros%}
+    <div class='table-responsive mt-3' style="max-height: 70vh;">
+        <table class='table table-sm table-bordered aux-tercero mb-0'>
+            <thead class='thead-light'>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Recibo</th>
+                    <th>Contrato</th>
+                    <th>Forma de pago</th>
+                    <th class="num">% Part.</th>
+                    <th class="num">Capital</th>
+                    <th class="num">Int. corriente</th>
+                    <th class="num">Int. mora</th>
+                    <th class="num">Saldo a favor</th>
+                    <th class="num">Sin aplicar</th>
+                    <th class="num">Total</th>
+                </tr>
+            </thead>
+            {%for g in informe.terceros%}
+            <tbody class="grupo-tercero" data-buscar="{{g.nit}} {{g.nombre|lower}}">
+                <tr class="grupo">
+                    <td colspan="11">{{g.nit|default:'—'}} &nbsp; {{g.nombre}}</td>
+                </tr>
+                {%for m in g.movimientos%}
+                <tr>
+                    <td>{{m.fecha|date:'d/m/Y'}}</td>
+                    <td>{{m.recibo}}</td>
+                    <td>{{m.contrato}}</td>
+                    <td>{{m.forma_pago}}</td>
+                    <td class="num">{{m.participacion|floatformat:"-2"}}%</td>
+                    <td class="num{%if not m.capital%} cero{%endif%}">{{m.capital|floatformat:2}}</td>
+                    <td class="num{%if not m.interescte%} cero{%endif%}">{{m.interescte|floatformat:2}}</td>
+                    <td class="num{%if not m.interesmora%} cero{%endif%}">{{m.interesmora|floatformat:2}}</td>
+                    <td class="num{%if not m.saldo_favor%} cero{%endif%}">{{m.saldo_favor|floatformat:2}}</td>
+                    <td class="num{%if not m.sin_aplicar%} cero{%endif%}">{{m.sin_aplicar|floatformat:2}}</td>
+                    <td class="num">{{m.total|floatformat:2}}</td>
+                </tr>
+                {%endfor%}
+                <tr class="subtotal">
+                    <td colspan="5">Total {{g.nombre}}</td>
+                    <td class="num">{{g.totales.capital|floatformat:2}}</td>
+                    <td class="num">{{g.totales.interescte|floatformat:2}}</td>
+                    <td class="num">{{g.totales.interesmora|floatformat:2}}</td>
+                    <td class="num">{{g.totales.saldo_favor|floatformat:2}}</td>
+                    <td class="num">{{g.totales.sin_aplicar|floatformat:2}}</td>
+                    <td class="num">{{g.totales.total|floatformat:2}}</td>
+                </tr>
+            </tbody>
+            {%endfor%}
+            <tfoot>
+                <tr>
+                    <td colspan="5">TOTAL GENERAL</td>
+                    <td class="num">{{informe.totales.capital|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.interescte|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.interesmora|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.saldo_favor|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.sin_aplicar|floatformat:2}}</td>
+                    <td class="num">{{informe.totales.total|floatformat:2}}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <h5 class="mt-4 px-3">Resumen contable</h5>
+    <div class='table-responsive px-3'>
+        <table class='table table-sm table-bordered aux-tercero' style="max-width: 760px;">
+            <thead class='thead-light'>
+                <tr>
+                    <th>Concepto</th>
+                    <th>Cuenta</th>
+                    <th class="num">Recibos</th>
+                    <th class="num">Débito</th>
+                    <th class="num">Crédito</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for r in informe.resumen%}
+                <tr>
+                    <td>{{r.concepto}}</td>
+                    <td>{{r.cuenta|default:'—'}}</td>
+                    <td class="num">{{r.recibos|default_if_none:''}}</td>
+                    <td class="num{%if not r.debito%} cero{%endif%}">{{r.debito|floatformat:2}}</td>
+                    <td class="num{%if not r.credito%} cero{%endif%}">{{r.credito|floatformat:2}}</td>
+                </tr>
+                {%endfor%}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3">Sumas iguales</td>
+                    <td class="num">{{informe.total_debito|floatformat:2}}</td>
+                    <td class="num">{{informe.total_credito|floatformat:2}}</td>
+                </tr>
+            </tfoot>
+        </table>
+        {%if informe.totales.sin_aplicar%}
+        <p class="small text-muted">"Sin aplicar" es la parte del valor del recibo que no tiene detalle de
+            capital o intereses en el recaudo; la interfaz de SIIGO no la acredita.</p>
+        {%endif%}
+    </div>
+    {%else%}
+    <p class="lead text-center text-muted my-5">No hay recibos en ese rango de fechas.</p>
+    {%endif%}
+    {%endif%}
+</div>
+{{form.media}}
+<script>
+    $('#filtro-tercero').on('input', function () {
+        var q = this.value.trim().toLowerCase();
+        $('.grupo-tercero').each(function () {
+            $(this).toggle(!q || this.dataset.buscar.indexOf(q) !== -1);
+        });
+    });
+</script>
+{%endblock%}

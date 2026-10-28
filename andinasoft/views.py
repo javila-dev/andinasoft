@@ -55,6 +55,7 @@ from andinasoft.shared_models import VerificacionOperaciones, DescuentosCondicio
 from andinasoft.shared_models import Promesas, PresupuestoCartera, Parametros_Operaciones, EntregaManzanas, Pqrs
 from andinasoft.informe_cartera_orm import informe_cartera_rows
 from andinasoft.edades_cartera_service import edades_cartera_snapshot
+from andinasoft.recaudos_terceros_service import informe_recaudos_terceros, excel_recaudos_terceros
 from andinasoft.cartera_gestor_service import asignar_gestor, listar_gestores_opciones
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
 from andinasoft.ajuste_capital_service import (
@@ -2881,6 +2882,32 @@ def lista_recaudos(request):
         return render(request,'listado_recaudos.html',context)
     else:
         return redirect('/accounts/login')
+
+@group_perm_required(perms=('andinasoft.view_recaudos_general',),raise_exception=True)
+def recaudos_por_tercero(request):
+    form = form_lista_recaudos(request.GET or None)
+    context = {'form': form}
+    if form.is_valid():
+        proyecto = str(form.cleaned_data.get('Proyecto'))
+        desde = form.cleaned_data.get('Fecha_Desde')
+        hasta = form.cleaned_data.get('Fecha_Hasta')
+        informe = informe_recaudos_terceros(proyecto, desde, hasta)
+        if request.GET.get('excel'):
+            filename = f'Recaudos_por_tercero_{proyecto}_{desde:%Y-%m-%d}_{hasta:%Y-%m-%d}.xlsx'
+            response = HttpResponse(
+                excel_recaudos_terceros(informe, proyecto, desde, hasta),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        context.update({
+            'informe': informe,
+            'proyecto': proyecto,
+            'desde': desde,
+            'hasta': hasta,
+            'querystring': request.GET.urlencode(),
+        })
+    return render(request, 'recaudos_por_tercero.html', context)
 
 @group_perm_required(('andinasoft.add_recaudos_general',),raise_exception=True)
 def lista_adj_recaudos(request,proyecto):

@@ -73,6 +73,7 @@ urlpatterns = [
     path('reg_cliente',views.registrar_cliente,name='registro cliente'),
     path('reg_cliente/success',views.registro_exitoso,name='registro cliente exitoso'),
     path('tesoreria/lista_recaudos',views.lista_recaudos,name='lista recaudos'),
+    path('contabilidad/informes/recaudos_terceros',views.recaudos_por_tercero,name='recaudos por tercero'),
     path('venta/seleccionar_proyecto',views.seleccionar_proyecto, name='seleccionar proyecto'),
     path('venta/inventario/<proyecto>',views.inventario_comercial,name='inventario comercial'),
     path('venta/<proyecto>/<inmueble>',views.nueva_venta,name='nueva venta'),
