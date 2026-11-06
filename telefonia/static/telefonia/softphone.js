@@ -106,7 +106,7 @@
     var lista = $('elegir-lista');
     lista.textContent = '';
     if (!state.destinos.length) {
-      aviso('Este contacto no tiene un número colombiano válido en Lyvio ni en Andinasoft.');
+      aviso('Este contacto no tiene un número válido en Lyvio ni en Andinasoft.');
       return;
     }
     state.destinos.forEach(function (d) {

@@ -52,21 +52,28 @@ class PermisoUnicoTests(SimpleTestCase):
 
 class NumerosTests(SimpleTestCase):
     def test_formatos_libres(self):
-        self.assertEqual(numeros.numeros_en('350 581 09 75'), ['3505810975'])
-        self.assertEqual(numeros.numeros_en('+57 350-581-0975'), ['3505810975'])
-        self.assertEqual(numeros.numeros_en('573505810975'), ['3505810975'])
-        self.assertEqual(numeros.numeros_en('3001234567 ELLA'), ['3001234567'])
-        self.assertEqual(numeros.numeros_en('6044441234'), ['6044441234'])
+        self.assertEqual(numeros.numeros_en('350 581 09 75'), ['+573505810975'])
+        self.assertEqual(numeros.numeros_en('+57 350-581-0975'), ['+573505810975'])
+        self.assertEqual(numeros.numeros_en('573505810975'), ['+573505810975'])
+        self.assertEqual(numeros.numeros_en('3001234567 ELLA'), ['+573001234567'])
+        self.assertEqual(numeros.numeros_en('6044441234'), ['+576044441234'])
 
     def test_dos_numeros_en_un_campo(self):
-        self.assertEqual(numeros.numeros_en('3001234567 / 310 987 6543'), ['3001234567', '3109876543'])
+        self.assertEqual(numeros.numeros_en('3001234567 / 310 987 6543'), ['+573001234567', '+573109876543'])
 
-    def test_descarta_basura_y_no_colombianos(self):
-        for valor in ('NO TIENE', '', None, '0000000000', '4441234', '+1 305 555 1234', '5551234567'):
+    def test_otros_paises_con_indicativo(self):
+        self.assertEqual(numeros.numeros_en('+13055551234'), ['+13055551234'])
+        self.assertEqual(numeros.numeros_en('+1 305 555 1234'), ['+13055551234'])
+        self.assertEqual(numeros.numeros_en('0034 612 345 678'), ['+34612345678'])
+        self.assertEqual(numeros.numeros_en('+1 305-555-1234 / 3001234567'), ['+13055551234', '+573001234567'])
+
+    def test_descarta_basura(self):
+        for valor in ('NO TIENE', '', None, '0000000000', '4441234', '5551234567', '+1 111 111 1111', '+12345'):
             self.assertEqual(numeros.numeros_en(valor), [], valor)
 
     def test_enmascarar(self):
-        self.assertEqual(numeros.enmascarar('3505810975'), '350 ••• 0975')
+        self.assertEqual(numeros.enmascarar('+573505810975'), '350 ••• 0975')
+        self.assertEqual(numeros.enmascarar('+13055551234'), '+130 ••• 1234')
         self.assertEqual(numeros.e164('3505810975'), '+573505810975')
 
 
@@ -105,8 +112,8 @@ class DestinosTests(SimpleTestCase):
             return servicio.destinos({'id': '5', 'telefono': telefono}, cedula)
 
     def test_no_ofrece_numeros_equivocados(self):
-        lista = self._destinos({'celular1': '3001234567', 'celular2': '3109876543'}, descartados={'3505810975',
-                                                                                                  '3109876543'})
+        lista = self._destinos({'celular1': '3001234567', 'celular2': '3109876543'}, descartados={'+573505810975',
+                                                                                                  '+573109876543'})
         self.assertEqual([d['id'] for d in lista], ['celular1'])
 
     def test_chatwoot_y_cliente_sin_repetir(self):
@@ -119,7 +126,12 @@ class DestinosTests(SimpleTestCase):
         with patch.object(servicio.clientes, 'objects') as objects:
             lista = servicio.destinos({'telefono': '+573505810975'}, '')
         objects.filter.assert_not_called()
-        self.assertEqual([d['numero'] for d in lista], ['3505810975'])
+        self.assertEqual([d['numero'] for d in lista], ['+573505810975'])
+
+    def test_contacto_de_otro_pais(self):
+        with patch.object(servicio.clientes, 'objects'):
+            lista = servicio.destinos({'telefono': '+13055551234'}, '')
+        self.assertEqual([d['numero'] for d in lista], ['+13055551234'])
 
     def test_resolver_destino_inexistente(self):
         with patch.object(servicio, 'destinos', return_value=[{'id': 'chatwoot', 'etiqueta': 'x', 'numero': '3'}]):

@@ -84,36 +84,36 @@ def verificar_conversacion(account_id, conversation_id, contact_id=''):
 
 
 def descartados(contacto, cedula=''):
-    """Números (10 dígitos) marcados como equivocados para este cliente o este contacto."""
+    """Números (E.164) marcados como equivocados para este cliente o este contacto."""
     filtro = Q(chatwoot_contact_id=contacto.get('id')) if contacto.get('id') else Q(pk__in=[])
     if cedula:
         filtro |= Q(cliente_id=cedula)
-    return {n[-10:] for n in NumeroDescartado.objects.filter(filtro).values_list('numero', flat=True)}
+    return set(NumeroDescartado.objects.filter(filtro).values_list('numero', flat=True))
 
 
 def destinos(contacto, cedula=''):
-    """Números para llamar: [{'id', 'etiqueta', 'numero' (10 dígitos)}], sin repetir ni equivocados."""
+    """Números para llamar: [{'id', 'etiqueta', 'numero' (E.164)}], sin repetir ni equivocados."""
     lista = []
     cedula = str(cedula or '').strip()
     vistos = descartados(contacto, cedula)
 
-    def agregar(id_, etiqueta, diez):
-        if diez in vistos:
+    def agregar(id_, etiqueta, numero):
+        if numero in vistos:
             return
-        vistos.add(diez)
-        lista.append({'id': id_, 'etiqueta': etiqueta, 'numero': diez})
+        vistos.add(numero)
+        lista.append({'id': id_, 'etiqueta': etiqueta, 'numero': numero})
 
-    for diez in numeros.numeros_en(contacto.get('telefono')):
-        agregar(FUENTE_CHATWOOT, 'Número de la conversación', diez)
+    for numero in numeros.numeros_en(contacto.get('telefono')):
+        agregar(FUENTE_CHATWOOT, 'Número de la conversación', numero)
 
     if cedula:
         fila = clientes.objects.filter(pk=cedula).values(*numeros.CAMPOS).first()
         for campo in numeros.CAMPOS if fila else ():
             encontrados = numeros.numeros_en(fila.get(campo))
-            for i, diez in enumerate(encontrados):
+            for i, numero in enumerate(encontrados):
                 varios = len(encontrados) > 1
                 agregar(f'{campo}.{i + 1}' if varios else campo,
-                        numeros.ETIQUETAS[campo] + (f' ({i + 1})' if varios else ''), diez)
+                        numeros.ETIQUETAS[campo] + (f' ({i + 1})' if varios else ''), numero)
     return lista
 
 
@@ -159,7 +159,7 @@ def iniciar(user, *, account_id, conversation_id, contact_id, cedula, destino_id
     linea = elegir_linea()
     llamada = Llamada.objects.create(
         user=user,
-        numero=numeros.e164(destino['numero']),
+        numero=destino['numero'],
         fuente=destino['id'][:20],
         caller_id=linea['numero'],
         linea_nombre=linea['nombre'][:60],
@@ -178,7 +178,7 @@ def _duracion(segundos):
 
 
 def texto_nota(llamada):
-    numero = numeros.enmascarar(llamada.numero[-10:])
+    numero = numeros.enmascarar(llamada.numero)
     fuente = (numeros.ETIQUETAS.get(llamada.fuente.split('.')[0])
               or ('número de la conversación' if llamada.fuente == FUENTE_CHATWOOT else llamada.fuente))
     desde = f' desde {llamada.linea_nombre}' if llamada.linea_nombre else ''
