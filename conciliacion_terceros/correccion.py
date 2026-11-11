@@ -17,6 +17,7 @@ import logging
 
 from django.conf import settings
 from django.db import connections, transaction
+from django.db.models import Q
 from django.forms.models import model_to_dict
 from django.utils import timezone
 
@@ -369,9 +370,17 @@ def revertir(registro):
                     antes[f'{fk}_id'] = antes.pop(fk)
             clientes.objects.filter(pk=correcto).update(**antes)
         elif d.get('cliente_errado'):
-            # El correcto se creó con la corrección: se elimina si nada más lo usa.
-            sagrilaft_info.objects.filter(pk=correcto).delete()
-            clientes.objects.filter(pk=correcto).delete()
+            # El correcto se creó con la corrección: se elimina solo si nada más lo usa (después de la corrección
+            # pudieron crearse adjudicaciones, recibos u otros registros con ese Id).
+            usos = _usos_identificacion(correcto)
+            if usos:
+                d['correcto_conservado'] = usos
+                registro.detalle = d
+                registro.error = ((registro.error + ' ') if registro.error else '') + (
+                    f'No se eliminó el cliente {correcto}: lo usan {", ".join(usos)}.')
+            else:
+                sagrilaft_info.objects.filter(pk=correcto).delete()
+                clientes.objects.filter(pk=correcto).delete()
         if d.get('sagrilaft'):
             if d.get('sagrilaft_movido'):
                 sagrilaft_info.objects.filter(pk=correcto).delete()
@@ -382,4 +391,30 @@ def revertir(registro):
             sagrilaft_info.objects.update_or_create(cliente_id=errado, defaults=datos)
     registro.estado = registro.ESTADO_REVERTIDA
     registro.revertido_en = timezone.now()
-    registro.save(update_fields=['estado', 'revertido_en'])
+    registro.save(update_fields=['estado', 'revertido_en', 'detalle', 'error'])
+
+
+def _usos_identificacion(ident):
+    """Dónde se usa todavía una identificación (para no borrar un cliente en uso)."""
+    from chatwoot_panel.models import ChatwootContactLink
+    from crm.models import ActaReunion
+
+    usos = []
+    for p in _proyectos():
+        try:
+            q_adj = Q(idtercero1=ident) | Q(idtercero2=ident) | Q(idtercero3=ident) | Q(idtercero4=ident)
+            q_ven = Q(id_t1=ident) | Q(id_t2=ident) | Q(id_t3=ident) | Q(id_t4=ident)
+            if Adjudicacion.objects.using(p).filter(q_adj).exists():
+                usos.append(f'adjudicaciones de {p}')
+            if ventas_nuevas.objects.using(p).filter(q_ven).exists():
+                usos.append(f'ventas de {p}')
+            if Recaudos_general.objects.using(p).filter(idtercero=ident).exists():
+                usos.append(f'recibos de {p}')
+        except Exception:
+            usos.append(f'{p} (no se pudo verificar)')
+    for nombre, qs in (('actas de reunión', ActaReunion.objects.filter(cliente_id=ident)),
+                       ('vínculos Chatwoot', ChatwootContactLink.objects.filter(cliente_id=ident)),
+                       ('novaciones', Novacion.objects.filter(titular=ident))):
+        if qs.exists():
+            usos.append(nombre)
+    return usos

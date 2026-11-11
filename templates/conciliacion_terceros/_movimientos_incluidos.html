@@ -1,0 +1,20 @@
+{% load humanize %}<div class="table-responsive">
+  <table class="table table-sm mb-0 small">
+    <thead class="thead-light"><tr><th style="width:40px">Ya viene</th><th>Referencia</th><th>Movimiento</th><th>Fecha</th><th class="num">Valor</th><th>Estado</th><th>Verificación</th></tr></thead>
+    <tbody>
+      {% for m in filas %}
+      <tr>
+        <td class="text-center"><input type="checkbox" name="incluido_{{ m.tipo }}_{{ m.id }}" value="1" {% if m.marcado %}checked{% endif %} aria-label="El archivo ya trae {{ m.referencia }}"></td>
+        <td class="text-nowrap"><strong>{{ m.referencia }}</strong></td>
+        <td>{{ m.descripcion }}</td>
+        <td class="text-nowrap">{{ m.fecha_txt }}</td>
+        <td class="num">${{ m.valor|floatformat:0|intcomma }}</td>
+        <td>{{ m.estado }}</td>
+        <td>
+          {% if m.verificacion == 'si' %}<span class="text-success"><i class="fas fa-check-circle mr-1" aria-hidden="true"></i></span>{% elif m.verificacion == 'no' %}<span class="text-muted"><i class="fas fa-minus-circle mr-1" aria-hidden="true"></i></span>{% elif m.verificacion == 'otro' %}<span class="text-warning"><i class="fas fa-exclamation-triangle mr-1" aria-hidden="true"></i></span>{% endif %}{{ m.explicacion }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

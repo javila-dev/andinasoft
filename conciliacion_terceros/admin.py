@@ -36,9 +36,10 @@ class CorreccionIdentificacionAdmin(admin.ModelAdmin):
 @admin.register(AjusteConciliacion)
 class AjusteConciliacionAdmin(admin.ModelAdmin):
     list_display = ('id', 'conciliacion', 'tipo', 'origen_identificacion', 'origen_cuenta', 'destino_identificacion',
-                    'destino_cuenta', 'valor', 'misma_empresa', 'anulado', 'journal_estado', 'created_by', 'created_at')
+                    'destino_cuenta', 'valor', 'anulado', 'journal_estado', 'fecha', 'journal_ref', 'created_by', 'created_at')
     list_filter = ('tipo', 'anulado', 'journal_estado', 'misma_empresa')
-    search_fields = ('origen_identificacion', 'destino_identificacion', 'grupo')
+    search_fields = ('origen_identificacion', 'destino_identificacion', 'grupo', 'journal_ref')
+    readonly_fields = ('journal_respuesta',)
 
 
 @admin.register(ConfigEmpresa)

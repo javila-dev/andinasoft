@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import uuid
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
@@ -21,7 +22,9 @@ from andinasoft.models import clientes, empresas
 from conciliacion_terceros import engine
 from conciliacion_terceros.export import construir_libro
 from conciliacion_terceros.formatos import leer_fuente
+from conciliacion_terceros import ajustes as ajustes_srv
 from conciliacion_terceros import correccion, facturacion
+from conciliacion_terceros import incluidos as incluidos_srv
 from conciliacion_terceros.models import (
     AjusteConciliacion,
     ConfigFacturacion,
@@ -107,7 +110,8 @@ def fuente_agregar(request, pk):
 
     folder = os.path.join(settings.MEDIA_ROOT, 'conciliacion_terceros', str(emp.pk))
     os.makedirs(folder, exist_ok=True)
-    path = os.path.join(folder, f'{timezone.now():%Y%m%d_%H%M%S}_{get_valid_filename(f.name)}')
+    # Con microsegundos: el archivo anterior de la empresa se conserva para compararlo con el nuevo.
+    path = os.path.join(folder, f'{timezone.now():%Y%m%d_%H%M%S_%f}_{get_valid_filename(f.name)}')
     with open(path, 'wb') as out:
         for chunk in f.chunks():
             out.write(chunk)
@@ -131,11 +135,21 @@ def fuente_agregar(request, pk):
         return rechazar(f'El archivo tiene corte {balance.fecha_hasta:%d/%m/%Y} y la conciliación es al '
                         f'{conc.fecha_corte:%d/%m/%Y}. Exporta el reporte con la misma fecha de corte.')
 
+    previa = FuenteConciliacion.objects.filter(conciliacion=conc, empresa=emp).first()
+    anterior = {}
+    if previa and not previa.confirmada:
+        anterior = previa.anterior or {}  # se compara siempre contra el último archivo confirmado
+    elif previa and previa.archivo and os.path.exists(previa.archivo):
+        anterior = {'archivo': previa.archivo, 'formato': previa.formato, 'archivo_nombre': previa.archivo_nombre,
+                    'cargado_en': (previa.cargado_en or previa.created_at).isoformat(),
+                    'incluidos': previa.incluidos}
+    # Archivo nuevo: hay que volver a decidir qué movimientos de la conciliación ya trae.
     fuente, _ = FuenteConciliacion.objects.update_or_create(
         conciliacion=conc, empresa=emp,
         defaults={'formato': formato, 'archivo': path, 'archivo_nombre': f.name,
                   'fecha_corte_archivo': balance.fecha_hasta, 'created_by': request.user,
-                  'confirmada': False, 'cuentas_usadas': []},
+                  'confirmada': False, 'cuentas_usadas': [], 'cargado_en': timezone.now(),
+                  'anterior': anterior, 'incluidos': {}},
     )
     messages.success(request, f'Archivo de {emp.nombre} leído: {len(balance.cuentas)} cuenta(s). Elige cuáles sumar.')
     return redirect('conciliacion-terceros-cuentas', pk=conc.pk, fuente_id=fuente.pk)
@@ -156,15 +170,36 @@ def fuente_cuentas(request, pk, fuente_id):
     config = ConfigEmpresa.objects.filter(empresa=fuente.empresa).first()
 
     if request.method == 'POST':
+        if conc.estado == Conciliacion.ESTADO_CERRADA:
+            messages.error(request, 'La conciliación está cerrada: no se pueden cambiar las cuentas ni los movimientos incluidos.')
+            return redirect('conciliacion-terceros-detalle', pk=pk)
         usadas = sorted(c for c in balance.cuentas if request.POST.get(f'usar_{c}'))
+        defaults = {'cuentas': usadas}
+        if 'numeracion_journal_id' in request.POST:
+            num = request.POST.get('numeracion_journal_id', '').strip()
+            if num and not re.fullmatch(r'[A-Za-z0-9_-]{1,40}', num):
+                messages.error(request, 'La numeración de los journals debe ser el ID de la numeración en Alegra (letras y números, sin espacios), o quedar vacía.')
+                return redirect('conciliacion-terceros-cuentas', pk=pk, fuente_id=fuente.pk)
+            defaults['numeracion_journal_id'] = num
+        # Movimientos dentro del corte que este archivo ya trae (no se vuelven a sumar).
+        candidatos = incluidos_srv.movimientos_en_corte(fuente)
+        fuente.incluidos = {
+            'ajustes': [m['id'] for m in candidatos if m['tipo'] == 'ajuste' and request.POST.get(f'incluido_ajuste_{m["id"]}')],
+            'facturas': [m['id'] for m in candidatos if m['tipo'] == 'factura' and request.POST.get(f'incluido_factura_{m["id"]}')],
+            'decidido_por': request.user.get_username(), 'decidido_en': timezone.now().isoformat(),
+        }
         fuente.cuentas_usadas = usadas
         fuente.confirmada = True
-        fuente.save(update_fields=['cuentas_usadas', 'confirmada'])
-        ConfigEmpresa.objects.update_or_create(empresa=fuente.empresa, defaults={'cuentas': usadas})
+        fuente.save(update_fields=['cuentas_usadas', 'confirmada', 'incluidos'])
+        ConfigEmpresa.objects.update_or_create(empresa=fuente.empresa, defaults=defaults)
         if usadas:
             messages.success(request, f'{fuente.empresa.nombre}: {len(usadas)} cuenta(s) seleccionada(s).')
         else:
             messages.warning(request, f'{fuente.empresa.nombre}: no seleccionaste cuentas, el archivo no suma nada.')
+        n_inc = len(fuente.incluidos['ajustes']) + len(fuente.incluidos['facturas'])
+        if n_inc:
+            messages.info(request, f'{n_inc} movimiento(s) de la conciliación quedaron como incluidos en el archivo de '
+                                   f'{fuente.empresa.nombre}: no se vuelven a sumar.')
         return _recalcular_si_listo(request, conc)
 
     if fuente.confirmada:
@@ -178,8 +213,20 @@ def fuente_cuentas(request, pk, fuente_id):
         'codigo': codigo, 'nombre': cta.nombre, 'terceros': len(cta.terceros), 'saldo': cta.suma,
         'usar': codigo in marcadas, 'nueva': bool(config) and codigo not in recordadas and not fuente.confirmada,
     } for codigo, cta in balance.cuentas.items()]
+    movimientos = incluidos_srv.sugerir(fuente, incluidos_srv.movimientos_en_corte(fuente))
+    if fuente.confirmada:  # ya se decidió para este archivo: se muestra lo guardado
+        ya = (incluidos_srv._ids(fuente.incluidos, 'ajustes'), incluidos_srv._ids(fuente.incluidos, 'facturas'))
+        for m in movimientos:
+            m['marcado'] = m['id'] in (ya[0] if m['tipo'] == 'ajuste' else ya[1])
+    else:
+        for m in movimientos:
+            m['marcado'] = m['sugerido']
     return render(request, 'conciliacion_terceros/cuentas.html', {
-        'conciliacion': conc, 'fuente': fuente, 'filas': filas,
+        'conciliacion': conc, 'fuente': fuente, 'filas': filas, 'movimientos': movimientos,
+        # Los verificados contra el archivo anterior ya traen la decisión; solo los dudosos piden atención.
+        'claros': [m for m in movimientos if m.get('verificacion') in ('si', 'no')],
+        'dudosos': [m for m in movimientos if m.get('verificacion') not in ('si', 'no')],
+        'numeracion_journal_id': config.numeracion_journal_id if config else '',
         'saldos_json': {f['codigo']: str(f['saldo']) for f in filas},
     })
 
@@ -204,14 +251,33 @@ def fuente_quitar(request, pk, fuente_id):
     return redirect('conciliacion-terceros-detalle', pk=pk)
 
 
-def _ajuste_json(a):
+def _falta_confirmar(conc):
+    """Mensaje si hay archivos recargados sin confirmar: mientras tanto esas empresas no suman y no se registran movimientos."""
+    nombres = [f.empresa.nombre for f in conc.fuentes.filter(confirmada=False).select_related('empresa')]
+    if not nombres:
+        return ''
+    return (f'Falta confirmar las cuentas del archivo de {", ".join(nombres)}: mientras tanto sus saldos no se suman. '
+            'Confírmalas antes de registrar traslados o facturas.')
+
+
+def _incluidos(conc):
+    return incluidos_srv.por_empresa(conc.fuentes.filter(confirmada=True))
+
+
+def _ajuste_json(a, inc=None):
     return {
+        'incluido_archivo': bool(inc) and incluidos_srv.ajuste_incluido(a, inc),
         'id': a.pk, 'grupo': a.grupo, 'tipo': a.tipo, 'valor': str(a.valor), 'misma_empresa': a.misma_empresa,
         'origen': a.origen_identificacion, 'origen_empresa': a.origen_empresa_id, 'origen_cuenta': a.origen_cuenta,
         'origen_cuenta_nombre': a.origen_cuenta_nombre,
         'destino': a.destino_identificacion, 'destino_empresa': a.destino_empresa_id, 'destino_cuenta': a.destino_cuenta,
         'destino_cuenta_nombre': a.destino_cuenta_nombre, 'nota': a.nota, 'anulado': a.anulado,
-        'journal_estado': a.journal_estado,
+        'journal_estado': a.journal_estado, 'journal_label': a.get_journal_estado_display(), 'journal_ref': a.journal_ref,
+        'journal_error': a.journal_error, 'aplicado': a.aplicado, 'via': 'alegra' if a.via_alegra else 'manual',
+        'fecha': a.fecha.isoformat() if a.fecha else '',
+        'enviando': bool(a.envio_en_curso_desde),
+        'enviado_por': a.enviado_por.get_username() if a.enviado_por else '',
+        'enviado_en': timezone.localtime(a.enviado_en).strftime('%d/%m/%Y %H:%M') if a.enviado_en else '',
         'creado_por': a.created_by.get_username() if a.created_by else '',
         'creado_en': timezone.localtime(a.created_at).strftime('%d/%m/%Y %H:%M') if a.created_at else '',
         'anulado_por': a.anulado_por.get_username() if a.anulado_por else '',
@@ -219,24 +285,38 @@ def _ajuste_json(a):
 
 
 def _ajustes_por_tercero(conc, idents=None):
-    qs = conc.ajustes.select_related('created_by', 'anulado_por')
+    qs = conc.ajustes.select_related('created_by', 'anulado_por', 'enviado_por', 'origen_empresa')
     if idents is not None:
         qs = qs.filter(Q(origen_identificacion__in=idents) | Q(destino_identificacion__in=idents))
-    out = defaultdict(list)
+    out, inc = defaultdict(list), _incluidos(conc)
     for a in qs:
-        j = _ajuste_json(a)
+        j = _ajuste_json(a, inc)
         out[a.origen_identificacion].append(j)
         if a.destino_identificacion != a.origen_identificacion:
             out[a.destino_identificacion].append(j)
     return out
 
 
-def _factura_json(f):
+def _ajustes_manuales(conc):
+    """Ajustes de empresas sin Alegra (vigentes): lo que hay que registrar a mano y lo ya registrado, con su asiento."""
+    out, inc = [], _incluidos(conc)
+    for a in conc.ajustes.filter(anulado=False).select_related('origen_empresa', 'created_by', 'enviado_por').order_by('created_at', 'id'):
+        if a.via_alegra and a.journal_estado != AjusteConciliacion.JOURNAL_MANUAL:
+            continue
+        out.append(dict(_ajuste_json(a, inc), empresa_nombre=a.origen_empresa.nombre, referencia=a.referencia,
+                        lineas=ajustes_srv.lineas_asiento(a)))
+    return out
+
+
+def _factura_json(f, inc=None):
     return {
+        'incluido_archivo': bool(inc) and incluidos_srv.factura_incluida(f, inc),
+        'siguiente': facturacion.siguiente_paso(f),
         'id': f.pk, 'grupo': f.grupo, 'tipo': f.tipo, 'tipo_label': f.get_tipo_display(), 'empresa': f.empresa_id,
         'proyecto': f.proyecto, 'negocio_ref': f.negocio_ref, 'identificacion': f.identificacion, 'concepto': f.concepto,
         'concepto_label': f.get_concepto_display(), 'fecha': f.fecha.isoformat(), 'numero': f.numero,
         'valor_venta': str(f.valor_venta), 'valor_intereses': str(f.valor_intereses), 'total': str(f.total),
+        'intereses_previos': str(f.intereses_previos),
         'cruce_cuenta': f.cruce_cuenta, 'cruce_estado': f.cruce_estado, 'cruce_label': f.get_cruce_estado_display(),
         'estado': f.estado, 'estado_label': f.get_estado_display(), 'alegra_invoice_id': f.alegra_invoice_id,
         'alegra_journal_id': f.alegra_journal_id, 'error': f.error, 'nota': f.nota,
@@ -253,9 +333,9 @@ def _facturas_por_tercero(conc, idents=None):
     qs = conc.facturas.select_related('created_by')
     if idents is not None:
         qs = qs.filter(identificacion__in=idents)
-    out = defaultdict(list)
+    out, inc = defaultdict(list), _incluidos(conc)
     for f in qs:
-        out[f.identificacion].append(_factura_json(f))
+        out[f.identificacion].append(_factura_json(f, inc))
     return out
 
 
@@ -294,8 +374,13 @@ def detalle(request, pk):
         c['empresa_corta'] = _empresa_corta(c.get('empresa_nombre'))
     andina = sum((l.saldo_andina for l in lineas), 0)
     contable = sum((l.saldo_contable for l in lineas), 0)
+    manuales = _ajustes_manuales(conc)
     return render(request, 'conciliacion_terceros/detalle.html', {
         'conciliacion': conc,
+        'falta_confirmar': _falta_confirmar(conc),
+        'ajustes_manuales': manuales,
+        'manuales_pendientes': sum(1 for a in manuales if a['journal_estado'] == AjusteConciliacion.JOURNAL_PENDIENTE),
+        'hoy': timezone.localdate().isoformat(),
         'fuentes': fuentes,
         'empresas_fuente': empresas.objects.order_by('nombre'),
         'formatos': FuenteConciliacion.FORMATO_CHOICES,
@@ -360,6 +445,27 @@ def _lineas_afectadas(conc, idents):
 # Facturación
 # ---------------------------------------------------------------------------
 
+def _referencias_ajenas(emp, datos):
+    """Referencias configuradas que no existen en el Alegra de la empresa (None si no se pudo consultar)."""
+    try:
+        refs = facturacion.referencias_alegra(emp)
+    except Exception:
+        logger.warning('No se pudieron leer las referencias de Alegra de %s', getattr(emp, 'pk', emp), exc_info=True)
+        return None
+    listas = {
+        'numeracion_id': ('numeración de factura', 'numeraciones_factura'), 'item_venta_id': ('ítem de venta', 'items'),
+        'item_intereses_id': ('ítem de intereses', 'items'), 'impuesto_id': ('impuesto', 'impuestos'),
+        'centro_costo_id': ('centro de costo', 'centros_costo'), 'cuenta_cxc_id': ('cuenta por cobrar', 'cuentas'),
+        'cuenta_costo_id': ('cuenta de costo', 'cuentas'), 'cuenta_inventario_id': ('cuenta de inventario', 'cuentas'),
+    }
+    out = []
+    for campo, (nombre, lista) in listas.items():
+        valor = datos.get(campo)
+        if valor and valor not in {str(x.get('id')) for x in refs.get(lista, [])}:
+            out.append(nombre)
+    return out
+
+
 @login_required
 @require_http_methods(['GET', 'POST'])
 def facturacion_config(request):
@@ -385,8 +491,9 @@ def facturacion_config(request):
             return redirect('conciliacion-terceros-facturacion')
         if datos['emision'] not in dict(ConfigFacturacion.EMISION_CHOICES):
             datos['emision'] = ConfigFacturacion.EMISION_BORRADOR
-        if datos['numeracion_journal_id'] and not datos['numeracion_journal_id'].isdigit():
-            messages.error(request, 'La numeración de los journals debe ser el número (ID) de la numeración en Alegra, o quedar vacía.')
+        # Igual que caja: el ID de la numeración es el que entrega Alegra (p. ej. 01KT9P5PEQY7D978MMYH0MNHTR).
+        if datos['numeracion_journal_id'] and not re.fullmatch(r'[A-Za-z0-9_-]+', datos['numeracion_journal_id']):
+            messages.error(request, 'La numeración de los journals debe ser el ID de la numeración en Alegra (letras y números, sin espacios), o quedar vacía.')
             return redirect('conciliacion-terceros-facturacion')
         datos['numeracion_journal_nombre'] = ''
         if datos['forma_pago'] not in ('CREDIT', 'CASH'):
@@ -399,6 +506,16 @@ def facturacion_config(request):
             datos['costo_m2'] = max(Decimal(0), Decimal(str(request.POST.get('costo_m2') or 0).replace(',', '')))
         except InvalidOperation:
             datos['costo_m2'] = Decimal(0)
+        if datos['modo'] == ConfigFacturacion.MODO_ALEGRA:
+            ajenas = _referencias_ajenas(emp, datos)
+            if ajenas is None:
+                messages.error(request, f'No se pudieron consultar las referencias de {emp.nombre} en Alegra para verificarlas; '
+                                        'no se guardó. Intenta de nuevo en un momento.')
+                return redirect('conciliacion-terceros-facturacion')
+            if ajenas:
+                messages.error(request, f'Estas referencias no existen en Alegra para {emp.nombre} (¿quedaron de otra empresa?): '
+                                        f'{", ".join(ajenas)}. Vuelve a elegirlas; no se guardó.')
+                return redirect('conciliacion-terceros-facturacion')
         cfg, _ = ConfigFacturacion.objects.update_or_create(proyecto=proyecto, defaults=dict(datos, empresa=emp, updated_by=request.user))
         faltan = cfg.faltantes_alegra() if cfg.modo == ConfigFacturacion.MODO_ALEGRA else []
         if faltan:
@@ -448,9 +565,9 @@ def facturacion_referencias(request):
         return JsonResponse({'detail': f'No se pudieron cargar los datos de Alegra: {exc}'}, status=502)
 
 
-def _factura_respuesta(conc, facturas):
+def _factura_respuesta(conc, facturas, mensaje=''):
     engine.ejecutar(conc, usar_cache=True)
-    return JsonResponse(dict(ok=True, facturas=[_factura_json(f) for f in facturas],
+    return JsonResponse(dict(ok=True, mensaje=mensaje, facturas=[_factura_json(f) for f in facturas],
                              **_lineas_afectadas(conc, [f.identificacion for f in facturas])))
 
 
@@ -461,6 +578,8 @@ def factura_crear(request, pk):
     conc = get_object_or_404(Conciliacion, pk=pk)
     if conc.estado == Conciliacion.ESTADO_CERRADA:
         return JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
+    if _falta_confirmar(conc):
+        return JsonResponse({'detail': _falta_confirmar(conc)}, status=400)
     try:
         datos = json.loads(request.body or '{}')
         facturas = facturacion.registrar(conc, datos, request.user)
@@ -481,8 +600,11 @@ def factura_accion(request, pk, factura_id, accion):
     if conc.estado == Conciliacion.ESTADO_CERRADA:
         return JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
     f = get_object_or_404(FacturaConciliacion.objects.select_related('empresa'), pk=factura_id, conciliacion=conc)
+    mensaje = ''
     try:
-        if accion == 'emitir':
+        if accion == 'verificar':
+            _, mensaje = facturacion.verificar_anulacion(f, request.user)
+        elif accion == 'emitir':
             facturacion.emitir(f)
         elif accion == 'costo':
             cfg = facturacion.config_de(f.proyecto)
@@ -494,9 +616,9 @@ def factura_accion(request, pk, factura_id, accion):
             if not cfg:
                 raise facturacion.FacturacionError('El proyecto no tiene configuración de facturación.')
             facturacion.cruzar(f, cfg)
-        elif accion == 'reintentar':
+        elif accion in ('enviar', 'reintentar'):
             if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado not in (FacturaConciliacion.ESTADO_ERROR, FacturaConciliacion.ESTADO_PENDIENTE):
-                raise facturacion.FacturacionError('Solo se reintenta una factura de Alegra que no alcanzó a crearse.')
+                raise facturacion.FacturacionError('Solo se envía una factura de Alegra que no alcanzó a crearse.')
             cfg = facturacion.config_de(f.proyecto)
             if not cfg:
                 raise facturacion.FacturacionError('El proyecto no tiene configuración de facturación.')
@@ -511,7 +633,7 @@ def factura_accion(request, pk, factura_id, accion):
         logger.exception('Factura %s %s', f.pk, accion)
         return JsonResponse({'detail': str(exc)}, status=502)
     f.refresh_from_db()
-    return _factura_respuesta(conc, [f])
+    return _factura_respuesta(conc, [f], mensaje)
 
 
 def _correccion_json(c):
@@ -568,6 +690,8 @@ def correccion_ejecutar(request, pk):
 def correccion_revertir(request, pk, correccion_id):
     _guard(request)
     conc = get_object_or_404(Conciliacion, pk=pk)
+    if conc.estado == Conciliacion.ESTADO_CERRADA:
+        return JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
     registro = get_object_or_404(CorreccionIdentificacion, pk=correccion_id)
     if registro.estado == CorreccionIdentificacion.ESTADO_REVERTIDA:
         return JsonResponse({'detail': 'Ya estaba revertida.'}, status=400)
@@ -614,8 +738,11 @@ def buscar_tercero(request, pk):
 @require_http_methods(['POST'])
 def ajuste_crear(request, pk):
     """
-    Registra uno o varios traslados de saldo contable:
-    {"nota": "...", "movimientos": [{"origen", "origen_empresa", "origen_cuenta", "destino", "destino_empresa", "destino_cuenta", "valor"}]}
+    Registra uno o varios traslados de saldo contable y, en empresas con Alegra, envía cada uno como journal:
+    {"nota": "...", "fecha": "AAAA-MM-DD", "movimientos": [{"origen", "origen_empresa", "origen_cuenta", "destino",
+     "destino_empresa", "destino_cuenta", "valor"}]}
+    Un ajuste solo mueve saldos cuando Alegra confirma el journal; si falla queda pendiente con el error.
+    En empresas sin Alegra queda pendiente hasta que alguien marque que lo registró a mano.
     """
     _guard(request)
     conc = get_object_or_404(Conciliacion, pk=pk)
@@ -628,14 +755,24 @@ def ajuste_crear(request, pk):
     movimientos = data.get('movimientos') or []
     if not movimientos:
         return JsonResponse({'detail': 'Agrega al menos un traslado.'}, status=400)
+    if _falta_confirmar(conc):
+        return JsonResponse({'detail': _falta_confirmar(conc)}, status=400)
+    fecha, error = _fecha_journal(data.get('fecha'))
+    if error:
+        return JsonResponse({'detail': error}, status=400)
 
     catalogo = {(c['empresa'], c['cuenta']): c for c in (conc.resumen or {}).get('catalogo', [])}
-    saldos = {}  # (ident, empresa, cuenta) -> saldo vigente
-    for l in conc.lineas.filter(identificacion__in={norm_ident(m.get('origen')) for m in movimientos}):
+    origenes = {norm_ident(m.get('origen')) for m in movimientos}
+    saldos = {}  # (ident, empresa, cuenta) -> saldo aplicado
+    for l in conc.lineas.filter(identificacion__in=origenes):
         for c in l.cuentas:
             saldos[(l.identificacion, c['empresa'], c['cuenta'])] = Decimal(c['saldo'])
 
+    # Los pendientes aún no restan del saldo, pero ya comprometen ese valor: no se puede trasladar dos veces.
     nuevos, consumido = [], defaultdict(Decimal)
+    for p in conc.ajustes.filter(anulado=False, journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE, origen_identificacion__in=origenes):
+        consumido[(p.origen_identificacion, p.origen_empresa_id, p.origen_cuenta)] += p.valor
+    empresas_por_id = {e.pk: e for e in empresas.objects.filter(pk__in={str(m.get('origen_empresa')) for m in movimientos})}
     for i, m in enumerate(movimientos, start=1):
         origen, destino = norm_ident(m.get('origen')), norm_ident(m.get('destino'))
         ko = (str(m.get('origen_empresa')), str(m.get('origen_cuenta')))
@@ -652,41 +789,185 @@ def ajuste_crear(request, pk):
             return JsonResponse({'detail': f'Fila {i}: el valor debe ser mayor que cero.'}, status=400)
         if origen == destino and ko == kd:
             return JsonResponse({'detail': f'Fila {i}: el origen y el destino son la misma cuenta del mismo tercero.'}, status=400)
+        if ko[0] != kd[0]:
+            return JsonResponse({'detail': f'Fila {i}: por ahora solo se trasladan saldos dentro de la misma empresa.'}, status=400)
+        if ko[0] not in empresas_por_id:
+            return JsonResponse({'detail': f'Fila {i}: la empresa {ko[0]} no existe.'}, status=400)
+        if ajustes_srv.naturaleza(ko[1]) != ajustes_srv.naturaleza(kd[1]):
+            return JsonResponse({'detail': f'Fila {i}: las cuentas {ko[1]} y {kd[1]} son de distinta naturaleza (débito/crédito); '
+                                           'el asiento no cuadraría.'}, status=400)
         disponible = saldos.get((origen,) + ko, Decimal(0)) - consumido[(origen,) + ko]
         if valor > disponible:
-            return JsonResponse({'detail': f'Fila {i}: {origen} tiene ${disponible:,.0f} en la cuenta {ko[1]}; no se pueden trasladar ${valor:,.0f}.'}, status=400)
+            return JsonResponse({'detail': f'Fila {i}: {origen} tiene ${disponible:,.0f} disponible en la cuenta {ko[1]} '
+                                           f'(descontando traslados pendientes); no se pueden trasladar ${valor:,.0f}.'}, status=400)
         consumido[(origen,) + ko] += valor
         nuevos.append(AjusteConciliacion(
             conciliacion=conc, tipo=AjusteConciliacion.TIPO_CUENTA if origen == destino else AjusteConciliacion.TIPO_TERCERO,
-            origen_identificacion=origen, origen_empresa_id=ko[0], origen_cuenta=ko[1], origen_cuenta_nombre=catalogo[ko]['cuenta_nombre'],
+            origen_identificacion=origen, origen_empresa=empresas_por_id[ko[0]], origen_cuenta=ko[1], origen_cuenta_nombre=catalogo[ko]['cuenta_nombre'],
             destino_identificacion=destino, destino_empresa_id=kd[0], destino_cuenta=kd[1], destino_cuenta_nombre=catalogo[kd]['cuenta_nombre'],
-            valor=valor, misma_empresa=ko[0] == kd[0], nota=(data.get('nota') or '')[:2000], created_by=request.user,
+            valor=valor, misma_empresa=True, nota=(data.get('nota') or '')[:2000], created_by=request.user, fecha=fecha,
         ))
+
+    # Antes de guardar: cuentas y contactos en Alegra. Si falta algo, no se registra nada.
+    cuentas_cache = {}
+    for i, a in enumerate(nuevos, start=1):
+        if not a.via_alegra:
+            continue
+        emp = a.origen_empresa
+        try:
+            if emp.pk not in cuentas_cache:
+                cuentas_cache[emp.pk] = facturacion.cuentas_alegra(emp)
+            ajustes_srv.resolver(a, cuentas_cache[emp.pk])
+        except Exception as exc:
+            return JsonResponse({'detail': f'Fila {i}: {exc} No se registró ningún traslado.'}, status=400)
+
     grupo = str(uuid.uuid4())
     for a in nuevos:
         a.grupo = grupo
-    AjusteConciliacion.objects.bulk_create(nuevos)
-    engine.ejecutar(conc, usar_cache=True)
+        a.save()  # uno a uno: cada ajuste necesita su id para la referencia AJ-CT-<id>
+    # Quedan pendientes (no mueven saldos). La pantalla envía cada uno a Alegra en su propia petición y espera
+    # la respuesta: así ninguna petición junta varias llamadas largas a Alegra (el servidor corta a los 120 s).
     idents = [a.origen_identificacion for a in nuevos] + [a.destino_identificacion for a in nuevos]
-    return JsonResponse(dict(ok=True, **_lineas_afectadas(conc, idents)))
+    return JsonResponse(dict(ok=True, resultados=[_resultado_ajuste(a) for a in nuevos],
+                             por_enviar=[a.pk for a in nuevos if a.via_alegra],
+                             **_lineas_afectadas(conc, idents)))
+
+
+def _fecha_journal(valor):
+    """(fecha, error). La fecha del journal la elige el usuario (se sugiere hoy); no puede ser futura."""
+    try:
+        fecha = datetime.date.fromisoformat(str(valor or ''))
+    except ValueError:
+        return None, 'Indica la fecha del comprobante.'
+    if fecha > timezone.localdate():
+        return None, 'La fecha del comprobante no puede ser futura.'
+    return fecha, ''
+
+
+def _resultado_ajuste(a):
+    return {'id': a.pk, 'referencia': a.referencia, 'estado': a.journal_estado, 'aplicado': a.aplicado,
+            'via': 'alegra' if a.via_alegra else 'manual', 'journal_ref': a.journal_ref, 'error': a.journal_error,
+            'empresa': a.origen_empresa.nombre, 'valor': str(a.valor)}
+
+
+def _ajuste_abierto(request, pk, ajuste_id):
+    """(conciliación, ajuste, respuesta de error)."""
+    conc = get_object_or_404(Conciliacion, pk=pk)
+    if conc.estado == Conciliacion.ESTADO_CERRADA:
+        return conc, None, JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
+    a = get_object_or_404(AjusteConciliacion.objects.select_related('origen_empresa', 'conciliacion'), pk=ajuste_id, conciliacion=conc)
+    if a.anulado:
+        return conc, a, JsonResponse({'detail': 'El traslado está anulado.'}, status=400)
+    return conc, a, None
 
 
 @login_required
 @require_http_methods(['POST'])
 def ajuste_anular(request, pk, ajuste_id):
     _guard(request)
-    conc = get_object_or_404(Conciliacion, pk=pk)
-    if conc.estado == Conciliacion.ESTADO_CERRADA:
-        return JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
-    a = get_object_or_404(AjusteConciliacion, pk=ajuste_id, conciliacion=conc)
-    if a.anulado:
-        return JsonResponse({'detail': 'El ajuste ya estaba anulado.'}, status=400)
+    conc, a, err = _ajuste_abierto(request, pk, ajuste_id)
+    if err:
+        return err
     if a.journal_estado == AjusteConciliacion.JOURNAL_ENVIADO:
-        return JsonResponse({'detail': 'El ajuste ya se envió como journal; anúlalo en la contabilidad.'}, status=400)
-    a.anulado, a.anulado_por, a.anulado_en = True, request.user, timezone.now()
-    a.save(update_fields=['anulado', 'anulado_por', 'anulado_en'])
+        return JsonResponse({'detail': f'El traslado ya está en Alegra (journal {a.journal_ref}); anúlalo allá.'}, status=400)
+    if a.journal_estado == AjusteConciliacion.JOURNAL_MANUAL:
+        return JsonResponse({'detail': 'El traslado ya se registró a mano en la contabilidad; revírtelo allá.'}, status=400)
+    limite = timezone.now() - datetime.timedelta(minutes=ajustes_srv.BLOQUEO_MINUTOS)
+    if a.envio_en_curso_desde and a.envio_en_curso_desde > limite:
+        return JsonResponse({'detail': 'El traslado se está enviando a Alegra en este momento; espera y recarga la página.'}, status=400)
+    # Siempre que la empresa tenga Alegra se verifica allá: el journal pudo quedar creado aunque aquí no haya
+    # error registrado (p. ej. si el servidor cortó la petición justo después del envío).
+    if a.via_alegra:
+        try:
+            from alegra_integration.journal_reconcile import _journal_reference, list_journals_by_reference
+            hallados = [j for j in list_journals_by_reference(facturacion._client(a.origen_empresa), a.referencia)
+                        if _journal_reference(j) == a.referencia]
+        except Exception as exc:
+            return JsonResponse({'detail': f'No se pudo verificar en Alegra si el journal «{a.referencia}» existe ({exc}). '
+                                           'Intenta de nuevo en un momento.'}, status=400)
+        if hallados:
+            return JsonResponse({'detail': f'En Alegra sí existe el journal «{a.referencia}». Usa «Reintentar» para dejarlo '
+                                           'aplicado, o elimínalo en Alegra antes de anular.'}, status=400)
+    # Cambio condicional: si mientras tanto empezó un envío o cambió el estado, no se anula.
+    anulado = AjusteConciliacion.objects.filter(
+        Q(envio_en_curso_desde__isnull=True) | Q(envio_en_curso_desde__lt=limite),
+        pk=a.pk, anulado=False, journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE,
+    ).update(anulado=True, anulado_por=request.user, anulado_en=timezone.now())
+    if not anulado:
+        return JsonResponse({'detail': 'El traslado cambió mientras se anulaba (¿se está enviando?); recarga la página.'}, status=400)
     engine.ejecutar(conc, usar_cache=True)
     return JsonResponse(dict(ok=True, **_lineas_afectadas(conc, [a.origen_identificacion, a.destino_identificacion])))
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajuste_enviar(request, pk, ajuste_id):
+    """Reintenta el envío del journal de un ajuste pendiente. {"fecha": "AAAA-MM-DD"} opcional."""
+    _guard(request)
+    conc, a, err = _ajuste_abierto(request, pk, ajuste_id)
+    if err:
+        return err
+    if a.journal_estado != AjusteConciliacion.JOURNAL_PENDIENTE:
+        return JsonResponse({'detail': 'El traslado ya no está pendiente.'}, status=400)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        data = {}
+    if data.get('fecha') or not a.fecha:
+        fecha, error = _fecha_journal(data.get('fecha'))
+        if error:
+            return JsonResponse({'detail': error}, status=400)
+        a.fecha = fecha
+        a.save(update_fields=['fecha'])
+    try:
+        ajustes_srv.enviar(a, request.user)
+    except ajustes_srv.AjusteError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    engine.ejecutar(conc, usar_cache=True)
+    return JsonResponse(dict(ok=True, resultados=[_resultado_ajuste(a)],
+                             **_lineas_afectadas(conc, [a.origen_identificacion, a.destino_identificacion])))
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajuste_verificar(request, pk, ajuste_id):
+    """Traslado enviado: si el journal se anuló en Alegra, se anula aquí y deja de contar."""
+    _guard(request)
+    conc, a, err = _ajuste_abierto(request, pk, ajuste_id)
+    if err:
+        return err
+    try:
+        _, mensaje = ajustes_srv.verificar_anulacion(a, request.user)
+    except ajustes_srv.AjusteError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    engine.ejecutar(conc, usar_cache=True)
+    return JsonResponse(dict(ok=True, mensaje=mensaje, **_lineas_afectadas(conc, [a.origen_identificacion, a.destino_identificacion])))
+
+
+@login_required
+@require_http_methods(['POST'])
+def ajuste_manual(request, pk, ajuste_id):
+    """Empresa sin Alegra: marca el ajuste como registrado a mano. {"comprobante": "...", "fecha": "AAAA-MM-DD"}"""
+    _guard(request)
+    conc, a, err = _ajuste_abierto(request, pk, ajuste_id)
+    if err:
+        return err
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        return JsonResponse({'detail': 'JSON inválido.'}, status=400)
+    fecha = a.fecha
+    if data.get('fecha'):
+        fecha, error = _fecha_journal(data.get('fecha'))
+        if error:
+            return JsonResponse({'detail': error}, status=400)
+    try:
+        ajustes_srv.marcar_manual(a, request.user, data.get('comprobante') or '', fecha)
+    except ajustes_srv.AjusteError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    engine.ejecutar(conc, usar_cache=True)
+    return JsonResponse(dict(ok=True, resultados=[_resultado_ajuste(a)],
+                             **_lineas_afectadas(conc, [a.origen_identificacion, a.destino_identificacion])))
 
 
 @login_required
@@ -721,12 +1002,49 @@ def recalcular(request, pk):
 @login_required
 @require_http_methods(['POST'])
 def cambiar_estado(request, pk):
+    """Cierra o reabre según la acción pedida (no es un interruptor: un doble envío no deshace el cierre)."""
     _guard(request)
     conc = get_object_or_404(Conciliacion, pk=pk)
-    conc.estado = Conciliacion.ESTADO_BORRADOR if conc.estado == Conciliacion.ESTADO_CERRADA else Conciliacion.ESTADO_CERRADA
+    accion = request.POST.get('accion')
+    if accion == 'reabrir':
+        conc.estado = Conciliacion.ESTADO_BORRADOR
+    elif accion == 'cerrar':
+        if conc.estado == Conciliacion.ESTADO_CERRADA:
+            return redirect('conciliacion-terceros-detalle', pk=pk)
+        faltan = _pendientes_para_cerrar(conc)
+        if faltan:
+            messages.error(request, 'No se puede cerrar todavía: ' + '; '.join(faltan) + '.')
+            return redirect('conciliacion-terceros-detalle', pk=pk)
+        borradores = conc.facturas.filter(tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_BORRADOR).count()
+        if borradores:
+            messages.warning(request, f'Se cerró con {borradores} factura(s) en borrador en Alegra: no cuentan como facturadas.')
+        conc.estado = Conciliacion.ESTADO_CERRADA
+    else:
+        messages.error(request, 'Acción inválida.')
+        return redirect('conciliacion-terceros-detalle', pk=pk)
     conc.notas = request.POST.get('notas', conc.notas)
     conc.save(update_fields=['estado', 'notas', 'updated_at'])
     return redirect('conciliacion-terceros-detalle', pk=pk)
+
+
+def _pendientes_para_cerrar(conc):
+    """Lo que impide cerrar: cosas a medio hacer que cambiarían el resultado de la conciliación."""
+    out = []
+    sin_confirmar = [f.empresa.nombre for f in conc.fuentes.filter(confirmada=False).select_related('empresa')]
+    if sin_confirmar:
+        out.append('falta confirmar las cuentas de ' + ', '.join(sin_confirmar))
+    n = conc.ajustes.filter(anulado=False, journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE).count()
+    if n:
+        out.append(f'{n} traslado(s) pendiente(s) de enviar o registrar a mano (envíalos o anúlalos)')
+    n = conc.facturas.filter(tipo=FacturaConciliacion.TIPO_ALEGRA, estado__in=(
+        FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR)).count()
+    if n:
+        out.append(f'{n} factura(s) que no alcanzaron a crearse en Alegra')
+    n = conc.facturas.filter(tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_EMITIDA).filter(
+        Q(cruce_estado=FacturaConciliacion.CRUCE_PENDIENTE) | Q(costo_estado=FacturaConciliacion.CRUCE_PENDIENTE)).count()
+    if n:
+        out.append(f'{n} factura(s) emitida(s) con el costo o el cruce pendiente')
+    return out
 
 
 @login_required

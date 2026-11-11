@@ -24,5 +24,8 @@ urlpatterns = [
     path('<int:pk>/terceros/buscar', views.buscar_tercero, name='conciliacion-terceros-buscar'),
     path('<int:pk>/ajustes', views.ajuste_crear, name='conciliacion-terceros-ajuste-crear'),
     path('<int:pk>/ajustes/<int:ajuste_id>/anular', views.ajuste_anular, name='conciliacion-terceros-ajuste-anular'),
+    path('<int:pk>/ajustes/<int:ajuste_id>/enviar', views.ajuste_enviar, name='conciliacion-terceros-ajuste-enviar'),
+    path('<int:pk>/ajustes/<int:ajuste_id>/manual', views.ajuste_manual, name='conciliacion-terceros-ajuste-manual'),
+    path('<int:pk>/ajustes/<int:ajuste_id>/verificar', views.ajuste_verificar, name='conciliacion-terceros-ajuste-verificar'),
     path('<int:pk>/lineas/<int:linea_id>/revision', views.linea_revision, name='conciliacion-terceros-linea-revision'),
 ]

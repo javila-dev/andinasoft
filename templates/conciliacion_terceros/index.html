@@ -31,12 +31,12 @@
     <form method="post" class="form-row align-items-end">
       {% csrf_token %}
       <div class="col-md-3 mb-2">
-        <label class="small mb-1">Fecha de corte</label>
-        <input type="date" name="fecha_corte" class="form-control form-control-sm" required>
+        <label class="small mb-1" for="n-fecha_corte">Fecha de corte</label>
+        <input type="date" name="fecha_corte" id="n-fecha_corte" class="form-control form-control-sm" required>
       </div>
       <div class="col-md-2 mb-2">
-        <label class="small mb-1">Tolerancia ($)</label>
-        <input type="number" name="tolerancia" value="1000" min="0" step="100" class="form-control form-control-sm">
+        <label class="small mb-1" for="n-tolerancia">Tolerancia ($)</label>
+        <input type="number" name="tolerancia" id="n-tolerancia" value="1000" min="0" step="100" class="form-control form-control-sm">
       </div>
       <div class="col-md-2 mb-2">
         <button class="btn btn-primary btn-sm btn-block" type="submit">Crear</button>

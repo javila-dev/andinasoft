@@ -46,7 +46,7 @@
         <thead class="thead-light"><tr><th>Proyecto</th><th>Empresa</th><th>Modo</th><th>Emisión</th><th>Numeración</th><th>Ítems</th><th>Impuesto</th><th>Cuenta por cobrar</th><th>Costo</th></tr></thead>
         <tbody>
           {% for f in filas %}
-          <tr data-proyecto="{{ f.proyecto }}">
+          <tr data-proyecto="{{ f.proyecto }}" tabindex="0" aria-label="Configurar {{ f.proyecto }}">
             <td><strong>{{ f.proyecto }}</strong></td>
             {% if f.cfg %}
             <td>{{ f.cfg.empresa.nombre }}</td>
@@ -75,12 +75,12 @@
       <button type="button" class="close" id="f-cerrar" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
     </div>
     <div class="form-row">
-      <div class="col-md-4 mb-2"><label>Empresa que factura</label>
+      <div class="col-md-4 mb-2"><label for="f-empresa">Empresa que factura</label>
         <select name="empresa" id="f-empresa" class="form-control form-control-sm">
           {% for e in empresas %}<option value="{{ e.pk }}" data-alegra="{{ e.alegra_enabled|yesno:'1,0' }}">{{ e.nombre }}{% if e.alegra_enabled %} · Alegra{% endif %}</option>{% endfor %}
         </select>
       </div>
-      <div class="col-md-4 mb-2"><label>Modo</label>
+      <div class="col-md-4 mb-2"><label for="f-modo">Modo</label>
         <select name="modo" id="f-modo" class="form-control form-control-sm">
           {% for v, l in modos %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
         </select>
@@ -90,26 +90,26 @@
     <div id="f-alegra" style="display:none">
       <div class="small text-muted mb-2" id="f-cargando"></div>
       <div class="form-row">
-        <div class="col-md-4 mb-2"><label>Emisión</label>
+        <div class="col-md-4 mb-2"><label for="f-emision">Emisión</label>
           <select name="emision" id="f-emision" class="form-control form-control-sm">
             {% for v, l in emisiones %}<option value="{{ v }}">{{ l }}</option>{% endfor %}
           </select>
         </div>
-        <div class="col-md-4 mb-2"><label>Numeración de la factura</label><select id="s-numeracion" class="form-control form-control-sm ct-ref" data-campo="numeracion" data-lista="numeraciones_factura"></select></div>
-        <div class="col-md-2 mb-2"><label>Forma de pago</label>
+        <div class="col-md-4 mb-2"><label for="s-numeracion">Numeración de la factura</label><select id="s-numeracion" class="form-control form-control-sm ct-ref" data-campo="numeracion" data-lista="numeraciones_factura"></select></div>
+        <div class="col-md-2 mb-2"><label for="f-forma_pago">Forma de pago</label>
           <select name="forma_pago" id="f-forma_pago" class="form-control form-control-sm"><option value="CREDIT">Crédito</option><option value="CASH">Contado</option></select>
         </div>
-        <div class="col-md-2 mb-2"><label>Días de vencimiento</label><input type="number" min="0" name="dias_vencimiento" id="f-dias_vencimiento" class="form-control form-control-sm" value="0"></div>
+        <div class="col-md-2 mb-2"><label for="f-dias_vencimiento">Días de vencimiento</label><input type="number" min="0" name="dias_vencimiento" id="f-dias_vencimiento" class="form-control form-control-sm" value="0"></div>
       </div>
       <div class="form-row">
-        <div class="col-md-4 mb-2"><label>Ítem para la venta (capital)</label><select id="s-item_venta" class="form-control form-control-sm ct-ref" data-campo="item_venta" data-lista="items"></select></div>
-        <div class="col-md-4 mb-2"><label>Ítem para los intereses</label><select id="s-item_intereses" class="form-control form-control-sm ct-ref" data-campo="item_intereses" data-lista="items"></select></div>
-        <div class="col-md-4 mb-2"><label>Impuesto</label><select id="s-impuesto" class="form-control form-control-sm ct-ref" data-campo="impuesto" data-lista="impuestos" data-vacio="Sin impuesto (excluido)"></select></div>
+        <div class="col-md-4 mb-2"><label for="s-item_venta">Ítem para la venta (capital)</label><select id="s-item_venta" class="form-control form-control-sm ct-ref" data-campo="item_venta" data-lista="items"></select></div>
+        <div class="col-md-4 mb-2"><label for="s-item_intereses">Ítem para los intereses</label><select id="s-item_intereses" class="form-control form-control-sm ct-ref" data-campo="item_intereses" data-lista="items"></select></div>
+        <div class="col-md-4 mb-2"><label for="s-impuesto">Impuesto</label><select id="s-impuesto" class="form-control form-control-sm ct-ref" data-campo="impuesto" data-lista="impuestos" data-vacio="Sin impuesto (excluido)"></select></div>
       </div>
       <div class="form-row">
-        <div class="col-md-4 mb-2"><label>Centro de costo</label><select id="s-centro_costo" class="form-control form-control-sm ct-ref" data-campo="centro_costo" data-lista="centros_costo" data-vacio="Sin centro de costo"></select></div>
+        <div class="col-md-4 mb-2"><label for="s-centro_costo">Centro de costo</label><select id="s-centro_costo" class="form-control form-control-sm ct-ref" data-campo="centro_costo" data-lista="centros_costo" data-vacio="Sin centro de costo"></select></div>
         <div class="col-md-4 mb-2"><label for="h-numeracion_journal_id">Numeración de los journals (costo y cruce)</label>
-          <input type="text" inputmode="numeric" name="numeracion_journal_id" id="h-numeracion_journal_id" class="form-control form-control-sm" placeholder="ID de la numeración en Alegra">
+          <input type="text" name="numeracion_journal_id" id="h-numeracion_journal_id" class="form-control form-control-sm" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Ej. 01KT9P5PEQY7D978MMYH0MNHTR">
           <small class="text-muted">Vacío = la numeración predeterminada de Alegra.</small>
         </div>
       </div>
@@ -119,21 +119,21 @@
           <small class="text-muted">Se multiplica por el área del lote; al facturar se puede cambiar.</small>
         </div>
         <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_costo">
-          <label>Cuenta de costo de venta (débito, 6)</label>
+          <label id="lbl-cuenta_costo">Cuenta de costo de venta (débito, 6)</label>
           <div class="ct-combo">
-            <button type="button" class="form-control form-control-sm ct-combo-btn text-left"></button>
+            <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-cuenta_costo"></button>
             <div class="ct-combo-panel" style="display:none">
-              <input type="search" class="form-control form-control-sm ct-cta-q" placeholder="Escribe código o nombre…" autocomplete="off">
+              <input type="search" class="form-control form-control-sm ct-cta-q" aria-label="Buscar cuenta por código o nombre" placeholder="Escribe código o nombre…" autocomplete="off">
               <div class="ct-res-busq mt-1"></div>
             </div>
           </div>
         </div>
         <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_inventario">
-          <label>Cuenta de inventario del proyecto (crédito, 15)</label>
+          <label id="lbl-cuenta_inventario">Cuenta de inventario del proyecto (crédito, 15)</label>
           <div class="ct-combo">
-            <button type="button" class="form-control form-control-sm ct-combo-btn text-left"></button>
+            <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-cuenta_inventario"></button>
             <div class="ct-combo-panel" style="display:none">
-              <input type="search" class="form-control form-control-sm ct-cta-q" placeholder="Escribe código o nombre…" autocomplete="off">
+              <input type="search" class="form-control form-control-sm ct-cta-q" aria-label="Buscar cuenta por código o nombre" placeholder="Escribe código o nombre…" autocomplete="off">
               <div class="ct-res-busq mt-1"></div>
             </div>
           </div>
@@ -141,12 +141,12 @@
       </div>
       <div class="form-row">
         <div class="col-md-6 mb-2 ct-cuenta" data-campo="cuenta_cxc">
-          <label>Cuenta por cobrar de la factura (crédito del cruce)</label>
+          <label id="lbl-cuenta_cxc">Cuenta por cobrar de la factura (crédito del cruce)</label>
           <small class="d-block text-muted mb-1">El débito del cruce va a la cuenta de anticipos donde cada tercero tiene el saldo; se elige al facturar.</small>
           <div class="ct-combo">
-            <button type="button" class="form-control form-control-sm ct-combo-btn text-left"></button>
+            <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-cuenta_cxc"></button>
             <div class="ct-combo-panel" style="display:none">
-              <input type="search" class="form-control form-control-sm ct-cta-q" placeholder="Escribe código o nombre…" autocomplete="off">
+              <input type="search" class="form-control form-control-sm ct-cta-q" aria-label="Buscar cuenta por código o nombre" placeholder="Escribe código o nombre…" autocomplete="off">
               <div class="ct-res-busq mt-1"></div>
             </div>
           </div>
@@ -229,10 +229,14 @@
     }).fail(function (x) { $('#f-cargando').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo consultar Alegra.') + '</span>'); });
   }
   $('#f-empresa').on('change', function () {
-    // Las cuentas son de la empresa: al cambiarla se limpian las elegidas.
+    // Todas las referencias de Alegra (numeración, ítems, impuesto, centro de costo y cuentas) son de la empresa:
+    // al cambiarla se limpian, para no guardar IDs de otra empresa.
     refs = null;
     ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(function (c) {
       ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(''); });
+    });
+    ['numeracion', 'item_venta', 'item_intereses', 'impuesto', 'centro_costo'].forEach(function (c) {
+      $('#h-' + c + '_id, #h-' + c + '_nombre').val('');
     });
     cerrarCombos(); llenarSelects(); mostrarCuentas(); cargarRefs();
   });
@@ -259,6 +263,9 @@
   });
   $(document).on('mousedown', function (e) { if (!$(e.target).closest('.ct-combo').length) cerrarCombos(); });
 
+  $('.ct-tabla tbody').on('keydown', 'tr', function (e) {  // teclado: Enter o espacio abre la configuración
+    if (e.target === this && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $(this).trigger('click'); }
+  });
   $('.ct-tabla tbody').on('click', 'tr', function () {
     var p = $(this).data('proyecto'); actual = CONFIGS[p] || null;
     $('.ct-tabla tbody tr').removeClass('sel'); $(this).addClass('sel');

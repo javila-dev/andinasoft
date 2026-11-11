@@ -15,7 +15,7 @@
   .ct-estado.active { box-shadow: 0 0 0 2px #2d4a42 inset; }
   .ct-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
   .st-cuadrado { background: #2e7d32; } .st-diferencia { background: #f9a825; } .st-solo_contable { background: #c62828; } .st-solo_andina { background: #1565c0; }
-  .ct-chip { display: inline-block; border: 1px solid #d5dbd9; border-radius: 14px; padding: 2px 10px; margin: 0 6px 6px 0; font-size: 12px; cursor: pointer; background: #fff; }
+  .ct-chip { display: inline-block; border: 1px solid #d5dbd9; border-radius: 14px; padding: 2px 10px; margin: 0 6px 6px 0; font-size: 12px; cursor: pointer; background: #fff; color: inherit; font-family: inherit; line-height: 1.5; }
   .ct-chip.active { background: #2d4a42; color: #fff; border-color: #2d4a42; }
   .ct-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin: 0 3px 2px 0; white-space: nowrap; }
   .ct-tag-p { background: #e3f2fd; color: #0d47a1; }
@@ -29,11 +29,24 @@
   .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .neg { color: #c62828; }
   .ct-alert-txt { color: #8a5a00; font-size: 11px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .rev-pendiente { color: #8a959f; } .rev-ok { color: #2e7d32; } .rev-ajuste { color: #b26a00; } .rev-corregir_andina { color: #1565c0; }
+  .ct-esc { font-size: 11.5px; margin-top: 2px; }
+  .ct-esc > summary { cursor: pointer; color: #2d4a42; }
+  .ct-esc-paso { color: #66727d; white-space: nowrap; padding-left: 4px; }
+  .ct-esc-paso.hecho { color: #2e7d32; }
+  /* Accesibilidad: el amarillo de Bootstrap no se lee sobre blanco (≈1.6:1); se usa un ámbar oscuro. */
+  .text-warning { color: #8a5a00 !important; }
+  #tabla tbody tr:focus, #tabla-adj tbody tr:focus, tr[tabindex]:focus, .ct-res-busq .item:focus { outline: 2px solid #2d4a42; outline-offset: -2px; }
+  .ct-chip:focus-visible, .ct-estado:focus-visible { outline: 2px solid #2d4a42; outline-offset: 2px; }
+  .rev-pendiente { color: #66727d; } .rev-ok { color: #2e7d32; } .rev-ajuste { color: #b26a00; } .rev-corregir_andina { color: #1565c0; }
   .ct-res table { font-size: 12px; }
   .ct-res td, .ct-res th { padding: 3px 8px; vertical-align: middle; }
   .ct-progress { height: 6px; }
   .ct-fuentes td { vertical-align: middle; font-size: 13px; }
+  .ct-archivos > summary { cursor: pointer; list-style: none; }
+  .ct-archivos > summary::-webkit-details-marker { display: none; }
+  .ct-archivos > summary .ct-ver-mas { text-decoration: underline; }
+  .ct-archivos[open] > summary .ct-ver-mas { display: none; }
+  .ct-archivos > summary:focus-visible, .ct-resumen > summary:focus-visible { outline: 2px solid #2d4a42; outline-offset: 2px; }
   /* Ficha tipo cuenta T */
   .ct-t { border: 1px solid #d5dbd9; border-radius: 8px; overflow: hidden; height: 100%; }
   .ct-t-head { padding: 6px 10px; font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; }
@@ -42,7 +55,7 @@
   .ct-t table { font-size: 12px; margin: 0; }
   .ct-t td, .ct-t th { padding: 4px 8px; vertical-align: middle; }
   .ct-t tfoot td { font-weight: 700; border-top: 2px solid #d5dbd9; }
-  .ct-t tr.ct-nosuma td { color: #9aa5a1; }
+  .ct-t tr.ct-nosuma td { color: #6f7b77; }
   .ct-t tr.ct-nosuma td.num { text-decoration: line-through; }
   .ct-balance { border-radius: 8px; padding: 12px 16px; font-size: 15px; display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
   .ct-balance.ok { background: #e8f5e9; } .ct-balance.bad { background: #fdecea; }
@@ -94,13 +107,13 @@
   .ct-res-busq .item { padding: 5px 8px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #f0f2f1; display: flex; justify-content: space-between; gap: 8px; }
   .ct-res-busq .item:hover { background: #eef5f2; }
   .ct-hist { font-size: 12px; }
-  .ct-hist tr.anulado td { color: #9aa5a1; text-decoration: line-through; }
+  .ct-hist tr.anulado td { color: #6f7b77; text-decoration: line-through; }
   .ct-hist tr.anulado td.acc { text-decoration: none; }
   /* Pasos de una factura en Alegra: factura → costo → cruce, cada uno con su estado y su reintento */
   .ct-pasos { list-style: none; padding: 0; margin: 0; min-width: 230px; }
   .ct-pasos li { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
   .ct-pasos li > i { width: 14px; text-align: center; flex: none; }
-  .ct-pasos .ok > i { color: #2e7d32; } .ct-pasos .bad > i { color: #c62828; } .ct-pasos .wait > i { color: #b26a00; } .ct-pasos .off { color: #9aa5a1; }
+  .ct-pasos .ok > i { color: #2e7d32; } .ct-pasos .bad > i { color: #c62828; } .ct-pasos .wait > i { color: #b26a00; } .ct-pasos .off { color: #6f7b77; }
   .ct-pasos .det { display: block; font-size: 11px; color: #6c7a76; }
   .ct-pasos .bad .det { color: #c62828; }
   .ct-pasos .btn-link { font-size: 11.5px; padding: 0; vertical-align: baseline; }
@@ -156,9 +169,10 @@
       <a href="{% url 'conciliacion-terceros-facturacion' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-invoice-dollar mr-1"></i>Facturación</a>
       <a href="{% url 'conciliacion-terceros-exportar' conciliacion.pk %}" class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel mr-1"></i>Exportar</a>
       <form method="post" action="{% url 'conciliacion-terceros-estado' conciliacion.pk %}" class="d-inline">{% csrf_token %}
+        <input type="hidden" name="accion" value="{% if conciliacion.estado == 'cerrada' %}reabrir{% else %}cerrar{% endif %}">
         <button class="btn btn-sm {% if conciliacion.estado == 'cerrada' %}btn-outline-dark{% else %}btn-dark{% endif %}" type="submit"
-                onclick="return confirm('{% if conciliacion.estado == 'cerrada' %}¿Reabrir la conciliación?{% else %}¿Cerrar la conciliación? Quedará de solo lectura.{% endif %}')">
-          {% if conciliacion.estado == 'cerrada' %}Reabrir{% else %}Cerrar{% endif %}
+                onclick="if (!confirm('{% if conciliacion.estado == 'cerrada' %}¿Reabrir la conciliación?{% else %}¿Cerrar la conciliación? Quedará de solo lectura.{% endif %}')) return false; this.disabled = true; this.form.submit(); return false;">
+          {% if conciliacion.estado == 'cerrada' %}Reabrir conciliación{% else %}Cerrar conciliación{% endif %}
         </button>
       </form>
     </div>
@@ -167,12 +181,15 @@
   {% for m in messages %}
   <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags }}{% endif %} py-2">{{ m }}</div>
   {% endfor %}
+  {% if falta_confirmar %}<div class="alert alert-warning py-2" role="alert"><i class="fas fa-exclamation-triangle mr-1" aria-hidden="true"></i>{{ falta_confirmar }}</div>{% endif %}
 
-  <div class="card mb-3">
-    <div class="card-header py-2 d-flex justify-content-between align-items-center">
-      <strong>Archivos de contabilidad</strong>
-      <small class="text-muted">Todos con corte {{ conciliacion.fecha_corte|date:"d/m/Y" }}</small>
-    </div>
+  <details class="card mb-3 ct-archivos" {% if not fuentes or falta_confirmar %}open{% endif %}>
+    <summary class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center">
+      <span><strong>Archivos de contabilidad</strong>
+        <span class="text-muted small ml-1">· {% if fuentes %}{{ fuentes|length }} empresa(s): {% for f in fuentes %}{{ f.empresa.nombre|truncatechars:28 }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if not falta_confirmar %} · <span class="text-success"><i class="fas fa-check" aria-hidden="true"></i> cuentas confirmadas</span>{% endif %}{% else %}aún no hay archivos{% endif %}</span>
+      </span>
+      <small class="text-muted">Corte {{ conciliacion.fecha_corte|date:"d/m/Y" }} · <span class="ct-ver-mas">Gestionar archivos y proyectos</span></small>
+    </summary>
     <div class="table-responsive">
       <table class="table table-sm mb-0 ct-fuentes">
         <tbody>
@@ -215,20 +232,20 @@
       <form method="post" enctype="multipart/form-data" action="{% url 'conciliacion-terceros-fuente-agregar' conciliacion.pk %}" class="form-row align-items-end">
         {% csrf_token %}
         <div class="col-md-3 mb-1">
-          <label class="small mb-1">Empresa</label>
-          <select name="empresa" class="form-control form-control-sm" required>
+          <label class="small mb-1" for="fu-empresa">Empresa</label>
+          <select name="empresa" id="fu-empresa" class="form-control form-control-sm" required>
             {% for e in empresas_fuente %}<option value="{{ e.pk }}">{{ e.nombre }}</option>{% endfor %}
           </select>
         </div>
         <div class="col-md-3 mb-1">
-          <label class="small mb-1">Formato del archivo</label>
-          <select name="formato" class="form-control form-control-sm" required>
+          <label class="small mb-1" for="fu-formato">Formato del archivo</label>
+          <select name="formato" id="fu-formato" class="form-control form-control-sm" required>
             {% for val, label in formatos %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
           </select>
         </div>
         <div class="col-md-4 mb-1">
-          <label class="small mb-1">Archivo</label>
-          <input type="file" name="archivo" accept=".xlsx,.xls,.csv" class="form-control-file" required>
+          <label class="small mb-1" for="fu-archivo">Archivo</label>
+          <input type="file" name="archivo" id="fu-archivo" accept=".xlsx,.xls,.csv" class="form-control-file" required>
         </div>
         <div class="col-md-2 mb-1">
           <button class="btn btn-primary btn-sm btn-block" type="submit"><i class="fas fa-file-upload mr-1"></i>Cargar</button>
@@ -236,19 +253,65 @@
       </form>
     </div>
     {% endif %}
-  </div>
+  </details>
 
   {% if lineas_json %}
-  <div class="d-flex align-items-center mb-3">
-    <div class="progress ct-progress flex-grow-1 mr-2"><div class="progress-bar bg-success" id="prog-bar" style="width:0%"></div></div>
-    <small class="text-muted" id="prog-txt"></small>
+  <div class="row mb-3">
+    <div class="col-6 col-md-3 mb-2"><div class="ct-kpi"><div class="lbl">Andinasoft</div><div class="val">${{ total_andina|floatformat:0|intcomma }}</div></div></div>
+    <div class="col-6 col-md-3 mb-2"><div class="ct-kpi"><div class="lbl">Contabilidad</div><div class="val">${{ total_contable|floatformat:0|intcomma }}</div></div></div>
+    <div class="col-6 col-md-3 mb-2"><div class="ct-kpi"><div class="lbl">Diferencia (contabilidad − Andinasoft)</div><div class="val {% if diferencia_total < 0 %}neg{% endif %}">${{ diferencia_total|floatformat:0|intcomma }}</div></div></div>
+    <div class="col-6 col-md-3 mb-2"><div class="ct-kpi"><div class="lbl">Revisión de los que no cuadran</div>
+      <div class="progress ct-progress my-2" role="progressbar" aria-label="Avance de la revisión"><div class="progress-bar bg-success" id="prog-bar" style="width:0%"></div></div>
+      <small class="text-muted" id="prog-txt"></small></div></div>
   </div>
 
-  <div class="row mb-3">
-    <div class="col-md-4 mb-2"><div class="ct-kpi"><div class="lbl">Andinasoft</div><div class="val">${{ total_andina|floatformat:0|intcomma }}</div></div></div>
-    <div class="col-md-4 mb-2"><div class="ct-kpi"><div class="lbl">Contabilidad</div><div class="val">${{ total_contable|floatformat:0|intcomma }}</div></div></div>
-    <div class="col-md-4 mb-2"><div class="ct-kpi"><div class="lbl">Diferencia (contabilidad − Andinasoft)</div><div class="val {% if diferencia_total < 0 %}neg{% endif %}">${{ diferencia_total|floatformat:0|intcomma }}</div></div></div>
+  <div id="aviso-resumen" class="alert alert-info py-1 px-2 small d-flex align-items-center justify-content-between" role="status" style="display:none !important">
+    <span><i class="fas fa-info-circle mr-1" aria-hidden="true"></i>Los totales y el resumen de arriba son de antes de tus últimos cambios; la tabla de terceros sí está al día.</span>
+    <button type="button" class="btn btn-sm btn-outline-info py-0 ml-2" id="btn-actualizar-resumen">Actualizar</button>
   </div>
+
+  {% if ajustes_manuales %}
+  <details class="card mb-3" id="ajustes-manuales" {% if manuales_pendientes %}open{% endif %}>
+    <summary class="card-header py-2 small" style="cursor:pointer">
+      <strong>Traslados para registrar a mano</strong>
+      <span class="text-muted">· empresas sin Alegra. No mueven el saldo hasta marcarlos como registrados.</span>
+      {% if manuales_pendientes %}<span class="badge badge-warning ml-1">{{ manuales_pendientes }} por registrar</span>{% endif %}
+    </summary>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0 small">
+        <thead class="thead-light"><tr><th>Referencia</th><th>Empresa</th><th>Tercero</th><th>Cuenta</th><th class="num">Débito</th><th class="num">Crédito</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+          {% for a in ajustes_manuales %}
+          {% for l in a.lineas %}
+          <tr>
+            {% if forloop.first %}
+            <td rowspan="2" class="text-nowrap"><strong>{{ a.referencia }}</strong><br><span class="text-muted">{{ a.creado_en }} · {{ a.creado_por }}</span></td>
+            <td rowspan="2">{{ a.empresa_nombre }}</td>
+            {% endif %}
+            <td>{{ l.identificacion }}</td>
+            <td><code>{{ l.cuenta }}</code> {{ l.cuenta_nombre }}</td>
+            <td class="num">{% if l.debito %}{{ l.debito|floatformat:2|intcomma }}{% endif %}</td>
+            <td class="num">{% if l.credito %}{{ l.credito|floatformat:2|intcomma }}{% endif %}</td>
+            {% if forloop.first %}
+            <td rowspan="2">{{ a.nota }}</td>
+            <td rowspan="2" class="text-nowrap">
+              {% if a.journal_estado == 'manual' %}<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>Registrado</span>{% if a.journal_ref %} · {{ a.journal_ref }}{% endif %}<br><span class="text-muted">{{ a.fecha }} · {{ a.enviado_por }}</span>
+              {% else %}<span class="text-warning"><i class="fas fa-hand-paper mr-1"></i>Por registrar</span>{% endif %}
+            </td>
+            <td rowspan="2" class="text-nowrap">
+              {% if a.journal_estado == 'pendiente' and conciliacion.estado != 'cerrada' %}
+              <button type="button" class="btn btn-sm btn-outline-primary py-0 ct-manual-marcar" data-id="{{ a.id }}" data-fecha="{{ a.fecha }}">Marcar registrado</button>
+              {% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
 
   <div class="d-flex flex-wrap align-items-center mb-2">
     <div class="btn-group btn-group-sm ct-vista mr-3" role="group" aria-label="Cómo ver la conciliación">
@@ -261,7 +324,7 @@
   <div class="row mb-2 v-adj" id="estados-adj" style="display:none">
     {% for val, label in resultados_adj %}
     <div class="col-6 col-md mb-2">
-      <button type="button" class="ct-estado" data-resultado="{{ val }}">
+      <button type="button" class="ct-estado" aria-pressed="false" data-resultado="{{ val }}">
         <div class="small text-muted"><span class="ct-dot st-{{ val }}"></span>{{ label }}</div>
         <div class="n" id="cnt-adj-{{ val }}">0</div>
       </button>
@@ -272,7 +335,7 @@
   <div class="row mb-2 v-terceros" id="estados">
     {% for val, label in estados %}
     <div class="col-6 col-md mb-2">
-      <button type="button" class="ct-estado" data-estado="{{ val }}">
+      <button type="button" class="ct-estado" aria-pressed="false" data-estado="{{ val }}">
         <div class="small text-muted"><span class="ct-dot st-{{ val }}"></span>{{ label }}</div>
         <div class="n" id="cnt-{{ val }}">0</div>
       </button>
@@ -280,13 +343,15 @@
     {% endfor %}
   </div>
 
-  <div class="row mb-3 ct-res">
+  <details class="mb-3 ct-details ct-resumen">
+    <summary>Resumen por proyecto y por cuenta <span class="text-muted">· clic en una fila para filtrar la tabla</span></summary>
+  <div class="row mt-2 ct-res">
     <div class="col-lg-5 mb-2">
       <div class="card h-100">
         <div class="card-header py-1 small"><strong>Andinasoft por proyecto</strong> <span class="text-muted">· lo que corresponde a los titulares</span></div>
         <div class="table-responsive"><table class="table table-sm mb-0">
           <thead class="thead-light"><tr><th>Proyecto</th><th class="num">Terceros</th><th class="num">Valor</th></tr></thead>
-          <tbody>{% for p in resumen.proyectos %}<tr class="ct-filtro-proy" data-proyecto="{{ p.proyecto }}" style="cursor:pointer"><td>{{ p.proyecto }}</td><td class="num">{{ p.terceros }}</td><td class="num">{{ p.valor|floatformat:0|intcomma }}</td></tr>{% endfor %}</tbody>
+          <tbody>{% for p in resumen.proyectos %}<tr class="ct-filtro-proy" data-proyecto="{{ p.proyecto }}" data-teclado tabindex="0" aria-label="Filtrar por {{ p.proyecto }}" style="cursor:pointer"><td>{{ p.proyecto }}</td><td class="num">{{ p.terceros }}</td><td class="num">{{ p.valor|floatformat:0|intcomma }}</td></tr>{% endfor %}</tbody>
           <tfoot><tr><td><strong>Total</strong></td><td></td><td class="num"><strong>{{ total_andina|floatformat:0|intcomma }}</strong></td></tr></tfoot>
         </table></div>
       </div>
@@ -296,38 +361,39 @@
         <div class="card-header py-1 small"><strong>Contabilidad por empresa y cuenta</strong></div>
         <div class="table-responsive"><table class="table table-sm mb-0">
           <thead class="thead-light"><tr><th>Empresa</th><th>Cuenta</th><th class="num">Terceros</th><th class="num">Saldo</th></tr></thead>
-          <tbody>{% for c in resumen.cuentas %}<tr class="ct-filtro-emp" data-empresa="{{ c.empresa }}" style="cursor:pointer"><td><span class="ct-tag ct-tag-e">{{ c.empresa_corta }}</span></td><td><code>{{ c.cuenta }}</code> {{ c.cuenta_nombre }}</td><td class="num">{{ c.terceros }}</td><td class="num">{{ c.saldo|floatformat:0|intcomma }}</td></tr>{% endfor %}</tbody>
+          <tbody>{% for c in resumen.cuentas %}<tr class="ct-filtro-emp" data-empresa="{{ c.empresa }}" data-teclado tabindex="0" aria-label="Filtrar por {{ c.empresa_corta }} {{ c.cuenta }}" style="cursor:pointer"><td><span class="ct-tag ct-tag-e">{{ c.empresa_corta }}</span></td><td><code>{{ c.cuenta }}</code> {{ c.cuenta_nombre }}</td><td class="num">{{ c.terceros }}</td><td class="num">{{ c.saldo|floatformat:0|intcomma }}</td></tr>{% endfor %}</tbody>
           <tfoot><tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>{{ total_contable|floatformat:0|intcomma }}</strong></td></tr></tfoot>
         </table></div>
       </div>
     </div>
   </div>
+  </details>
 
   <div class="mb-2 v-terceros" id="chips"><small class="text-muted mr-2">Alertas:</small></div>
 
   <div class="form-row align-items-end mb-2">
     <div class="col-md-2 mb-2 v-terceros">
-      <label class="small mb-1">Con saldo en empresa</label>
+      <label class="small mb-1" for="f-empresa">Con saldo en empresa</label>
       <select id="f-empresa" class="form-control form-control-sm"><option value="">Todas</option>
         {% for emp, nombre in empresas_lineas %}<option value="{{ emp }}">{{ nombre }}</option>{% endfor %}
         <option value="__ninguna">Sin saldo contable</option>
       </select>
     </div>
     <div class="col-md-2 mb-2">
-      <label class="small mb-1">Con negocio en proyecto</label>
+      <label class="small mb-1" for="f-proyecto">Con negocio en proyecto</label>
       <select id="f-proyecto" class="form-control form-control-sm"><option value="">Todos</option>
         {% for p in proyectos_lineas %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
         <option value="__ninguno">Sin negocio</option>
       </select>
     </div>
     <div class="col-md-2 mb-2 v-terceros">
-      <label class="small mb-1">Revisión</label>
+      <label class="small mb-1" for="f-revision">Revisión</label>
       <select id="f-revision" class="form-control form-control-sm"><option value="">Todas</option>
         {% for val, label in revisiones %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
       </select>
     </div>
     <div class="col-md-4 mb-2">
-      <label class="small mb-1">Buscar</label>
+      <label class="small mb-1" for="f-q">Buscar</label>
       <input id="f-q" type="search" class="form-control form-control-sm" placeholder="Cédula, nombre, ADJ, cuenta, nota…">
     </div>
     <div class="col-md-2 mb-2">
@@ -388,7 +454,7 @@
           <div class="row">
             <div class="col-lg-6 mb-2">
               <div class="ct-t ct-t-a">
-                <div class="ct-t-head"><span>Andinasoft</span><span id="m-tot-a"></span></div>
+                <div class="ct-t-head"><span>Andinasoft</span></div>
                 <div class="table-responsive"><table class="table table-sm">
                   <thead><tr><th>Proyecto · negocio</th><th>Estado ADJ</th><th>Origen</th><th>Titulares</th><th class="num">Valor</th></tr></thead>
                   <tbody id="m-lado-a"></tbody><tfoot id="m-foot-a"></tfoot>
@@ -397,7 +463,7 @@
             </div>
             <div class="col-lg-6 mb-2">
               <div class="ct-t ct-t-c">
-                <div class="ct-t-head"><span>Contabilidad</span><span id="m-tot-c"></span></div>
+                <div class="ct-t-head"><span>Contabilidad</span></div>
                 <div class="table-responsive"><table class="table table-sm">
                   <thead id="m-head-c"></thead>
                   <tbody id="m-lado-c"></tbody><tfoot id="m-foot-c"></tfoot>
@@ -447,7 +513,7 @@
                   <label class="btn btn-outline-secondary active"><input type="radio" name="aj-dir" value="enviar" checked>Este tercero le envía saldo</label>
                   <label class="btn btn-outline-secondary"><input type="radio" name="aj-dir" value="traer">Este tercero recibe saldo</label>
                 </div>
-                <input type="search" id="m-aj-q" class="form-control form-control-sm" placeholder="Busca el otro tercero por nombre o cédula/NIT (mínimo 3 caracteres)" autocomplete="off">
+                <input type="search" id="m-aj-q" aria-label="Buscar el otro tercero" class="form-control form-control-sm" placeholder="Busca el otro tercero por nombre o cédula/NIT (mínimo 3 caracteres)" autocomplete="off">
                 <div id="m-aj-res" class="ct-res-busq mt-1" style="display:none"></div>
               </div>
               <div class="table-responsive">
@@ -457,8 +523,17 @@
                 </table>
               </div>
               <button type="button" class="btn btn-sm btn-link px-0" id="m-aj-add"><i class="fas fa-plus mr-1"></i>Agregar otra fila</button>
-              <label class="small mb-1 mt-2 d-block" for="m-aj-nota">Motivo</label>
-              <textarea id="m-aj-nota" class="form-control form-control-sm" rows="2" placeholder="Por qué se hace el traslado. Queda en el registro y en el comprobante."></textarea>
+              <div class="form-row mt-2">
+                <div class="col-md-3 mb-1">
+                  <label class="small mb-1 d-block" for="m-aj-fecha">Fecha del comprobante</label>
+                  <input type="date" id="m-aj-fecha" class="form-control form-control-sm" value="{{ hoy }}" max="{{ hoy }}">
+                </div>
+                <div class="col-md-9 mb-1">
+                  <label class="small mb-1 d-block" for="m-aj-nota">Motivo</label>
+                  <textarea id="m-aj-nota" class="form-control form-control-sm" rows="2" placeholder="Por qué se hace el traslado. Queda en el registro y en el comprobante."></textarea>
+                </div>
+              </div>
+              <p class="small text-muted mb-0">El saldo solo se mueve cuando Alegra confirma el comprobante. En empresas sin Alegra queda pendiente hasta marcarlo como registrado a mano.</p>
               <div class="ct-panel-pie">
                 <small class="text-muted" id="m-aj-total"></small>
                 <span>
@@ -492,8 +567,9 @@
                     <option value="intereses">Solo intereses</option>
                     <option value="venta">Solo capital</option>
                   </select></div>
-                <div class="col-md-3 mb-2"><label class="small mb-1" for="m-fac-fecha">Fecha de la factura</label><input type="date" id="m-fac-fecha" class="form-control form-control-sm"></div>
+                <div class="col-md-3 mb-2"><label class="small mb-1" for="m-fac-fecha">Fecha de la factura</label><input type="date" id="m-fac-fecha" class="form-control form-control-sm" data-aviso="#m-fac-corte"></div>
               </div>
+              <div id="m-fac-corte" class="ct-aviso-corte small text-warning mb-1" role="status" style="display:none"></div>
               <div id="m-fac-aviso" class="small mb-2"></div>
               <div id="m-fac-previas" class="ct-previas small mb-2" style="display:none"></div>
               <div id="m-fac-costo" class="form-row align-items-end mb-2" style="display:none">
@@ -504,9 +580,13 @@
                 <div class="col-md-4 mb-1"><label class="small mb-1" for="m-fac-costo-valor">Costo a registrar</label>
                   <input type="text" inputmode="numeric" autocomplete="off" id="m-fac-costo-valor" class="form-control form-control-sm text-right" placeholder="0"></div>
               </div>
+              <div class="custom-control custom-checkbox small mb-1" id="m-fac-prev-wrap">
+                <input type="checkbox" class="custom-control-input" id="m-fac-con-prev">
+                <label class="custom-control-label" for="m-fac-con-prev">Parte de los intereses ya se facturó antes (fuera de la conciliación): descontarla</label>
+              </div>
               <div class="table-responsive">
                 <table class="table table-sm table-bordered bg-white mb-2">
-                  <thead class="thead-light"><tr><th>Titular</th><th class="num">Capital</th><th class="num">Intereses</th><th class="num">Total</th><th class="fac-info">N.º de factura</th><th>Cuenta de anticipos que se cruza</th><th class="fac-info">¿El cruce ya está en contabilidad?</th></tr></thead>
+                  <thead class="thead-light"><tr><th>Titular</th><th class="num fac-col-cap">Capital</th><th class="num fac-col-prev" title="Intereses de este negocio que ya se facturaron antes de la conciliación">Intereses ya facturados antes</th><th class="num fac-col-int">Intereses a facturar</th><th class="num">Total</th><th class="fac-info">N.º de factura</th><th>Cuenta de anticipos que se cruza</th><th class="fac-info">¿El cruce ya está en contabilidad?</th></tr></thead>
                   <tbody id="m-fac-filas"></tbody><tfoot id="m-fac-foot"></tfoot>
                 </table>
               </div>
@@ -541,6 +621,8 @@
           </div>
           <button type="button" class="d-none" id="m-corr-open"></button>
         </section>
+
+        <div id="m-progreso" class="alert alert-info py-1 px-2 small mb-2" role="status" aria-live="polite" style="display:none"></div>
 
         <!-- 5. Historial -->
         <details class="ct-sec ct-details" id="m-historial" style="display:none">
@@ -629,6 +711,23 @@
   var TOL = {{ conciliacion.tolerancia|floatformat:0|default:"0" }};
   var URL_REV = "{% url 'conciliacion-terceros-linea-revision' conciliacion.pk 0 %}".replace('/0/revision', '/__ID__/revision');
   var CSRF = "{{ csrf_token }}";
+  var HOY = "{{ hoy }}";
+  var CORTE = "{{ conciliacion.fecha_corte|date:'Y-m-d' }}";
+  // Un movimiento con fecha dentro del corte puede quedar en un archivo contable que se cargue después: se avisa.
+  function textoCorte(fecha) {
+    if (!fecha || fecha > CORTE) return '';
+    var dmy = function (iso) { return iso.split('-').reverse().join('/'); };
+    return 'Fecha dentro del corte (' + dmy(CORTE) + '): si después recargas el archivo contable de esa empresa, el archivo nuevo ' +
+      'ya lo traerá; al recargarlo márcalo como «ya viene en este archivo».';
+  }
+  // Aviso en línea bajo cada campo de fecha (en lugar de una ventana de confirmación).
+  function pintarAvisoCorte(input) {
+    var $i = $(input), $a = $i.data('aviso') ? $($i.data('aviso')) : $i.next('.ct-aviso-corte');
+    if (!$a.length) $a = $('<small class="ct-aviso-corte text-warning d-block mt-1" role="status"></small>').insertAfter($i);
+    var t = textoCorte($i.val());
+    $a.toggle(!!t).text(t);
+  }
+  $(document).on('input change', '#m-aj-fecha, #m-fac-fecha, .ct-inline-fecha', function () { pintarAvisoCorte(this); });
   var ESTADOS = { {% for val, label in estados %}'{{ val }}': '{{ label }}',{% endfor %} };
   var REVS = { {% for val, label in revisiones %}'{{ val }}': '{{ label }}',{% endfor %} };
   var EMP_CORTA = { {% for emp, nombre in empresas_lineas %}'{{ emp }}': '{{ nombre }}',{% endfor %} };
@@ -643,7 +742,7 @@
     cesion_posterior: 'Cesión posterior al corte', cesion_registrada: 'Cesión registrada', pagador_distinto: 'Recibos a nombre de otro',
     nombre_parecido: 'Nombre parecido', adjudicacion_conjunta: 'ADJ cuadra en conjunto', mismo_valor: 'Mismo valor en otro tercero',
     solo_capital: 'Coincide solo capital', intereses_parciales: 'Intereses parciales', varias_empresas: 'Saldo en varias empresas',
-    con_ajustes: 'Con ajustes registrados'
+    con_ajustes: 'Con traslados registrados'
   };
   var conteoAlertas = {};
   function preparar(l) {
@@ -665,7 +764,7 @@
     l._codigos.forEach(function (c) { conteoAlertas[c] = (conteoAlertas[c] || 0) + 1; });
   });
   Object.keys(conteoAlertas).sort(function (a, b) { return conteoAlertas[b] - conteoAlertas[a]; }).forEach(function (c) {
-    $('#chips').append('<span class="ct-chip" data-alerta="' + c + '">' + esc(etiquetas[c] || c) + ' <strong>' + conteoAlertas[c] + '</strong></span>');
+    $('#chips').append('<button type="button" class="ct-chip" aria-pressed="false" data-alerta="' + c + '">' + esc(etiquetas[c] || c) + ' <strong>' + conteoAlertas[c] + '</strong></button>');
   });
 
   var filtros = { estado: '', alerta: '', empresa: '', proyecto: '', revision: '', q: '', ocultar: true };
@@ -687,6 +786,7 @@
   var tabla = $('#tabla').DataTable({
     data: LINEAS,
     rowId: function (l) { return 'l' + l.id; },
+    createdRow: function (tr, l) { $(tr).attr({ tabindex: 0, 'aria-label': 'Revisar ' + l.identificacion + ' ' + (l.nombre || '') }); },
     pageLength: 50,
     lengthMenu: [25, 50, 100, 500],
     order: [[6, 'desc']],
@@ -793,7 +893,7 @@
     tablaAdj = $('#tabla-adj').DataTable({
       data: ADJS,
       rowId: function (a) { return 'a-' + a.key.replace(/[^\w-]/g, '_'); },
-      createdRow: function (tr, a) { if (!a.suma) $(tr).addClass('ct-nosuma'); },
+      createdRow: function (tr, a) { if (!a.suma) $(tr).addClass('ct-nosuma'); $(tr).attr({ tabindex: 0, 'aria-label': 'Ver ' + a.proyecto + ' ' + a.ref }); },
       pageLength: 50,
       lengthMenu: [25, 50, 100, 500],
       order: [[6, 'desc']],
@@ -844,7 +944,8 @@
   $('#estados-adj').on('click', '.ct-estado', function () {
     var v = $(this).data('resultado');
     filtroResultado = filtroResultado === v ? '' : v;
-    $('#estados-adj .ct-estado').removeClass('active'); if (filtroResultado) $(this).addClass('active');
+    $('#estados-adj .ct-estado').removeClass('active').attr('aria-pressed', 'false');
+    if (filtroResultado) $(this).addClass('active').attr('aria-pressed', 'true');
     dibujarAdj();
   });
 
@@ -928,13 +1029,15 @@
   $('#estados').on('click', '.ct-estado', function () {
     var v = $(this).data('estado');
     filtros.estado = filtros.estado === v ? '' : v;
-    $('.ct-estado').removeClass('active'); if (filtros.estado) $(this).addClass('active');
+    $('#estados .ct-estado').removeClass('active').attr('aria-pressed', 'false');
+    if (filtros.estado) $(this).addClass('active').attr('aria-pressed', 'true');
     redibujar();
   });
   $('#chips').on('click', '.ct-chip', function () {
     var v = $(this).data('alerta');
     filtros.alerta = filtros.alerta === v ? '' : v;
-    $('.ct-chip').removeClass('active'); if (filtros.alerta) $(this).addClass('active');
+    $('.ct-chip').removeClass('active').attr('aria-pressed', 'false');
+    if (filtros.alerta) $(this).addClass('active').attr('aria-pressed', 'true');
     redibujar();
   });
   $('.ct-filtro-emp').on('click', function () { $('#f-empresa').val($(this).data('empresa')).trigger('change'); });
@@ -974,7 +1077,21 @@
         '</td><td class="num">' + money(dif) + '</td></tr></tfoot></table></div>';
     }).join('');
   }
+  // Escrituración del lote (módulo de promesas): un resumen en la celda de estado y los pasos con su fecha al desplegarlo.
+  function celdaEscritura(n) {
+    var e = n.escritura;
+    if (!e || n.situacion === 'factura') return '';
+    var hechos = e.pasos.filter(function (p) { return p.hecho; }).length;
+    return '<details class="ct-esc"><summary>Escritura: ' + (e.completa ? 'completa' : 'va en ' + esc(e.actual)) + ' (' + hechos + '/' + e.pasos.length + ')</summary>' +
+      e.pasos.map(function (p) {
+        return '<div class="ct-esc-paso' + (p.hecho ? ' hecho' : '') + '"><i class="' + (p.hecho ? 'fas fa-check-circle' : 'far fa-circle') + '" aria-hidden="true"></i> ' +
+          esc(p.label) + (p.fecha ? ' · ' + fechaCorta(p.fecha) : (p.hecho ? ' · sin fecha' : '')) + '</div>';
+      }).join('') + '</details>';
+  }
   function abrir(l) {
+    // Si se vuelve a pintar el mismo tercero (después de un traslado o una factura), se conserva lo escrito en la revisión.
+    var borrador = (actual && actual.identificacion === l.identificacion && revisionSucia())
+      ? { rev: $('#m-rev input:checked').val(), nota: $('#m-nota').val() } : null;
     actual = l;
     $('#m-nombre').text(l.nombre || '(sin nombre)');
     $('#m-sub').html(esc(l.identificacion) + ' · <span class="ct-dot st-' + l.estado + '"></span>' + esc(ESTADOS[l.estado]));
@@ -989,36 +1106,36 @@
       if (!n.suma) nota.push('no suma');
       return '<tr class="' + (n.suma ? '' : 'ct-nosuma') + '"><td>' + esc(n.proyecto) + ' · <strong>' + esc(n.ref) + '</strong>' +
         '</td><td>' + est +
-        (nota.length ? '<br><small>' + esc(nota.join(' · ')) + '</small>' : '') + '</td><td>' + esc(n.origen || '—') +
+        (nota.length ? '<br><small>' + esc(nota.join(' · ')) + '</small>' : '') + celdaEscritura(n) + '</td><td>' + esc(n.origen || '—') +
         '</td><td>' + n.titulares.map(function (t) { return linkTercero(t, t === l.identificacion); }).join(', ') +
         '</td><td class="num" title="Recaudado del negocio: ' + fmt.format(Number(n.total_negocio)) + '">' + money(n.valor) + '</td></tr>';
     }).join('') : '<tr><td colspan="5" class="text-muted">Sin negocios en Andinasoft.</td></tr>');
     $('#m-foot-a').html('<tr><td colspan="4">Total Andinasoft' + (Number(l.intereses) ? ' <small class="font-weight-normal text-muted">(capital ' + fmt.format(Number(l.capital)) + ' + intereses ' + fmt.format(Number(l.intereses)) + ')</small>' : '') + '</td><td class="num">' + money(l.andina) + '</td></tr>');
     // Lado contable
     var conAj = l.cuentas.some(function (c) { return Number(c.ajustes || 0) !== 0; });
-    $('#m-head-c').html('<tr><th>Empresa</th><th>Cuenta</th>' + (conAj ? '<th class="num">Archivo</th><th class="num">Ajustes</th>' : '') + '<th class="num">Saldo</th></tr>');
+    $('#m-head-c').html('<tr><th>Empresa</th><th>Cuenta</th>' + (conAj ? '<th class="num">Archivo</th><th class="num">Traslados</th>' : '') + '<th class="num">Saldo</th></tr>');
     $('#m-lado-c').html(l.cuentas.length ? l.cuentas.map(function (c) {
       return '<tr><td><span class="ct-tag ct-tag-e">' + esc(EMP_CORTA[c.empresa] || c.empresa_nombre) + '</span></td><td><code>' + esc(c.cuenta) + '</code> ' + esc(c.cuenta_nombre) +
         '</td>' + (conAj ? '<td class="num">' + money(c.saldo_archivo) + '</td><td class="num">' + (Number(c.ajustes) ? money(c.ajustes) : '') + '</td>' : '') +
         '<td class="num">' + money(c.saldo) + '</td></tr>';
-    }).join('') : '<tr><td colspan="5" class="text-muted">Sin saldo en las cuentas seleccionadas.</td></tr>');
+    }).join('') : '<tr><td colspan="' + (conAj ? 5 : 3) + '" class="text-muted">Sin saldo en las cuentas seleccionadas.</td></tr>');
     $('#m-foot-c').html('<tr><td colspan="' + (conAj ? 4 : 2) + '">Total contabilidad</td><td class="num">' + money(l.contable) + '</td></tr>');
     renderHistorial(l);
     prepararCorr(l);
     renderFacturas(l);
     cerrarPaneles();
-    actualizarSecciones(l);
-    $('#m-tot-a').html(money(l.andina)); $('#m-tot-c').html(money(l.contable));
     var ok = l.estado === 'cuadrado';
     $('#m-balance').attr('class', 'ct-balance mb-3 ' + (ok ? 'ok' : 'bad')).html(
       '<span>Andinasoft <strong>' + money(l.andina) + '</strong></span><span>Contabilidad <strong>' + money(l.contable) + '</strong></span>' +
       '<span>Diferencia <strong>' + money(l.diferencia) + '</strong></span>' +
       (ok ? '<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>Cuadra</span>' : '<span class="ct-bad"><i class="fas fa-times-circle mr-1"></i>No cuadra</span>'));
-    $('#m-obs').toggle(!!l.observacion).text(l.observacion || '');
-    $('#m-alertas').html(l.alertas.map(function (a) { return '<li><i class="fas fa-exclamation-triangle text-warning" aria-hidden="true"></i><span>' + esc(a.texto) + '</span></li>'; }).join(''));
+    // Observación y alertas en una sola lista: primero lo que explica la diferencia, luego las alertas.
+    $('#m-obs').hide();
+    $('#m-alertas').html((l.observacion ? '<li><i class="fas fa-search text-muted" aria-hidden="true"></i><span>' + esc(l.observacion) + '</span></li>' : '') +
+      l.alertas.map(function (a) { return '<li><i class="fas fa-exclamation-triangle text-warning" aria-hidden="true"></i><span>' + esc(a.texto) + '</span></li>'; }).join(''));
     var s = l.sugerencia || {}, sh = '';
     if (s.traslados && s.traslados.length) {
-      sh = '<div class="ct-sub-h">Ajuste sugerido</div><table class="table table-sm table-bordered mb-0" style="max-width:640px"><tbody>' +
+      sh = '<div class="ct-sub-h">Traslado sugerido</div><table class="table table-sm table-bordered mb-0" style="max-width:640px"><tbody>' +
         s.traslados.map(function (t) {
           if (t.desde) return '<tr><td>Trasladar ' + money(t.valor) + ' de <strong>' + esc(t.desde) + '</strong> a <strong>' + esc(t.hacia) + '</strong></td></tr>';
           return '<tr><td>' + esc(t.identificacion) + ' ' + esc(t.nombre) + '</td><td class="num">' + money(t.ajuste) + '</td></tr>';
@@ -1034,14 +1151,30 @@
     $('#m-sug').html(sh);
     var adj = renderAdj(l);
     $('#m-adj').html(adj); $('#m-adj-wrap').toggle(!!adj);
+    var rev = borrador ? (borrador.rev || l.revision) : l.revision;
     $('#m-rev input').prop('checked', false).parent().removeClass('active');
-    $('#m-rev input[value="' + l.revision + '"]').prop('checked', true).parent().addClass('active');
-    $('#m-nota').val(l.nota || '');
+    $('#m-rev input[value="' + rev + '"]').prop('checked', true).parent().addClass('active');
+    $('#m-nota').val(borrador ? borrador.nota : (l.nota || ''));
     $('#m-revby').text(l.revisado_por ? 'Última revisión: ' + l.revisado_por + ' · ' + l.revisado_en : '');
-    $('#m-rev input, #m-nota, #m-save, #m-next').prop('disabled', CERRADA);
+    // Cerrada: solo lectura, pero se puede seguir navegando entre terceros.
+    $('#m-rev input, #m-nota, #m-save').prop('disabled', CERRADA);
+    $('#m-next').prop('disabled', false).text(CERRADA ? 'Siguiente' : 'Guardar y siguiente');
+    actualizarSecciones(l);  // al final: ya están pintadas la sugerencia y la del NIT con DV
     $('#m-linea').modal('show');
   }
   $('#tabla tbody').on('click', 'tr', function () { var l = tabla.row(this).data(); if (l) abrir(l); });
+  // Formularios de la página (recalcular, cargar archivo, proyectos, quitar archivo): un solo envío.
+  $('form').on('submit', function () {
+    var $f = $(this);
+    if ($f.data('enviado')) return false;
+    $f.data('enviado', true);
+    setTimeout(function () { $f.find('button[type="submit"]').prop('disabled', true); }, 0);
+  });
+  // Teclado: Enter o espacio sobre una fila o un elemento clicable hace lo mismo que el clic.
+  $(document).on('keydown', '#tabla tbody tr, #tabla-adj tbody tr, tr[data-teclado], .ct-res-busq .item[tabindex]', function (e) {
+    if (e.target !== this || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault(); $(this).trigger('click');
+  });
 
   // ---- Ajustes ----
   var CATALOGO = JSON.parse(document.getElementById('catalogo-data').textContent);
@@ -1058,9 +1191,18 @@
     if (!cs.length) return '<option value="">Sin saldo disponible</option>';
     return cs.map(function (c) { return '<option value="' + esc(keyC(c)) + '" data-saldo="' + c.saldo + '"' + (keyC(c) === sel ? ' selected' : '') + '>' + esc(labelC(c, c.saldo)) + '</option>'; }).join('');
   }
-  function opcionesDestino(sel, excluir) {
-    return CATALOGO.filter(function (c) { return keyC(c) !== excluir; })
-      .map(function (c) { return '<option value="' + esc(keyC(c)) + '"' + (keyC(c) === sel ? ' selected' : '') + '>' + esc(labelC(c)) + '</option>'; }).join('');
+  // Naturaleza de la cuenta: crédito (clases 2, 3 y 4) o débito. Origen y destino deben coincidir para que el asiento cuadre.
+  function natC(cuenta) { return '234'.indexOf(String(cuenta || '').charAt(0)) >= 0 ? 'C' : 'D'; }
+  var EMP_ALEGRA = {};
+  JSON.parse(document.getElementById('empresas-fac-data').textContent).forEach(function (e) { EMP_ALEGRA[e.id] = !!e.alegra; });
+  function opcionesDestino(sel, excluir, origenKey) {
+    // Solo cuentas de la misma empresa y la misma naturaleza que la cuenta de origen.
+    var o = (origenKey || '').split('|');
+    var cs = CATALOGO.filter(function (c) {
+      return keyC(c) !== excluir && (!o[1] || (c.empresa === o[0] && natC(c.cuenta) === natC(o[1])));
+    });
+    if (!cs.length) return '<option value="">Sin cuentas compatibles en la empresa</option>';
+    return cs.map(function (c) { return '<option value="' + esc(keyC(c)) + '"' + (keyC(c) === sel ? ' selected' : '') + '>' + esc(labelC(c)) + '</option>'; }).join('');
   }
   function filaAjuste(t) {
     // t: {ident, nombre, estado, cuentas} del otro tercero (modo tercero) o null (modo cuenta)
@@ -1073,9 +1215,9 @@
       : '<td class="text-muted small">Mismo tercero</td>';
     var celS = '<td class="aj-saldo"' + (aj.modo === 'tercero' ? '' : ' style="display:none"') + '></td>';
     var $tr = $('<tr>' + celT + celS +
-      '<td><select class="form-control form-control-sm aj-origen">' + opcionesOrigen(origenCuentas, selO) + '</select><div class="aj-o-info aj-saldo mt-1"></div></td>' +
-      '<td><select class="form-control form-control-sm aj-destino">' + opcionesDestino(selD, aj.modo === 'cuenta' ? selO : null) + '</select><div class="aj-d-info aj-saldo mt-1"></div></td>' +
-      '<td><div class="input-group input-group-sm"><input type="number" min="0" step="0.01" class="form-control aj-valor"><div class="input-group-append"><button type="button" class="btn btn-outline-secondary aj-todo" title="Todo el saldo">Todo</button></div></div></td>' +
+      '<td><select class="form-control form-control-sm aj-origen" aria-label="Cuenta de la que sale el saldo">' + opcionesOrigen(origenCuentas, selO) + '</select><div class="aj-o-info aj-saldo mt-1"></div></td>' +
+      '<td><select class="form-control form-control-sm aj-destino" aria-label="Cuenta a la que entra el saldo">' + opcionesDestino(selD, aj.modo === 'cuenta' ? selO : null, selO) + '</select><div class="aj-d-info aj-saldo mt-1"></div></td>' +
+      '<td><div class="input-group input-group-sm"><input type="number" min="0" step="0.01" class="form-control aj-valor" aria-label="Valor a trasladar"><div class="input-group-append"><button type="button" class="btn btn-outline-secondary aj-todo" title="Todo el saldo">Todo</button></div></div></td>' +
       '<td class="aj-emp small"></td><td><button type="button" class="btn btn-sm btn-link text-danger aj-quitar" title="Quitar fila"><i class="fas fa-times"></i></button></td></tr>');
     $tr.data('tercero', t);
     $('#m-aj-filas').append($tr);
@@ -1083,13 +1225,12 @@
   }
   function actualizarFila($tr) {
     var o = $tr.find('.aj-origen').val() || '', d = $tr.find('.aj-destino').val() || '';
-    if (aj.modo === 'cuenta') {
-      var dSel = d;
-      $tr.find('.aj-destino').html(opcionesDestino(dSel === o ? '' : dSel, o));
-      d = $tr.find('.aj-destino').val() || '';
-    }
-    var misma = o.split('|')[0] === d.split('|')[0];
-    $tr.find('.aj-emp').html(o && d ? (misma ? '<span class="ct-tag ct-tag-e">Misma empresa</span>' : '<span class="ct-tag ct-badge-ic">Entre empresas</span>') : '');
+    var excluir = aj.modo === 'cuenta' ? o : null;
+    $tr.find('.aj-destino').html(opcionesDestino(d === excluir ? '' : d, excluir, o));
+    d = $tr.find('.aj-destino').val() || '';
+    var emp = o.split('|')[0];
+    $tr.find('.aj-emp').html(o && d ? (EMP_ALEGRA[emp] ? '<span class="ct-tag ct-tag-e" title="Se envía como journal y cuenta cuando Alegra lo confirme">Va a Alegra</span>'
+                                                      : '<span class="ct-tag ct-badge-ic" title="Esta empresa no tiene Alegra: queda pendiente hasta que se marque como registrado">Registro a mano</span>') : '');
     totalAjuste();
   }
   function proyeccion(contable, andina, delta) {
@@ -1151,7 +1292,12 @@
     }
     $('#m-aj-total').text(resumen);
   }
-  function cerrarAjuste() { aj.modo = null; $('#m-aj').hide(); $('#m-aj-filas').empty(); $('#m-aj-nota').val(''); $('#m-aj-q').val(''); $('#m-aj-res').hide().empty(); }
+  function cerrarAjuste() {
+    aj.modo = null; $('#m-aj').hide(); $('#m-aj-filas').empty(); $('#m-aj-nota').val(''); $('#m-aj-q').val(''); $('#m-aj-res').hide().empty(); $('#m-aj-fecha').val(HOY).trigger('change');
+    // La dirección vuelve a «este tercero envía»: no se arrastra la del tercero anterior.
+    aj.dir = 'enviar';
+    $('#m-aj input[name="aj-dir"]').each(function () { var on = this.value === 'enviar'; this.checked = on; $(this).parent().toggleClass('active', on); });
+  }
   $('#m-linea').on('click', '.ct-aj-open', function () {
     if (CERRADA) { alert('La conciliación está cerrada.'); return; }
     cerrarAjuste();
@@ -1188,7 +1334,7 @@
       $.getJSON(URL_BUSCAR, { q: q }).done(function (r) {
         var res = r.resultados.filter(function (x) { return x.identificacion !== actual.identificacion; });
         $('#m-aj-res').show().html(res.length ? res.map(function (x, i) {
-          return '<div class="item" data-i="' + i + '"><span><strong>' + esc(x.identificacion) + '</strong> ' + esc(x.nombre) + '</span><span class="text-nowrap">' +
+          return '<div class="item" data-i="' + i + '" tabindex="0" role="button" aria-label="Elegir ' + esc(x.identificacion + ' ' + x.nombre) + '"><span><strong>' + esc(x.identificacion) + '</strong> ' + esc(x.nombre) + '</span><span class="text-nowrap">' +
             (x.en_conciliacion ? '<span class="ct-dot st-' + x.estado + '"></span>' + esc(ESTADOS[x.estado]) + ' · contable ' + fmt.format(Number(x.contable)) + ' · Andinasoft ' + fmt.format(Number(x.andina))
                                : '<span class="text-muted">Sin línea en la conciliación</span>') + '</span></div>';
         }).join('') : '<div class="item text-muted">Sin resultados</div>').data('res', res);
@@ -1214,13 +1360,52 @@
     });
     if (error) { alert(error); return; }
     if (!movs.length) { alert('Agrega al menos un traslado.'); return; }
+    var fecha = $('#m-aj-fecha').val();
+    if (!fecha) { alert('Indica la fecha del comprobante.'); return; }
     var $b = $(this).prop('disabled', true).text('Registrando…');
+    var listo = function () { $b.prop('disabled', false).text('Registrar traslado'); };
     $.ajax({ url: URL_AJ, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
-      data: JSON.stringify({ movimientos: movs, nota: $('#m-aj-nota').val() }) })
-      .done(aplicarRespuesta)
-      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo registrar el ajuste.'); })
-      .always(function () { $b.prop('disabled', false).text('Registrar ajuste'); });
+      data: JSON.stringify({ movimientos: movs, nota: $('#m-aj-nota').val(), fecha: fecha }) })
+      .done(function (r) {
+        aplicarRespuesta(r);
+        // Quedaron registrados como pendientes: cada uno se envía a Alegra en su propia petición.
+        enviarAjustes(r.por_enviar || [], r.resultados || [], function (rs) { listo(); avisarResultados(rs); });
+      })
+      .fail(function (x) { listo(); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo registrar el traslado.'); });
   });
+  // Envía a Alegra los traslados uno por uno y espera la respuesta de cada uno.
+  function enviarAjustes(ids, resultados, alTerminar) {
+    var porId = {}, cola = ids.slice();
+    resultados.forEach(function (x) { porId[x.id] = x; });
+    function siguiente() {
+      var id = cola.shift();
+      if (id === undefined) { progreso(''); alTerminar(resultados.map(function (x) { return porId[x.id]; })); return; }
+      progreso('Enviando a Alegra · traslado ' + (ids.length - cola.length) + ' de ' + ids.length + '…');
+      $.ajax({ url: URL_AJ_ACC.replace('__ID__', id).replace('__ACC__', 'enviar'), method: 'POST', contentType: 'application/json',
+        headers: { 'X-CSRFToken': CSRF }, data: '{}' })
+        .done(function (r) { aplicarRespuesta(r); var x = (r.resultados || [])[0]; if (x) porId[x.id] = x; siguiente(); })
+        .fail(function (x) {
+          porId[id] = Object.assign({}, porId[id], { aplicado: false, error: (x.responseJSON && x.responseJSON.detail) || 'No se pudo enviar.' });
+          siguiente();
+        });
+    }
+    siguiente();
+  }
+  // Lo que respondió Alegra por cada ajuste: solo los confirmados mueven el saldo.
+  function avisarResultados(rs) {
+    rs = rs || [];
+    var ok = rs.filter(function (x) { return x.aplicado; });
+    var fallo = rs.filter(function (x) { return !x.aplicado && x.via === 'alegra'; });
+    var mano = rs.filter(function (x) { return !x.aplicado && x.via === 'manual'; });
+    if (!fallo.length && !mano.length) return;
+    var txt = [];
+    if (ok.length) txt.push(ok.length + ' traslado(s) quedaron en Alegra: ' + ok.map(function (x) { return x.referencia + ' → journal ' + x.journal_ref; }).join(', ') + '.');
+    if (fallo.length) txt.push('Alegra NO confirmó ' + fallo.length + ' traslado(s); no se aplicaron al saldo:\n' +
+      fallo.map(function (x) { return '• ' + x.referencia + ': ' + x.error; }).join('\n') + '\nPuedes reintentarlos desde el historial del tercero.');
+    if (mano.length) txt.push(mano.length + ' traslado(s) de empresas sin Alegra quedaron por registrar a mano (' +
+      mano.map(function (x) { return x.referencia + ' · ' + x.empresa; }).join(', ') + '). Cuentan cuando los marques como registrados.');
+    alert(txt.join('\n\n'));
+  }
   function aplicarRespuesta(r) {
     var mostrar = actual.identificacion;
     r.lineas.forEach(function (x) {
@@ -1235,8 +1420,18 @@
     });
     adjSucio = true;
     tabla.draw(false); refrescarConteos();
+    avisarResumenViejo();
     abrir(BY_IDENT[mostrar]);
   }
+  // Los KPIs, el resumen por cuenta y la tarjeta de traslados manuales se pintan en el servidor: tras una acción
+  // se avisa y se ofrece recargar conservando vista y filtros.
+  function avisarResumenViejo() { $('#aviso-resumen').attr('style', ''); }
+  var CLAVE_FILTROS = 'ct-filtros-{{ conciliacion.pk }}';
+  function recargarConFiltros() {
+    try { sessionStorage.setItem(CLAVE_FILTROS, JSON.stringify({ filtros: filtros, vista: vista })); } catch (e) {}
+    location.href = location.pathname;
+  }
+  $('#btn-actualizar-resumen').on('click', recargarConFiltros);
   // ---- Paneles de acción: solo uno abierto a la vez ----
   function cerrarPaneles() {
     $('.ct-panel').hide();
@@ -1248,23 +1443,31 @@
     cerrarPaneles();
     $('.ct-accion[data-accion="' + acc + '"]').addClass('active').attr('aria-expanded', 'true');
     $('#m-panel-' + acc).show();
+    setTimeout(function () {  // primero un campo; si el panel no tiene, su primer botón (sin contar el de cerrar)
+      var $p = $('#m-panel-' + acc), $c = $p.find('input, select, textarea').filter(':visible:not(:disabled)');
+      ($c.length ? $c : $p.find('button:not(.ct-panel-x)').filter(':visible:not(:disabled)')).first().trigger('focus');
+    }, 0);
     if (acc === 'factura') prepararPanelFactura();
     if (acc === 'correccion') { $('#m-corr').show(); $('#m-corr-correcto').focus(); }
     var el = document.getElementById('m-panel-' + acc);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+  $('.ct-accion').each(function () { $(this).attr('aria-controls', 'm-panel-' + $(this).data('accion')); });
   $('#m-linea').on('click', '.ct-accion', function () {
     if ($(this).hasClass('active')) cerrarPaneles(); else abrirAccion($(this).data('accion'));
   });
   $('#m-linea').on('click', '.ct-panel-x', cerrarPaneles);
   function actualizarSecciones(l) {
-    var hay = !!(l.observacion || (l.alertas || []).length || $('#m-sug').html() || $('#m-sug-dv').is(':visible'));
+    var hay = !!(l.observacion || (l.alertas || []).length || $('#m-sug').html() || sinDv(l.identificacion));
     $('#m-sec-hallazgos').toggle(hay);
     $('#m-hallazgos-h').text(l.estado === 'cuadrado' ? 'Observaciones' : 'Por qué no cuadra');
     $('#m-sec-acciones').toggle(!CERRADA);
     var na = (l.ajustes || []).length, nf = (l.facturas || []).length, nc = (l.correcciones || []).length;
-    $('#m-historial').toggle(na + nf + nc > 0);
-    $('#m-historial-n').text(na + nf + nc);
+    var pend = (l.ajustes || []).filter(function (a) { return !a.anulado && a.journal_estado === 'pendiente'; }).length +
+      (l.facturas || []).filter(function (f) { return f.estado !== 'anulada' && (f.siguiente || f.error || f.error_costo || f.error_cruce || f.estado === 'pendiente' || f.estado === 'error'); }).length +
+      (l.correcciones || []).filter(function (c) { return c.estado === 'parcial'; }).length;
+    $('#m-historial').toggle(na + nf + nc > 0).prop('open', pend > 0);
+    $('#m-historial-n').attr('class', 'badge ' + (pend ? 'badge-warning' : 'badge-light')).text(pend ? pend + ' pendiente(s)' : (na + nf + nc));
     $('#m-hist-h').toggle(na > 0); $('#m-corr-hist-h').toggle(nc > 0);
   }
 
@@ -1275,7 +1478,7 @@
   var URL_FAC_COSTO = "{% url 'conciliacion-terceros-factura-costo' conciliacion.pk %}";
   var URL_FAC_ACC = "{% url 'conciliacion-terceros-factura-accion' conciliacion.pk 0 'X' %}".replace('/0/X', '/__ID__/__ACC__');
   var fac = null;
-  function cerrarFac() { fac = null; $('#m-fac').hide(); $('#m-fac-filas, #m-fac-foot').empty(); $('#m-fac-nota').val(''); }
+  function cerrarFac() { fac = null; $('#m-fac').hide(); $('#m-fac-filas, #m-fac-foot').empty(); $('#m-fac-nota').val(''); ponerCosto(0); $('#m-fac-costo-calc').text(''); }
   function negocioDe(ident, proyecto, ref) {
     var x = BY_IDENT[ident]; if (!x) return null;
     return x.negocios.filter(function (n) { return n.proyecto === proyecto && n.ref === ref && n.situacion !== 'factura'; })[0] || null;
@@ -1318,6 +1521,7 @@
     var n = negocioDe(actual.identificacion, proyecto, ref); if (!n) return;
     var cfg = CONFIG_FAC[proyecto] || null;
     fac = { proyecto: proyecto, ref: ref, negocio: n, cfg: cfg };
+    $('#m-fac-filas').empty(); $('#m-fac-con-prev').prop('checked', false);  // otro negocio: no se arrastran valores escritos para el anterior
     $('#m-fac-titulo').text('Facturar ' + proyecto + ' · ' + ref);
     $('#m-fac-sub').text('Recaudado ' + fmt.format(Number(n.total_negocio)) + ' entre ' + n.titulares.length + ' titular(es) · una factura por titular en partes iguales.');
     var puedeAlegra = cfg && cfg.modo === 'alegra' && !(cfg.faltantes || []).length;
@@ -1325,7 +1529,8 @@
       (puedeAlegra ? '<option value="alegra">Crear en Alegra (' + (cfg.emision === 'emitir' ? 'crear y emitir' : 'borrador') + ')</option>' : ''));
     $('#m-fac-empresa').html(EMP_FAC.map(function (e) { return '<option value="' + esc(e.id) + '">' + esc(e.nombre) + '</option>'; }).join(''));
     if (cfg) $('#m-fac-empresa').val(cfg.empresa);
-    $('#m-fac-fecha').val(new Date().toISOString().slice(0, 10));
+    $('#m-fac-fecha').val(HOY).attr('max', HOY).trigger('change');  // fecha local del servidor (toISOString daba la de mañana en la noche)
+    ponerCosto(0); $('#m-fac-costo-calc').text('');  // el costo es de cada lote: nunca se arrastra el del negocio anterior
     $('#m-fac-concepto').val('venta_intereses');
     var avisos = [];
     if (!cfg) avisos.push('El proyecto no tiene configuración de facturación: solo se puede registrar como informativa.');
@@ -1333,13 +1538,14 @@
     var previas = facturasPreviasNegocio(proyecto, ref, n.titulares);
     var sinTerminar = previas.filter(function (f) { return f.estado === 'error' || f.estado === 'pendiente'; });
     $('#m-fac-previas').toggle(previas.length > 0).html(previas.length ? (
-      '<strong><i class="fas fa-exclamation-triangle text-warning mr-1"></i>Este negocio ya tiene ' + previas.length + ' factura(s)</strong>' +
+      '<details><summary><strong><i class="fas fa-exclamation-triangle text-warning mr-1" aria-hidden="true"></i>Este negocio ya tiene ' + previas.length + ' factura(s)</strong>: ' +
+      esc(previas.map(function (f) { return f.numero || ('#' + f.id); }).join(', ')) + ' <span class="text-muted">· ver detalle</span></summary>' +
       '<table class="table table-sm bg-white mb-1"><thead><tr><th>Titular</th><th>Factura</th><th>Fecha</th><th class="num">Total</th><th>Estado</th></tr></thead><tbody>' +
       previas.map(function (f) {
         var x = BY_IDENT[f.identificacion] || {};
         return '<tr><td>' + esc(f.identificacion) + ' ' + esc(x.nombre || '') + '</td><td>' + esc(f.numero || ('#' + f.id)) + '<br><small class="text-muted">' + esc(f.tipo_label) + '</small></td>' +
           '<td class="text-nowrap">' + esc(f.fecha) + '</td><td class="num">' + money(f.total) + '</td><td>' + esc(f.estado_label) + '</td></tr>';
-      }).join('') + '</tbody></table>' +
+      }).join('') + '</tbody></table></details>' +
       (sinTerminar.length ? '<div class="text-danger">Hay facturas que no terminaron de crearse: reintenta esas en el historial de facturas en vez de crear otra.</div>'
                           : '<div class="text-muted">Si registras otra, el sistema te pedirá confirmarlo.</div>')) : '');
     $('#m-fac-aviso').html(avisos.map(function (a) { return '<div class="text-warning"><i class="fas fa-exclamation-triangle mr-1"></i>' + esc(a) + '</div>'; }).join(''));
@@ -1370,7 +1576,9 @@
     if (tipo === 'alegra' && !fac.costoCargado) {
       fac.costoCargado = true;
       $('#m-fac-costo-calc').text('Calculando…');
+      var pedido = fac;  // si mientras tanto se abrió otro negocio, esta respuesta ya no aplica
       $.getJSON(URL_FAC_COSTO, { proyecto: fac.proyecto, ref: fac.ref }).done(function (r) {
+        if (fac !== pedido) return;
         var area = Number(r.area), m2 = Number(r.costo_m2), sug = Number(r.sugerido);
         $('#m-fac-costo-calc').text(m2 ? ('Sugerido: lote ' + (r.inmueble || '') + ' de ' + fmt.format(area) + ' m² × $' + fmt.format(m2) + '/m² = $' + fmt.format(sug) + '. Puedes cambiarlo.')
                                        : 'El proyecto no tiene costo por m² configurado: escribe el costo.');
@@ -1390,38 +1598,72 @@
     }
     fac.negocio.titulares.forEach(function (t) { var c = mayorSaldo(t); if (c) porCuenta[c] = (porCuenta[c] || 0) + 1; });
     var defectoNegocio = Object.keys(porCuenta).sort(function (a, b) { return porCuenta[b] - porCuenta[a]; })[0] || '';
+    var prevAntes = {};
+    $('#m-fac-filas tr').each(function () { prevAntes[String($(this).data('ident'))] = Number($(this).find('.fac-prev').val() || 0); });
     $('#m-fac-filas').html(fac.negocio.titulares.map(function (t) {
       var n = negocioDe(t, fac.proyecto, fac.ref);
       var cap = n ? Number(n.capital) : Number(fac.negocio.total_negocio) / k, inte = n ? Number(n.intereses) : 0;
+      var inteRecaudado = inte;
       if (concepto === 'intereses') cap = 0;
       if (concepto === 'venta') inte = 0;
       var x = BY_IDENT[t] || { nombre: '', cuentas: [] };
       var ctas = cuentasEmpresa(emp);
       var defecto = mayorSaldo(t) || defectoNegocio;
       var saldoDe = function (cta) { var c = (x.cuentas || []).filter(function (y) { return y.empresa === emp && y.cuenta === cta; })[0]; return c ? Number(c.saldo) : 0; };
-      return '<tr data-ident="' + esc(t) + '" data-nombre="' + esc(x.nombre) + '"><td><strong>' + esc(t) + '</strong> ' + esc(x.nombre) + '</td>' +
-        '<td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fac-cap" value="' + cap.toFixed(2) + '"></td>' +
-        '<td><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fac-int" value="' + inte.toFixed(2) + '"></td>' +
+      return '<tr data-ident="' + esc(t) + '" data-nombre="' + esc(x.nombre) + '" data-int-recaudado="' + inteRecaudado.toFixed(2) + '"><td><strong>' + esc(t) + '</strong> ' + esc(x.nombre) + '</td>' +
+        '<td class="fac-col-cap"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fac-cap" aria-label="Capital a facturar de ' + esc(t) + '" value="' + cap.toFixed(2) + '"></td>' +
+        '<td class="fac-col-prev"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fac-prev" value="0" aria-label="Intereses ya facturados antes de ' + esc(t) + '" title="Intereses de este negocio que ya se facturaron antes (fuera de la conciliación). Se descuentan; no se facturan de nuevo.">' +
+        '<small class="text-muted">de ' + fmt.format(inteRecaudado) + ' recaudados</small></td>' +
+        '<td class="fac-col-int"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fac-int" aria-label="Intereses a facturar de ' + esc(t) + '" value="' + inte.toFixed(2) + '"></td>' +
         '<td class="num fac-tot"></td>' +
-        '<td class="fac-info"><input type="text" class="form-control form-control-sm fac-num" placeholder="Prefijo y número"></td>' +
-        '<td><select class="form-control form-control-sm fac-cta"><option value="">— Sin cruce —</option>' + ctas.map(function (c) {
+        '<td class="fac-info"><input type="text" class="form-control form-control-sm fac-num" aria-label="Número de factura de ' + esc(t) + '" placeholder="Prefijo y número"></td>' +
+        '<td><select class="form-control form-control-sm fac-cta" aria-label="Cuenta de anticipos que se cruza de ' + esc(t) + '"><option value="">— Sin cruce —</option>' + ctas.map(function (c) {
           return '<option value="' + esc(c.cuenta) + '" data-nombre="' + esc(c.cuenta_nombre) + '"' + (c.cuenta === defecto ? ' selected' : '') + '>' + esc(c.cuenta + ' ' + c.cuenta_nombre) + ' (saldo ' + fmt.format(saldoDe(c.cuenta)) + ')</option>';
         }).join('') + '</select></td>' +
-        '<td class="fac-info text-center"><input type="checkbox" class="fac-ya" title="La factura y el cruce ya están en el archivo contable cargado"></td></tr>';
+        '<td class="fac-info text-center"><input type="checkbox" class="fac-ya" aria-label="El cruce ya está en el archivo contable" title="La factura y el cruce ya están en el archivo contable cargado"></td></tr>';
     }).join(''));
+    // Lo escrito en «intereses ya facturados antes» se conserva y se vuelve a descontar.
+    $('#m-fac-filas tr').each(function () {
+      var v = prevAntes[String($(this).data('ident'))];
+      if (v) { $('#m-fac-con-prev').prop('checked', true); $(this).find('.fac-prev').val(v.toFixed(2)).trigger('input'); }
+    });
+    columnasFac();
+  }
+  // Solo las columnas que aplican: sin capital si se facturan solo intereses, sin intereses si solo capital, y
+  // «intereses ya facturados antes» solo si se marca la casilla.
+  function columnasFac() {
+    var concepto = $('#m-fac-concepto').val();
+    var conPrev = $('#m-fac-con-prev').prop('checked') && concepto !== 'venta';
+    $('#m-fac-prev-wrap').toggle(concepto !== 'venta');
+    $('.fac-col-cap').toggle(concepto !== 'intereses');
+    $('.fac-col-int').toggle(concepto !== 'venta');
+    $('.fac-col-prev').toggle(conPrev);
+    if (!conPrev) $('#m-fac-filas .fac-prev').each(function () { if (Number(this.value)) $(this).val('0').trigger('input'); });
     totalFac();
   }
+  $('#m-fac-con-prev').on('change', columnasFac);
   function totalFac() {
     var t = 0;
     $('#m-fac-filas tr').each(function () {
       var v = Number($(this).find('.fac-cap').val() || 0) + Number($(this).find('.fac-int').val() || 0);
       $(this).find('.fac-tot').html(money(v)); t += v;
     });
-    $('#m-fac-foot').html('<tr><td colspan="3"><strong>Total a facturar</strong></td><td class="num"><strong>' + money(t) + '</strong></td><td colspan="3"></td></tr>');
+    var resto = $('#m-fac-tipo').val() === 'informativa' ? 3 : 1;  // número, cuenta y ¿ya cruzado? solo en informativas
+    var antes = 1 + $('#m-fac-filas tr:first').find('.fac-col-cap, .fac-col-prev, .fac-col-int').filter(function () { return this.style.display !== 'none'; }).length;
+    $('#m-fac-foot').html('<tr><td colspan="' + antes + '"><strong>Total a facturar</strong></td><td class="num"><strong>' + money(t) + '</strong></td><td colspan="' + resto + '"></td></tr>');
     $('.fac-info').toggle($('#m-fac-tipo').val() === 'informativa');
   }
   $('#m-fac-tipo, #m-fac-empresa, #m-fac-concepto').on('change', pintarFilasFac);
   $('#m-fac-filas').on('input', '.fac-cap, .fac-int', totalFac);
+  // Intereses ya facturados antes: lo que queda por facturar es lo recaudado menos eso.
+  $('#m-fac-filas').on('input', '.fac-prev', function () {
+    var $tr = $(this).closest('tr');
+    if ($('#m-fac-concepto').val() !== 'venta') {
+      var resto = Math.max(0, Number($tr.data('int-recaudado') || 0) - Number(this.value || 0));
+      $tr.find('.fac-int').val(resto.toFixed(2));
+    }
+    totalFac();
+  });
   $('#m-fac-x, #m-fac-cancel').on('click', cerrarPaneles);
   $('#m-fac-save').on('click', function () {
     if (!fac) return;
@@ -1430,49 +1672,82 @@
       var $o = $(this).find('.fac-cta option:selected');
       var t = { identificacion: String($(this).data('ident')), nombre: String($(this).data('nombre') || ''),
         valor_venta: $(this).find('.fac-cap').val(), valor_intereses: $(this).find('.fac-int').val(),
+        intereses_previos: $(this).find('.fac-prev').val() || 0,
         numero: $(this).find('.fac-num').val(), cruce_cuenta: $(this).find('.fac-cta').val(), cruce_cuenta_nombre: $o.data('nombre') || '',
         ya_cruzado: $(this).find('.fac-ya').is(':checked') };
       if (tipo === 'informativa' && !t.numero.trim()) error = 'Indica el número de factura de cada titular.';
       return t;
     }).get();
-    if (!error && tipo === 'alegra' && !(costoValor() > 0)
-        && !confirm('No escribiste el costo del inmueble: no se registrará el asiento de costo. ¿Continuar?')) return;
     if (error) { alert(error); return; }
-    var msg = tipo === 'alegra'
-      ? '¿Crear ' + titulares.length + ' factura(s) en Alegra' + (fac.cfg.emision === 'emitir' ? ' y EMITIRLAS ante la DIAN' : ' como borrador') + '?\nEs un cambio inmediato en producción.'
-      : '¿Registrar ' + titulares.length + ' factura(s) informativa(s)?';
+    // Una sola confirmación: qué se hace y, debajo, lo que conviene revisar antes.
+    var total = titulares.reduce(function (a, t) { return a + Number(t.valor_venta || 0) + Number(t.valor_intereses || 0); }, 0);
+    var notas = [];
+    if (tipo === 'alegra' && !(costoValor() > 0)) notas.push('• Sin costo del inmueble: no se registrará el asiento de costo.');
+    var corte = titulares.some(function (t) { return t.cruce_cuenta && !t.ya_cruzado; }) ? textoCorte($('#m-fac-fecha').val()) : '';
+    if (corte) notas.push('• ' + corte);
+    var msg = (tipo === 'alegra'
+      ? '¿Crear ' + titulares.length + ' factura(s) en Alegra por $' + fmt.format(total) + (fac.cfg.emision === 'emitir' ? ' y EMITIRLAS ante la DIAN' : ' como borrador') + '?\nEs un cambio inmediato en producción.'
+      : '¿Registrar ' + titulares.length + ' factura(s) informativa(s) por $' + fmt.format(total) + '?') + (notas.length ? '\n\n' + notas.join('\n') : '');
     if (!confirm(msg)) return;
     var $b = $(this);
     if ($b.prop('disabled')) return;  // doble clic
     var datos = { tipo: tipo, empresa: $('#m-fac-empresa').val(), proyecto: fac.proyecto, negocio_ref: fac.ref,
       concepto: $('#m-fac-concepto').val(), fecha: $('#m-fac-fecha').val(), nota: $('#m-fac-nota').val(), titulares: titulares,
       costo: tipo === 'alegra' ? costoValor() : 0 };
+    var txtBoton = $b.text(), ref = fac.ref;
+    function informar(fs) {
+      var fallos = [];
+      fs.forEach(function (f) {
+        if (f.error_paso) fallos.push(f.identificacion + ': ' + f.error_paso);
+        if (f.error) fallos.push(f.identificacion + ' · factura: ' + f.error);
+        if (f.error_costo) fallos.push(f.identificacion + ' · costo: ' + f.error_costo);
+        if (f.error_cruce) fallos.push(f.identificacion + ' · cruce: ' + f.error_cruce);
+      });
+      if (fallos.length) alert('Algunos pasos no se completaron. Puedes reintentar cada uno en el historial de facturas:\n\n' + fallos.join('\n'));
+      else if (fs.some(function (f) { return f.escritura_marcada; })) alert('Factura registrada. La ' + ref + ' quedó marcada como escriturada (paso "Facturado").');
+    }
     function enviar() {
-      $b.prop('disabled', true).text(tipo === 'alegra' ? 'Enviando a Alegra…' : 'Registrando…');
+      $b.prop('disabled', true).text('Registrando…');
       $.ajax({ url: URL_FAC, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify(datos) })
         .done(function (r) {
-          var fallos = [];
-          r.facturas.forEach(function (f) {
-            if (f.error) fallos.push(f.identificacion + ' · factura: ' + f.error);
-            if (f.error_costo) fallos.push(f.identificacion + ' · costo: ' + f.error_costo);
-            if (f.error_cruce) fallos.push(f.identificacion + ' · cruce: ' + f.error_cruce);
-          });
-          if (fallos.length) alert('Algunos pasos no se completaron. Puedes reintentar cada uno en el historial de facturas:\n\n' + fallos.join('\n'));
-          else if (r.facturas.some(function (f) { return f.escritura_marcada; })) alert('Factura registrada. La ' + fac.ref + ' quedó marcada como escriturada (paso "Facturado").');
           aplicarRespuesta(r);
           var h = document.getElementById('m-historial'); if (h) { h.open = true; }
+          if (tipo !== 'alegra') { informar(r.facturas); $b.prop('disabled', false).text(txtBoton); return; }
+          // Quedaron registradas como pendientes: cada paso en Alegra va en su propia petición.
+          completarFacturas(r.facturas, function (fs) { $b.prop('disabled', false).text(txtBoton); informar(fs); });
         })
         .fail(function (x) {
           var j = x.responseJSON || {};
           if (x.status === 409 && j.confirmar) {
             if (confirm(j.detail)) { datos.confirmar_duplicado = true; enviar(); return; }
           } else alert(j.detail || 'No se pudo registrar la factura.');
-          $b.prop('disabled', false).text('Registrar factura(s)');
-        })
-        .done(function () { $b.prop('disabled', false).text('Registrar factura(s)'); });
+          $b.prop('disabled', false).text(txtBoton);
+        });
     }
     enviar();
   });
+  // Envía a Alegra los pasos pendientes de cada factura, uno por petición y en orden (factura → costo → cruce),
+  // esperando la respuesta de cada uno. Se detiene en el primer paso que falle de cada factura.
+  var PASO_TXT = { enviar: 'factura', costo: 'costo', cruzar: 'cruce' };
+  function progreso(txt) { $('#m-progreso').toggle(!!txt).html(txt ? '<i class="fas fa-spinner fa-spin mr-1"></i>' + esc(txt) : ''); }
+  function completarFacturas(lista, alTerminar) {
+    var cola = lista.slice(), finales = [], hechos = {};
+    function siguiente() {
+      var f = cola[0];
+      if (!f) { progreso(''); alTerminar(finales); return; }
+      var clave = f.id + '|' + f.siguiente;
+      if (!f.siguiente || hechos[clave]) { finales.push(f); cola.shift(); siguiente(); return; }
+      hechos[clave] = true;
+      progreso('Enviando a Alegra · titular ' + (finales.length + 1) + ' de ' + lista.length + ' · ' + PASO_TXT[f.siguiente] + '…');
+      $.ajax({ url: URL_FAC_ACC.replace('__ID__', f.id).replace('__ACC__', f.siguiente), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+        .done(function (r) { aplicarRespuesta(r); cola[0] = (r.facturas || [])[0] || f; siguiente(); })
+        .fail(function (x) {
+          finales.push(Object.assign({}, f, { error_paso: PASO_TXT[f.siguiente] + ': ' + ((x.responseJSON && x.responseJSON.detail) || 'no se pudo completar.') }));
+          cola.shift(); siguiente();
+        });
+    }
+    siguiente();
+  }
   // Cada paso con su estado y, si falló o quedó pendiente, su propio botón: se reintenta solo ese paso.
   function pasosFactura(f) {
     function li(clase, icono, texto, det, boton) {
@@ -1492,7 +1767,7 @@
     if (f.paso_en_curso === 'factura') h += li('wait', 'fa-clock', enviando);
     else if (emitida) h += li('ok', 'fa-check-circle', 'Factura ' + esc(f.numero) + ' emitida');
     else if (f.estado === 'borrador') h += li('wait', 'fa-pause-circle', 'Factura en borrador en Alegra', 'Al emitirla se registran el costo y el cruce.', btn('emitir', 'Emitir'));
-    else h += li('bad', 'fa-times-circle', 'Factura no creada', f.error || 'Pendiente de enviar.', btn('reintentar', 'Reintentar factura'));
+    else h += li('bad', 'fa-times-circle', 'Factura no creada', f.error || 'Pendiente de enviar.', f.error ? btn('reintentar', 'Reintentar factura') : btn('enviar', 'Enviar factura'));
     // 2. Costo (solo en la primera factura del negocio)
     if (Number(f.costo) > 0) {
       var tc = 'Costo ' + fmt.format(Number(f.costo));
@@ -1520,10 +1795,14 @@
         var acc = [];
         if (!CERRADA && (['anulada', 'emitida', 'borrador'].indexOf(f.estado) < 0 || (f.tipo === 'informativa' && f.estado !== 'anulada')))
           acc.push('<button type="button" class="btn btn-sm btn-link text-danger p-0 fac-acc" data-acc="anular" data-id="' + f.id + '">Anular registro</button>');
+        if (!CERRADA && f.tipo === 'alegra' && (f.estado === 'emitida' || f.estado === 'borrador'))
+          acc.push('<button type="button" class="btn btn-sm btn-link p-0 fac-acc" data-acc="verificar" data-id="' + f.id + '" title="Si la anulaste (o eliminaste el borrador) en Alegra, aquí deja de contar">¿Anulada en Alegra?</button>');
         return '<tr class="' + (f.estado === 'anulada' ? 'anulado' : '') + '"><td class="text-nowrap">' + esc(f.fecha) + '<br><small class="text-muted">' + esc(f.creado_por) + '</small></td>' +
           '<td>' + esc(f.proyecto) + ' · ' + esc(f.negocio_ref) + '<br><small>' + esc(f.identificacion) + ' · ' + esc(f.concepto_label) + '</small>' +
           (f.escritura_marcada ? '<br><small class="ct-ok"><i class="fas fa-check mr-1"></i>ADJ marcada como escriturada</small>' : '') + '</td>' +
-          '<td>' + esc(f.numero || '—') + '<br><small class="text-muted">' + esc(f.tipo_label) + '</small></td><td class="num">' + money(f.total) + '</td>' +
+          '<td>' + esc(f.numero || '—') + '<br><small class="text-muted">' + esc(f.tipo_label) + '</small></td><td class="num">' + money(f.total) +
+          (Number(f.intereses_previos) ? '<br><small class="text-muted" title="Intereses facturados antes de la conciliación: se descuentan de Andinasoft, no se facturan de nuevo">+ ' + fmt.format(Number(f.intereses_previos)) + ' int. facturados antes</small>' : '') +
+          (f.incluido_archivo ? '<br><small class="text-muted"><i class="fas fa-file-import mr-1"></i>El cruce ya viene en el archivo cargado</small>' : '') + '</td>' +
           '<td>' + pasosFactura(f) + '</td>' +
           '<td class="acc">' + acc.join('<br>') + '</td></tr>';
       }).join('') + '</tbody></table>');
@@ -1532,21 +1811,29 @@
     var acc = $(this).data('acc');
     var txt = { emitir: '¿Emitir la factura ante la DIAN? Es un cambio inmediato en producción.',
                 costo: '¿Registrar en Alegra el asiento de costo (costo de venta contra inventario)?\nAntes de crearlo se verifica que no exista ya.',
-                cruzar: '¿Registrar en Alegra el journal de cruce del anticipo?\nAntes de crearlo se verifica que no exista ya.',
+                cruzar: '¿Registrar en Alegra el comprobante de cruce del anticipo?\nAntes de crearlo se verifica que no exista ya.',
                 reintentar: '¿Reintentar solo la factura en Alegra?\nAntes de crearla se busca si quedó creada en el intento anterior; si está, se enlaza sin crear otra.',
+                enviar: '¿Enviar la factura a Alegra?\nAntes de crearla se busca si ya existe; si está, se enlaza sin crear otra.',
+                verificar: '¿Consultar la factura en Alegra?\nSi allá está anulada (o el borrador se eliminó), el registro se anula aquí y deja de contar.',
                 anular: '¿Anular el registro de esta factura?' }[acc];
     if (!confirm(txt)) return;
-    var $b = $(this);
+    var $b = $(this), txtOrig = $(this).text();
     if ($b.prop('disabled')) return;
     $b.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Enviando…');
     $.ajax({ url: URL_FAC_ACC.replace('__ID__', $b.data('id')).replace('__ACC__', acc), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
       .done(function (r) {
         var f = (r.facturas || [])[0] || {}, err = { costo: f.error_costo, cruzar: f.error_cruce, reintentar: f.error, emitir: f.error }[acc];
-        if (err) alert(err);
         aplicarRespuesta(r);
         var h = document.getElementById('m-historial'); if (h) { h.open = true; }
+        if (r.mensaje) alert(r.mensaje);
+        if (err) { alert(err); return; }
+        // Si quedaron pasos pendientes (p. ej. costo y cruce después de emitir), se siguen enviando uno por uno.
+        if (f.siguiente && ['emitir', 'reintentar', 'enviar'].indexOf(acc) >= 0) completarFacturas([f], function (fs) {
+          var e = fs[0] || {}, msg = e.error_paso || e.error_costo || e.error_cruce;
+          if (msg) alert('No se completaron todos los pasos: ' + msg);
+        });
       })
-      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo completar la acción.'); $b.prop('disabled', false).text('Reintentar'); });
+      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo completar la acción.'); $b.prop('disabled', false).text(txtOrig); });
   });
 
   // ---- Corrección de identificación ----
@@ -1618,7 +1905,7 @@
           (a.error ? '<br><small class="text-danger">' + esc(a.error) + '</small>' : '') + '</td></tr>';
       }).join('') + '</tbody></table>';
     if (p.avisos.length) h += '<ul class="small text-danger mb-2">' + p.avisos.map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>';
-    h += '<textarea id="m-corr-motivo" class="form-control form-control-sm mb-2" rows="2" placeholder="Motivo de la corrección"></textarea>' +
+    h += '<textarea id="m-corr-motivo" aria-label="Motivo de la corrección" class="form-control form-control-sm mb-2" rows="2" placeholder="Motivo de la corrección"></textarea>' +
       '<div class="text-right"><button type="button" class="btn btn-sm btn-warning" id="m-corr-ejecutar"' + (p.bloqueado ? ' disabled' : '') + '>Ejecutar corrección</button></div>';
     $('#m-corr-res').html(h);
   }
@@ -1640,9 +1927,12 @@
   });
   $('#m-linea').on('click', '.corr-rev', function () {
     if (!confirm('¿Revertir esta corrección en Andinasoft?')) return;
-    $.ajax({ url: URL_CORR_REV.replace('__ID__', $(this).data('id')), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+    var $b = $(this);
+    if ($b.prop('disabled')) return;
+    $b.prop('disabled', true);
+    $.ajax({ url: URL_CORR_REV.replace('__ID__', $b.data('id')), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
       .done(function (r) { alert('Corrección revertida. Se recarga la conciliación.'); location.href = location.pathname + '?q=' + encodeURIComponent(r.correccion.errado); })
-      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo revertir.'); });
+      .fail(function (x) { $b.prop('disabled', false); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo revertir.'); });
   });
 
   // ---- Precargar el formulario desde la sugerencia ----
@@ -1720,42 +2010,140 @@
     function lado(ident, emp, cuenta) {
       return (ident === l.identificacion ? '' : '<strong>' + esc(ident) + '</strong> · ') + '<span class="ct-tag ct-tag-e">' + esc(EMP_CORTA[emp] || emp) + '</span>' + esc(cuenta);
     }
-    $('#m-hist').html('<table class="table table-sm table-bordered ct-hist mb-0"><thead class="thead-light"><tr><th>Fecha</th><th>Desde</th><th>Hacia</th><th class="num">Valor</th><th>Tipo</th><th>Nota</th><th></th></tr></thead><tbody>' +
+    $('#m-hist').html('<table class="table table-sm table-bordered ct-hist mb-0"><thead class="thead-light"><tr><th>Registro</th><th>Desde</th><th>Hacia</th><th class="num">Valor</th><th>Tipo</th><th>Nota</th><th>Contabilidad</th><th></th></tr></thead><tbody>' +
       hs.map(function (a) {
         var sale = a.origen === l.identificacion && a.destino !== l.identificacion;
         var entra = a.destino === l.identificacion && a.origen !== l.identificacion;
         var signo = sale ? -1 : (entra ? 1 : 0);
+        var pendiente = !a.anulado && a.journal_estado === 'pendiente';
+        var acciones = '';
+        if (a.anulado) acciones = '<small class="text-muted">Anulado' + (a.anulado_por ? ' por ' + esc(a.anulado_por) : '') + '</small>';
+        else if (a.journal_estado === 'enviado' && !CERRADA)
+          acciones = '<button type="button" class="btn btn-sm btn-link p-0 aj-verificar" data-id="' + a.id + '" title="Si anulaste el journal en Alegra, aquí deja de contar">¿Anulado en Alegra?</button>';
+        else if (pendiente && !CERRADA) {
+          acciones = (a.via === 'alegra'
+              ? '<button type="button" class="btn btn-sm btn-link p-0 aj-enviar" data-id="' + a.id + '" data-fecha="' + esc(a.fecha) + '">' + (a.journal_error ? 'Reintentar' : 'Enviar a Alegra') + '</button>'
+              : '<button type="button" class="btn btn-sm btn-link p-0 aj-manual" data-id="' + a.id + '" data-fecha="' + esc(a.fecha) + '">Marcar registrado</button>') +
+            '<br><button type="button" class="btn btn-sm btn-link text-danger p-0 aj-anular" data-id="' + a.id + '">Anular</button>';
+        }
         return '<tr class="' + (a.anulado ? 'anulado' : '') + '"><td class="text-nowrap">' + esc(a.creado_en) + '<br><small class="text-muted">' + esc(a.creado_por) + '</small></td>' +
           '<td>' + lado(a.origen, a.origen_empresa, a.origen_cuenta) + '</td><td>' + lado(a.destino, a.destino_empresa, a.destino_cuenta) + '</td>' +
           '<td class="num">' + (signo ? money(signo * Number(a.valor)) : money(a.valor)) + '</td>' +
           '<td>' + (a.tipo === 'cuenta' ? 'Entre cuentas' : 'Entre terceros') + (a.misma_empresa ? '' : '<br><span class="ct-tag ct-badge-ic">Entre empresas</span>') + '</td>' +
-          '<td>' + esc(a.nota) + '</td><td class="acc text-nowrap">' + (a.anulado ? '<small class="text-muted">Anulado' + (a.anulado_por ? ' por ' + esc(a.anulado_por) : '') + '</small>'
-            : (CERRADA ? '' : '<button type="button" class="btn btn-sm btn-link text-danger p-0 aj-anular" data-id="' + a.id + '">Anular</button>')) + '</td></tr>';
+          '<td>' + esc(a.nota) + '</td><td class="small">' + estadoAjuste(a) + '</td><td class="acc text-nowrap">' + acciones + '</td></tr>';
       }).join('') + '</tbody></table>');
   }
+  function fechaCorta(iso) { return iso ? iso.split('-').reverse().join('/') : ''; }
+  function estadoAjuste(a) {
+    var ref = 'AJ-CT-' + a.id;
+    if (a.anulado) return '<span class="text-muted">' + ref + '</span>';
+    var enArchivo = a.incluido_archivo ? '<br><small class="text-muted"><i class="fas fa-file-import mr-1"></i>Ya viene en el archivo cargado: no se suma de nuevo</small>' : '';
+    if (a.journal_estado === 'enviado')
+      return '<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>En Alegra</span> · journal ' + esc(a.journal_ref) +
+        '<br><small class="text-muted">' + ref + ' · ' + fechaCorta(a.fecha) + (a.enviado_por ? ' · ' + esc(a.enviado_por) : '') + '</small>' + enArchivo;
+    if (a.journal_estado === 'manual')
+      return '<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>Registrado a mano</span>' + (a.journal_ref ? ' · ' + esc(a.journal_ref) : '') +
+        '<br><small class="text-muted">' + ref + ' · ' + fechaCorta(a.fecha) + (a.enviado_por ? ' · ' + esc(a.enviado_por) : '') + '</small>' + enArchivo;
+    if (a.via === 'manual')
+      return '<span class="text-warning"><i class="fas fa-hand-paper mr-1"></i>Por registrar a mano</span><br><small class="text-muted">' + ref + ' · no cuenta todavía</small>';
+    if (a.enviando) return '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Enviando…</span>';
+    return '<span class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i>Pendiente · no cuenta</span>' +
+      (a.journal_error ? '<br><small class="text-danger">' + esc(a.journal_error) + '</small>' : '') + '<br><small class="text-muted">' + ref + '</small>';
+  }
+  var URL_AJ_ACC = "{% url 'conciliacion-terceros-ajuste-enviar' conciliacion.pk 0 %}".replace('/0/enviar', '/__ID__/__ACC__');
+  // Formulario en línea (en lugar de prompt): fecha con selector, comprobante opcional, Guardar / Cancelar.
+  // Se pinta debajo del botón que lo abre; el aviso de corte aparece bajo la fecha.
+  function formInline($boton, opciones, alGuardar) {
+    var $cont = $boton.closest('td');
+    $cont.find('.ct-inline').remove();
+    var id = 'inl-' + Date.now();
+    var $f = $('<div class="ct-inline mt-1">' +
+      '<label class="small mb-0 d-block" for="' + id + '-f">' + esc(opciones.etiquetaFecha) + '</label>' +
+      '<input type="date" id="' + id + '-f" class="form-control form-control-sm ct-inline-fecha" max="' + HOY + '" value="' + esc(opciones.fecha || HOY) + '">' +
+      (opciones.comprobante ? '<label class="small mb-0 mt-1 d-block" for="' + id + '-c">Comprobante (opcional)</label>' +
+        '<input type="text" id="' + id + '-c" class="form-control form-control-sm ct-inline-comp" maxlength="100" placeholder="Ej. CC-1234">' : '') +
+      '<div class="mt-1"><button type="button" class="btn btn-sm btn-primary py-0 ct-inline-ok">' + esc(opciones.boton) + '</button> ' +
+      '<button type="button" class="btn btn-sm btn-link py-0 ct-inline-no">Cancelar</button></div></div>');
+    $boton.after($f);
+    pintarAvisoCorte($f.find('.ct-inline-fecha'));
+    $f.find('.ct-inline-fecha').trigger('focus');
+    $f.on('click', '.ct-inline-no', function () { $f.remove(); });
+    $f.on('click', '.ct-inline-ok', function () {
+      var fecha = $f.find('.ct-inline-fecha').val();
+      if (!fecha) { $f.find('.ct-inline-fecha').trigger('focus'); return; }
+      $(this).prop('disabled', true).text('Guardando…');
+      alGuardar(fecha, ($f.find('.ct-inline-comp').val() || '').trim(), function () { $f.find('.ct-inline-ok').prop('disabled', false).text(opciones.boton); });
+    });
+  }
+  $('#m-linea').on('click', '.aj-enviar', function () {
+    var $b = $(this), id = $b.data('id');
+    formInline($b, { etiquetaFecha: 'Fecha del comprobante en Alegra', fecha: $b.data('fecha'), boton: 'Enviar a Alegra' }, function (fecha, _, liberar) {
+      $.ajax({ url: URL_AJ_ACC.replace('__ID__', id).replace('__ACC__', 'enviar'), method: 'POST', contentType: 'application/json',
+        headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify({ fecha: fecha }) })
+        .done(function (r) {
+          aplicarRespuesta(r);
+          var x = (r.resultados || [])[0];
+          if (x && !x.aplicado) alert('Alegra no confirmó ' + x.referencia + '; sigue pendiente y no cuenta.\n\n' + x.error);
+        })
+        .fail(function (x) { liberar(); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo enviar.'); });
+    });
+  });
+  $('#m-linea').on('click', '.aj-verificar', function () {
+    if (!confirm('¿Consultar el comprobante en Alegra?\nSi allá está anulado, el traslado se anula aquí y deja de contar.')) return;
+    var $b = $(this).prop('disabled', true);
+    $.ajax({ url: URL_AJ_ACC.replace('__ID__', $b.data('id')).replace('__ACC__', 'verificar'), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+      .done(function (r) { aplicarRespuesta(r); if (r.mensaje) alert(r.mensaje); })
+      .fail(function (x) { $b.prop('disabled', false); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo verificar.'); });
+  });
+  function abrirMarcarManual($b, despues) {
+    formInline($b, { etiquetaFecha: 'Fecha del comprobante', fecha: $b.data('fecha'), comprobante: true, boton: 'Marcar registrado' },
+      function (fecha, comp, liberar) { marcarManual($b.data('id'), fecha, comp, despues, liberar); });
+  }
+  $('#m-linea').on('click', '.aj-manual', function () { abrirMarcarManual($(this), aplicarRespuesta); });
+  $('.ct-manual-marcar').on('click', function () { abrirMarcarManual($(this), recargarConFiltros); });
+  function marcarManual(id, fecha, comp, despues, liberar) {
+    $.ajax({ url: URL_AJ_ACC.replace('__ID__', id).replace('__ACC__', 'manual'), method: 'POST', contentType: 'application/json',
+      headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify({ fecha: fecha, comprobante: comp }) })
+      .done(despues)
+      .fail(function (x) { if (liberar) liberar(); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo marcar.'); });
+  }
   $('#m-linea').on('click', '.aj-anular', function () {
-    if (!confirm('¿Anular este ajuste? El saldo vuelve a como estaba en ambos terceros.')) return;
-    $.ajax({ url: URL_ANULAR.replace('__ID__', $(this).data('id')), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+    if (!confirm('¿Anular este traslado? No se ha aplicado al saldo; queda como anulado.')) return;
+    var $b = $(this);
+    if ($b.prop('disabled')) return;
+    $b.prop('disabled', true);
+    $.ajax({ url: URL_ANULAR.replace('__ID__', $b.data('id')), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
       .done(aplicarRespuesta)
-      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo anular.'); });
+      .fail(function (x) { $b.prop('disabled', false); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo anular.'); });
   });
   $('#m-linea').on('click', '.ct-ir', function (e) {
     e.preventDefault();
     var dest = BY_IDENT[$(this).data('ident')];
-    if (dest) abrir(dest); else alert('Ese tercero no tiene línea en esta conciliación.');
+    if (!dest) { alert('Ese tercero no tiene línea en esta conciliación.'); return; }
+    guardar(function () { abrir(dest); });  // no se pierde la revisión escrita
   });
 
-  function guardar(despues) {
-    if (!actual || CERRADA) { despues && despues(); return; }
+  // Revisión: lo escrito y no guardado.
+  function revisionSucia() {
+    if (!actual || CERRADA) return false;
     var rev = $('#m-rev input:checked').val() || actual.revision;
-    var nota = $('#m-nota').val();
-    if (rev === actual.revision && nota === (actual.nota || '')) { despues && despues(); return; }
-    $.ajax({ url: URL_REV.replace('__ID__', actual.id), method: 'POST', contentType: 'application/json',
+    return rev !== actual.revision || $('#m-nota').val() !== (actual.nota || '');
+  }
+  var guardando = false;
+  function guardar(despues) {
+    var l = actual;  // el tercero de esta revisión, aunque la ficha cambie mientras responde el servidor
+    if (!l || CERRADA || !revisionSucia()) { despues && despues(); return; }
+    if (guardando) return;  // doble Ctrl+Enter o doble clic
+    guardando = true;
+    $('#m-save, #m-next, #m-prev').prop('disabled', true);
+    var rev = $('#m-rev input:checked').val() || l.revision, nota = $('#m-nota').val();
+    $.ajax({ url: URL_REV.replace('__ID__', l.id), method: 'POST', contentType: 'application/json',
       headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify({ revision: rev, nota: nota }) })
+      .always(function () { guardando = false; $('#m-save, #m-next, #m-prev').prop('disabled', false); $('#m-save').prop('disabled', CERRADA); })
       .done(function (r) {
-        var x = r.linea; Object.assign(actual, { revision: x.revision, nota: x.nota, revisado_por: x.revisado_por, revisado_en: x.revisado_en });
-        actual._texto = actual._texto + ' ' + (x.nota || '').toLowerCase();
-        tabla.row('#l' + actual.id).invalidate('data');
+        var x = r.linea; Object.assign(l, { revision: x.revision, nota: x.nota, revisado_por: x.revisado_por, revisado_en: x.revisado_en });
+        l._texto = l._texto + ' ' + (x.nota || '').toLowerCase();
+        tabla.row('#l' + l.id).invalidate('data');
         adjSucio = true;
         refrescarConteos();
         despues && despues();
@@ -1770,18 +2158,35 @@
   }
   $('#m-save').on('click', function () { guardar(function () { $('#m-revby').text('Guardado.'); }); });
   $('#m-next').on('click', function () { guardar(function () { tabla.draw(false); mover(1); }); });
-  $('#m-prev').on('click', function () { mover(-1); });
+  $('#m-prev').on('click', function () { guardar(function () { mover(-1); }); });
+  // Al cerrar la ficha con la revisión sin guardar, se guarda.
+  $('#m-linea').on('hide.bs.modal', function () { if (revisionSucia()) guardar(); });
   $('#m-linea').on('keydown', function (e) { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); $('#m-next').click(); } });
 
   redibujar();
   var vistaGuardada = null;
   try { vistaGuardada = localStorage.getItem('ct-vista'); } catch (e) {}
   cambiarVista(new URLSearchParams(location.search).get('vista') || vistaGuardada || 'terceros');
+  // Filtros guardados al pulsar «Actualizar» (una sola vez).
+  var guardados = null;
+  try { guardados = JSON.parse(sessionStorage.getItem(CLAVE_FILTROS) || 'null'); sessionStorage.removeItem(CLAVE_FILTROS); } catch (e) {}
+  if (guardados && guardados.filtros) {
+    var g = guardados.filtros;
+    Object.assign(filtros, g);
+    $('#f-empresa').val(g.empresa || ''); $('#f-proyecto').val(g.proyecto || ''); $('#f-revision').val(g.revision || '');
+    $('#f-ocultar').prop('checked', g.ocultar !== false); $('#f-q').val(g.q || '');
+    if (g.estado) $('#estados .ct-estado[data-estado="' + g.estado + '"]').addClass('active').attr('aria-pressed', 'true');
+    if (g.alerta) $('.ct-chip[data-alerta="' + g.alerta + '"]').addClass('active').attr('aria-pressed', 'true');
+    if (guardados.vista) cambiarVista(guardados.vista);
+    redibujar();
+  }
   var qInicial = new URLSearchParams(location.search).get('q');
   if (qInicial) {
     $('#f-ocultar').prop('checked', false); filtros.ocultar = false;
     $('#f-q').val(qInicial); filtros.q = qInicial.toLowerCase(); redibujar();
     if (BY_IDENT[qInicial]) { cambiarVista('terceros'); abrir(BY_IDENT[qInicial]); }
+    // El ?q= ya se aplicó: se quita de la URL para que una recarga posterior no vuelva a filtrar ni abrir la ficha.
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
   }
 })();
 </script>

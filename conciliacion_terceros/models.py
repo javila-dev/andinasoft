@@ -9,6 +9,8 @@ class ConfigEmpresa(models.Model):
     """Lo que se recuerda de una empresa entre conciliaciones: qué cuentas de su archivo se suman."""
     empresa = models.OneToOneField(empresas, on_delete=models.CASCADE, related_name='+', db_constraint=False)
     cuentas = models.JSONField(default=list, blank=True)
+    # Numeración (ID de Alegra) de los journals de ajuste; vacío = la predeterminada de Alegra.
+    numeracion_journal_id = models.CharField(max_length=40, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -65,6 +67,12 @@ class FuenteConciliacion(models.Model):
     # Cuentas del archivo que se suman; el resto se descarta.
     cuentas_usadas = models.JSONField(default=list, blank=True)
     confirmada = models.BooleanField(default=False)
+    # Cuándo se cargó el archivo vigente (created_at no cambia al recargar) y cuál había antes, para comparar saldos.
+    cargado_en = models.DateTimeField(null=True, blank=True)
+    anterior = models.JSONField(default=dict, blank=True)  # {archivo, formato, archivo_nombre, cargado_en}
+    # Movimientos de la conciliación que este archivo ya trae (fecha dentro del corte, registrados antes de exportarlo):
+    # el engine no los vuelve a sumar en esta empresa. {'ajustes': [ids], 'facturas': [ids]}
+    incluidos = models.JSONField(default=dict, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -84,7 +92,10 @@ class AjusteConciliacion(models.Model):
     """
     Traslado de saldo contable registrado durante la revisión: de (tercero, empresa, cuenta) a
     (tercero, empresa, cuenta). No modifica los archivos cargados: el saldo contable de cada tercero
-    se recalcula como saldo del archivo + ajustes vigentes. Queda listo para generar el journal.
+    se recalcula como saldo del archivo + ajustes aplicados.
+
+    Un ajuste solo cuenta (está aplicado) cuando Alegra confirmó el journal (`enviado`) o, en empresas sin
+    Alegra, cuando alguien marcó que ya lo registró a mano (`manual`). Mientras esté `pendiente` no mueve saldos.
     """
     TIPO_CUENTA = 'cuenta'
     TIPO_TERCERO = 'tercero'
@@ -94,10 +105,13 @@ class AjusteConciliacion(models.Model):
     )
     JOURNAL_PENDIENTE = 'pendiente'
     JOURNAL_ENVIADO = 'enviado'
+    JOURNAL_MANUAL = 'manual'
     JOURNAL_CHOICES = (
         (JOURNAL_PENDIENTE, 'Pendiente'),
-        (JOURNAL_ENVIADO, 'Enviado'),
+        (JOURNAL_ENVIADO, 'Enviado a Alegra'),
+        (JOURNAL_MANUAL, 'Registrado a mano'),
     )
+    ESTADOS_APLICADOS = (JOURNAL_ENVIADO, JOURNAL_MANUAL)
 
     conciliacion = models.ForeignKey(Conciliacion, on_delete=models.CASCADE, related_name='ajustes')
     grupo = models.CharField(max_length=36, db_index=True)  # movimientos guardados juntos
@@ -117,7 +131,13 @@ class AjusteConciliacion(models.Model):
     anulado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
     anulado_en = models.DateTimeField(null=True, blank=True)
     journal_estado = models.CharField(max_length=20, choices=JOURNAL_CHOICES, default=JOURNAL_PENDIENTE)
-    journal_ref = models.CharField(max_length=100, blank=True, default='')
+    journal_ref = models.CharField(max_length=100, blank=True, default='')  # id del journal en Alegra o comprobante manual
+    fecha = models.DateField(null=True, blank=True)  # fecha del journal / comprobante
+    journal_error = models.TextField(blank=True, default='')
+    journal_respuesta = models.JSONField(null=True, blank=True)
+    enviado_en = models.DateTimeField(null=True, blank=True)
+    enviado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
+    envio_en_curso_desde = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -128,6 +148,19 @@ class AjusteConciliacion(models.Model):
 
     def __str__(self):
         return f'{self.origen_identificacion} {self.origen_cuenta} -> {self.destino_identificacion} {self.destino_cuenta}: {self.valor}'
+
+    @property
+    def aplicado(self):
+        return not self.anulado and self.journal_estado in self.ESTADOS_APLICADOS
+
+    @property
+    def via_alegra(self):
+        """La empresa tiene Alegra: el ajuste se envía como journal. Si no, se registra a mano."""
+        return bool(getattr(self.origen_empresa, 'alegra_enabled', False))
+
+    @property
+    def referencia(self):
+        return f'AJ-CT-{self.pk}'
 
 
 class ConciliacionLinea(models.Model):
@@ -346,6 +379,9 @@ class FacturaConciliacion(models.Model):
     valor_venta = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     valor_intereses = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    # Intereses del negocio que ya se facturaron antes, fuera de la conciliación (el cruce ya está en contabilidad).
+    # No se facturan ni se cruzan de nuevo: solo se descuentan de lo que espera Andinasoft.
+    intereses_previos = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     cruce_cuenta = models.CharField(max_length=30, blank=True, default='')
     cruce_cuenta_nombre = models.CharField(max_length=255, blank=True, default='')
     cruce_estado = models.CharField(max_length=20, choices=CRUCE_CHOICES, default=CRUCE_PENDIENTE)

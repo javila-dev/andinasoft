@@ -90,16 +90,37 @@ def construir_libro(conciliacion):
         for c in l.cuentas:
             _row(dt, [l.identificacion, l.nombre, 'Contabilidad', c['empresa_nombre'], c['cuenta'], c['cuenta_nombre'], 'Sí',
                       None, Decimal(c['saldo']), estados.get(l.estado, l.estado)], money_cols=(8, 9))
-    # Ajustes registrados (vigentes y anulados): base para generar los journals.
-    aj = wb.create_sheet('Ajustes')
-    _header(aj, ['Fecha', 'Grupo', 'Tipo', 'Origen tercero', 'Origen empresa', 'Origen cuenta', 'Destino tercero', 'Destino empresa',
-                 'Destino cuenta', 'Valor', 'Entre empresas', 'Nota', 'Estado', 'Journal', 'Registrado por'],
-            [16, 12, 16, 14, 26, 26, 14, 26, 26, 16, 12, 40, 12, 12, 16])
+    # Ajustes registrados (todos): solo los «Enviado a Alegra» y «Registrado a mano» mueven el saldo.
+    aj = wb.create_sheet('Traslados')
+    _header(aj, ['Registrado', 'Referencia', 'Tipo', 'Origen tercero', 'Origen empresa', 'Origen cuenta', 'Destino tercero', 'Destino empresa',
+                 'Destino cuenta', 'Valor', 'Nota', 'Vigencia', 'Contabilidad', 'Fecha comprobante', 'Journal / comprobante', 'Error',
+                 'Ya viene en el archivo', 'Registrado por'],
+            [16, 12, 16, 14, 26, 26, 14, 26, 26, 16, 40, 10, 18, 12, 18, 40, 14, 16])
     nombres = {f.empresa_id: f.empresa.nombre for f in fuentes}
-    for a in conciliacion.ajustes.select_related('created_by').order_by('created_at', 'id'):
-        _row(aj, [a.created_at.strftime('%d/%m/%Y %H:%M'), a.grupo[:8], a.get_tipo_display(), a.origen_identificacion,
+    from conciliacion_terceros.incluidos import ajuste_incluido, por_empresa
+    inc = por_empresa(fuentes)
+    todos = list(conciliacion.ajustes.select_related('created_by', 'origen_empresa').order_by('created_at', 'id'))
+    for a in todos:
+        _row(aj, [a.created_at.strftime('%d/%m/%Y %H:%M'), a.referencia, a.get_tipo_display(), a.origen_identificacion,
                   nombres.get(a.origen_empresa_id, a.origen_empresa_id), f'{a.origen_cuenta} {a.origen_cuenta_nombre}',
                   a.destino_identificacion, nombres.get(a.destino_empresa_id, a.destino_empresa_id), f'{a.destino_cuenta} {a.destino_cuenta_nombre}',
-                  a.valor, 'No' if a.misma_empresa else 'Sí', a.nota, 'Anulado' if a.anulado else 'Vigente', a.get_journal_estado_display(),
-                  a.created_by.get_username() if a.created_by else ''], money_cols=(10,), fill='F2F3F4' if a.anulado else None)
+                  a.valor, a.nota, 'Anulado' if a.anulado else 'Vigente', a.get_journal_estado_display(),
+                  a.fecha.strftime('%d/%m/%Y') if a.fecha else '', a.journal_ref, a.journal_error,
+                  'Sí' if ajuste_incluido(a, inc) else '',
+                  a.created_by.get_username() if a.created_by else ''], money_cols=(10,),
+             fill='F2F3F4' if a.anulado else ('FDECEA' if a.journal_estado == a.JOURNAL_PENDIENTE else None))
+
+    # Empresas sin Alegra: asiento (débito / crédito) de cada traslado para registrarlo a mano.
+    manuales = [a for a in todos if not a.anulado and (not a.via_alegra or a.journal_estado == a.JOURNAL_MANUAL)]
+    if manuales:
+        from conciliacion_terceros.ajustes import lineas_asiento
+        mm = wb.create_sheet('Traslados a mano')
+        _header(mm, ['Referencia', 'Empresa', 'Tercero', 'Cuenta', 'Nombre cuenta', 'Débito', 'Crédito', 'Motivo', 'Estado',
+                     'Fecha', 'Comprobante'], [12, 30, 14, 12, 34, 16, 16, 40, 18, 12, 18])
+        for a in manuales:
+            for l in lineas_asiento(a):
+                _row(mm, [a.referencia, nombres.get(a.origen_empresa_id, a.origen_empresa_id), l['identificacion'], l['cuenta'],
+                          l['cuenta_nombre'], l['debito'] or None, l['credito'] or None, a.nota, a.get_journal_estado_display(),
+                          a.fecha.strftime('%d/%m/%Y') if a.fecha else '', a.journal_ref],
+                     money_cols=(6, 7), fill='FFF4E5' if a.journal_estado == a.JOURNAL_PENDIENTE else None)
     return wb

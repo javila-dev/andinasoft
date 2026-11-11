@@ -41,7 +41,7 @@
           <tbody>
             {% for f in filas %}
             <tr class="{% if not f.usar %}ct-off{% endif %}">
-              <td><input type="checkbox" class="ct-usar" name="usar_{{ f.codigo }}" value="1" {% if f.usar %}checked{% endif %}></td>
+              <td><input type="checkbox" class="ct-usar" name="usar_{{ f.codigo }}" value="1" {% if f.usar %}checked{% endif %} aria-label="Sumar la cuenta {{ f.codigo }} {{ f.nombre }}"></td>
               <td><code>{{ f.codigo }}</code></td>
               <td>{{ f.nombre }}{% if f.nueva %} <span class="badge badge-warning" title="No estaba en la selección anterior de esta empresa">nueva</span>{% endif %}</td>
               <td class="num">{{ f.terceros }}</td>
@@ -55,6 +55,36 @@
         </table>
       </div>
     </div>
+    {% if movimientos %}
+    {# Primero los dudosos (hay que decidirlos); los verificados contra el archivo anterior quedan desplegables. #}
+    <div class="card mt-3 {% if dudosos %}border-warning{% endif %}">
+      <div class="card-header py-2 small">
+        <strong>Movimientos de la conciliación que este archivo puede traer</strong>
+        <span class="text-muted">· con fecha dentro del corte ({{ conciliacion.fecha_corte|date:"d/m/Y" }}) en {{ fuente.empresa.nombre }}.
+          Los que el archivo ya trae se marcan para no sumarlos dos veces.</span>
+      </div>
+      {% if dudosos %}
+      <div class="card-body py-2 small"><strong>Revisa {{ dudosos|length }} movimiento(s):</strong> la comparación con el archivo anterior no es concluyente.</div>
+      {% include "conciliacion_terceros/_movimientos_incluidos.html" with filas=dudosos %}
+      {% endif %}
+      {% if claros %}
+      <details class="card-body py-2 small border-top" {% if not dudosos %}open{% endif %}>
+        <summary>{{ claros|length }} movimiento(s) verificado(s) automáticamente contra el archivo anterior · ver o cambiar</summary>
+        {% include "conciliacion_terceros/_movimientos_incluidos.html" with filas=claros %}
+      </details>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if fuente.empresa.alegra_enabled %}
+    <div class="form-row align-items-end mt-3">
+      <div class="col-md-6">
+        <label class="small mb-1" for="numeracion_journal_id">Numeración de los comprobantes de traslado en Alegra</label>
+        <input type="text" name="numeracion_journal_id" id="numeracion_journal_id" class="form-control form-control-sm" maxlength="40"
+               autocomplete="off" spellcheck="false" value="{{ numeracion_journal_id }}" placeholder="Ej. 01KT9P5PEQY7D978MMYH0MNHTR">
+        <small class="text-muted">Los traslados de saldo de esta empresa se envían a Alegra con esta numeración. Vacío = la predeterminada de Alegra.</small>
+      </div>
+    </div>
+    {% endif %}
     <div class="mt-3 text-right">
       <button type="submit" class="btn btn-primary btn-sm">Confirmar y conciliar</button>
     </div>
@@ -84,6 +114,12 @@
   });
   $('.ct-usar').on('change', refrescar);
   $('#sel-todas').on('change', function () { $('.ct-usar').prop('checked', this.checked); refrescar(); });
+  $('form').on('submit', function () {  // un solo envío
+    var $f = $(this);
+    if ($f.data('enviado')) return false;
+    $f.data('enviado', true);
+    setTimeout(function () { $f.find('button[type="submit"]').prop('disabled', true).text('Guardando…'); }, 0);
+  });
   refrescar();
 })();
 </script>

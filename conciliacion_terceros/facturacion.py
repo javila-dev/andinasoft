@@ -19,11 +19,12 @@ from contextlib import contextmanager
 from decimal import ROUND_DOWN, Decimal
 
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from andinasoft.models import empresas
-from conciliacion_terceros.models import ConfigFacturacion, FacturaConciliacion
+from conciliacion_terceros.models import Conciliacion, ConfigFacturacion, FacturaConciliacion
 
 logger = logging.getLogger(__name__)
 CENT = Decimal('0.01')
@@ -168,10 +169,22 @@ def registrar(conciliacion, datos, user):
                 motivo = 'no existe en Alegra como cuenta de movimiento' if not codigos[cta] else 'está repetida en Alegra con el mismo código'
                 raise FacturacionError(f'{t.get("identificacion")}: la cuenta {cta} {motivo}; elige otra cuenta de anticipos para el cruce.')
 
-    # Protecciones contra duplicados al registrar.
     idents = [str(t.get('identificacion') or '').strip() for t in titulares]
     if len(set(idents)) != len(idents):
         raise FacturacionError('Hay titulares repetidos en la factura.')
+    # La revisión de duplicados y la creación van bajo un bloqueo de la conciliación: dos pestañas o un
+    # reintento del navegador no pueden pasar la revisión a la vez y crear dos grupos (dos facturas DIAN).
+    with transaction.atomic():
+        Conciliacion.objects.select_for_update().filter(pk=conciliacion.pk).first()
+        facturas = _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, empresa, costo)
+    if tipo == FacturaConciliacion.TIPO_INFORMATIVA:
+        marcar_escritura(facturas[0], getattr(user, 'username', ''))
+    # Las de Alegra quedan pendientes: la pantalla envía cada una en su propia petición (factura, costo y cruce
+    # por separado), para que ninguna petición dependa de varias llamadas largas a Alegra.
+    return facturas
+
+
+def _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, empresa, costo):
     previas = list(FacturaConciliacion.objects.filter(
         proyecto=datos.get('proyecto') or '', negocio_ref=datos.get('negocio_ref') or '', identificacion__in=idents,
     ).exclude(estado=FacturaConciliacion.ESTADO_ANULADA).order_by('id'))
@@ -190,11 +203,23 @@ def registrar(conciliacion, datos, user):
     grupo = str(uuid.uuid4())
     creadas = []
     for t in titulares:
-        venta = Decimal(str(t.get('valor_venta') or 0)).quantize(CENT)
-        intereses = Decimal(str(t.get('valor_intereses') or 0)).quantize(CENT)
+        try:
+            venta = Decimal(str(t.get('valor_venta') or 0)).quantize(CENT)
+            intereses = Decimal(str(t.get('valor_intereses') or 0)).quantize(CENT)
+            previos = Decimal(str(t.get('intereses_previos') or 0)).quantize(CENT)
+        except Exception:
+            raise FacturacionError(f'{t.get("identificacion")}: valores inválidos.')
         total = venta + intereses
+        if venta < 0 or intereses < 0 or previos < 0:
+            raise FacturacionError(f'{t.get("identificacion")}: los valores no pueden ser negativos.')
         if total <= 0:
             raise FacturacionError(f'{t.get("identificacion")}: el valor a facturar debe ser mayor que cero.')
+        if previos > 0:
+            recaudados = _intereses_recaudados(conciliacion, t.get('identificacion'), datos.get('proyecto'), datos.get('negocio_ref'))
+            if recaudados is not None and intereses + previos > recaudados + 1:
+                raise FacturacionError(
+                    f'{t.get("identificacion")}: intereses a facturar (${intereses:,.0f}) más los ya facturados antes (${previos:,.0f}) '
+                    f'superan los intereses recaudados del negocio (${recaudados:,.0f}).')
         if tipo == FacturaConciliacion.TIPO_INFORMATIVA and not (t.get('numero') or '').strip():
             raise FacturacionError(f'{t.get("identificacion")}: indica el número de la factura emitida.')
         cruce_cuenta = (t.get('cruce_cuenta') or '').strip()
@@ -204,7 +229,7 @@ def registrar(conciliacion, datos, user):
             conciliacion=conciliacion, grupo=grupo, tipo=tipo, empresa=empresa, proyecto=datos.get('proyecto') or '',
             negocio_ref=datos.get('negocio_ref') or '', identificacion=t['identificacion'], nombre=t.get('nombre') or '',
             concepto=datos.get('concepto') or 'venta_intereses', fecha=fecha, numero=(t.get('numero') or '').strip(),
-            valor_venta=venta, valor_intereses=intereses, total=total,
+            valor_venta=venta, valor_intereses=intereses, total=total, intereses_previos=previos,
             cruce_cuenta=cruce_cuenta, cruce_cuenta_nombre=(t.get('cruce_cuenta_nombre') or '') if cruce_cuenta else '',
             cruce_estado=FacturaConciliacion.CRUCE_NO_APLICA if ya_cruzado else FacturaConciliacion.CRUCE_PENDIENTE,
             estado=FacturaConciliacion.ESTADO_REGISTRADA if tipo == FacturaConciliacion.TIPO_INFORMATIVA else FacturaConciliacion.ESTADO_PENDIENTE,
@@ -215,13 +240,16 @@ def registrar(conciliacion, datos, user):
         creadas[0].costo = costo
         creadas[0].costo_estado = FacturaConciliacion.CRUCE_PENDIENTE
     FacturaConciliacion.objects.bulk_create(creadas)
-    facturas = list(FacturaConciliacion.objects.filter(grupo=grupo).order_by('id'))
-    if tipo == FacturaConciliacion.TIPO_ALEGRA:
-        for f in facturas:
-            crear_en_alegra(f, config, user)
-    else:
-        marcar_escritura(facturas[0], getattr(user, 'username', ''))
-    return facturas
+    return list(FacturaConciliacion.objects.filter(grupo=grupo).order_by('id'))
+
+
+def _intereses_recaudados(conciliacion, identificacion, proyecto, negocio_ref):
+    """Intereses recaudados que le corresponden al titular en ese negocio según la última ejecución (None si no aparece)."""
+    linea = conciliacion.lineas.filter(identificacion=identificacion).first()
+    for n in (linea.negocios if linea else []):
+        if n.get('situacion') != 'factura' and n.get('proyecto') == proyecto and str(n.get('ref')) == str(negocio_ref):
+            return Decimal(str(n.get('intereses') or 0))
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +264,9 @@ def _client(empresa):
 def _contacto(empresa, identificacion):
     from alegra_integration.exceptions import AlegraConfigurationError
     from alegra_integration.mapping import MappingResolver
+    from conciliacion_terceros.engine import alias_identificaciones
+    # Si el contacto se corrigió en Alegra después de registrar el movimiento, allá ya está con el Id nuevo.
+    identificacion = alias_identificaciones()[0].get((str(empresa.pk), identificacion), identificacion)
     try:
         return str(MappingResolver(empresa).contact_for_cliente(identificacion))
     except AlegraConfigurationError as exc:
@@ -339,10 +370,29 @@ def _ya_enlazada(campo, alegra_id, f):
 
 
 def _journal_idempotente(f, referencia, construir_payload):
-    """Devuelve (journal, ya_existia). Nunca crea un segundo journal con la misma referencia."""
+    return journal_idempotente(f.empresa, referencia, construir_payload)
+
+
+ESTADOS_JOURNAL_ANULADO = ('void', 'voided', 'annulled', 'cancelled', 'canceled')
+
+
+def journal_idempotente(empresa, referencia, construir_payload):
+    """Devuelve (journal, ya_existia). Nunca crea un segundo journal con la misma referencia.
+    Solo devuelve un journal válido: con id y no anulado; si no, lanza FacturacionError."""
+    journal, ya = _journal_idempotente_crudo(empresa, referencia, construir_payload)
+    jid = str(journal.get('id') or '') if isinstance(journal, dict) else ''
+    if not jid:
+        raise FacturacionError(f'Alegra no devolvió el journal «{referencia}»; no quedó registrado. Respuesta: {journal}'[:1000])
+    if str(journal.get('status') or '').lower() in ESTADOS_JOURNAL_ANULADO:
+        raise FacturacionError(f'En Alegra existe el journal {jid} con la referencia «{referencia}», pero está anulado. '
+                               'Elimínalo en Alegra para volver a registrarlo.')
+    return journal, ya
+
+
+def _journal_idempotente_crudo(empresa, referencia, construir_payload):
     from alegra_integration.journal_reconcile import _journal_reference, list_journals_by_reference
 
-    client = _client(f.empresa)
+    client = _client(empresa)
 
     def buscar():
         return [j for j in list_journals_by_reference(client, referencia) if _journal_reference(j) == referencia]
@@ -382,16 +432,27 @@ def _aplicar_factura_alegra(f, inv, reconciliada=False):
 
 
 def _encadenar(f, config, usuario):
-    """Tras la factura emitida: escritura, costo y cruce. Cada uno guarda su propio resultado."""
-    if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
-        return f
-    marcar_escritura(f, usuario)
-    for paso in (registrar_costo, cruzar):
-        try:
-            paso(f, config)
-        except FacturacionError as exc:
-            logger.warning('Factura %s: %s', f.pk, exc)
+    """Tras la factura emitida: marca la escrituración (local). El costo y el cruce van cada uno en su propia
+    petición (la pantalla los encadena), para no juntar varias llamadas largas a Alegra en un solo request."""
+    if f.estado == FacturaConciliacion.ESTADO_EMITIDA:
+        marcar_escritura(f, usuario)
     return f
+
+
+def siguiente_paso(f):
+    """Lo que le falta a una factura de Alegra, en orden: 'enviar', 'costo', 'cruzar' o '' si no falta nada
+    (o si lo que sigue depende de una acción del usuario, como emitir un borrador)."""
+    if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado == FacturaConciliacion.ESTADO_ANULADA:
+        return ''
+    if f.estado in (FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR) and not f.error:
+        return 'enviar'
+    if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
+        return ''
+    if f.costo_estado == FacturaConciliacion.CRUCE_PENDIENTE and f.costo > 0 and not f.error_costo:
+        return 'costo'
+    if f.cruce_estado == FacturaConciliacion.CRUCE_PENDIENTE and f.cruce_cuenta and not f.error_cruce:
+        return 'cruzar'
+    return ''
 
 
 def crear_en_alegra(f, config, user=None):
@@ -495,7 +556,7 @@ def registrar_costo(f, config):
                 ],
             }
             if config.numeracion_journal_id:
-                payload['numberTemplate'] = {'id': int(config.numeracion_journal_id)}
+                payload['numberTemplate'] = str(config.numeracion_journal_id)  # mismo contrato que caja (_journal_payload)
             return payload
 
         try:
@@ -522,6 +583,17 @@ def cruzar(f, config):
         referencia = f'CRUCE-FC-{f.pk}'
 
         def construir():
+            # El cruce acredita la CxC por el valor registrado. Si la factura en Alegra vale otra cosa (p. ej. con
+            # impuesto), quedaría un saldo abierto en la CxC: no se envía y queda el error para revisarlo.
+            total_alegra = ((f.respuesta or {}).get('factura') or {}).get('total')
+            try:
+                total_alegra = Decimal(str(total_alegra)) if total_alegra not in (None, '') else None
+            except Exception:
+                total_alegra = None
+            if total_alegra is not None and abs(total_alegra - f.total) > 1:
+                raise FacturacionError(
+                    f'La factura en Alegra vale ${total_alegra:,.0f} y el registro ${f.total:,.0f} (¿impuesto en la factura?). '
+                    'No se envió el cruce: dejaría un saldo abierto en la cuenta por cobrar. Revisa el impuesto configurado del proyecto.')
             halladas = [c for c in cuentas_alegra(f.empresa) if f.cruce_cuenta and c['codigo'] == f.cruce_cuenta]
             if len(halladas) != 1:
                 raise FacturacionError(f'La cuenta de anticipos {f.cruce_cuenta or "(vacía)"} '
@@ -541,7 +613,7 @@ def cruzar(f, config):
                 ],
             }
             if config.numeracion_journal_id:
-                payload['numberTemplate'] = {'id': int(config.numeracion_journal_id)}
+                payload['numberTemplate'] = str(config.numeracion_journal_id)  # mismo contrato que caja (_journal_payload)
             return payload
 
         try:
@@ -649,15 +721,71 @@ def desmarcar_escritura(f):
     f.save(update_fields=['respuesta'])
 
 
+def _no_existe(exc):
+    return 'HTTP 404' in str(exc)
+
+
+def verificar_anulacion(f, user):
+    """Factura emitida o en borrador: consulta Alegra. Si allá está anulada (o el borrador se eliminó), el registro
+    se anula aquí y deja de contar. Devuelve (anulada, mensaje)."""
+    if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado not in (FacturaConciliacion.ESTADO_EMITIDA, FacturaConciliacion.ESTADO_BORRADOR) \
+            or not f.alegra_invoice_id:
+        raise FacturacionError('Solo se verifica una factura emitida o en borrador en Alegra.')
+    try:
+        inv = _client(f.empresa).rest('GET', f'/invoices/{f.alegra_invoice_id}')
+    except Exception as exc:
+        if not _no_existe(exc):
+            raise FacturacionError(f'No se pudo consultar la factura en Alegra ({exc}).')
+        inv = None
+    status = (inv or {}).get('status') if isinstance(inv, dict) else None
+    if inv is not None and status != 'voided':
+        return False, f'En Alegra la factura {_numero(inv) or f.numero} sigue vigente (estado «{status}»). No se cambió nada.'
+    estado_antes = f.estado
+    marca = {'fecha': timezone.now().isoformat(), 'usuario': getattr(user, 'username', ''),
+             'motivo': 'anulada en Alegra' if inv is not None else 'ya no existe en Alegra'}
+    if not FacturaConciliacion.objects.filter(pk=f.pk, estado=estado_antes).update(
+            estado=FacturaConciliacion.ESTADO_ANULADA, anulada_por=user, anulada_en=timezone.now()):
+        raise FacturacionError('El registro cambió mientras se verificaba; recarga la página.')
+    f.refresh_from_db()
+    f.respuesta = dict(f.respuesta or {}, anulada_en_alegra=marca)
+    f.save(update_fields=['respuesta'])
+    desmarcar_escritura(f)
+    extra = ''
+    if f.alegra_journal_id or f.alegra_costo_journal_id:
+        extra = ' Revisa en Alegra que también estén anulados sus journals de ' + ' y '.join(
+            x for x, j in (('cruce', f.alegra_journal_id), ('costo', f.alegra_costo_journal_id)) if j) + '.'
+    return True, f'La factura {f.numero} está {marca["motivo"]}: el registro quedó anulado aquí y deja de contar.{extra}'
+
+
 def anular_registro(f, user):
-    """Anula el registro local. Una factura emitida en Alegra no se anula aquí (requiere nota crédito)."""
+    """Anula el registro local. Una factura emitida en Alegra no se anula aquí (requiere nota crédito).
+    Si el registro es de Alegra y quedó pendiente o con error, antes se verifica que no se haya creado allá:
+    anularlo y registrar otra produciría una segunda factura electrónica."""
     if f.tipo == FacturaConciliacion.TIPO_ALEGRA and f.estado == FacturaConciliacion.ESTADO_EMITIDA:
-        raise FacturacionError('La factura ya está emitida en Alegra: anúlala con nota crédito en Alegra y luego márcala aquí.')
+        raise FacturacionError('La factura ya está emitida en Alegra: se anula con nota crédito en Alegra.')
     if f.tipo == FacturaConciliacion.TIPO_ALEGRA and f.estado == FacturaConciliacion.ESTADO_BORRADOR:
         raise FacturacionError('La factura está como borrador en Alegra: elimínala allá antes de anular el registro.')
-    f.estado = FacturaConciliacion.ESTADO_ANULADA
-    f.anulada_por = user
-    f.anulada_en = timezone.now()
-    f.save(update_fields=['estado', 'anulada_por', 'anulada_en'])
+    estado_antes = f.estado
+    if f.tipo == FacturaConciliacion.TIPO_ALEGRA:
+        if f.paso_en_curso and f.paso_en_curso_desde and f.paso_en_curso_desde > timezone.now() - datetime.timedelta(minutes=BLOQUEO_MINUTOS):
+            raise FacturacionError('La factura se está enviando a Alegra en este momento; espera y recarga la página.')
+        try:
+            contacto = _contacto(f.empresa, f.identificacion)
+        except FacturacionError:
+            contacto = None  # sin contacto en Alegra no se pudo crear la factura
+        if contacto:
+            try:
+                existentes = _buscar_facturas_alegra(f, contacto)
+            except Exception as exc:
+                raise FacturacionError(f'No se pudo verificar en Alegra si la factura «FC-{f.pk}» quedó creada ({exc}); '
+                                       'no se anuló. Intenta de nuevo en un momento.')
+            if existentes:
+                raise FacturacionError(f'En Alegra sí existe la factura {_numero(existentes[0])} de este registro (FC-{f.pk}). '
+                                       'Usa «Reintentar» para enlazarla en vez de anular y crear otra.')
+    # Cambio condicional: si otro proceso cambió el estado mientras tanto, no se anula.
+    if not FacturaConciliacion.objects.filter(pk=f.pk, estado=estado_antes).update(
+            estado=FacturaConciliacion.ESTADO_ANULADA, anulada_por=user, anulada_en=timezone.now()):
+        raise FacturacionError('El registro cambió mientras se anulaba; recarga la página.')
+    f.refresh_from_db()
     desmarcar_escritura(f)
     return f

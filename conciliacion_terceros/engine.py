@@ -7,6 +7,7 @@ Una línea por tercero:
 - Contabilidad: la suma de sus saldos en las cuentas seleccionadas de cada empresa.
 """
 import datetime
+import logging
 import re
 from collections import defaultdict
 from decimal import ROUND_DOWN, Decimal
@@ -30,6 +31,7 @@ from conciliacion_terceros.formatos import leer_fuente
 from conciliacion_terceros.models import AjusteConciliacion, ConciliacionLinea
 from conciliacion_terceros.parser import norm_ident
 
+logger = logging.getLogger(__name__)
 ZERO = Decimal('0')
 CENT = Decimal('0.01')
 
@@ -265,13 +267,10 @@ def calcular(conciliacion, usar_cache=False):
     contable = defaultdict(dict)  # ident -> {(empresa, cuenta): entrada}
     nombres_contables = {}
     balances = {}
-    # Contactos corregidos en Alegra después de cargar el archivo: el archivo aún trae el Id viejo.
-    alias = {}
-    from conciliacion_terceros.models import CorreccionIdentificacion
-    for c in CorreccionIdentificacion.objects.exclude(estado=CorreccionIdentificacion.ESTADO_REVERTIDA).order_by('created_at'):
-        for a in c.alegra or []:
-            if a.get('estado') == 'ok' and a.get('accion') == 'corregir_contacto':
-                alias[(a['empresa'], c.id_errado)] = c.id_correcto
+    # Identificaciones corregidas: en Andinasoft (siempre) y en el contacto de Alegra (por empresa). El archivo y los
+    # movimientos registrados con el Id viejo se leen con el nuevo donde la corrección aplica.
+    alias_c, alias_a = alias_identificaciones()
+    confirmadas = {f.empresa_id for f in fuentes}
     for f in fuentes:
         balance = leer_fuente(f.formato, f.archivo)
         balances[f.empresa_id] = balance
@@ -282,7 +281,11 @@ def calcular(conciliacion, usar_cache=False):
             for ident, t in cta.terceros.items():
                 if t['saldo'] == 0:
                     continue
-                ident = alias.get((f.empresa_id, ident), ident)
+                ident = alias_c.get((f.empresa_id, ident), ident)
+                e = contable[ident].get((f.empresa_id, codigo))
+                if e:  # el archivo trae el Id viejo y el nuevo en la misma cuenta: se suman
+                    e['saldo_archivo'] += t['saldo']
+                    continue
                 contable[ident][(f.empresa_id, codigo)] = {
                     'empresa': f.empresa_id, 'empresa_nombre': f.empresa.nombre, 'cuenta': codigo,
                     'cuenta_nombre': cta.nombre, 'saldo_archivo': t['saldo'], 'ajustes': ZERO,
@@ -292,6 +295,7 @@ def calcular(conciliacion, usar_cache=False):
     nombres_empresa = {f.empresa_id: f.empresa.nombre for f in fuentes}
 
     def entrada(ident, emp, cuenta, nombre_cuenta):
+        ident = alias_c.get((emp, ident), ident)
         e = contable[ident].get((emp, cuenta))
         if e is None:
             info = catalogo.get((emp, cuenta)) or {'empresa': emp, 'empresa_nombre': nombres_empresa.get(emp, emp),
@@ -299,19 +303,43 @@ def calcular(conciliacion, usar_cache=False):
             e = contable[ident][(emp, cuenta)] = dict(info, saldo_archivo=ZERO, ajustes=ZERO)
         return e
 
-    for a in conciliacion.ajustes.filter(anulado=False):
-        entrada(a.origen_identificacion, a.origen_empresa_id, a.origen_cuenta, a.origen_cuenta_nombre)['ajustes'] -= a.valor
-        entrada(a.destino_identificacion, a.destino_empresa_id, a.destino_cuenta, a.destino_cuenta_nombre)['ajustes'] += a.valor
+    # Movimientos que el archivo de cada empresa ya trae: no se vuelven a sumar en esa empresa.
+    from conciliacion_terceros import incluidos as incl
+    inc = incl.por_empresa(fuentes)
+
+    # Solo los ajustes aplicados: confirmados por Alegra o registrados a mano. Los pendientes no mueven saldos.
+    # Y solo en empresas con archivo confirmado: sin archivo no hay saldo al que sumarlos.
+    for a in conciliacion.ajustes.filter(anulado=False, journal_estado__in=AjusteConciliacion.ESTADOS_APLICADOS):
+        if a.origen_empresa_id in confirmadas and a.pk not in inc.get(a.origen_empresa_id, incl.VACIO)[0]:
+            entrada(a.origen_identificacion, a.origen_empresa_id, a.origen_cuenta, a.origen_cuenta_nombre)['ajustes'] -= a.valor
+        if a.destino_empresa_id in confirmadas and a.pk not in inc.get(a.destino_empresa_id, incl.VACIO)[0]:
+            entrada(a.destino_identificacion, a.destino_empresa_id, a.destino_cuenta, a.destino_cuenta_nombre)['ajustes'] += a.valor
 
     # Facturas: cierran el anticipo. Si el cruce no está en el archivo contable, se resta de la cuenta de anticipos.
     facturas = defaultdict(list)
     from conciliacion_terceros.models import FacturaConciliacion
+
+    def cuenta_como_facturada(fac):
+        # Igual que los traslados: lo de Alegra cuenta solo cuando existe allá. Un borrador no está facturado.
+        return fac.vigente and (fac.tipo != FacturaConciliacion.TIPO_ALEGRA or fac.estado == FacturaConciliacion.ESTADO_EMITIDA)
+
     for fac in conciliacion.facturas.select_related('empresa'):
-        if not fac.vigente:
+        if not cuenta_como_facturada(fac):
             continue
-        facturas[fac.identificacion].append(fac)
-        if fac.cruce_estado != FacturaConciliacion.CRUCE_NO_APLICA and fac.cruce_cuenta:
+        facturas[alias_a.get(fac.identificacion, fac.identificacion)].append(fac)
+        alegra = fac.tipo == FacturaConciliacion.TIPO_ALEGRA
+        cruce_hecho = (fac.cruce_estado == FacturaConciliacion.CRUCE_REGISTRADO if alegra
+                       else fac.cruce_estado != FacturaConciliacion.CRUCE_NO_APLICA)
+        if cruce_hecho and fac.cruce_cuenta and fac.empresa_id in confirmadas and not incl.factura_incluida(fac, inc):
             entrada(fac.identificacion, fac.empresa_id, fac.cruce_cuenta, fac.cruce_cuenta_nombre)['ajustes'] -= fac.total
+    # Facturas registradas en conciliaciones anteriores (con fecha hasta este corte): el negocio ya se facturó, así que
+    # Andinasoft ya no lo espera. Su cruce, si se hizo, ya viene en el archivo de esta conciliación: no se resta otra vez.
+    anteriores = FacturaConciliacion.objects.filter(conciliacion__fecha_corte__lt=corte, fecha__lte=corte) \
+        .exclude(conciliacion=conciliacion).select_related('conciliacion')
+    for fac in anteriores:
+        if cuenta_como_facturada(fac):
+            fac.de_otra_conciliacion = True
+            facturas[alias_a.get(fac.identificacion, fac.identificacion)].append(fac)
 
     # Lado Andinasoft: negocios de todos los proyectos.
     negocios = _negocios(conciliacion, usar_cache)
@@ -325,6 +353,7 @@ def calcular(conciliacion, usar_cache=False):
         for t in n['pagadores']:
             pagador_de[t].append(n)
     nombres_locales = dict(clientes.objects.filter(pk__in=list(por_tercero) + list(contable)).values_list('pk', 'nombrecompleto'))
+    escrituras = _escrituraciones(negocios)
 
     lineas = {}
     for ident in set(contable) | set(facturas) | {t for t, ns in por_tercero.items() if any(_suma(n) and n['total'] for n in ns)}:
@@ -344,16 +373,24 @@ def calcular(conciliacion, usar_cache=False):
                 'titulares': n['titulares'], 'total_negocio': str(n['total']), 'valor': str(valor), 'suma': suma,
                 'capital': str(p['capital'][ident]), 'intereses': str(p['intereses'][ident]),
                 'no_radicado': str(n['no_radicado']), 'pagadores': n['pagadores'], 'cesiones': n['cesiones'],
+                'escritura': escrituras.get((n['proyecto'], str(n['ref']))),
             })
         for fac in facturas.get(ident, []):
-            esperado -= fac.total
+            # Lo facturado ahora más los intereses que ya se habían facturado antes de la conciliación.
+            facturado = fac.total + fac.intereses_previos
+            esperado -= facturado
             capital -= fac.valor_venta
-            intereses -= fac.valor_intereses
+            intereses -= fac.valor_intereses + fac.intereses_previos
             lado_a.append({
-                'proyecto': fac.proyecto, 'ref': f'Factura {fac.numero or "(sin número)"}', 'situacion': 'factura',
+                'proyecto': fac.proyecto,
+                'ref': f'Factura {fac.numero or "(sin número)"}' + (' + intereses facturados antes' if fac.intereses_previos else '')
+                       + (f' · conciliación al {fac.conciliacion.fecha_corte:%d/%m/%Y}' if getattr(fac, 'de_otra_conciliacion', False) else ''),
+                'de_otra_conciliacion': bool(getattr(fac, 'de_otra_conciliacion', False)),
+                'situacion': 'factura',
                 'situacion_label': 'Facturado', 'estado': fac.get_estado_display(), 'origen': fac.get_tipo_display(),
-                'fecha_desistimiento': '', 'titulares': [ident], 'total_negocio': str(-fac.total), 'valor': str(-fac.total),
-                'suma': True, 'capital': str(-fac.valor_venta), 'intereses': str(-fac.valor_intereses), 'no_radicado': '0',
+                'fecha_desistimiento': '', 'titulares': [ident], 'total_negocio': str(-facturado), 'valor': str(-facturado),
+                'suma': True, 'capital': str(-fac.valor_venta), 'intereses': str(-(fac.valor_intereses + fac.intereses_previos)),
+                'intereses_previos': str(fac.intereses_previos), 'no_radicado': '0',
                 'pagadores': [], 'cesiones': [], 'factura_id': fac.pk, 'negocio_ref': fac.negocio_ref,
             })
         lado_c = []
@@ -383,6 +420,45 @@ def calcular(conciliacion, usar_cache=False):
     _regla_mismo_valor(lineas, tol)
     _regla_nombre(lineas)
     return balances, list(lineas.values()), catalogo
+
+
+PASOS_ESCRITURA = (  # (paso, campo con la fecha) en el orden del módulo de escrituración
+    ('firma_cliente', 'fecha_firma_cliente'),
+    ('factura_notaria', 'fecha_factura_notaria'),
+    ('firma_empresa', 'fecha_firma_empresa'),
+    ('carga_escritura', 'fecha_carga_escritura'),
+    ('registro', 'fecha_registro'),
+    ('facturado', 'fecha_facturado'),
+)
+
+
+def _escrituraciones(negocios):
+    """Pasos de escrituración de cada ADJ (módulo de promesas) con su fecha: {(proyecto, adj): {...}}.
+    Se lee en cada cálculo (no se cachea con la foto de Andinasoft) para que refleje cambios recientes."""
+    from andinasoft import promesas_service
+    from andinasoft.models import PromesaCumplimiento
+
+    refs = {(n['proyecto'], str(n['ref'])) for n in negocios if str(n['ref']).upper().startswith('ADJ')}
+    if not refs:
+        return {}
+    labels = dict(PromesaCumplimiento.PASO_CHOICES)
+    out = {}
+    try:
+        for c in PromesaCumplimiento.objects.filter(proyecto_id__in={p for p, _ in refs}):
+            if (c.proyecto_id, c.adj) not in refs:
+                continue
+            hechos = promesas_service.hechos_from_cumplimiento(c)
+            out[(c.proyecto_id, c.adj)] = {
+                'actual': labels.get(c.paso_escritura_actual, c.paso_escritura_actual),
+                'completa': promesas_service.escritura_completa(hechos),
+                'fecha_escritura': c.fecha_escritura_real.isoformat() if c.fecha_escritura_real else '',
+                'pasos': [{'codigo': paso, 'label': labels.get(paso, paso), 'hecho': paso in hechos,
+                           'fecha': getattr(c, campo).isoformat() if getattr(c, campo) else ''}
+                          for paso, campo in PASOS_ESCRITURA],
+            }
+    except Exception:
+        logger.exception('No se pudieron leer los pasos de escrituración')
+    return out
 
 
 def _observaciones(l, refs, tol, corte, pagador_de):
@@ -534,19 +610,82 @@ def _resumen(lineas, balances, fuentes):
     }
 
 
+def _resolver_alias(d):
+    """Encadena correcciones (X→Y y luego Y→Z quedan X→Z)."""
+    out = {}
+    for k in d:
+        v, vistos = d[k], {k}
+        while v in d and v not in vistos:
+            vistos.add(v)
+            v = d[v]
+        out[k] = v
+    return out
+
+
+def alias_identificaciones():
+    """Identificaciones corregidas vigentes (no revertidas):
+    - contable: {(empresa, errado): correcto} donde también se corrigió el contacto en Alegra (el archivo cargado
+      antes de la corrección aún trae el Id viejo);
+    - andina: {errado: correcto} si la corrección quedó ejecutada en Andinasoft."""
+    from conciliacion_terceros.models import CorreccionIdentificacion
+    contable, andina = {}, {}
+    for c in CorreccionIdentificacion.objects.exclude(estado=CorreccionIdentificacion.ESTADO_REVERTIDA).order_by('created_at'):
+        if c.estado == CorreccionIdentificacion.ESTADO_EJECUTADA:
+            andina[c.id_errado] = c.id_correcto
+        for a in c.alegra or []:
+            if a.get('estado') == 'ok' and a.get('accion') == 'corregir_contacto':
+                contable[(a['empresa'], c.id_errado)] = c.id_correcto
+    andina = _resolver_alias(andina)
+    por_empresa = defaultdict(dict)
+    for (emp, x), y in contable.items():
+        por_empresa[emp][x] = y
+    contable = {(emp, x): y for emp, d in por_empresa.items() for x, y in _resolver_alias(d).items()}
+    return contable, andina
+
+
+# Lo que calcula el motor; la revisión (revision, nota, revisado_por, revisado_en) es del usuario y no se toca.
+CAMPOS_CALCULADOS = ['nombre', 'saldo_andina', 'saldo_contable', 'diferencia', 'capital', 'intereses', 'estado',
+                     'negocios', 'cuentas', 'alertas', 'observacion', 'sugerencia']
+
+
 def ejecutar(conciliacion, usar_cache=False):
-    """Calcula y guarda una línea por tercero. Conserva la revisión y notas de una ejecución anterior."""
+    """Calcula y guarda una línea por tercero. Actualiza las líneas que ya existen (mismo id, así una revisión que
+    se esté guardando en paralelo no se pierde ni da 404), crea las nuevas y borra las que ya no aparecen."""
+    from conciliacion_terceros.models import Conciliacion
+
     balances, lineas, catalogo = calcular(conciliacion, usar_cache=usar_cache)
-    previas = {p.identificacion: p for p in conciliacion.lineas.exclude(revision=ConciliacionLinea.REVISION_PENDIENTE, nota='')}
-    for l in lineas:
-        l.conciliacion = conciliacion
-        p = previas.get(l.identificacion)
-        if p:
-            l.revision, l.nota, l.revisado_por_id, l.revisado_en = p.revision, p.nota, p.revisado_por_id, p.revisado_en
+    _, alias_a = alias_identificaciones()
     fuentes = list(conciliacion.fuentes.all())
     with transaction.atomic():
-        conciliacion.lineas.all().delete()
-        ConciliacionLinea.objects.bulk_create(lineas, batch_size=500)
+        Conciliacion.objects.select_for_update().filter(pk=conciliacion.pk).first()  # un recálculo a la vez
+        existentes = {e.identificacion: e for e in conciliacion.lineas.all()}
+        idents = {l.identificacion for l in lineas}
+        crear, actualizar, heredan = [], [], []
+        for l in lineas:
+            l.conciliacion = conciliacion
+            e = existentes.get(l.identificacion)
+            if e is not None:
+                l.pk = e.pk
+                l.revision, l.nota, l.revisado_por_id, l.revisado_en = e.revision, e.nota, e.revisado_por_id, e.revisado_en
+            # Id corregido: la línea del Id viejo desaparece y su revisión pasa a la del nuevo (las notas se juntan).
+            for x, y in alias_a.items():
+                p = existentes.get(x)
+                if y != l.identificacion or p is None or x in idents:
+                    continue
+                if p.revision == ConciliacionLinea.REVISION_PENDIENTE and not p.nota:
+                    continue
+                if l.revision == ConciliacionLinea.REVISION_PENDIENTE:
+                    l.revision, l.revisado_por_id, l.revisado_en = p.revision, p.revisado_por_id, p.revisado_en
+                if p.nota:
+                    l.nota = (l.nota + '\n' if l.nota else '') + f'[Id anterior {x}] {p.nota}'
+                if e is not None:
+                    heredan.append(l)
+            (actualizar if e is not None else crear).append(l)
+        conciliacion.lineas.exclude(identificacion__in=idents).delete()
+        ConciliacionLinea.objects.bulk_update(actualizar, CAMPOS_CALCULADOS, batch_size=300)
+        if heredan:
+            ConciliacionLinea.objects.bulk_update(heredan, ['revision', 'nota', 'revisado_por', 'revisado_en'])
+        ConciliacionLinea.objects.bulk_create(crear, batch_size=500)
         conciliacion.resumen = dict(
             _resumen(lineas, balances, fuentes), calculado_en=timezone.now().isoformat(),
             catalogo=sorted(catalogo.values(), key=lambda c: (c['empresa_nombre'], c['cuenta'])),
