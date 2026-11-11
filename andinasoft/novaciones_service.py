@@ -15,10 +15,11 @@ Flujo:
 """
 import datetime
 import logging
+import threading
 from decimal import Decimal
 
 from django.contrib.auth.models import Permission, User
-from django.db import transaction
+from django.db import connections, transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
@@ -290,12 +291,32 @@ def _evento(novacion, usuario, accion, detalle=''):
     NovacionEvento.objects.create(novacion=novacion, usuario=usuario, accion=accion, detalle=detalle)
 
 
+def _en_segundo_plano(nombre, fn, *args):
+    """Corre ``fn`` en un hilo aparte: la respuesta no espera correos, n8n ni el almacenamiento.
+
+    Un SMTP que no contesta dejaba la peticion colgada mas de 2 minutos (504 en nginx) aunque
+    la novacion ya estuviera guardada.
+    """
+    def _correr():
+        try:
+            fn(*args)
+        except Exception:
+            logger.exception('Novaciones: fallo la tarea en segundo plano %s', nombre)
+        finally:
+            connections.close_all()
+
+    threading.Thread(target=_correr, name=f'novacion-{nombre}', daemon=True).start()
+
+
 def _notificar(novacion, evento, comentario=''):
     """Avisa (correo + n8n) cuando la transaccion confirma; un fallo del aviso no tumba el flujo."""
     from andinasoft.novaciones_notify import notificar
 
     novacion_id = novacion.pk
-    transaction.on_commit(lambda: notificar(novacion_id, evento, comentario), using='default')
+    transaction.on_commit(
+        lambda: _en_segundo_plano(f'aviso-{novacion_id}-{evento}', notificar, novacion_id, evento, comentario),
+        using='default',
+    )
 
 
 def crear_solicitud(
@@ -623,6 +644,10 @@ def _adjudicar_destino(request, novacion, venta, deshacer, *, oficina, gestor_ca
         titulares=titulares_por_adj.objects.using(destino).get(adj=adj),
         proyecto=destino, cobrar_mora=False,
     )
+    # aplicar_pago no guarda concepto ni usuario en el encabezado; el recibo del origen si los lleva.
+    Recaudos_general.objects.using(destino).filter(numrecibo=novacion.nro_nota).update(
+        concepto=CONCEPTO_NOVACION, usuario=usuario_corto(usuario),
+    )
     # Abonos que el cliente haya hecho directamente a la venta nueva (se borran de la cola al aplicarlos).
     pendientes = list(RecaudosNoradicados.objects.using(destino).filter(contrato=venta.pk).values())
 
@@ -732,11 +757,12 @@ def aprobar(request, novacion_id, *, oficina, gestor_cartera):
     except Exception:
         deshacer.ejecutar()
         raise
-    # Al final y sin tumbar la aprobacion: si falla, los documentos se reasignan a mano.
-    try:
-        _mover_documentos_venta_a_adj(novacion.proyecto_destino_id, novacion.venta_destino, novacion.adj_destino)
-    except Exception:
-        logger.exception('Novacion %s: no se movieron los documentos de la venta %s', novacion.pk, novacion.venta_destino)
+    # Al final, aparte y sin tumbar la aprobacion: copiar los PDF en el almacenamiento puede
+    # tardar. Si falla queda en el log y los documentos se reasignan a mano.
+    _en_segundo_plano(
+        f'documentos-{novacion.pk}', _mover_documentos_venta_a_adj,
+        novacion.proyecto_destino_id, novacion.venta_destino, novacion.adj_destino,
+    )
     return novacion
 
 

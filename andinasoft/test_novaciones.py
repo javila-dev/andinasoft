@@ -265,6 +265,28 @@ class ReciboOrigenTests(SimpleTestCase):
         self.assertEqual(revisados, {('Carmelo', 'N' * 10), ('Carmelo', 'N' * 10 + '-D')})
 
 
+class SegundoPlanoTests(SimpleTestCase):
+    @patch.object(svc, 'connections')
+    @patch.object(svc, 'threading')
+    def test_corre_aparte_registra_fallos_y_cierra_conexiones(self, threading, connections):
+        threading.Thread.side_effect = lambda target, **kwargs: SimpleNamespace(start=target)
+        hechos = []
+        svc._en_segundo_plano('ok', hechos.append, 1)
+        with self.assertLogs('andinasoft.novaciones_service', level='ERROR'):
+            svc._en_segundo_plano('smtp', MagicMock(side_effect=TimeoutError('Connection timed out')))
+        self.assertEqual(hechos, [1])
+        self.assertEqual(connections.close_all.call_count, 2)
+        self.assertTrue(all(c.kwargs['daemon'] for c in threading.Thread.call_args_list))
+
+    @patch.object(svc, '_en_segundo_plano')
+    @patch('django.db.transaction.on_commit', side_effect=lambda fn, using=None: fn())
+    def test_el_aviso_no_se_envia_dentro_de_la_peticion(self, _on_commit, segundo_plano):
+        from andinasoft.novaciones_notify import notificar
+
+        svc._notificar(SimpleNamespace(pk=3), 'aprobada')
+        segundo_plano.assert_called_once_with('aviso-3-aprobada', notificar, 3, 'aprobada', '')
+
+
 class DeshacerTests(SimpleTestCase):
     def test_revierte_en_orden_inverso_aunque_un_paso_falle(self):
         orden = []
