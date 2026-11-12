@@ -12,6 +12,7 @@ HEADER_FONT = Font(name='Calibri', bold=True, color='FFFFFF', size=10)
 THIN = Border(*(Side(style='thin', color='D5D8DC'),) * 4)
 ESTADO_FILL = {
     ConciliacionLinea.ESTADO_CUADRADO: 'E8F5E9',
+    ConciliacionLinea.ESTADO_JUSTIFICADO: 'F1F8E9',
     ConciliacionLinea.ESTADO_DIFERENCIA: 'FFF8E1',
     ConciliacionLinea.ESTADO_SOLO_CONTABLE: 'FDECEA',
     ConciliacionLinea.ESTADO_SOLO_ANDINA: 'E3F2FD',
@@ -25,7 +26,7 @@ def _header(ws, cols, widths):
         c.fill, c.font, c.border = HEADER_FILL, HEADER_FONT, THIN
         c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         ws.column_dimensions[get_column_letter(i)].width = w
-    ws.freeze_panes = ws.cell(ws.max_row + 1, 1)
+    ws.freeze_panes = f'A{ws.max_row + 1}'  # como texto: ws.cell() crearía una fila vacía bajo el encabezado
     ws.auto_filter.ref = f'A{ws.max_row}:{get_column_letter(len(cols))}{ws.max_row}'
 
 
@@ -69,15 +70,16 @@ def construir_libro(conciliacion):
     # Una fila por tercero.
     sh = wb.create_sheet('Terceros')
     _header(sh, ['Identificación', 'Nombre', 'Andinasoft', 'Contabilidad', 'Diferencia', 'Estado', 'Proyectos', 'Empresas · cuentas',
-                 'Observación', 'Alertas', 'Revisión', 'Nota', 'Revisado por'],
-            [14, 34, 16, 16, 16, 16, 30, 50, 50, 60, 20, 40, 16])
+                 'Observación', 'Alertas', 'Revisión', 'Diferencia justificada', 'Nota', 'Revisado por'],
+            [14, 34, 16, 16, 16, 16, 30, 50, 50, 60, 20, 18, 40, 16])
     for l in sorted(lineas, key=lambda x: -abs(x.diferencia)):
         proyectos = ', '.join(sorted({f"{n['proyecto']} {n['ref']}" for n in l.negocios if n['suma']}))
         cuentas = ' | '.join(f"{c['empresa_nombre']} {c['cuenta']}: {Decimal(c['saldo']):,.0f}" for c in l.cuentas)
         _row(sh, [l.identificacion, l.nombre, l.saldo_andina, l.saldo_contable, l.diferencia, estados.get(l.estado, l.estado),
                   proyectos, cuentas, l.observacion, ' | '.join(a['texto'] for a in l.alertas), revisiones.get(l.revision, l.revision),
+                  l.justificado_valor if l.revision == ConciliacionLinea.REVISION_JUSTIFICADO else None,
                   l.nota, (l.revisado_por.get_username() if l.revisado_por else '')],
-             money_cols=(3, 4, 5), fill=ESTADO_FILL.get(l.estado))
+             money_cols=(3, 4, 5, 12), fill=ESTADO_FILL.get(l.estado))
 
     # Detalle débito / crédito: una fila por negocio y por saldo contable (sirve para tablas dinámicas).
     dt = wb.create_sheet('Detalle')

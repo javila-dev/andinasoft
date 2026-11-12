@@ -180,22 +180,28 @@ class ConciliacionLinea(models.Model):
     ESTADO_DIFERENCIA = 'diferencia'
     ESTADO_SOLO_CONTABLE = 'solo_contable'
     ESTADO_SOLO_ANDINA = 'solo_andina'
+    # Hay diferencia, pero alguien la aceptó con una explicación y por ese valor exacto (revisión «justificado»).
+    ESTADO_JUSTIFICADO = 'justificado'
     ESTADO_CHOICES = (
         (ESTADO_CUADRADO, 'Cuadra'),
+        (ESTADO_JUSTIFICADO, 'Cuadra con justificación'),
         (ESTADO_DIFERENCIA, 'Con diferencia'),
         (ESTADO_SOLO_CONTABLE, 'Solo en contabilidad'),
         (ESTADO_SOLO_ANDINA, 'Solo en Andinasoft'),
     )
+    ESTADOS_RESUELTOS = (ESTADO_CUADRADO, ESTADO_JUSTIFICADO)
 
     REVISION_PENDIENTE = 'pendiente'
     REVISION_OK = 'ok'
     REVISION_AJUSTE = 'ajuste'
     REVISION_ANDINA = 'corregir_andina'
+    REVISION_JUSTIFICADO = 'justificado'
     REVISION_CHOICES = (
         (REVISION_PENDIENTE, 'Pendiente'),
         (REVISION_OK, 'Revisado, sin acción'),
         (REVISION_AJUSTE, 'Requiere ajuste contable'),
         (REVISION_ANDINA, 'Corregir en Andinasoft'),
+        (REVISION_JUSTIFICADO, 'Cuadra con justificación'),
     )
 
     conciliacion = models.ForeignKey(Conciliacion, on_delete=models.CASCADE, related_name='lineas')
@@ -218,6 +224,9 @@ class ConciliacionLinea(models.Model):
     nota = models.TextField(blank=True, default='')
     revisado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
     revisado_en = models.DateTimeField(null=True, blank=True)
+    # Diferencia aceptada con la revisión «justificado» (contable − Andinasoft). Solo vale mientras la diferencia
+    # siga siendo esa: si cambia, la línea vuelve a quedar con diferencia y un aviso.
+    justificado_valor = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
 
     class Meta:
         verbose_name = 'Línea de conciliación'

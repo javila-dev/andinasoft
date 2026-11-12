@@ -14,7 +14,7 @@
   .ct-estado .n { font-size: 20px; font-weight: 600; }
   .ct-estado.active { box-shadow: 0 0 0 2px #2d4a42 inset; }
   .ct-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
-  .st-cuadrado { background: #2e7d32; } .st-diferencia { background: #f9a825; } .st-solo_contable { background: #c62828; } .st-solo_andina { background: #1565c0; }
+  .st-cuadrado { background: #2e7d32; } .st-justificado { background: #66bb6a; box-shadow: inset 0 0 0 2px #2e7d32; } .st-diferencia { background: #f9a825; } .st-solo_contable { background: #c62828; } .st-solo_andina { background: #1565c0; }
   .ct-chip { display: inline-block; border: 1px solid #d5dbd9; border-radius: 14px; padding: 2px 10px; margin: 0 6px 6px 0; font-size: 12px; cursor: pointer; background: #fff; color: inherit; font-family: inherit; line-height: 1.5; }
   .ct-chip.active { background: #2d4a42; color: #fff; border-color: #2d4a42; }
   .ct-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin: 0 3px 2px 0; white-space: nowrap; }
@@ -42,7 +42,8 @@
   .text-warning { color: #8a5a00 !important; }
   #tabla tbody tr:focus, #tabla-adj tbody tr:focus, tr[tabindex]:focus, .ct-res-busq .item:focus { outline: 2px solid #2d4a42; outline-offset: -2px; }
   .ct-chip:focus-visible, .ct-estado:focus-visible { outline: 2px solid #2d4a42; outline-offset: 2px; }
-  .rev-pendiente { color: #66727d; } .rev-ok { color: #2e7d32; } .rev-ajuste { color: #b26a00; } .rev-corregir_andina { color: #1565c0; }
+  .rev-pendiente { color: #66727d; } .rev-ok { color: #2e7d32; } .rev-ajuste { color: #b26a00; } .rev-corregir_andina { color: #1565c0; } .rev-justificado { color: #2e7d32; }
+  .ct-just { display: none; max-width: 360px; }
   .ct-res table { font-size: 12px; }
   .ct-res td, .ct-res th { padding: 3px 8px; vertical-align: middle; }
   .ct-progress { height: 6px; }
@@ -488,7 +489,7 @@
           <div class="ct-acciones" role="group" aria-label="Acciones sobre el tercero">
             <button type="button" class="ct-accion" data-accion="traslado" aria-expanded="false">
               <i class="fas fa-exchange-alt" aria-hidden="true"></i>
-              <span><strong>Trasladar saldo</strong><small>Entre sus cuentas o con otro tercero</small></span>
+              <span><strong>Trasladar saldo</strong><small>Entre sus cuentas, con otro tercero o contra otra cuenta</small></span>
             </button>
             <button type="button" class="ct-accion" data-accion="factura" aria-expanded="false">
               <i class="fas fa-file-invoice" aria-hidden="true"></i>
@@ -650,6 +651,11 @@
             <label class="btn btn-outline-secondary"><input type="radio" name="rev" value="{{ val }}">{{ label }}</label>
             {% endfor %}
           </div>
+          <div class="ct-just mb-2" id="m-just">
+            <label class="small mb-1" for="m-just-valor">Diferencia que se acepta (contable − Andinasoft)</label>
+            <input type="number" step="0.01" id="m-just-valor" class="form-control form-control-sm">
+            <small class="text-muted d-block">Solo vale por este valor: si la diferencia cambia, la línea vuelve a quedar con diferencia. Explica el motivo en la nota (obligatorio).</small>
+          </div>
           <label class="sr-only" for="m-nota">Nota de revisión</label>
           <textarea id="m-nota" class="form-control form-control-sm" rows="2" placeholder="Qué encontraste y qué se hizo o se debe hacer"></textarea>
           <small class="text-muted" id="m-revby"></small>
@@ -780,7 +786,7 @@
   var filtros = { estado: '', alerta: '', empresa: '', proyecto: '', revision: '', q: '', ocultar: true };
   function pasa(l, ignorarEstado) {
     if (!ignorarEstado && filtros.estado && l.estado !== filtros.estado) return false;
-    if (!ignorarEstado && !filtros.estado && filtros.ocultar && l.estado === 'cuadrado') return false;
+    if (!ignorarEstado && !filtros.estado && filtros.ocultar && (l.estado === 'cuadrado' || l.estado === 'justificado')) return false;
     if (filtros.alerta && l._codigos.indexOf(filtros.alerta) < 0) return false;
     if (filtros.empresa === '__ninguna' ? l._empresas.length : (filtros.empresa && l._empresas.indexOf(filtros.empresa) < 0)) return false;
     if (filtros.proyecto === '__ninguno' ? l._proyectos.length : (filtros.proyecto && l._proyectos.indexOf(filtros.proyecto) < 0)) return false;
@@ -874,6 +880,9 @@
       var porTitular = fs.every(function (f) { return Math.abs(f.contable - f.esperado) <= TOL; });
       a.resultado = Math.abs(a.dif) <= TOL ? (porTitular ? 'cuadra' : 'reparto')
                   : (!a.suma ? 'no_cuenta' : (Math.abs(a.contable) <= TOL ? 'sin_contable' : 'diferencia'));
+      // Con diferencia, pero todos sus titulares quedaron resueltos y al menos uno con justificación.
+      if (a.resultado !== 'cuadra' && fs.every(function (f) { return f.l.estado === 'cuadrado' || f.l.estado === 'justificado'; })
+          && fs.some(function (f) { return f.l.estado === 'justificado'; })) a.resultado = 'justificado';
       a.revisados = fs.filter(function (f) { return f.l.estado === 'cuadrado' || f.l.revision !== 'pendiente'; }).length;
       a.n_titulares = fs.length;
       a._texto = [a.proyecto, a.ref, a.n.estado, a.n.origen, a.n.situacion_label].concat(fs.map(function (f) { return f.l.identificacion + ' ' + f.l.nombre; })).join(' ').toLowerCase();
@@ -882,7 +891,7 @@
   }
   function pasaAdj(a, ignorarResultado) {
     if (!ignorarResultado && filtroResultado && a.resultado !== filtroResultado) return false;
-    if (!ignorarResultado && !filtroResultado && filtros.ocultar && a.resultado === 'cuadra') return false;
+    if (!ignorarResultado && !filtroResultado && filtros.ocultar && (a.resultado === 'cuadra' || a.resultado === 'justificado')) return false;
     if (filtros.proyecto && a.proyecto !== filtros.proyecto) return false;
     if (filtros.q && a._texto.indexOf(filtros.q) < 0) return false;
     return true;
@@ -895,7 +904,7 @@
     var nota = [];
     if (n.situacion === 'escriturada') nota.push('Escriturada');
     if (n.situacion === 'venta_pendiente' || n.situacion === 'venta_anulada') nota.push(n.situacion_label);
-    if (n.situacion === 'novada') nota.push('Novación a ' + n.novada_a + ': lo que quedó sigue contando');
+    if (n.situacion === 'novada') nota.push('Novación a ' + n.novada_a + ': lo que quedó sigue contando' + (n.solo_por_novacion ? ' (proyecto no incluido, se trae solo por la novación)' : ''));
     if (n.fecha_desistimiento) nota.push('Desistió ' + n.fecha_desistimiento);
     if (!n.suma) nota.push('no suma');
     return esc(n.estado || '—') + (nota.length ? '<br><small class="text-muted">' + esc(nota.join(' · ')) + '</small>' : '');
@@ -966,7 +975,7 @@
     $('#ma-titulo').text(a.proyecto + ' · ' + a.ref);
     var sub = [n.estado || '—', n.origen || ''];
     if (n.situacion === 'escriturada') sub.push('Escriturada');
-    if (n.situacion === 'novada') sub.push('Desistida por novación a ' + n.novada_a);
+    if (n.situacion === 'novada') sub.push('Desistida por novación a ' + n.novada_a + (n.solo_por_novacion ? ' (proyecto no incluido en la conciliación)' : ''));
     if (n.fecha_desistimiento) sub.push('Desistió ' + n.fecha_desistimiento);
     if (!a.suma) sub.push('No suma: Andinasoft espera $0');
     $('#ma-sub').text(sub.filter(Boolean).join(' · '));
@@ -1125,13 +1134,30 @@
           esc(p.label) + (p.fecha ? ' · ' + fechaCorta(p.fecha) : (p.hecho ? ' · sin fecha' : '')) + '</div>';
       }).join('') + '</details>';
   }
+  // Encabezado de la ficha que depende del estado: subtítulo, balance y lista de hallazgos.
+  function pintarEstado(l) {
+    $('#m-sub').html(esc(l.identificacion) + ' · <span class="ct-dot st-' + l.estado + '"></span>' + esc(ESTADOS[l.estado]));
+    var ok = l.estado === 'cuadrado' || l.estado === 'justificado';
+    $('#m-balance').attr('class', 'ct-balance mb-3 ' + (ok ? 'ok' : 'bad')).html(
+      '<span>Andinasoft <strong>' + money(l.andina) + '</strong></span><span>Contabilidad <strong>' + money(l.contable) + '</strong></span>' +
+      '<span>Diferencia <strong>' + money(l.diferencia) + '</strong></span>' +
+      (l.estado === 'justificado' ? '<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>Cuadra con justificación</span>'
+        : ok ? '<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>Cuadra</span>' : '<span class="ct-bad"><i class="fas fa-times-circle mr-1"></i>No cuadra</span>'));
+    // Observación y alertas en una sola lista: primero lo que explica la diferencia, luego las alertas.
+    $('#m-obs').hide();
+    $('#m-alertas').html((l.observacion ? '<li><i class="fas fa-search text-muted" aria-hidden="true"></i><span>' + esc(l.observacion) + '</span></li>' : '') +
+      l.alertas.map(function (a) { return '<li><i class="fas fa-exclamation-triangle text-warning" aria-hidden="true"></i><span>' + esc(a.texto) + '</span></li>'; }).join(''));
+  }
+  // «Cuadra con justificación» pide el valor que se acepta.
+  function mostrarJustificacion() { $('#m-just').toggle($('#m-rev input:checked').val() === 'justificado'); }
+  $('#m-rev').on('change', 'input', mostrarJustificacion);
   function abrir(l) {
     // Si se vuelve a pintar el mismo tercero (después de un traslado o una factura), se conserva lo escrito en la revisión.
     var borrador = (actual && actual.identificacion === l.identificacion && revisionSucia())
-      ? { rev: $('#m-rev input:checked').val(), nota: $('#m-nota').val() } : null;
+      ? { rev: $('#m-rev input:checked').val(), nota: $('#m-nota').val(), just: $('#m-just-valor').val() } : null;
     actual = l;
     $('#m-nombre').text(l.nombre || '(sin nombre)');
-    $('#m-sub').html(esc(l.identificacion) + ' · <span class="ct-dot st-' + l.estado + '"></span>' + esc(ESTADOS[l.estado]));
+    // (el estado, el balance y las alertas se pintan en pintarEstado)
     // Lado Andinasoft
     $('#m-lado-a').html(l.negocios.length ? l.negocios.map(function (n) {
       // Estado tal como está en Andinasoft; si la conciliación lo trata distinto (escriturada, venta), se aclara debajo.
@@ -1139,7 +1165,8 @@
       var nota = [];
       if (n.situacion === 'escriturada') nota.push('Escriturada al corte');
       if (n.situacion === 'venta_pendiente' || n.situacion === 'venta_anulada') nota.push(n.situacion_label);
-      if (n.situacion === 'novada') nota.push('Desistida por novación a ' + n.novada_a + ': lo que quedó sigue siendo del cliente');
+      if (n.situacion === 'novada') nota.push('Desistida por novación a ' + n.novada_a + ': lo que quedó sigue siendo del cliente' +
+        (n.solo_por_novacion ? '. Su proyecto no está incluido en la conciliación: se trae solo por la novación' : ''));
       if (n.fecha_desistimiento) nota.push('Desistió ' + n.fecha_desistimiento);
       if (!n.suma) nota.push('no suma');
       return '<tr class="' + (n.suma ? '' : 'ct-nosuma') + '"><td>' + esc(n.proyecto) + ' · <strong>' + esc(n.ref) + '</strong>' +
@@ -1162,15 +1189,7 @@
     prepararCorr(l);
     renderFacturas(l);
     cerrarPaneles();
-    var ok = l.estado === 'cuadrado';
-    $('#m-balance').attr('class', 'ct-balance mb-3 ' + (ok ? 'ok' : 'bad')).html(
-      '<span>Andinasoft <strong>' + money(l.andina) + '</strong></span><span>Contabilidad <strong>' + money(l.contable) + '</strong></span>' +
-      '<span>Diferencia <strong>' + money(l.diferencia) + '</strong></span>' +
-      (ok ? '<span class="ct-ok"><i class="fas fa-check-circle mr-1"></i>Cuadra</span>' : '<span class="ct-bad"><i class="fas fa-times-circle mr-1"></i>No cuadra</span>'));
-    // Observación y alertas en una sola lista: primero lo que explica la diferencia, luego las alertas.
-    $('#m-obs').hide();
-    $('#m-alertas').html((l.observacion ? '<li><i class="fas fa-search text-muted" aria-hidden="true"></i><span>' + esc(l.observacion) + '</span></li>' : '') +
-      l.alertas.map(function (a) { return '<li><i class="fas fa-exclamation-triangle text-warning" aria-hidden="true"></i><span>' + esc(a.texto) + '</span></li>'; }).join(''));
+    pintarEstado(l);
     var s = l.sugerencia || {}, sh = '';
     if (s.traslados && s.traslados.length) {
       sh = '<div class="ct-sub-h">Traslado sugerido</div><table class="table table-sm table-bordered mb-0" style="max-width:640px"><tbody>' +
@@ -1193,9 +1212,11 @@
     $('#m-rev input').prop('checked', false).parent().removeClass('active');
     $('#m-rev input[value="' + rev + '"]').prop('checked', true).parent().addClass('active');
     $('#m-nota').val(borrador ? borrador.nota : (l.nota || ''));
+    $('#m-just-valor').val(borrador ? borrador.just : (l.justificado_valor !== '' ? Number(l.justificado_valor).toFixed(2) : Number(l.diferencia).toFixed(2)));
+    mostrarJustificacion();
     $('#m-revby').text(l.revisado_por ? 'Última revisión: ' + l.revisado_por + ' · ' + l.revisado_en : '');
     // Cerrada: solo lectura, pero se puede seguir navegando entre terceros.
-    $('#m-rev input, #m-nota, #m-save').prop('disabled', CERRADA);
+    $('#m-rev input, #m-nota, #m-save, #m-just-valor').prop('disabled', CERRADA);
     $('#m-next').prop('disabled', false).text(CERRADA ? 'Siguiente' : 'Guardar y siguiente');
     actualizarSecciones(l);  // al final: ya están pintadas la sugerencia y la del NIT con DV
     $('#m-linea').modal('show');
@@ -1521,7 +1542,7 @@
   function actualizarSecciones(l) {
     var hay = !!(l.observacion || (l.alertas || []).length || $('#m-sug').html() || sinDv(l.identificacion));
     $('#m-sec-hallazgos').toggle(hay);
-    $('#m-hallazgos-h').text(l.estado === 'cuadrado' ? 'Observaciones' : 'Por qué no cuadra');
+    $('#m-hallazgos-h').text(l.estado === 'cuadrado' || l.estado === 'justificado' ? 'Observaciones' : 'Por qué no cuadra');
     $('#m-sec-acciones').toggle(!CERRADA);
     var na = (l.ajustes || []).length, nf = (l.facturas || []).length, nc = (l.correcciones || []).length;
     var pend = (l.ajustes || []).filter(function (a) { return !a.anulado && a.journal_estado === 'pendiente'; }).length +
@@ -2189,22 +2210,30 @@
   function revisionSucia() {
     if (!actual || CERRADA) return false;
     var rev = $('#m-rev input:checked').val() || actual.revision;
-    return rev !== actual.revision || $('#m-nota').val() !== (actual.nota || '');
+    var just = rev === 'justificado' && (actual.justificado_valor === '' || Number($('#m-just-valor').val()) !== Number(actual.justificado_valor));
+    return rev !== actual.revision || $('#m-nota').val() !== (actual.nota || '') || just;
   }
   var guardando = false;
   function guardar(despues) {
     var l = actual;  // el tercero de esta revisión, aunque la ficha cambie mientras responde el servidor
     if (!l || CERRADA || !revisionSucia()) { despues && despues(); return; }
     if (guardando) return;  // doble Ctrl+Enter o doble clic
+    var rev = $('#m-rev input:checked').val() || l.revision, nota = $('#m-nota').val();
+    if (rev === 'justificado' && !nota.trim()) {
+      alert('Para marcarlo como «Cuadra con justificación» escribe la explicación en la nota.');
+      $('#m-nota').focus(); return;
+    }
     guardando = true;
     $('#m-save, #m-next, #m-prev').prop('disabled', true);
-    var rev = $('#m-rev input:checked').val() || l.revision, nota = $('#m-nota').val();
     $.ajax({ url: URL_REV.replace('__ID__', l.id), method: 'POST', contentType: 'application/json',
-      headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify({ revision: rev, nota: nota }) })
+      headers: { 'X-CSRFToken': CSRF }, data: JSON.stringify({ revision: rev, nota: nota, justificado_valor: rev === 'justificado' ? $('#m-just-valor').val() : '' }) })
       .always(function () { guardando = false; $('#m-save, #m-next, #m-prev').prop('disabled', false); $('#m-save').prop('disabled', CERRADA); })
       .done(function (r) {
-        var x = r.linea; Object.assign(l, { revision: x.revision, nota: x.nota, revisado_por: x.revisado_por, revisado_en: x.revisado_en });
-        l._texto = l._texto + ' ' + (x.nota || '').toLowerCase();
+        var x = r.linea;
+        Object.assign(l, { revision: x.revision, nota: x.nota, revisado_por: x.revisado_por, revisado_en: x.revisado_en,
+                           justificado_valor: x.justificado_valor, estado: x.estado, alertas: x.alertas });
+        preparar(l);
+        if (actual === l) { pintarEstado(l); actualizarSecciones(l); }  // el estado puede cambiar al justificar
         tabla.row('#l' + l.id).invalidate('data');
         adjSucio = true;
         refrescarConteos();

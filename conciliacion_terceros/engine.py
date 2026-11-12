@@ -244,10 +244,11 @@ def proyectos_conciliables():
     return out
 
 
-def marcar_novaciones(negocios):
+def marcar_novaciones(negocios, incluidos=None):
     """Un negocio desistido con saldo es una novación cuando su nota de desistimiento tiene el mismo valor que un recibo
     que entró por novación (forma de pago NOVACION…) a otro negocio del mismo titular. Lo que le quedó no se devolvió:
-    pasa a contar (situación «novada»). Lo trasladado ya está en el negocio destino."""
+    pasa a contar (situación «novada»). Lo trasladado ya está en el negocio destino.
+    `incluidos`: proyectos de la conciliación; si hay varios destinos posibles se prefiere uno de ellos."""
     por_titular = defaultdict(list)
     for n in negocios:
         if n.get('recibido_novacion'):
@@ -257,12 +258,14 @@ def marcar_novaciones(negocios):
         if n['situacion'] != SIT_DESISTIDA or n['total'] <= 0 or not n.get('notas_negativas'):
             continue
         notas = [Decimal(v) for v in n['notas_negativas']]
-        destino = next((m for t in n['titulares'] for m in por_titular.get(t, [])
-                        if m is not n and any(abs(Decimal(v) - x) <= 1 for v in m['recibido_novacion'] for x in notas)), None)
-        if destino is None:
+        candidatos = [m for t in n['titulares'] for m in por_titular.get(t, [])
+                      if m is not n and any(abs(Decimal(v) - x) <= 1 for v in m['recibido_novacion'] for x in notas)]
+        if not candidatos:
             continue
+        destino = next((m for m in candidatos if incluidos is None or m['proyecto'] in incluidos), candidatos[0])
         n['situacion'] = SIT_NOVADA
         n['novada_a'] = f'{destino["proyecto"]} {destino["ref"]}'
+        n['novada_a_proyecto'] = destino['proyecto']
         # Lo que queda se reparte entre capital e intereses sin pasarse del total (el detalle puede no cuadrar con los recibos).
         cap = min(max(n['capital'], ZERO), n['total'])
         n['capital'], n['interes_cte'], n['interes_mora'] = cap, n['total'] - cap, ZERO
@@ -272,16 +275,26 @@ def marcar_novaciones(negocios):
 def _negocios(conciliacion, usar_cache):
     """Foto de Andinasoft al corte. Se cachea para que registrar ajustes no vuelva a leer todos los proyectos."""
     excluidos = sorted(conciliacion.proyectos_excluidos or [])
-    key = f'conciliacion_terceros:negocios:v2:{conciliacion.pk}:{conciliacion.fecha_corte}:{"|".join(excluidos)}'
+    key = f'conciliacion_terceros:negocios:v3:{conciliacion.pk}:{conciliacion.fecha_corte}:{"|".join(excluidos)}'
     if usar_cache:
         hit = cache.get(key)
         if hit is not None:
             return hit
+    # Los proyectos excluidos también se leen, pero solo para encontrar el origen de una novación hacia un proyecto
+    # incluido: de ellos entra únicamente ese negocio desistido (con lo que le quedó). El resto no aparece.
+    todos = proyectos_conciliables()
+    incluidos = {p for p in todos if p not in excluidos}
+    leidos = []
+    for p in todos:
+        leidos.extend(snapshot_proyecto(p, conciliacion.fecha_corte))
+    marcar_novaciones(leidos, incluidos)
     negocios = []
-    for p in proyectos_conciliables():
-        if p not in excluidos:
-            negocios.extend(snapshot_proyecto(p, conciliacion.fecha_corte))
-    marcar_novaciones(negocios)
+    for n in leidos:
+        if n['proyecto'] in incluidos:
+            negocios.append(n)
+        elif n['situacion'] == SIT_NOVADA and n.get('novada_a_proyecto') in incluidos:
+            n['solo_por_novacion'] = True
+            negocios.append(n)
     cache.set(key, negocios, 60 * 60)
     return negocios
 
@@ -416,6 +429,7 @@ def calcular(conciliacion, usar_cache=False):
                 'no_radicado': str(n['no_radicado']), 'pagadores': n['pagadores'], 'cesiones': n['cesiones'],
                 'escritura': escrituras.get((n['proyecto'], str(n['ref']))),
                 'novada_a': n.get('novada_a', ''),
+                'solo_por_novacion': bool(n.get('solo_por_novacion')),
             })
         for fac in facturas.get(ident, []):
             # Lo facturado ahora más los intereses que ya se habían facturado antes de la conciliación.
@@ -447,14 +461,7 @@ def calcular(conciliacion, usar_cache=False):
             negocios=lado_a, alertas=[], sugerencia={},
             cuentas=[dict(c, saldo=str(c['saldo']), saldo_archivo=str(c['saldo_archivo']), ajustes=str(c['ajustes'])) for c in lado_c],
         )
-        if abs(dif) <= tol:
-            l.estado = ConciliacionLinea.ESTADO_CUADRADO
-        elif esperado == 0:
-            l.estado = ConciliacionLinea.ESTADO_SOLO_CONTABLE
-        elif saldo_c == 0:
-            l.estado = ConciliacionLinea.ESTADO_SOLO_ANDINA
-        else:
-            l.estado = ConciliacionLinea.ESTADO_DIFERENCIA
+        l.estado = estado_base(l, tol)
         _observaciones(l, refs, tol, corte, pagador_de.get(ident, []))
         lineas[ident] = l
 
@@ -501,6 +508,37 @@ def _escrituraciones(negocios):
     except Exception:
         logger.exception('No se pudieron leer los pasos de escrituración')
     return out
+
+
+def estado_base(l, tol):
+    """Estado según los saldos, sin tener en cuenta la revisión."""
+    if abs(l.diferencia) <= tol:
+        return ConciliacionLinea.ESTADO_CUADRADO
+    if l.saldo_andina == 0:
+        return ConciliacionLinea.ESTADO_SOLO_CONTABLE
+    if l.saldo_contable == 0:
+        return ConciliacionLinea.ESTADO_SOLO_ANDINA
+    return ConciliacionLinea.ESTADO_DIFERENCIA
+
+
+ALERTA_JUSTIFICACION = 'justificacion_desactualizada'
+
+
+def aplicar_justificacion(l, tol):
+    """Revisión «justificado»: la línea cuadra con justificación solo si la diferencia sigue siendo la aceptada.
+    Si cambió (archivo nuevo, traslado, factura…), vuelve a su estado con un aviso. Devuelve el estado."""
+    l.alertas = [a for a in (l.alertas or []) if a.get('codigo') != ALERTA_JUSTIFICACION]
+    base = estado_base(l, tol)
+    l.estado = base
+    if (l.revision == ConciliacionLinea.REVISION_JUSTIFICADO and l.justificado_valor is not None
+            and base != ConciliacionLinea.ESTADO_CUADRADO):
+        if abs(l.diferencia - l.justificado_valor) <= tol:
+            l.estado = ConciliacionLinea.ESTADO_JUSTIFICADO
+        else:
+            l.alertas.append(_alerta(ALERTA_JUSTIFICACION,
+                                     f'La justificación cubre {_fmt(l.justificado_valor)} pero la diferencia es {_fmt(l.diferencia)}: '
+                                     f'quedan {_fmt(l.diferencia - l.justificado_valor)} sin explicar (o la diferencia cambió desde que se justificó).'))
+    return l.estado
 
 
 def _observaciones(l, refs, tol, corte, pagador_de):
@@ -696,6 +734,7 @@ def ejecutar(conciliacion, usar_cache=False):
     from conciliacion_terceros.models import Conciliacion
 
     balances, lineas, catalogo = calcular(conciliacion, usar_cache=usar_cache)
+    tol = Decimal(conciliacion.tolerancia)
     _, alias_a = alias_identificaciones()
     fuentes = list(conciliacion.fuentes.all())
     with transaction.atomic():
@@ -709,6 +748,7 @@ def ejecutar(conciliacion, usar_cache=False):
             if e is not None:
                 l.pk = e.pk
                 l.revision, l.nota, l.revisado_por_id, l.revisado_en = e.revision, e.nota, e.revisado_por_id, e.revisado_en
+                l.justificado_valor = e.justificado_valor
             # Id corregido: la línea del Id viejo desaparece y su revisión pasa a la del nuevo (las notas se juntan).
             for x, y in alias_a.items():
                 p = existentes.get(x)
@@ -718,15 +758,17 @@ def ejecutar(conciliacion, usar_cache=False):
                     continue
                 if l.revision == ConciliacionLinea.REVISION_PENDIENTE:
                     l.revision, l.revisado_por_id, l.revisado_en = p.revision, p.revisado_por_id, p.revisado_en
+                    l.justificado_valor = p.justificado_valor
                 if p.nota:
                     l.nota = (l.nota + '\n' if l.nota else '') + f'[Id anterior {x}] {p.nota}'
                 if e is not None:
                     heredan.append(l)
+            aplicar_justificacion(l, tol)
             (actualizar if e is not None else crear).append(l)
         conciliacion.lineas.exclude(identificacion__in=idents).delete()
         ConciliacionLinea.objects.bulk_update(actualizar, CAMPOS_CALCULADOS, batch_size=300)
         if heredan:
-            ConciliacionLinea.objects.bulk_update(heredan, ['revision', 'nota', 'revisado_por', 'revisado_en'])
+            ConciliacionLinea.objects.bulk_update(heredan, ['revision', 'nota', 'revisado_por', 'revisado_en', 'justificado_valor'])
         ConciliacionLinea.objects.bulk_create(crear, batch_size=500)
         conciliacion.resumen = dict(
             _resumen(lineas, balances, fuentes), calculado_en=timezone.now().isoformat(),

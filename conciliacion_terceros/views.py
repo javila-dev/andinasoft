@@ -350,6 +350,7 @@ def _linea_json(l, ajustes=None, correcciones=None, facturas=None):
         'negocios': l.negocios, 'cuentas': l.cuentas, 'alertas': l.alertas,
         'observacion': l.observacion, 'sugerencia': l.sugerencia,
         'revision': l.revision, 'nota': l.nota,
+        'justificado_valor': str(l.justificado_valor) if l.justificado_valor is not None else '',
         'revisado_por': l.revisado_por.get_username() if l.revisado_por else '',
         'revisado_en': l.revisado_en.strftime('%d/%m/%Y %H:%M') if l.revisado_en else '',
     }
@@ -402,7 +403,7 @@ def detalle(request, pk):
         'proyectos_todos': [(p, p not in (conc.proyectos_excluidos or [])) for p in engine.proyectos_conciliables()],
         'estados': ConciliacionLinea.ESTADO_CHOICES,
         'revisiones': ConciliacionLinea.REVISION_CHOICES,
-        'resultados_adj': [('cuadra', 'Cuadra'), ('reparto', 'Cuadra en total, no por titular'), ('diferencia', 'Con diferencia'), ('sin_contable', 'Sin saldo en contabilidad'),
+        'resultados_adj': [('cuadra', 'Cuadra'), ('justificado', 'Cuadra con justificación'), ('reparto', 'Cuadra en total, no por titular'), ('diferencia', 'Con diferencia'), ('sin_contable', 'Sin saldo en contabilidad'),
                            ('no_cuenta', 'Desistido o anulado con saldo')],
     })
 
@@ -422,11 +423,26 @@ def linea_revision(request, pk, linea_id):
     revision = data.get('revision', linea.revision)
     if revision not in dict(ConciliacionLinea.REVISION_CHOICES):
         return JsonResponse({'detail': 'Revisión inválida.'}, status=400)
+    nota = (data.get('nota', linea.nota) or '')[:5000]
+    justificado = None
+    if revision == ConciliacionLinea.REVISION_JUSTIFICADO:
+        # Se acepta una diferencia por un valor exacto y con explicación; si la diferencia cambia, deja de valer.
+        if not nota.strip():
+            return JsonResponse({'detail': 'Para marcarlo como «Cuadra con justificación» escribe la explicación en la nota.'}, status=400)
+        try:
+            justificado = Decimal(str(data.get('justificado_valor') if data.get('justificado_valor') not in (None, '')
+                                      else linea.diferencia)).quantize(Decimal('0.01'))
+        except (InvalidOperation, TypeError):
+            return JsonResponse({'detail': 'El valor justificado no es válido.'}, status=400)
+        if abs(linea.diferencia) <= Decimal(conc.tolerancia):
+            return JsonResponse({'detail': 'Esta línea ya cuadra: no hay diferencia que justificar.'}, status=400)
     linea.revision = revision
-    linea.nota = (data.get('nota', linea.nota) or '')[:5000]
+    linea.nota = nota
+    linea.justificado_valor = justificado
     linea.revisado_por = request.user
     linea.revisado_en = timezone.now()
-    linea.save(update_fields=['revision', 'nota', 'revisado_por', 'revisado_en'])
+    engine.aplicar_justificacion(linea, Decimal(conc.tolerancia))
+    linea.save(update_fields=['revision', 'nota', 'justificado_valor', 'estado', 'alertas', 'revisado_por', 'revisado_en'])
     return JsonResponse({'ok': True, 'linea': _linea_json(linea, _ajustes_por_tercero(conc, [linea.identificacion]))})
 
 
