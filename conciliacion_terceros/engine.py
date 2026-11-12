@@ -14,7 +14,7 @@ from decimal import ROUND_DOWN, Decimal
 
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from andinasoft.models import clientes
@@ -40,10 +40,14 @@ SIT_DESISTIDA = 'desistida'
 SIT_ESCRITURADA = 'escriturada'
 SIT_VENTA_PENDIENTE = 'venta_pendiente'
 SIT_VENTA_ANULADA = 'venta_anulada'
+# Desistida porque el cliente se pasó a otro negocio (novación). Lo que no se trasladó (normalmente los intereses)
+# no se devolvió: sigue siendo del cliente y cuenta hasta que se facture.
+SIT_NOVADA = 'novada'
 
 SIT_LABEL = {
     SIT_ACTIVA: 'Activa',
     SIT_DESISTIDA: 'Desistida',
+    SIT_NOVADA: 'Desistida por novación',
     SIT_ESCRITURADA: 'Escriturada',
     SIT_VENTA_PENDIENTE: 'Venta sin adjudicar',
     SIT_VENTA_ANULADA: 'Venta anulada',
@@ -103,6 +107,14 @@ def snapshot_proyecto(proyecto, corte):
     for adj, tercero in Recaudos_general.objects.using(proyecto).filter(fecha__lte=corte).values_list('idadjudicacion', 'idtercero').distinct():
         if adj and tercero:
             pagadores[adj].add(norm_ident(tercero))
+    # Para reconocer novaciones: notas negativas (desistimiento) y recibos que entraron por novación.
+    notas_negativas, recibido_novacion = defaultdict(list), defaultdict(list)
+    for adj, valor, forma in Recaudos_general.objects.using(proyecto).filter(fecha__lte=corte).filter(
+            Q(valor__lt=0) | Q(formapago__istartswith='NOVACION', valor__gt=0)).values_list('idadjudicacion', 'valor', 'formapago'):
+        if valor < 0:
+            notas_negativas[adj].append(str(_q(-valor)))
+        else:
+            recibido_novacion[adj].append(str(_q(valor)))
     escrituras = {
         p['idadjudicacion']: p['fechaescritura']
         for p in Promesas.objects.using(proyecto).filter(escriturado=True).values('idadjudicacion', 'fechaescritura')
@@ -145,6 +157,8 @@ def snapshot_proyecto(proyecto, corte):
             'no_radicado': ZERO,
             'pagadores': sorted(pagadores.get(pk, set()) - set(tits)),
             'cesiones': sorted(d.isoformat() for d in cesiones.get(pk, []) if d),
+            'notas_negativas': notas_negativas.get(pk, []) if sit == SIT_DESISTIDA else [],
+            'recibido_novacion': recibido_novacion.get(pk, []),
         })
 
     no_radicado = defaultdict(lambda: ZERO)
@@ -230,10 +244,35 @@ def proyectos_conciliables():
     return out
 
 
+def marcar_novaciones(negocios):
+    """Un negocio desistido con saldo es una novación cuando su nota de desistimiento tiene el mismo valor que un recibo
+    que entró por novación (forma de pago NOVACION…) a otro negocio del mismo titular. Lo que le quedó no se devolvió:
+    pasa a contar (situación «novada»). Lo trasladado ya está en el negocio destino."""
+    por_titular = defaultdict(list)
+    for n in negocios:
+        if n.get('recibido_novacion'):
+            for t in n['titulares']:
+                por_titular[t].append(n)
+    for n in negocios:
+        if n['situacion'] != SIT_DESISTIDA or n['total'] <= 0 or not n.get('notas_negativas'):
+            continue
+        notas = [Decimal(v) for v in n['notas_negativas']]
+        destino = next((m for t in n['titulares'] for m in por_titular.get(t, [])
+                        if m is not n and any(abs(Decimal(v) - x) <= 1 for v in m['recibido_novacion'] for x in notas)), None)
+        if destino is None:
+            continue
+        n['situacion'] = SIT_NOVADA
+        n['novada_a'] = f'{destino["proyecto"]} {destino["ref"]}'
+        # Lo que queda se reparte entre capital e intereses sin pasarse del total (el detalle puede no cuadrar con los recibos).
+        cap = min(max(n['capital'], ZERO), n['total'])
+        n['capital'], n['interes_cte'], n['interes_mora'] = cap, n['total'] - cap, ZERO
+    return negocios
+
+
 def _negocios(conciliacion, usar_cache):
     """Foto de Andinasoft al corte. Se cachea para que registrar ajustes no vuelva a leer todos los proyectos."""
     excluidos = sorted(conciliacion.proyectos_excluidos or [])
-    key = f'conciliacion_terceros:negocios:{conciliacion.pk}:{conciliacion.fecha_corte}:{"|".join(excluidos)}'
+    key = f'conciliacion_terceros:negocios:v2:{conciliacion.pk}:{conciliacion.fecha_corte}:{"|".join(excluidos)}'
     if usar_cache:
         hit = cache.get(key)
         if hit is not None:
@@ -242,6 +281,7 @@ def _negocios(conciliacion, usar_cache):
     for p in proyectos_conciliables():
         if p not in excluidos:
             negocios.extend(snapshot_proyecto(p, conciliacion.fecha_corte))
+    marcar_novaciones(negocios)
     cache.set(key, negocios, 60 * 60)
     return negocios
 
@@ -312,7 +352,8 @@ def calcular(conciliacion, usar_cache=False):
     for a in conciliacion.ajustes.filter(anulado=False, journal_estado__in=AjusteConciliacion.ESTADOS_APLICADOS):
         if a.origen_empresa_id in confirmadas and a.pk not in inc.get(a.origen_empresa_id, incl.VACIO)[0]:
             entrada(a.origen_identificacion, a.origen_empresa_id, a.origen_cuenta, a.origen_cuenta_nombre)['ajustes'] -= a.valor
-        if a.destino_empresa_id in confirmadas and a.pk not in inc.get(a.destino_empresa_id, incl.VACIO)[0]:
+        # Un cruce con otra cuenta solo baja el origen: la otra cuenta no hace parte de la conciliación.
+        if not a.es_cruce and a.destino_empresa_id in confirmadas and a.pk not in inc.get(a.destino_empresa_id, incl.VACIO)[0]:
             entrada(a.destino_identificacion, a.destino_empresa_id, a.destino_cuenta, a.destino_cuenta_nombre)['ajustes'] += a.valor
 
     # Facturas: cierran el anticipo. Si el cruce no está en el archivo contable, se resta de la cuenta de anticipos.
@@ -374,6 +415,7 @@ def calcular(conciliacion, usar_cache=False):
                 'capital': str(p['capital'][ident]), 'intereses': str(p['intereses'][ident]),
                 'no_radicado': str(n['no_radicado']), 'pagadores': n['pagadores'], 'cesiones': n['cesiones'],
                 'escritura': escrituras.get((n['proyecto'], str(n['ref']))),
+                'novada_a': n.get('novada_a', ''),
             })
         for fac in facturas.get(ident, []):
             # Lo facturado ahora más los intereses que ya se habían facturado antes de la conciliación.

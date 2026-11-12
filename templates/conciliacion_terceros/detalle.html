@@ -33,6 +33,11 @@
   .ct-esc > summary { cursor: pointer; color: #2d4a42; }
   .ct-esc-paso { color: #66727d; white-space: nowrap; padding-left: 4px; }
   .ct-esc-paso.hecho { color: #2e7d32; }
+  .ct-esc-pasos { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; padding: 0; margin: 0; font-size: 12.5px; }
+  .ct-esc-pasos li { color: #66727d; white-space: nowrap; }
+  .ct-esc-pasos li.hecho { color: #2e7d32; }
+  .ct-esc-pasos li.actual { color: #2d4a42; font-weight: 600; }
+  .ct-esc-pasos small { color: #66727d; font-weight: normal; }
   /* Accesibilidad: el amarillo de Bootstrap no se lee sobre blanco (≈1.6:1); se usa un ámbar oscuro. */
   .text-warning { color: #8a5a00 !important; }
   #tabla tbody tr:focus, #tabla-adj tbody tr:focus, tr[tabindex]:focus, .ct-res-busq .item:focus { outline: 2px solid #2d4a42; outline-offset: -2px; }
@@ -504,6 +509,7 @@
             <div class="ct-elige mb-2">
               <button type="button" class="btn btn-sm btn-outline-secondary ct-aj-open" data-modo="cuenta"><i class="fas fa-random mr-1"></i>Entre sus propias cuentas</button>
               <button type="button" class="btn btn-sm btn-outline-secondary ct-aj-open" data-modo="tercero"><i class="fas fa-user-friends mr-1"></i>Con otro tercero</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary ct-aj-open" data-modo="cruce" title="Cruzar el saldo contra una cuenta que no se concilia, p. ej. anticipos contra clientes (13)"><i class="fas fa-exchange-alt mr-1"></i>Cruzar con otra cuenta</button>
             </div>
             <div id="m-aj" class="ct-aj" style="display:none">
               <button type="button" class="d-none" id="m-aj-x"></button>
@@ -518,7 +524,7 @@
               </div>
               <div class="table-responsive">
                 <table class="table table-sm mb-1">
-                  <thead><tr><th id="m-aj-col-t">Tercero</th><th id="m-aj-col-s">Cómo queda el otro tercero</th><th>Sale de la cuenta</th><th>Entra a la cuenta</th><th style="width:170px">Valor</th><th></th><th></th></tr></thead>
+                  <thead><tr><th id="m-aj-col-t">Tercero</th><th id="m-aj-col-s">Cómo queda el otro tercero</th><th>Sale de la cuenta</th><th id="m-aj-col-d">Entra a la cuenta</th><th style="width:170px">Valor</th><th></th><th></th></tr></thead>
                   <tbody id="m-aj-filas"></tbody>
                 </table>
               </div>
@@ -672,6 +678,10 @@
       <div class="modal-body ct-ficha ct-adjm">
         <div id="ma-balance" class="ct-balance mb-2"></div>
         <p class="ct-sec-ayuda mb-3" id="ma-ayuda"></p>
+        <section class="mb-3" id="ma-esc-wrap">
+          <h6 class="ct-sec-h">Escrituración <small class="text-muted font-weight-normal" id="ma-esc-estado"></small></h6>
+          <ol class="ct-esc-pasos" id="ma-esc"></ol>
+        </section>
         <section>
           <h6 class="ct-sec-h">Titulares</h6>
           <p class="ct-sec-ayuda">Haz clic en un titular para abrir su ficha (traslados, factura, corrección de Id y revisión). Al cerrarla vuelves a este negocio.</p>
@@ -885,6 +895,7 @@
     var nota = [];
     if (n.situacion === 'escriturada') nota.push('Escriturada');
     if (n.situacion === 'venta_pendiente' || n.situacion === 'venta_anulada') nota.push(n.situacion_label);
+    if (n.situacion === 'novada') nota.push('Novación a ' + n.novada_a + ': lo que quedó sigue contando');
     if (n.fecha_desistimiento) nota.push('Desistió ' + n.fecha_desistimiento);
     if (!n.suma) nota.push('no suma');
     return esc(n.estado || '—') + (nota.length ? '<br><small class="text-muted">' + esc(nota.join(' · ')) + '</small>' : '');
@@ -955,6 +966,7 @@
     $('#ma-titulo').text(a.proyecto + ' · ' + a.ref);
     var sub = [n.estado || '—', n.origen || ''];
     if (n.situacion === 'escriturada') sub.push('Escriturada');
+    if (n.situacion === 'novada') sub.push('Desistida por novación a ' + n.novada_a);
     if (n.fecha_desistimiento) sub.push('Desistió ' + n.fecha_desistimiento);
     if (!a.suma) sub.push('No suma: Andinasoft espera $0');
     $('#ma-sub').text(sub.filter(Boolean).join(' · '));
@@ -965,9 +977,12 @@
       '<span class="' + (ok ? 'ct-ok' : 'ct-bad') + '"><span class="ct-dot st-' + a.resultado + '"></span>' + esc(RESULTADOS[a.resultado]) + '</span>');
     var ayuda = a.suma ? 'Recaudado del negocio ' + fmt.format(Number(n.total_negocio)) + ', dividido en partes iguales entre ' + a.n_titulares + ' titular(es).'
                        : 'El negocio no suma (desistido o anulado): ningún titular debería tener saldo por él.';
+    if (n.situacion === 'novada') ayuda = 'El cliente se pasó a ' + n.novada_a + ' por novación. Lo trasladado ya cuenta allá; lo que quedó aquí (' +
+      fmt.format(Number(n.total_negocio)) + ', normalmente intereses) no se devolvió, así que sigue siendo del cliente hasta que se facture.';
     if (a.resultado === 'reparto') ayuda += ' El total cuadra, pero el saldo contable no está repartido entre los titulares como en Andinasoft: antes de facturar, trasládalo desde la ficha del titular que tiene de más.';
     if (a.facturado) ayuda += ' Ya se facturaron ' + fmt.format(a.facturado) + ', que se descuentan de lo que espera Andinasoft.';
     $('#ma-ayuda').text(ayuda);
+    pintarEscrituraAdj(a);
     var orden = n.titulares.filter(function (t) { return a.filas[t]; });
     Object.keys(a.filas).forEach(function (t) { if (orden.indexOf(t) < 0) orden.push(t); });
     $('#ma-filas').html(orden.map(function (t) {
@@ -997,6 +1012,28 @@
     $('#ma-extra').html(extra.map(function (x) { return '<li><i class="fas fa-exclamation-triangle text-warning" aria-hidden="true"></i><span>' + esc(x) + '</span></li>'; }).join(''));
     $('#ma-extra-wrap').toggle(!!extra.length);
     $('#m-adjm').modal('show');
+  }
+  // Pasos de escrituración del lote (módulo de promesas), con su fecha, siempre visibles en el modal del negocio.
+  function pintarEscrituraAdj(a) {
+    var n = a.n, e = n.escritura;
+    var esAdj = String(a.ref || '').toUpperCase().indexOf('ADJ') === 0;
+    $('#ma-esc-wrap').toggle(esAdj || !!e);
+    if (!e) {
+      $('#ma-esc-estado').text('');
+      $('#ma-esc').html('<li>' + ('escritura' in n
+        ? 'Este ADJ no tiene registro en el módulo de escrituración.'
+        : 'La conciliación se calculó antes de mostrar la escrituración: dale Recalcular para verla.') + '</li>');
+      return;
+    }
+    var hechos = e.pasos.filter(function (p) { return p.hecho; }).length;
+    $('#ma-esc-estado').text('· ' + (e.completa ? 'completa' : 'va en ' + e.actual) + ' (' + hechos + ' de ' + e.pasos.length + ')' +
+      (e.fecha_escritura ? ' · escritura del ' + fechaCorta(e.fecha_escritura) : ''));
+    $('#ma-esc').html(e.pasos.map(function (p) {
+      var actual = !e.completa && p.label === e.actual;
+      return '<li class="' + (p.hecho ? 'hecho' : (actual ? 'actual' : '')) + '"><i class="' + (p.hecho ? 'fas fa-check-circle' : 'far fa-circle') + '" aria-hidden="true"></i> ' +
+        esc(p.label) + (p.fecha ? ' <small>' + fechaCorta(p.fecha) + '</small>' : (p.hecho ? ' <small>sin fecha</small>' : '')) +
+        '<span class="sr-only">' + (p.hecho ? ' (hecho)' : ' (pendiente)') + '</span></li>';
+    }).join(''));
   }
   function moverAdj(delta) {
     if (!tablaAdj || !adjActual) return;
@@ -1102,6 +1139,7 @@
       var nota = [];
       if (n.situacion === 'escriturada') nota.push('Escriturada al corte');
       if (n.situacion === 'venta_pendiente' || n.situacion === 'venta_anulada') nota.push(n.situacion_label);
+      if (n.situacion === 'novada') nota.push('Desistida por novación a ' + n.novada_a + ': lo que quedó sigue siendo del cliente');
       if (n.fecha_desistimiento) nota.push('Desistió ' + n.fecha_desistimiento);
       if (!n.suma) nota.push('no suma');
       return '<tr class="' + (n.suma ? '' : 'ct-nosuma') + '"><td>' + esc(n.proyecto) + ' · <strong>' + esc(n.ref) + '</strong>' +
@@ -1214,9 +1252,14 @@
       ? '<td><strong>' + esc(t.ident) + '</strong> ' + esc(t.nombre) + (t.estado ? '<br><small><span class="ct-dot st-' + t.estado + '"></span>' + esc(ESTADOS[t.estado]) + '</small>' : '<br><small class="text-muted">Sin línea en la conciliación</small>') + '</td>'
       : '<td class="text-muted small">Mismo tercero</td>';
     var celS = '<td class="aj-saldo"' + (aj.modo === 'tercero' ? '' : ' style="display:none"') + '></td>';
+    // Cruce: la otra cuenta se escribe (no hace parte de la conciliación) y se valida contra Alegra al registrar.
+    var celD = aj.modo === 'cruce'
+      ? '<td><input type="text" class="form-control form-control-sm aj-destino-libre" inputmode="numeric" maxlength="20" placeholder="Ej. 13050501" aria-label="Cuenta contra la que se cruza el saldo">' +
+        '<div class="aj-d-info aj-saldo mt-1"><span class="text-muted">No se concilia: solo baja el saldo de la cuenta de origen</span></div></td>'
+      : '<td><select class="form-control form-control-sm aj-destino" aria-label="Cuenta a la que entra el saldo">' + opcionesDestino(selD, aj.modo === 'cuenta' ? selO : null, selO) + '</select><div class="aj-d-info aj-saldo mt-1"></div></td>';
     var $tr = $('<tr>' + celT + celS +
       '<td><select class="form-control form-control-sm aj-origen" aria-label="Cuenta de la que sale el saldo">' + opcionesOrigen(origenCuentas, selO) + '</select><div class="aj-o-info aj-saldo mt-1"></div></td>' +
-      '<td><select class="form-control form-control-sm aj-destino" aria-label="Cuenta a la que entra el saldo">' + opcionesDestino(selD, aj.modo === 'cuenta' ? selO : null, selO) + '</select><div class="aj-d-info aj-saldo mt-1"></div></td>' +
+      celD +
       '<td><div class="input-group input-group-sm"><input type="number" min="0" step="0.01" class="form-control aj-valor" aria-label="Valor a trasladar"><div class="input-group-append"><button type="button" class="btn btn-outline-secondary aj-todo" title="Todo el saldo">Todo</button></div></div></td>' +
       '<td class="aj-emp small"></td><td><button type="button" class="btn btn-sm btn-link text-danger aj-quitar" title="Quitar fila"><i class="fas fa-times"></i></button></td></tr>');
     $tr.data('tercero', t);
@@ -1224,10 +1267,15 @@
     actualizarFila($tr);
   }
   function actualizarFila($tr) {
-    var o = $tr.find('.aj-origen').val() || '', d = $tr.find('.aj-destino').val() || '';
-    var excluir = aj.modo === 'cuenta' ? o : null;
-    $tr.find('.aj-destino').html(opcionesDestino(d === excluir ? '' : d, excluir, o));
-    d = $tr.find('.aj-destino').val() || '';
+    var o = $tr.find('.aj-origen').val() || '', d;
+    if (aj.modo === 'cruce') {
+      d = ($tr.find('.aj-destino-libre').val() || '').trim();
+    } else {
+      d = $tr.find('.aj-destino').val() || '';
+      var excluir = aj.modo === 'cuenta' ? o : null;
+      $tr.find('.aj-destino').html(opcionesDestino(d === excluir ? '' : d, excluir, o));
+      d = $tr.find('.aj-destino').val() || '';
+    }
     var emp = o.split('|')[0];
     $tr.find('.aj-emp').html(o && d ? (EMP_ALEGRA[emp] ? '<span class="ct-tag ct-tag-e" title="Se envía como journal y cuenta cuando Alegra lo confirme">Va a Alegra</span>'
                                                       : '<span class="ct-tag ct-badge-ic" title="Esta empresa no tiene Alegra: queda pendiente hasta que se marque como registrado">Registro a mano</span>') : '');
@@ -1274,7 +1322,8 @@
     }
     $('#m-aj-filas tr').each(function () {
       var $tr = $(this), du = duenos($tr), o = $tr.find('.aj-origen').val(), d = $tr.find('.aj-destino').val();
-      [[o, du.o, '.aj-o-info'], [d, du.d, '.aj-d-info']].forEach(function (x) {
+      // En un cruce la otra cuenta no se concilia: su celda conserva el aviso.
+      [[o, du.o, '.aj-o-info'], [d, du.d, '.aj-d-info']].slice(0, aj.modo === 'cruce' ? 1 : 2).forEach(function (x) {
         if (!x[0]) { $tr.find(x[2]).html(''); return; }
         var antes = saldoCuenta(x[1], x[0]), despues = antes + (mov[x[1].identificacion + '|' + x[0]] || 0);
         var quien = aj.modo === 'tercero' ? (x[1].identificacion === actual.identificacion ? 'Este tercero' : 'Otro tercero') : 'Saldo';
@@ -1284,9 +1333,9 @@
 
     var resumen = '';
     if (t && actual) {
-      var deltaYo = aj.modo === 'tercero' ? -signoOtro * t : 0;
+      var deltaYo = aj.modo === 'tercero' ? -signoOtro * t : (aj.modo === 'cruce' ? -t : 0);
       var dYo = Number(actual.contable) + deltaYo - Number(actual.andina);
-      resumen = 'Total a trasladar: $' + fmt.format(t) + (aj.modo === 'tercero'
+      resumen = (aj.modo === 'cruce' ? 'Total a cruzar: $' : 'Total a trasladar: $') + fmt.format(t) + (aj.modo !== 'cuenta'
         ? ' · Este tercero quedaría con contable $' + fmt.format(Number(actual.contable) + deltaYo) + ' y diferencia $' + fmt.format(dYo) + (Math.abs(dYo) <= TOL ? ' (cuadra)' : '')
         : ' · Entre cuentas: el total contable del tercero no cambia');
     }
@@ -1306,19 +1355,25 @@
     $('#m-aj-dir').toggle(aj.modo === 'tercero');
     $('#m-aj-titulo').text(aj.modo === 'tercero'
       ? 'Elige si este tercero envía o recibe, busca al otro tercero y escribe el valor.'
+      : aj.modo === 'cruce'
+      ? 'Elige la cuenta de la que sale el saldo y escribe la cuenta contra la que se cruza (p. ej. 13050501 clientes). ' +
+        'El comprobante lleva este mismo tercero en las dos líneas; la otra cuenta no se concilia, así que el saldo de este tercero baja.'
       : 'Elige de qué cuenta sale el saldo, a cuál entra y el valor. El total del tercero no cambia.');
     $('#m-aj-col-t').text(aj.modo === 'tercero' ? 'Otro tercero' : 'Tercero');
+    $('#m-aj-col-d').text(aj.modo === 'cruce' ? 'Se cruza contra la cuenta' : 'Entra a la cuenta');
     $('#m-aj-col-s').toggle(aj.modo === 'tercero');
-    $('#m-aj-add').toggle(aj.modo === 'cuenta');
+    $('#m-aj-add').toggle(aj.modo !== 'tercero');
+    $('#m-aj-save').text(aj.modo === 'cruce' ? 'Registrar cruce' : 'Registrar traslado');
     $('#m-aj').show();
-    if (aj.modo === 'cuenta') filaAjuste(null); else $('#m-aj-q').focus();
+    if (aj.modo !== 'tercero') { filaAjuste(null); $('#m-aj-filas tr:first').find(aj.modo === 'cruce' ? '.aj-destino-libre' : '.aj-origen').focus(); }
+    else $('#m-aj-q').focus();
   });
   $('#m-aj').on('change', 'input[name="aj-dir"]', function () {
     aj.dir = this.value;
     $('#m-aj-filas tr').each(function () { var t = $(this).data('tercero'); $(this).remove(); filaAjuste(t); });
   });
   $('#m-aj-add').on('click', function () { filaAjuste(null); });
-  $('#m-aj-filas').on('change', '.aj-origen, .aj-destino', function () { actualizarFila($(this).closest('tr')); });
+  $('#m-aj-filas').on('change', '.aj-origen, .aj-destino, .aj-destino-libre', function () { actualizarFila($(this).closest('tr')); });
   $('#m-aj-filas').on('input', '.aj-valor', totalAjuste);
   $('#m-aj-filas').on('click', '.aj-todo', function () {
     var $tr = $(this).closest('tr'); var s = $tr.find('.aj-origen option:selected').data('saldo');
@@ -1353,6 +1408,12 @@
     $('#m-aj-filas tr').each(function (i) {
       var t = $(this).data('tercero'), o = ($(this).find('.aj-origen').val() || '').split('|'), d = ($(this).find('.aj-destino').val() || '').split('|');
       var v = Number($(this).find('.aj-valor').val() || 0);
+      if (aj.modo === 'cruce') {
+        var cta = ($(this).find('.aj-destino-libre').val() || '').replace(/\s+/g, '');
+        if (!o[1] || !/^\d{4,20}$/.test(cta) || !(v > 0)) { error = 'Fila ' + (i + 1) + ': elige la cuenta de origen, escribe el código de la otra cuenta (solo números) y un valor mayor que cero.'; return false; }
+        movs.push({ cruce: true, origen: actual.identificacion, origen_empresa: o[0], origen_cuenta: o[1], destino_cuenta: cta, valor: v.toFixed(2) });
+        return;
+      }
       if (!o[1] || !d[1] || !(v > 0)) { error = 'Fila ' + (i + 1) + ': completa las cuentas y un valor mayor que cero.'; return false; }
       var origen = actual.identificacion, destino = actual.identificacion;
       if (aj.modo === 'tercero') { if (aj.dir === 'enviar') destino = t.ident; else origen = t.ident; }
@@ -1363,7 +1424,7 @@
     var fecha = $('#m-aj-fecha').val();
     if (!fecha) { alert('Indica la fecha del comprobante.'); return; }
     var $b = $(this).prop('disabled', true).text('Registrando…');
-    var listo = function () { $b.prop('disabled', false).text('Registrar traslado'); };
+    var listo = function () { $b.prop('disabled', false).text(aj.modo === 'cruce' ? 'Registrar cruce' : 'Registrar traslado'); };
     $.ajax({ url: URL_AJ, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
       data: JSON.stringify({ movimientos: movs, nota: $('#m-aj-nota').val(), fecha: fecha }) })
       .done(function (r) {
@@ -2012,7 +2073,7 @@
     }
     $('#m-hist').html('<table class="table table-sm table-bordered ct-hist mb-0"><thead class="thead-light"><tr><th>Registro</th><th>Desde</th><th>Hacia</th><th class="num">Valor</th><th>Tipo</th><th>Nota</th><th>Contabilidad</th><th></th></tr></thead><tbody>' +
       hs.map(function (a) {
-        var sale = a.origen === l.identificacion && a.destino !== l.identificacion;
+        var sale = a.origen === l.identificacion && (a.destino !== l.identificacion || a.tipo === 'cruce');
         var entra = a.destino === l.identificacion && a.origen !== l.identificacion;
         var signo = sale ? -1 : (entra ? 1 : 0);
         var pendiente = !a.anulado && a.journal_estado === 'pendiente';
@@ -2027,9 +2088,10 @@
             '<br><button type="button" class="btn btn-sm btn-link text-danger p-0 aj-anular" data-id="' + a.id + '">Anular</button>';
         }
         return '<tr class="' + (a.anulado ? 'anulado' : '') + '"><td class="text-nowrap">' + esc(a.creado_en) + '<br><small class="text-muted">' + esc(a.creado_por) + '</small></td>' +
-          '<td>' + lado(a.origen, a.origen_empresa, a.origen_cuenta) + '</td><td>' + lado(a.destino, a.destino_empresa, a.destino_cuenta) + '</td>' +
+          '<td>' + lado(a.origen, a.origen_empresa, a.origen_cuenta) + '</td><td>' + lado(a.destino, a.destino_empresa, a.destino_cuenta) +
+          (a.tipo === 'cruce' ? ' ' + esc(a.destino_cuenta_nombre) + '<br><small class="text-muted">No se concilia</small>' : '') + '</td>' +
           '<td class="num">' + (signo ? money(signo * Number(a.valor)) : money(a.valor)) + '</td>' +
-          '<td>' + (a.tipo === 'cuenta' ? 'Entre cuentas' : 'Entre terceros') + (a.misma_empresa ? '' : '<br><span class="ct-tag ct-badge-ic">Entre empresas</span>') + '</td>' +
+          '<td>' + (a.tipo === 'cuenta' ? 'Entre cuentas' : a.tipo === 'cruce' ? 'Cruce con otra cuenta' : 'Entre terceros') + (a.misma_empresa ? '' : '<br><span class="ct-tag ct-badge-ic">Entre empresas</span>') + '</td>' +
           '<td>' + esc(a.nota) + '</td><td class="small">' + estadoAjuste(a) + '</td><td class="acc text-nowrap">' + acciones + '</td></tr>';
       }).join('') + '</tbody></table>');
   }

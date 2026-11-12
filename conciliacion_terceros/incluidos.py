@@ -57,13 +57,14 @@ def movimientos_en_corte(fuente):
         efectos = []
         if a.origen_empresa_id == emp:
             efectos.append((a.origen_identificacion, a.origen_cuenta, -a.valor))
-        if a.destino_empresa_id == emp:
+        if a.destino_empresa_id == emp and not a.es_cruce:  # la cuenta del cruce no se concilia
             efectos.append((a.destino_identificacion, a.destino_cuenta, a.valor))
         quien = (f'{a.origen_identificacion} → {a.destino_identificacion}' if a.origen_identificacion != a.destino_identificacion
                  else a.origen_identificacion)
         out.append({
             'tipo': 'ajuste', 'id': a.pk, 'referencia': a.referencia, 'fecha': a.fecha, 'registrado_en': a.enviado_en or a.created_at,
-            'descripcion': f'Traslado {quien} · {a.origen_cuenta} → {a.destino_cuenta}', 'valor': a.valor,
+            'descripcion': (f'Cruce {quien} · {a.origen_cuenta} contra {a.destino_cuenta}' if a.es_cruce
+                            else f'Traslado {quien} · {a.origen_cuenta} → {a.destino_cuenta}'), 'valor': a.valor,
             'estado': a.get_journal_estado_display() + (f' · {a.journal_ref}' if a.journal_ref else ''), 'efectos': efectos,
         })
     facturas = conc.facturas.filter(empresa_id=emp).exclude(cruce_cuenta='').filter(

@@ -99,9 +99,13 @@ class AjusteConciliacion(models.Model):
     """
     TIPO_CUENTA = 'cuenta'
     TIPO_TERCERO = 'tercero'
+    # Cruce del saldo contra una cuenta que no hace parte de la conciliación (p. ej. anticipos contra clientes 13):
+    # solo baja el origen; la otra cuenta no se concilia.
+    TIPO_CRUCE = 'cruce'
     TIPO_CHOICES = (
         (TIPO_CUENTA, 'Entre cuentas del mismo tercero'),
         (TIPO_TERCERO, 'Entre terceros'),
+        (TIPO_CRUCE, 'Cruce con otra cuenta'),
     )
     JOURNAL_PENDIENTE = 'pendiente'
     JOURNAL_ENVIADO = 'enviado'
@@ -152,6 +156,10 @@ class AjusteConciliacion(models.Model):
     @property
     def aplicado(self):
         return not self.anulado and self.journal_estado in self.ESTADOS_APLICADOS
+
+    @property
+    def es_cruce(self):
+        return self.tipo == self.TIPO_CRUCE
 
     @property
     def via_alegra(self):

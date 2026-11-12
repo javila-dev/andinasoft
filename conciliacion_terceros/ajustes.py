@@ -9,6 +9,10 @@ Ajustes de la conciliación (traslados de saldo contable) llevados a la contabil
 
 El saldo de cada cuenta viene en su naturaleza (crédito positivo en las clases 2, 3 y 4), así que el origen y el
 destino deben tener la misma naturaleza para que el asiento cuadre.
+
+Excepción: el cruce con otra cuenta (tipo «cruce»), p. ej. anticipos 28 contra clientes 13. La otra cuenta no hace
+parte de la conciliación y puede ser de cualquier naturaleza: el origen se debita (si es crédito) y la otra cuenta
+recibe la contrapartida. En la conciliación solo baja el origen.
 """
 import datetime
 import logging
@@ -82,7 +86,9 @@ def payload(a, r):
     entries = []
     for l in lineas_asiento(a):
         otro = a.destino_identificacion if l['lado'] == 'origen' else a.origen_identificacion
-        if otro == l['identificacion']:
+        if a.es_cruce:
+            desc = f'Cruce {a.origen_cuenta} contra {a.destino_cuenta} · conciliación {corte} · {a.referencia}'
+        elif otro == l['identificacion']:
             desc = f'Traslado entre cuentas · conciliación {corte} · {a.referencia}'
         elif l['lado'] == 'origen':
             desc = f'Traslado de saldo a {otro} · conciliación {corte} · {a.referencia}'

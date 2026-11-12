@@ -773,43 +773,71 @@ def ajuste_crear(request, pk):
     for p in conc.ajustes.filter(anulado=False, journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE, origen_identificacion__in=origenes):
         consumido[(p.origen_identificacion, p.origen_empresa_id, p.origen_cuenta)] += p.valor
     empresas_por_id = {e.pk: e for e in empresas.objects.filter(pk__in={str(m.get('origen_empresa')) for m in movimientos})}
+    cuentas_cache = {}
     for i, m in enumerate(movimientos, start=1):
-        origen, destino = norm_ident(m.get('origen')), norm_ident(m.get('destino'))
+        cruce = bool(m.get('cruce'))
+        origen = norm_ident(m.get('origen'))
         ko = (str(m.get('origen_empresa')), str(m.get('origen_cuenta')))
-        kd = (str(m.get('destino_empresa')), str(m.get('destino_cuenta')))
+        if cruce:
+            # Cruce con otra cuenta del mismo tercero y la misma empresa, que no hace parte de la conciliación.
+            destino, kd = origen, (ko[0], re.sub(r'\s+', '', str(m.get('destino_cuenta') or '')))
+        else:
+            destino = norm_ident(m.get('destino'))
+            kd = (str(m.get('destino_empresa')), str(m.get('destino_cuenta')))
         try:
             valor = Decimal(str(m.get('valor'))).quantize(Decimal('0.01'))
         except (InvalidOperation, TypeError):
             return JsonResponse({'detail': f'Fila {i}: valor inválido.'}, status=400)
         if not origen or not destino:
             return JsonResponse({'detail': f'Fila {i}: falta el tercero de origen o de destino.'}, status=400)
-        if ko not in catalogo or kd not in catalogo:
+        if ko not in catalogo or (not cruce and kd not in catalogo):
             return JsonResponse({'detail': f'Fila {i}: la cuenta debe ser una de las cuentas seleccionadas de la conciliación.'}, status=400)
         if valor <= 0:
             return JsonResponse({'detail': f'Fila {i}: el valor debe ser mayor que cero.'}, status=400)
-        if origen == destino and ko == kd:
-            return JsonResponse({'detail': f'Fila {i}: el origen y el destino son la misma cuenta del mismo tercero.'}, status=400)
-        if ko[0] != kd[0]:
-            return JsonResponse({'detail': f'Fila {i}: por ahora solo se trasladan saldos dentro de la misma empresa.'}, status=400)
         if ko[0] not in empresas_por_id:
             return JsonResponse({'detail': f'Fila {i}: la empresa {ko[0]} no existe.'}, status=400)
-        if ajustes_srv.naturaleza(ko[1]) != ajustes_srv.naturaleza(kd[1]):
-            return JsonResponse({'detail': f'Fila {i}: las cuentas {ko[1]} y {kd[1]} son de distinta naturaleza (débito/crédito); '
-                                           'el asiento no cuadraría.'}, status=400)
+        if cruce:
+            if not re.fullmatch(r'\d{4,20}', kd[1]):
+                return JsonResponse({'detail': f'Fila {i}: escribe el código de la cuenta contra la que se cruza (solo números, p. ej. 13050501).'}, status=400)
+            if kd in catalogo:
+                return JsonResponse({'detail': f'Fila {i}: la cuenta {kd[1]} es de la conciliación; para moverla usa «Entre cuentas».'}, status=400)
+            emp = empresas_por_id[ko[0]]
+            if getattr(emp, "alegra_enabled", False):
+                try:
+                    if emp.pk not in cuentas_cache:
+                        cuentas_cache[emp.pk] = facturacion.cuentas_alegra(emp)
+                except Exception as exc:
+                    return JsonResponse({'detail': f'No se pudieron consultar las cuentas de {emp.nombre} en Alegra ({exc}).'}, status=400)
+                halladas = [c for c in cuentas_cache[emp.pk] if c['codigo'] == kd[1]]
+                if len(halladas) != 1:
+                    return JsonResponse({'detail': f'Fila {i}: la cuenta {kd[1]} ' + ('no existe en Alegra como cuenta de movimiento'
+                                         if not halladas else 'está repetida en Alegra') + f' ({emp.nombre}).'}, status=400)
+                nombre_destino = halladas[0]['nombre']
+            else:
+                nombre_destino = str(m.get('destino_cuenta_nombre') or '').strip()
+        else:
+            if origen == destino and ko == kd:
+                return JsonResponse({'detail': f'Fila {i}: el origen y el destino son la misma cuenta del mismo tercero.'}, status=400)
+            if ko[0] != kd[0]:
+                return JsonResponse({'detail': f'Fila {i}: por ahora solo se trasladan saldos dentro de la misma empresa.'}, status=400)
+            if ajustes_srv.naturaleza(ko[1]) != ajustes_srv.naturaleza(kd[1]):
+                return JsonResponse({'detail': f'Fila {i}: las cuentas {ko[1]} y {kd[1]} son de distinta naturaleza (débito/crédito); '
+                                               'el asiento no cuadraría.'}, status=400)
+            nombre_destino = catalogo[kd]['cuenta_nombre']
         disponible = saldos.get((origen,) + ko, Decimal(0)) - consumido[(origen,) + ko]
         if valor > disponible:
             return JsonResponse({'detail': f'Fila {i}: {origen} tiene ${disponible:,.0f} disponible en la cuenta {ko[1]} '
                                            f'(descontando traslados pendientes); no se pueden trasladar ${valor:,.0f}.'}, status=400)
         consumido[(origen,) + ko] += valor
         nuevos.append(AjusteConciliacion(
-            conciliacion=conc, tipo=AjusteConciliacion.TIPO_CUENTA if origen == destino else AjusteConciliacion.TIPO_TERCERO,
+            conciliacion=conc, tipo=(AjusteConciliacion.TIPO_CRUCE if cruce else
+                                     AjusteConciliacion.TIPO_CUENTA if origen == destino else AjusteConciliacion.TIPO_TERCERO),
             origen_identificacion=origen, origen_empresa=empresas_por_id[ko[0]], origen_cuenta=ko[1], origen_cuenta_nombre=catalogo[ko]['cuenta_nombre'],
-            destino_identificacion=destino, destino_empresa_id=kd[0], destino_cuenta=kd[1], destino_cuenta_nombre=catalogo[kd]['cuenta_nombre'],
+            destino_identificacion=destino, destino_empresa_id=kd[0], destino_cuenta=kd[1], destino_cuenta_nombre=nombre_destino[:255],
             valor=valor, misma_empresa=True, nota=(data.get('nota') or '')[:2000], created_by=request.user, fecha=fecha,
         ))
 
     # Antes de guardar: cuentas y contactos en Alegra. Si falta algo, no se registra nada.
-    cuentas_cache = {}
     for i, a in enumerate(nuevos, start=1):
         if not a.via_alegra:
             continue
