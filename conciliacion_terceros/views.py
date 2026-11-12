@@ -581,6 +581,21 @@ def facturacion_referencias(request):
         return JsonResponse({'detail': f'No se pudieron cargar los datos de Alegra: {exc}'}, status=502)
 
 
+@login_required
+@require_http_methods(['GET'])
+def cuentas_alegra(request):
+    """Cuentas de movimiento activas de la empresa en Alegra (código, nombre e id), para elegir la otra cuenta de un cruce."""
+    _guard(request)
+    emp = get_object_or_404(empresas, pk=request.GET.get('empresa'))
+    if not emp.alegra_enabled:
+        return JsonResponse({'detail': 'La empresa no tiene integración con Alegra.'}, status=400)
+    try:
+        return JsonResponse({'ok': True, 'cuentas': facturacion.cuentas_alegra(emp)})
+    except Exception as exc:
+        logger.exception('Cuentas de Alegra %s', emp.pk)
+        return JsonResponse({'detail': f'No se pudieron consultar las cuentas en Alegra: {exc}'}, status=502)
+
+
 def _factura_respuesta(conc, facturas, mensaje=''):
     engine.ejecutar(conc, usar_cache=True)
     return JsonResponse(dict(ok=True, mensaje=mensaje, facturas=[_factura_json(f) for f in facturas],

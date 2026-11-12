@@ -33,6 +33,20 @@
   .ct-esc > summary { cursor: pointer; color: #2d4a42; }
   .ct-esc-paso { color: #66727d; white-space: nowrap; padding-left: 4px; }
   .ct-esc-paso.hecho { color: #2e7d32; }
+  .ct-info { color: #2d4a42; cursor: help; margin-left: 2px; }
+  /* Selector de la cuenta del cruce: el panel va dentro de la celda (la tabla tiene scroll y lo cortaría si flotara). */
+  .aj-cruce { min-width: 240px; }
+  .aj-cruce .ct-combo-btn { cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; position: relative; padding-right: 22px; }
+  .aj-cruce .ct-combo-btn::after { content: "\25BE"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #6c757d; }
+  .aj-cruce .ct-combo-panel { margin-top: 4px; padding: 6px; background: #fff; border: 1px solid #ced4da; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .ct-cta-res { max-height: 220px; overflow-y: auto; }
+  .ct-cta-res .item { padding: 4px 8px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #f0f2f1; }
+  .ct-cta-res .item:hover, .ct-cta-res .item.activo { background: #eef5f2; }
+  /* Ficha: Andinasoft lleva más columnas que contabilidad, así que va 60/40 en pantallas anchas. */
+  @media (min-width: 992px) {
+    .row > .ct-col-a { flex: 0 0 60%; max-width: 60%; }
+    .row > .ct-col-c { flex: 0 0 40%; max-width: 40%; }
+  }
   .ct-esc-pasos { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; padding: 0; margin: 0; font-size: 12.5px; }
   .ct-esc-pasos li { color: #66727d; white-space: nowrap; }
   .ct-esc-pasos li.hecho { color: #2e7d32; }
@@ -458,7 +472,7 @@
           <h6 class="ct-sec-h">Saldos del tercero</h6>
           <p class="ct-sec-ayuda">A la izquierda, lo que le corresponde según sus negocios en Andinasoft. A la derecha, lo que tiene en las cuentas de contabilidad.</p>
           <div class="row">
-            <div class="col-lg-6 mb-2">
+            <div class="col-lg-6 ct-col-a mb-2">
               <div class="ct-t ct-t-a">
                 <div class="ct-t-head"><span>Andinasoft</span></div>
                 <div class="table-responsive"><table class="table table-sm">
@@ -467,7 +481,7 @@
                 </table></div>
               </div>
             </div>
-            <div class="col-lg-6 mb-2">
+            <div class="col-lg-6 ct-col-c mb-2">
               <div class="ct-t ct-t-c">
                 <div class="ct-t-head"><span>Contabilidad</span></div>
                 <div class="table-responsive"><table class="table table-sm">
@@ -1165,13 +1179,19 @@
       var nota = [];
       if (n.situacion === 'escriturada') nota.push('Escriturada al corte');
       if (n.situacion === 'venta_pendiente' || n.situacion === 'venta_anulada') nota.push(n.situacion_label);
-      if (n.situacion === 'novada') nota.push('Desistida por novación a ' + n.novada_a + ': lo que quedó sigue siendo del cliente' +
-        (n.solo_por_novacion ? '. Su proyecto no está incluido en la conciliación: se trae solo por la novación' : ''));
-      if (n.fecha_desistimiento) nota.push('Desistió ' + n.fecha_desistimiento);
+      // Novación: en la celda solo el destino; la explicación completa va en el ícono de información.
+      var info = '';
+      if (n.situacion === 'novada') {
+        nota.push('Novación → ' + n.novada_a);
+        var expl = 'Desistida por novación a ' + n.novada_a + (n.fecha_desistimiento ? ' el ' + n.fecha_desistimiento : '') +
+          '. Lo que quedó (' + fmt.format(Number(n.total_negocio)) + ') no se devolvió: sigue siendo del cliente.' +
+          (n.solo_por_novacion ? ' Su proyecto no está incluido en la conciliación: se trae solo por la novación.' : '');
+        info = ' <i class="fas fa-info-circle ct-info" tabindex="0" role="img" title="' + esc(expl) + '" aria-label="' + esc(expl) + '"></i>';
+      } else if (n.fecha_desistimiento) nota.push('Desistió ' + n.fecha_desistimiento);
       if (!n.suma) nota.push('no suma');
       return '<tr class="' + (n.suma ? '' : 'ct-nosuma') + '"><td>' + esc(n.proyecto) + ' · <strong>' + esc(n.ref) + '</strong>' +
         '</td><td>' + est +
-        (nota.length ? '<br><small>' + esc(nota.join(' · ')) + '</small>' : '') + celdaEscritura(n) + '</td><td>' + esc(n.origen || '—') +
+        (nota.length ? '<br><small>' + esc(nota.join(' · ')) + info + '</small>' : '') + celdaEscritura(n) + '</td><td>' + esc(n.origen || '—') +
         '</td><td>' + n.titulares.map(function (t) { return linkTercero(t, t === l.identificacion); }).join(', ') +
         '</td><td class="num" title="Recaudado del negocio: ' + fmt.format(Number(n.total_negocio)) + '">' + money(n.valor) + '</td></tr>';
     }).join('') : '<tr><td colspan="5" class="text-muted">Sin negocios en Andinasoft.</td></tr>');
@@ -1273,9 +1293,9 @@
       ? '<td><strong>' + esc(t.ident) + '</strong> ' + esc(t.nombre) + (t.estado ? '<br><small><span class="ct-dot st-' + t.estado + '"></span>' + esc(ESTADOS[t.estado]) + '</small>' : '<br><small class="text-muted">Sin línea en la conciliación</small>') + '</td>'
       : '<td class="text-muted small">Mismo tercero</td>';
     var celS = '<td class="aj-saldo"' + (aj.modo === 'tercero' ? '' : ' style="display:none"') + '></td>';
-    // Cruce: la otra cuenta se escribe (no hace parte de la conciliación) y se valida contra Alegra al registrar.
+    // Cruce: la otra cuenta no hace parte de la conciliación. Con Alegra se elige de sus cuentas; sin Alegra se escribe.
     var celD = aj.modo === 'cruce'
-      ? '<td><input type="text" class="form-control form-control-sm aj-destino-libre" inputmode="numeric" maxlength="20" placeholder="Ej. 13050501" aria-label="Cuenta contra la que se cruza el saldo">' +
+      ? '<td class="aj-cruce"><div class="aj-cruce-sel"></div>' +
         '<div class="aj-d-info aj-saldo mt-1"><span class="text-muted">No se concilia: solo baja el saldo de la cuenta de origen</span></div></td>'
       : '<td><select class="form-control form-control-sm aj-destino" aria-label="Cuenta a la que entra el saldo">' + opcionesDestino(selD, aj.modo === 'cuenta' ? selO : null, selO) + '</select><div class="aj-d-info aj-saldo mt-1"></div></td>';
     var $tr = $('<tr>' + celT + celS +
@@ -1287,10 +1307,84 @@
     $('#m-aj-filas').append($tr);
     actualizarFila($tr);
   }
+  // ---- Cuenta del cruce: selector con búsqueda sobre las cuentas de Alegra de la empresa ----
+  var URL_CTAS = "{% url 'conciliacion-terceros-cuentas-alegra' %}";
+  var CTAS_ALEGRA = {};  // empresa -> promesa con [{id, codigo, nombre}]
+  function cuentasAlegra(emp) {
+    if (!CTAS_ALEGRA[emp]) {
+      CTAS_ALEGRA[emp] = $.getJSON(URL_CTAS, { empresa: emp }).then(function (r) { return r.cuentas || []; });
+      CTAS_ALEGRA[emp].fail(function () { delete CTAS_ALEGRA[emp]; });  // se puede reintentar
+    }
+    return CTAS_ALEGRA[emp];
+  }
+  function cuentaCruce($tr) {
+    var c = $tr.data('cruce');
+    return c ? c.codigo : ($tr.find('.aj-destino-libre').val() || '').trim();
+  }
+  function pintarCeldaCruce($tr, emp) {
+    if ($tr.data('cruce-emp') === emp) return;
+    $tr.data('cruce-emp', emp).removeData('cruce');
+    var $s = $tr.find('.aj-cruce-sel');
+    if (!emp || !EMP_ALEGRA[emp]) {
+      $s.html('<input type="text" class="form-control form-control-sm aj-destino-libre" inputmode="numeric" maxlength="20" placeholder="Código, ej. 13050501" aria-label="Cuenta contra la que se cruza el saldo">');
+      return;
+    }
+    $s.html('<div class="ct-combo"><button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-label="Cuenta contra la que se cruza el saldo" disabled>' +
+      '<span class="text-muted">Cargando cuentas de Alegra…</span></button><div class="ct-combo-panel" style="display:none">' +
+      '<input type="search" class="form-control form-control-sm ct-cta-q" aria-label="Buscar cuenta por código o nombre" placeholder="Escribe código o nombre…" autocomplete="off">' +
+      '<div class="ct-cta-res mt-1" role="listbox"></div></div></div>');
+    cuentasAlegra(emp).done(function (cs) {
+      if ($tr.data('cruce-emp') !== emp) return;
+      // Las cuentas de la conciliación no van aquí: esas se mueven con «Entre sus propias cuentas».
+      var propias = {}; CATALOGO.forEach(function (c) { if (c.empresa === emp) propias[c.cuenta] = 1; });
+      $tr.data('cruce-cuentas', cs.filter(function (c) { return !propias[c.codigo]; }));
+      mostrarCruce($tr);
+    }).fail(function (x) {
+      if ($tr.data('cruce-emp') !== emp) return;
+      $s.find('.ct-combo-btn').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudieron cargar las cuentas de Alegra.') + '</span>');
+    });
+  }
+  function mostrarCruce($tr) {
+    var c = $tr.data('cruce');
+    $tr.find('.ct-combo-btn').prop('disabled', false)
+      .html(c ? '<code>' + esc(c.codigo) + '</code> ' + esc(c.nombre) : '<span class="text-muted">— Elige la cuenta —</span>');
+  }
+  function normTxt(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function filtrarCruce($tr) {
+    var q = normTxt($tr.find('.ct-cta-q').val()).trim(), palabras = q ? q.split(/\s+/) : [];
+    var cs = ($tr.data('cruce-cuentas') || []).filter(function (c) {
+      var h = normTxt(c.codigo + ' ' + c.nombre); return palabras.every(function (w) { return h.indexOf(w) >= 0; });
+    }).slice(0, 80);
+    $tr.find('.ct-cta-res').html(cs.length ? cs.map(function (c, i) {
+      return '<div class="item" data-i="' + i + '" role="option"><code>' + esc(c.codigo) + '</code> ' + esc(c.nombre) + '</div>';
+    }).join('') : '<div class="item text-muted">Sin resultados</div>').data('cs', cs);
+  }
+  function cerrarCombosCruce() { $('#m-aj-filas .ct-combo-panel').hide(); }
+  $('#m-aj-filas').on('click', '.ct-combo-btn', function () {
+    var $tr = $(this).closest('tr'), $p = $tr.find('.ct-combo-panel'), abierto = $p.is(':visible');
+    cerrarCombosCruce(); if (abierto) return;
+    $p.show(); $tr.find('.ct-cta-q').val(''); filtrarCruce($tr); $tr.find('.ct-cta-q').trigger('focus');
+  });
+  $('#m-aj-filas').on('input', '.ct-cta-q', function () { filtrarCruce($(this).closest('tr')); });
+  $('#m-aj-filas').on('keydown', '.ct-cta-q', function (e) {
+    var $tr = $(this).closest('tr'), $its = $tr.find('.ct-cta-res .item[data-i]'), $a = $its.filter('.activo'), i = $its.index($a);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(i + 1, $its.length - 1) : Math.max(i - 1, 0);
+      $its.removeClass('activo'); var el = $its.eq(i).addClass('activo')[0]; if (el) el.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') { e.preventDefault(); ($a.length ? $a : $its.first()).trigger('click'); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarCombosCruce(); $tr.find('.ct-combo-btn').trigger('focus'); }
+  });
+  $('#m-aj-filas').on('click', '.ct-cta-res .item[data-i]', function () {
+    var $tr = $(this).closest('tr');
+    $tr.data('cruce', $tr.find('.ct-cta-res').data('cs')[$(this).data('i')]);
+    cerrarCombosCruce(); mostrarCruce($tr); actualizarFila($tr); $tr.find('.ct-combo-btn').trigger('focus');
+  });
+  $(document).on('mousedown', function (e) { if (!$(e.target).closest('#m-aj-filas .ct-combo').length) cerrarCombosCruce(); });
   function actualizarFila($tr) {
     var o = $tr.find('.aj-origen').val() || '', d;
     if (aj.modo === 'cruce') {
-      d = ($tr.find('.aj-destino-libre').val() || '').trim();
+      pintarCeldaCruce($tr, o.split('|')[0]);
+      d = cuentaCruce($tr);
     } else {
       d = $tr.find('.aj-destino').val() || '';
       var excluir = aj.modo === 'cuenta' ? o : null;
@@ -1386,7 +1480,7 @@
     $('#m-aj-add').toggle(aj.modo !== 'tercero');
     $('#m-aj-save').text(aj.modo === 'cruce' ? 'Registrar cruce' : 'Registrar traslado');
     $('#m-aj').show();
-    if (aj.modo !== 'tercero') { filaAjuste(null); $('#m-aj-filas tr:first').find(aj.modo === 'cruce' ? '.aj-destino-libre' : '.aj-origen').focus(); }
+    if (aj.modo !== 'tercero') { filaAjuste(null); $('#m-aj-filas tr:first').find(aj.modo === 'cruce' ? '.aj-destino-libre, .ct-combo-btn' : '.aj-origen').first().focus(); }
     else $('#m-aj-q').focus();
   });
   $('#m-aj').on('change', 'input[name="aj-dir"]', function () {
@@ -1395,6 +1489,7 @@
   });
   $('#m-aj-add').on('click', function () { filaAjuste(null); });
   $('#m-aj-filas').on('change', '.aj-origen, .aj-destino, .aj-destino-libre', function () { actualizarFila($(this).closest('tr')); });
+  $('#m-aj-filas').on('input', '.aj-destino-libre', function () { actualizarFila($(this).closest('tr')); });
   $('#m-aj-filas').on('input', '.aj-valor', totalAjuste);
   $('#m-aj-filas').on('click', '.aj-todo', function () {
     var $tr = $(this).closest('tr'); var s = $tr.find('.aj-origen option:selected').data('saldo');
@@ -1430,7 +1525,7 @@
       var t = $(this).data('tercero'), o = ($(this).find('.aj-origen').val() || '').split('|'), d = ($(this).find('.aj-destino').val() || '').split('|');
       var v = Number($(this).find('.aj-valor').val() || 0);
       if (aj.modo === 'cruce') {
-        var cta = ($(this).find('.aj-destino-libre').val() || '').replace(/\s+/g, '');
+        var cta = cuentaCruce($(this)).replace(/\s+/g, '');
         if (!o[1] || !/^\d{4,20}$/.test(cta) || !(v > 0)) { error = 'Fila ' + (i + 1) + ': elige la cuenta de origen, escribe el código de la otra cuenta (solo números) y un valor mayor que cero.'; return false; }
         movs.push({ cruce: true, origen: actual.identificacion, origen_empresa: o[0], origen_cuenta: o[1], destino_cuenta: cta, valor: v.toFixed(2) });
         return;
