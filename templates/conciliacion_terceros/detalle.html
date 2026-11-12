@@ -1721,7 +1721,7 @@
     fac = { proyecto: proyecto, ref: ref, negocio: n, cfg: cfg };
     $('#m-fac-filas').empty(); $('#m-fac-con-prev').prop('checked', false);  // otro negocio: no se arrastran valores escritos para el anterior
     $('#m-fac-titulo').text('Facturar ' + proyecto + ' · ' + ref);
-    $('#m-fac-sub').text('Recaudado ' + fmt.format(Number(n.total_negocio)) + ' entre ' + n.titulares.length + ' titular(es) · una factura por titular en partes iguales.');
+    $('#m-fac-sub').text('Recaudado ' + fmt.format(Number(n.total_negocio)) + ' entre ' + n.titulares.length + ' titular(es) · una factura por titular en partes iguales. Un titular que quede en 0 no se factura.');
     var puedeAlegra = cfg && cfg.modo === 'alegra' && !(cfg.faltantes || []).length;
     $('#m-fac-tipo').html('<option value="informativa">Informativa (factura ya emitida)</option>' +
       (puedeAlegra ? '<option value="alegra">Crear en Alegra (' + (cfg.emision === 'emitir' ? 'crear y emitir' : 'borrador') + ')</option>' : ''));
@@ -1873,10 +1873,13 @@
         intereses_previos: $(this).find('.fac-prev').val() || 0,
         numero: $(this).find('.fac-num').val(), cruce_cuenta: $(this).find('.fac-cta').val(), cruce_cuenta_nombre: $o.data('nombre') || '',
         ya_cruzado: $(this).find('.fac-ya').is(':checked') };
-      if (tipo === 'informativa' && !t.numero.trim()) error = 'Indica el número de factura de cada titular.';
+      // Un titular en 0 no se factura (p. ej. la factura salió completa a nombre de uno solo de los titulares).
+      if (!(Number(t.valor_venta || 0) + Number(t.valor_intereses || 0) + Number(t.intereses_previos || 0))) return null;
+      if (tipo === 'informativa' && !t.numero.trim()) error = 'Indica el número de factura de cada titular que se factura.';
       return t;
     }).get();
     if (error) { alert(error); return; }
+    if (!titulares.length) { alert('No hay nada que facturar: todos los titulares están en 0.'); return; }
     // Una sola confirmación: qué se hace y, debajo, lo que conviene revisar antes.
     var total = titulares.reduce(function (a, t) { return a + Number(t.valor_venta || 0) + Number(t.valor_intereses || 0); }, 0);
     var notas = [];

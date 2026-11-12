@@ -202,6 +202,7 @@ def _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, 
 
     grupo = str(uuid.uuid4())
     creadas = []
+    intereses_grupo, con_previos = Decimal(0), False
     for t in titulares:
         try:
             venta = Decimal(str(t.get('valor_venta') or 0)).quantize(CENT)
@@ -214,12 +215,8 @@ def _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, 
             raise FacturacionError(f'{t.get("identificacion")}: los valores no pueden ser negativos.')
         if total <= 0:
             raise FacturacionError(f'{t.get("identificacion")}: el valor a facturar debe ser mayor que cero.')
-        if previos > 0:
-            recaudados = _intereses_recaudados(conciliacion, t.get('identificacion'), datos.get('proyecto'), datos.get('negocio_ref'))
-            if recaudados is not None and intereses + previos > recaudados + 1:
-                raise FacturacionError(
-                    f'{t.get("identificacion")}: intereses a facturar (${intereses:,.0f}) más los ya facturados antes (${previos:,.0f}) '
-                    f'superan los intereses recaudados del negocio (${recaudados:,.0f}).')
+        intereses_grupo += intereses + previos
+        con_previos = con_previos or previos > 0
         if tipo == FacturaConciliacion.TIPO_INFORMATIVA and not (t.get('numero') or '').strip():
             raise FacturacionError(f'{t.get("identificacion")}: indica el número de la factura emitida.')
         cruce_cuenta = (t.get('cruce_cuenta') or '').strip()
@@ -235,6 +232,13 @@ def _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, 
             estado=FacturaConciliacion.ESTADO_REGISTRADA if tipo == FacturaConciliacion.TIPO_INFORMATIVA else FacturaConciliacion.ESTADO_PENDIENTE,
             nota=(datos.get('nota') or '')[:2000], created_by=user,
         ))
+    if con_previos:
+        # El tope es el del negocio, no el de cada titular: a veces todo se le facturó a uno solo de ellos.
+        recaudados = _intereses_negocio(conciliacion, idents, datos.get('proyecto'), datos.get('negocio_ref'))
+        if recaudados is not None and intereses_grupo > recaudados + 1:
+            raise FacturacionError(
+                f'Los intereses a facturar más los ya facturados antes (${intereses_grupo:,.0f}) superan los intereses '
+                f'recaudados del negocio (${recaudados:,.0f}).')
     if creadas and costo > 0:
         # El costo es uno por negocio y va a nombre de la empresa: se guarda en la primera factura del grupo.
         creadas[0].costo = costo
@@ -243,13 +247,20 @@ def _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, 
     return list(FacturaConciliacion.objects.filter(grupo=grupo).order_by('id'))
 
 
-def _intereses_recaudados(conciliacion, identificacion, proyecto, negocio_ref):
-    """Intereses recaudados que le corresponden al titular en ese negocio según la última ejecución (None si no aparece)."""
-    linea = conciliacion.lineas.filter(identificacion=identificacion).first()
-    for n in (linea.negocios if linea else []):
-        if n.get('situacion') != 'factura' and n.get('proyecto') == proyecto and str(n.get('ref')) == str(negocio_ref):
-            return Decimal(str(n.get('intereses') or 0))
-    return None
+def _intereses_negocio(conciliacion, idents, proyecto, negocio_ref):
+    """Intereses recaudados del negocio completo (todos sus titulares) según la última ejecución (None si no aparece)."""
+    def del_negocio(linea):
+        return next((n for n in (linea.negocios or []) if n.get('situacion') != 'factura' and n.get('proyecto') == proyecto
+                     and str(n.get('ref')) == str(negocio_ref)), None)
+    n = next((del_negocio(l) for l in conciliacion.lineas.filter(identificacion__in=idents) if del_negocio(l)), None)
+    if n is None:
+        return None
+    titulares = n.get('titulares') or idents
+    total = Decimal(0)
+    for l in conciliacion.lineas.filter(identificacion__in=titulares):
+        x = del_negocio(l)
+        total += Decimal(str(x.get('intereses') or 0)) if x else Decimal(0)
+    return total
 
 
 # ---------------------------------------------------------------------------
