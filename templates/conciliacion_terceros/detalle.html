@@ -857,18 +857,34 @@
   var RESULTADOS = { {% for val, label in resultados_adj %}'{{ val }}': '{{ label }}',{% endfor %} };
   var vista = 'terceros', ADJS = [], BY_ADJ = {}, adjSucio = true, tablaAdj = null, filtroResultado = '', volverAdj = null, adjActual = null;
   function claveAdj(p, r) { return p + '|' + r; }
+  // Un negocio desistido por novación no es una fila propia: lo que le quedó se suma a su negocio destino
+  // (es plata del cliente que sigue en ese negocio). Solo si el destino no está en la conciliación queda aparte.
+  function claveNegocio(n) {
+    if (n.situacion === 'novada' && n.novada_proyecto && BY_ADJ[claveAdj(n.novada_proyecto, n.novada_ref)]) return claveAdj(n.novada_proyecto, n.novada_ref);
+    return claveAdj(n.proyecto, n.ref);
+  }
   function construirAdjs() {
     ADJS = []; BY_ADJ = {};
+    function crear(n) {
+      var k = claveAdj(n.proyecto, n.ref);
+      if (!BY_ADJ[k]) { BY_ADJ[k] = { key: k, proyecto: n.proyecto, ref: n.ref, n: n, suma: n.suma, facturado: 0, novaciones: [], filas: {} }; ADJS.push(BY_ADJ[k]); }
+    }
+    LINEAS.forEach(function (l) { l.negocios.forEach(function (n) { if (n.situacion !== 'factura' && n.situacion !== 'novada') crear(n); }); });
+    LINEAS.forEach(function (l) { l.negocios.forEach(function (n) { if (n.situacion === 'novada' && claveNegocio(n) === claveAdj(n.proyecto, n.ref)) crear(n); }); });
+    var vistas = {};
     LINEAS.forEach(function (l) {
+      // Un renglón por negocio del tercero; lo que quedó en el origen de una novación se suma al destino.
+      var porAdj = {}, mios = [];
       l.negocios.forEach(function (n) {
         if (n.situacion === 'factura') return;
-        var k = claveAdj(n.proyecto, n.ref);
-        if (!BY_ADJ[k]) { BY_ADJ[k] = { key: k, proyecto: n.proyecto, ref: n.ref, n: n, suma: n.suma, facturado: 0, filas: {} }; ADJS.push(BY_ADJ[k]); }
-      });
-    });
-    LINEAS.forEach(function (l) {
-      var mios = l.negocios.filter(function (n) { return n.situacion !== 'factura'; }).map(function (n) {
-        return { adj: BY_ADJ[claveAdj(n.proyecto, n.ref)], esperado: n.suma ? Number(n.valor) : 0, suma: n.suma };
+        var adj = BY_ADJ[claveNegocio(n)], m = porAdj[adj.key];
+        if (!m) { m = porAdj[adj.key] = { adj: adj, esperado: 0, suma: false }; mios.push(m); }
+        m.esperado += n.suma ? Number(n.valor) : 0;
+        m.suma = m.suma || n.suma;
+        if (adj.key !== claveAdj(n.proyecto, n.ref) && !vistas[adj.key + '<' + n.proyecto + '|' + n.ref]) {
+          vistas[adj.key + '<' + n.proyecto + '|' + n.ref] = 1;
+          adj.novaciones.push({ proyecto: n.proyecto, ref: n.ref, valor: Number(n.total_negocio), fecha: n.fecha_desistimiento, solo: n.solo_por_novacion });
+        }
       });
       if (!mios.length) return;
       // Las facturas registradas restan de lo que espera Andinasoft en su negocio.
@@ -899,7 +915,8 @@
           && fs.some(function (f) { return f.l.estado === 'justificado'; })) a.resultado = 'justificado';
       a.revisados = fs.filter(function (f) { return f.l.estado === 'cuadrado' || f.l.revision !== 'pendiente'; }).length;
       a.n_titulares = fs.length;
-      a._texto = [a.proyecto, a.ref, a.n.estado, a.n.origen, a.n.situacion_label].concat(fs.map(function (f) { return f.l.identificacion + ' ' + f.l.nombre; })).join(' ').toLowerCase();
+      a._texto = [a.proyecto, a.ref, a.n.estado, a.n.origen, a.n.situacion_label].concat(fs.map(function (f) { return f.l.identificacion + ' ' + f.l.nombre; }))
+        .concat((a.novaciones || []).map(function (o) { return o.proyecto + ' ' + o.ref; })).join(' ').toLowerCase();  // buscar ADJ86 lleva a su destino
     });
     adjSucio = false;
   }
@@ -1003,6 +1020,10 @@
     if (n.situacion === 'novada') ayuda = 'El cliente se pasó a ' + n.novada_a + ' por novación. Lo trasladado ya cuenta allá; lo que quedó aquí (' +
       fmt.format(Number(n.total_negocio)) + ', normalmente intereses) no se devolvió, así que sigue siendo del cliente hasta que se facture.';
     if (a.resultado === 'reparto') ayuda += ' El total cuadra, pero el saldo contable no está repartido entre los titulares como en Andinasoft: antes de facturar, trasládalo desde la ficha del titular que tiene de más.';
+    (a.novaciones || []).forEach(function (o) {
+      ayuda += ' Incluye ' + fmt.format(o.valor) + ' que quedaron en ' + o.proyecto + ' ' + o.ref + ' cuando el cliente se pasó a este negocio por novación' +
+        (o.fecha ? ' (' + o.fecha + ')' : '') + ': no se devolvieron, así que siguen siendo suyos' + (o.solo ? ' (ese proyecto no está incluido en la conciliación)' : '') + '.';
+    });
     if (a.facturado) ayuda += ' Ya se facturaron ' + fmt.format(a.facturado) + ', que se descuentan de lo que espera Andinasoft.';
     $('#ma-ayuda').text(ayuda);
     pintarEscrituraAdj(a);

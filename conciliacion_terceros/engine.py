@@ -265,7 +265,7 @@ def marcar_novaciones(negocios, incluidos=None):
         destino = next((m for m in candidatos if incluidos is None or m['proyecto'] in incluidos), candidatos[0])
         n['situacion'] = SIT_NOVADA
         n['novada_a'] = f'{destino["proyecto"]} {destino["ref"]}'
-        n['novada_a_proyecto'] = destino['proyecto']
+        n['novada_a_proyecto'], n['novada_a_ref'] = destino['proyecto'], str(destino['ref'])
         # Lo que queda se reparte entre capital e intereses sin pasarse del total (el detalle puede no cuadrar con los recibos).
         cap = min(max(n['capital'], ZERO), n['total'])
         n['capital'], n['interes_cte'], n['interes_mora'] = cap, n['total'] - cap, ZERO
@@ -275,7 +275,7 @@ def marcar_novaciones(negocios, incluidos=None):
 def _negocios(conciliacion, usar_cache):
     """Foto de Andinasoft al corte. Se cachea para que registrar ajustes no vuelva a leer todos los proyectos."""
     excluidos = sorted(conciliacion.proyectos_excluidos or [])
-    key = f'conciliacion_terceros:negocios:v3:{conciliacion.pk}:{conciliacion.fecha_corte}:{"|".join(excluidos)}'
+    key = f'conciliacion_terceros:negocios:v4:{conciliacion.pk}:{conciliacion.fecha_corte}:{"|".join(excluidos)}'
     if usar_cache:
         hit = cache.get(key)
         if hit is not None:
@@ -428,7 +428,7 @@ def calcular(conciliacion, usar_cache=False):
                 'capital': str(p['capital'][ident]), 'intereses': str(p['intereses'][ident]),
                 'no_radicado': str(n['no_radicado']), 'pagadores': n['pagadores'], 'cesiones': n['cesiones'],
                 'escritura': escrituras.get((n['proyecto'], str(n['ref']))),
-                'novada_a': n.get('novada_a', ''),
+                'novada_a': n.get('novada_a', ''), 'novada_proyecto': n.get('novada_a_proyecto', ''), 'novada_ref': n.get('novada_a_ref', ''),
                 'solo_por_novacion': bool(n.get('solo_por_novacion')),
             })
         for fac in facturas.get(ident, []):
