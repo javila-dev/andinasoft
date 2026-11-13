@@ -388,7 +388,10 @@ def _buscar_facturas_alegra(f, contacto_id):
 
 
 def _ya_enlazada(campo, alegra_id, f):
-    return bool(alegra_id) and FacturaConciliacion.objects.filter(empresa_id=f.empresa_id, **{campo: str(alegra_id)}).exclude(pk=f.pk).exists()
+    """Otro registro vigente ya apunta a ese documento de Alegra. Un registro anulado no cuenta: para anularlo se
+    verificó que su factura ya no estaba en Alegra, y al eliminar un borrador allá el id puede quedar libre y reusarse."""
+    return bool(alegra_id) and FacturaConciliacion.objects.filter(empresa_id=f.empresa_id, **{campo: str(alegra_id)}) \
+        .exclude(pk=f.pk).exclude(estado=FacturaConciliacion.ESTADO_ANULADA).exists()
 
 
 def _journal_idempotente(f, referencia, construir_payload):
