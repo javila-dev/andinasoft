@@ -178,7 +178,9 @@ def registrar(conciliacion, datos, user):
         Conciliacion.objects.select_for_update().filter(pk=conciliacion.pk).first()
         facturas = _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, empresa, costo)
     if tipo == FacturaConciliacion.TIPO_INFORMATIVA:
-        marcar_escritura(facturas[0], getattr(user, 'username', ''))
+        con_venta = [f for f in facturas if f.valor_venta > 0]  # solo intereses no factura el inmueble
+        if con_venta:
+            marcar_escritura(con_venta[0], getattr(user, 'username', ''))
     # Las de Alegra quedan pendientes: la pantalla envía cada una en su propia petición (factura, costo y cruce
     # por separado), para que ninguna petición dependa de varias llamadas largas a Alegra.
     return facturas
@@ -661,6 +663,8 @@ def marcar_escritura(f, usuario):
 
     if not (f.negocio_ref or '').upper().startswith('ADJ'):
         return None  # ventas sin adjudicar: no hay escritura
+    if f.valor_venta <= 0:
+        return None  # solo intereses: el inmueble no se ha facturado, la escritura no avanza
     ya = FacturaConciliacion.objects.filter(
         proyecto=f.proyecto, negocio_ref=f.negocio_ref, respuesta__escritura__isnull=False,
     ).exclude(pk=f.pk).exclude(estado=FacturaConciliacion.ESTADO_ANULADA).exists()
