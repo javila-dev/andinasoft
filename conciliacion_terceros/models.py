@@ -243,6 +243,30 @@ class ConciliacionLinea(models.Model):
         return f'{self.identificacion} {self.estado}'
 
 
+class EquivalenciaIdentificacion(models.Model):
+    """
+    El mismo tercero con otra identificación en contabilidad, sin cambiar nada en Andinasoft. Es para los casos en que
+    el Id no puede ser igual en los dos lados (Alegra no admite letras, así que CE504122 allá es 504122).
+
+    La conciliación suma el saldo contable de `identificacion_contable` al tercero `identificacion`, y los documentos
+    que se envían a Alegra (traslados, facturas, cruces) buscan su contacto con `identificacion_contable`.
+    Es uno a uno: una identificación contable no puede ser de dos terceros, ni un tercero tener dos.
+    """
+    identificacion = models.CharField(max_length=40, unique=True)  # en Andinasoft
+    identificacion_contable = models.CharField(max_length=40, unique=True)  # en contabilidad / Alegra
+    nota = models.TextField(blank=True, default='')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Equivalencia de identificación'
+        verbose_name_plural = 'Equivalencias de identificación'
+        ordering = ['identificacion']
+
+    def __str__(self):
+        return f'{self.identificacion} = {self.identificacion_contable} (contabilidad)'
+
+
 class CorreccionIdentificacion(models.Model):
     """Registro de una corrección de identificación de tercero (Andinasoft y, opcionalmente, Alegra)."""
     ESTADO_EJECUTADA = 'ejecutada'

@@ -277,9 +277,11 @@ def _client(empresa):
 def _contacto(empresa, identificacion):
     from alegra_integration.exceptions import AlegraConfigurationError
     from alegra_integration.mapping import MappingResolver
-    from conciliacion_terceros.engine import alias_identificaciones
+    from conciliacion_terceros.engine import alias_identificaciones, equivalencias
     # Si el contacto se corrigió en Alegra después de registrar el movimiento, allá ya está con el Id nuevo.
     identificacion = alias_identificaciones()[0].get((str(empresa.pk), identificacion), identificacion)
+    # Y si en contabilidad va con otro Id (Alegra no admite letras), el contacto está con ese.
+    identificacion = equivalencias()[1].get(identificacion, identificacion)
     try:
         return str(MappingResolver(empresa).contact_for_cliente(identificacion))
     except AlegraConfigurationError as exc:

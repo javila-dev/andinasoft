@@ -323,6 +323,8 @@ def calcular(conciliacion, usar_cache=False):
     # Identificaciones corregidas: en Andinasoft (siempre) y en el contacto de Alegra (por empresa). El archivo y los
     # movimientos registrados con el Id viejo se leen con el nuevo donde la corrección aplica.
     alias_c, alias_a = alias_identificaciones()
+    # El mismo tercero con otro Id en contabilidad: su saldo se suma al tercero de Andinasoft.
+    eq_contable, _ = equivalencias()
     confirmadas = {f.empresa_id for f in fuentes}
     for f in fuentes:
         balance = leer_fuente(f.formato, f.archivo)
@@ -335,6 +337,7 @@ def calcular(conciliacion, usar_cache=False):
                 if t['saldo'] == 0:
                     continue
                 ident = alias_c.get((f.empresa_id, ident), ident)
+                ident = eq_contable.get(ident, ident)
                 e = contable[ident].get((f.empresa_id, codigo))
                 if e:  # el archivo trae el Id viejo y el nuevo en la misma cuenta: se suman
                     e['saldo_archivo'] += t['saldo']
@@ -349,6 +352,7 @@ def calcular(conciliacion, usar_cache=False):
 
     def entrada(ident, emp, cuenta, nombre_cuenta):
         ident = alias_c.get((emp, ident), ident)
+        ident = eq_contable.get(ident, ident)
         e = contable[ident].get((emp, cuenta))
         if e is None:
             info = catalogo.get((emp, cuenta)) or {'empresa': emp, 'empresa_nombre': nombres_empresa.get(emp, emp),
@@ -466,6 +470,7 @@ def calcular(conciliacion, usar_cache=False):
         lineas[ident] = l
 
     _regla_adjudicacion(lineas, negocios, partes, tol)
+    _regla_mismo_numero(lineas)
     _regla_mismo_valor(lineas, tol)
     _regla_nombre(lineas)
     return balances, list(lineas.values()), catalogo
@@ -614,9 +619,32 @@ def _regla_adjudicacion(lineas, negocios, partes, tol):
             x.sugerencia = {'regla': 'adjudicacion_conjunta', 'adj': n['ref'], 'traslados': traslados}
 
 
+def _regla_mismo_numero(lineas):
+    """El mismo número con un prefijo de tipo de documento en un lado (CE504122 en Andinasoft, 504122 en contabilidad):
+    no es un traslado, es la misma persona con el Id escrito distinto. Se corrige la identificación."""
+    por_numero = defaultdict(list)
+    for x in lineas.values():
+        digitos = re.sub(r'\D', '', x.identificacion)
+        if len(digitos) >= 4:
+            por_numero[digitos].append(x)
+    for digitos, grupo in por_numero.items():
+        if len(grupo) < 2 or not any(_abierta(x) for x in grupo):
+            continue
+        for x in grupo:
+            otros = [o for o in grupo if o is not x]
+            x.alertas = list(x.alertas) + [_alerta('mismo_numero', 'Mismo número con el Id escrito distinto: ' + ', '.join(
+                f'{o.identificacion} {o.nombre} (Andinasoft {_fmt(o.saldo_andina)}, contabilidad {_fmt(o.saldo_contable)})'.strip()
+                for o in otros) + '. Si es la misma persona, corrige la identificación en vez de trasladar el saldo.')]
+            # El Id correcto es el que no lleva letras; con él la conciliación los une en una sola línea.
+            correcto = next((o.identificacion for o in grupo if o.identificacion == digitos), '')
+            x.sugerencia = dict(x.sugerencia or {}, regla='mismo_numero', contrapartes=[o.identificacion for o in otros],
+                                **({'correcto': correcto} if correcto and x.identificacion != correcto else {}))
+
+
 def _regla_mismo_valor(lineas, tol):
     """Otro tercero sin conciliar con la diferencia opuesta: posible cesión no registrada o tercero errado."""
-    abiertas = [x for x in lineas.values() if _abierta(x) and (x.sugerencia or {}).get('regla') != 'adjudicacion_conjunta']
+    abiertas = [x for x in lineas.values() if _abierta(x)
+                and (x.sugerencia or {}).get('regla') not in ('adjudicacion_conjunta', 'mismo_numero')]
     sobrantes = [x for x in abiertas if x.diferencia > tol]
     faltantes = [x for x in abiertas if x.diferencia < -tol]
     for s in sobrantes:
@@ -700,6 +728,13 @@ def _resolver_alias(d):
             v = d[v]
         out[k] = v
     return out
+
+
+def equivalencias():
+    """Terceros cuyo Id en contabilidad es otro (Alegra no admite letras). ({contable: andinasoft}, {andinasoft: contable})."""
+    from conciliacion_terceros.models import EquivalenciaIdentificacion
+    pares = list(EquivalenciaIdentificacion.objects.values_list('identificacion', 'identificacion_contable'))
+    return {c: a for a, c in pares}, {a: c for a, c in pares}
 
 
 def alias_identificaciones():

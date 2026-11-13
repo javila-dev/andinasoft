@@ -34,6 +34,7 @@
   .ct-esc-paso { color: #66727d; white-space: nowrap; padding-left: 4px; }
   .ct-esc-paso.hecho { color: #2e7d32; }
   .ct-info { color: #2d4a42; cursor: help; margin-left: 2px; }
+  .ct-equiv { background: #eef5f2; border-radius: 6px; padding: 6px 10px; color: #2d4a42; }
   .ct-enlace { border: 1px solid #f0c36d; background: #fffaf0; border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
   /* Selector de la cuenta del cruce: el panel va dentro de la celda (la tabla tiene scroll y lo cortaría si flotara). */
   .aj-cruce { min-width: 240px; }
@@ -458,6 +459,7 @@
 
         <!-- 1. ¿Cuadra? -->
         <div id="m-balance" class="ct-balance"></div>
+        <p class="small ct-equiv mb-2" id="m-equiv" style="display:none"></p>
 
         <!-- 2. ¿Por qué? -->
         <section class="ct-sec" id="m-sec-hallazgos">
@@ -773,7 +775,7 @@
     venta_anulada_con_saldo: 'Venta anulada con saldo', ex_titular: 'Ex titular (posible cesión)', sin_negocio: 'Sin negocio en Andinasoft',
     cesion_posterior: 'Cesión posterior al corte', cesion_registrada: 'Cesión registrada', pagador_distinto: 'Recibos a nombre de otro',
     nombre_parecido: 'Nombre parecido', adjudicacion_conjunta: 'ADJ cuadra en conjunto', mismo_valor: 'Mismo valor en otro tercero',
-    solo_capital: 'Coincide solo capital', intereses_parciales: 'Intereses parciales', varias_empresas: 'Saldo en varias empresas',
+    mismo_numero: 'Mismo número, Id distinto', solo_capital: 'Coincide solo capital', intereses_parciales: 'Intereses parciales', varias_empresas: 'Saldo en varias empresas',
     con_ajustes: 'Con traslados registrados'
   };
   var conteoAlertas = {};
@@ -1233,6 +1235,10 @@
     renderFacturas(l);
     cerrarPaneles();
     pintarEstado(l);
+    $('#m-equiv').html(!l.equivalencia ? '' :
+      '<i class="fas fa-link mr-1" aria-hidden="true"></i>En contabilidad este tercero va como <strong>' + esc(l.equivalencia) + '</strong>: su saldo se suma aquí ' +
+      'y los documentos a Alegra usan ese Id.' + (CERRADA ? '' :
+      ' <button type="button" class="btn btn-link p-0 ct-equiv-del">Quitar</button>')).toggle(!!l.equivalencia);
     var s = l.sugerencia || {}, sh = '';
     if (s.traslados && s.traslados.length) {
       sh = '<div class="ct-sub-h">Traslado sugerido</div><table class="table table-sm table-bordered mb-0" style="max-width:640px"><tbody>' +
@@ -1244,6 +1250,13 @@
     if (!CERRADA && sugerenciasTraslado(l).length) {
       sh += '<button type="button" class="btn btn-sm btn-primary mt-2" id="m-precargar"><i class="fas fa-magic mr-1"></i>Preparar este traslado</button>' +
             ' <small class="text-muted ml-1">Se llena el formulario; nada se guarda hasta que lo confirmes.</small>';
+    }
+    if (s.correcto && !CERRADA) {
+      sh += '<div class="mt-2"><button type="button" class="btn btn-sm btn-primary ct-equiv-add" data-contable="' + esc(s.correcto) + '">' +
+        '<i class="fas fa-link mr-1"></i>Es el mismo tercero: en contabilidad va como <strong>' + esc(s.correcto) + '</strong></button>' +
+        ' <small class="text-muted ml-1">No cambia nada en Andinasoft ni en Alegra: solo une los dos saldos aquí.</small>' +
+        '<div class="mt-1"><button type="button" class="btn btn-sm btn-link p-0" id="m-corr-ir" data-correcto="' + esc(s.correcto) + '">' +
+        'o corregir la identificación en Andinasoft a ' + esc(s.correcto) + '</button></div></div>';
     }
     if (s.contrapartes && s.contrapartes.length) {
       sh += '<div class="small mt-1">Ver contraparte: ' + s.contrapartes.map(function (c) { return '<a href="#" class="ct-ir" data-ident="' + esc(c) + '">' + esc(c) + '</a>'; }).join(', ') + '</div>';
@@ -2082,6 +2095,32 @@
           (puedeRev ? '<button type="button" class="btn btn-sm btn-link text-danger p-0 corr-rev" data-id="' + c.id + '">Revertir</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table>' : '');
   }
+  // Mismo tercero con otro Id en contabilidad: se enlaza sin tocar Andinasoft.
+  var URL_EQUIV = "{% url 'conciliacion-terceros-equivalencia' conciliacion.pk %}";
+  function guardarEquivalencia(datos, $btn, textoBoton) {
+    $btn.prop('disabled', true).text('Guardando…');
+    $.ajax({ url: URL_EQUIV, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+      data: JSON.stringify($.extend({ identificacion: actual.identificacion }, datos)) })
+      .done(function (r) { aplicarRespuesta(r); })
+      .fail(function (x) {
+        $btn.prop('disabled', false).text(textoBoton);
+        alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo guardar.');
+      });
+  }
+  $('#m-linea').on('click', '.ct-equiv-add', function () {
+    var contable = $(this).data('contable');
+    if (!confirm('¿Confirmas que ' + actual.identificacion + ' y ' + contable + ' son el mismo tercero?\n\n' +
+                 'El saldo contable de ' + contable + ' pasa a contar en ' + actual.identificacion + ', y los traslados y facturas ' +
+                 'buscarán su contacto en Alegra con ' + contable + '. No se cambia nada en Andinasoft ni en Alegra.')) return;
+    guardarEquivalencia({ identificacion_contable: contable }, $(this), 'Es el mismo tercero');
+  });
+  $('#m-linea').on('click', '.ct-equiv-del', function () {
+    if (!confirm('¿Quitar la equivalencia? El saldo contable volverá a quedar en una línea aparte.')) return;
+    guardarEquivalencia({ quitar: true }, $(this), 'Quitar');
+  });
+  $('#m-linea').on('click', '#m-corr-ir', function () {
+    abrirAccion('correccion'); $('#m-corr-correcto').val($(this).data('correcto')); $('#m-corr-previa').click();
+  });
   $('#m-linea').on('click', '#m-sug-dv-btn', function (e) {
     e.preventDefault(); abrirAccion('correccion'); $('#m-corr-correcto').val(sinDv(actual.identificacion)); $('#m-corr-previa').click();
   });

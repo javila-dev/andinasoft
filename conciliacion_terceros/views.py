@@ -33,6 +33,7 @@ from conciliacion_terceros.models import (
     Conciliacion,
     ConciliacionLinea,
     ConfigEmpresa,
+    EquivalenciaIdentificacion,
     FuenteConciliacion,
 )
 from conciliacion_terceros.parser import BalanceParseError, norm_ident
@@ -339,7 +340,7 @@ def _facturas_por_tercero(conc, idents=None):
     return out
 
 
-def _linea_json(l, ajustes=None, correcciones=None, facturas=None):
+def _linea_json(l, ajustes=None, correcciones=None, facturas=None, equivs=None):
     return {
         'facturas': (facturas or {}).get(l.identificacion, []),
         'correcciones': (correcciones or {}).get(l.identificacion, []),
@@ -349,6 +350,7 @@ def _linea_json(l, ajustes=None, correcciones=None, facturas=None):
         'capital': str(l.capital), 'intereses': str(l.intereses), 'estado': l.estado,
         'negocios': l.negocios, 'cuentas': l.cuentas, 'alertas': l.alertas,
         'observacion': l.observacion, 'sugerencia': l.sugerencia,
+        'equivalencia': (equivs or {}).get(l.identificacion, ''),
         'revision': l.revision, 'nota': l.nota,
         'justificado_valor': str(l.justificado_valor) if l.justificado_valor is not None else '',
         'revisado_por': l.revisado_por.get_username() if l.revisado_por else '',
@@ -389,7 +391,7 @@ def detalle(request, pk):
         'total_andina': andina,
         'total_contable': contable,
         'diferencia_total': contable - andina,
-        'lineas_json': [_linea_json(l, ajustes, correcciones, facturas) for l in lineas],
+        'lineas_json': [_linea_json(l, ajustes, correcciones, facturas, engine.equivalencias()[1]) for l in lineas],
         'config_facturacion': {
             c.proyecto: {'empresa': c.empresa_id, 'empresa_nombre': c.empresa.nombre, 'modo': c.modo, 'emision': c.emision,
                          'faltantes': c.faltantes_alegra() if c.modo == ConfigFacturacion.MODO_ALEGRA else []}
@@ -443,7 +445,8 @@ def linea_revision(request, pk, linea_id):
     linea.revisado_en = timezone.now()
     engine.aplicar_justificacion(linea, Decimal(conc.tolerancia))
     linea.save(update_fields=['revision', 'nota', 'justificado_valor', 'estado', 'alertas', 'revisado_por', 'revisado_en'])
-    return JsonResponse({'ok': True, 'linea': _linea_json(linea, _ajustes_por_tercero(conc, [linea.identificacion]))})
+    return JsonResponse({'ok': True, 'linea': _linea_json(linea, _ajustes_por_tercero(conc, [linea.identificacion]),
+                                                          equivs=engine.equivalencias()[1])})
 
 
 def _lineas_afectadas(conc, idents):
@@ -454,7 +457,8 @@ def _lineas_afectadas(conc, idents):
     estados = defaultdict(int)
     for e in conc.lineas.values_list('estado', flat=True):
         estados[e] += 1
-    return {'lineas': [_linea_json(l, ajustes, None, facturas) for l in lineas], 'estados': dict(estados)}
+    equivs = engine.equivalencias()[1]
+    return {'lineas': [_linea_json(l, ajustes, None, facturas, equivs) for l in lineas], 'estados': dict(estados)}
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +583,47 @@ def facturacion_referencias(request):
     except Exception as exc:
         logger.exception('Referencias de facturación %s', emp.pk)
         return JsonResponse({'detail': f'No se pudieron cargar los datos de Alegra: {exc}'}, status=502)
+
+
+@login_required
+@require_http_methods(['POST'])
+def equivalencia(request, pk):
+    """El mismo tercero con otro Id en contabilidad: {"identificacion", "identificacion_contable", "nota"} lo guarda y
+    {"identificacion", "quitar": true} lo deshace. No cambia nada en Andinasoft ni en Alegra: solo cómo se busca."""
+    _guard(request)
+    conc = get_object_or_404(Conciliacion, pk=pk)
+    if conc.estado == Conciliacion.ESTADO_CERRADA:
+        return JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        return JsonResponse({'detail': 'JSON inválido.'}, status=400)
+    ident = norm_ident(data.get('identificacion'))
+    if not ident:
+        return JsonResponse({'detail': 'Falta el tercero.'}, status=400)
+    if data.get('quitar'):
+        EquivalenciaIdentificacion.objects.filter(Q(identificacion=ident) | Q(identificacion_contable=ident)).delete()
+        engine.ejecutar(conc)
+        return JsonResponse(dict(ok=True, **_lineas_afectadas(conc, [ident])))
+    contable = norm_ident(data.get('identificacion_contable'))
+    if not contable:
+        return JsonResponse({'detail': 'Escribe la identificación con la que el tercero está en contabilidad.'}, status=400)
+    if contable == ident:
+        return JsonResponse({'detail': 'Es la misma identificación: no hace falta equivalencia.'}, status=400)
+    # Uno a uno: ninguno de los dos puede estar ya en otra equivalencia (ni como Andinasoft ni como contable).
+    otra = EquivalenciaIdentificacion.objects.filter(
+        Q(identificacion__in=(ident, contable)) | Q(identificacion_contable__in=(ident, contable))).first()
+    if otra:
+        return JsonResponse({'detail': f'{otra.identificacion} ya está enlazado con {otra.identificacion_contable} en contabilidad; '
+                                       'quita esa equivalencia primero.'}, status=400)
+    if conc.lineas.filter(identificacion=contable, saldo_andina__isnull=False).exclude(saldo_andina=0).exists():
+        return JsonResponse({'detail': f'{contable} también tiene negocios en Andinasoft: son dos terceros distintos, '
+                                       'no una equivalencia. Si es un Id mal digitado, usa «Corregir identificación».'}, status=400)
+    EquivalenciaIdentificacion.objects.create(identificacion=ident, identificacion_contable=contable,
+                                              nota=(data.get('nota') or '')[:2000], created_by=request.user)
+    logger.info('Conciliación %s: %s enlazó %s con %s en contabilidad', conc.pk, request.user, ident, contable)
+    engine.ejecutar(conc)
+    return JsonResponse(dict(ok=True, **_lineas_afectadas(conc, [ident, contable])))
 
 
 @login_required
