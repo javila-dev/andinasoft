@@ -35,6 +35,12 @@ def _local(identificacion):
     return 'andinasoft.terceros_raw', ''
 
 
+def _misma_ident(a, b):
+    """Misma cédula/NIT; el NIT de Alegra puede traer el dígito de verificación de más."""
+    a, b = _solo_digitos(a), _solo_digitos(b)
+    return bool(a and b and (a == b or a[:-1] == b or b[:-1] == a))
+
+
 def _conflicto(empresa_id, alegra_id, local_model, identificacion):
     return AlegraMapping.objects.filter(
         empresa_id=empresa_id, proyecto__isnull=True, mapping_type=AlegraMapping.CONTACT, alegra_id=alegra_id, active=True,
@@ -52,9 +58,6 @@ def validar(empresa_id, identificacion, alegra_id, client=None):
     if not alegra_id.isdigit():
         raise EnlaceError('El ID de Alegra es un número (lo ves en la URL del contacto).')
     local_model, _ = _local(identificacion)
-    otro = _conflicto(emp.pk, alegra_id, local_model, identificacion)
-    if otro:
-        raise EnlaceError(f'El contacto {alegra_id} de Alegra ya está enlazado a otro tercero ({otro.local_pk}).')
     try:
         c = (client or AlegraMCPClient(emp, timeout=60)).rest('GET', f'/contacts/{alegra_id}')
     except Exception as exc:
@@ -64,10 +67,21 @@ def validar(empresa_id, identificacion, alegra_id, client=None):
     ident = c.get('identification') or ''
     if isinstance(ident, dict):
         ident = ident.get('number') or ''
-    a, b = _solo_digitos(ident), _solo_digitos(identificacion)
-    # Con dígito de verificación el NIT de Alegra puede traer un dígito de más.
-    coincide = bool(a and b and (a == b or a[:-1] == b or b[:-1] == a))
-    return {'id': str(c.get('id')), 'nombre': c.get('name') or c.get('businessName') or '',
+    nombre = c.get('name') or c.get('businessName') or ''
+    if isinstance(nombre, dict):  # personas: {firstName, lastName, …}
+        nombre = ' '.join(str(v) for v in nombre.values() if v)
+    coincide = _misma_ident(ident, identificacion)
+    otro = _conflicto(emp.pk, alegra_id, local_model, identificacion)
+    if otro:
+        # Se dice qué contacto es en Alegra, para saber si el ID pegado es el del otro tercero o si el enlace viejo está mal.
+        quien = f'En Alegra el contacto {alegra_id} es {nombre or "(sin nombre)"} · identificación {ident or "(vacía)"}'
+        if _misma_ident(ident, otro.local_pk):
+            raise EnlaceError(f'{quien}, y ya está enlazado a ese tercero ({otro.local_pk}): es su contacto, no el de {identificacion}. '
+                              f'Busca en Alegra el contacto de {identificacion} y pega su ID; si no existe, créalo en Alegra.')
+        raise EnlaceError(f'{quien}, pero está enlazado a {otro.local_pk}'
+                          + (f'; por la identificación parece ser el de {identificacion} y ese enlace estaría errado' if coincide else '')
+                          + '. Revísalo en Integración Alegra → Enlazar tercero antes de moverlo.')
+    return {'id': str(c.get('id')), 'nombre': nombre,
             'identificacion': str(ident), 'coincide': coincide}
 
 
