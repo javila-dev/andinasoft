@@ -281,7 +281,14 @@ def _contacto(empresa, identificacion):
     try:
         return str(MappingResolver(empresa).contact_for_cliente(identificacion))
     except AlegraConfigurationError as exc:
-        raise FacturacionError(f'{identificacion} no tiene contacto en Alegra ({empresa.nombre}): {exc}')
+        raise SinContactoAlegra(empresa, identificacion, f'{identificacion} no tiene contacto en Alegra ({empresa.nombre}): {exc}')
+
+
+class SinContactoAlegra(FacturacionError):
+    """El tercero existe en Alegra pero no está enlazado (o no existe): la pantalla ofrece enlazarlo por su id."""
+    def __init__(self, empresa, identificacion, mensaje):
+        super().__init__(mensaje)
+        self.falta_contacto = {'empresa': str(empresa.pk), 'empresa_nombre': empresa.nombre, 'identificacion': identificacion}
 
 
 def payload_factura(f, config, contacto_id):

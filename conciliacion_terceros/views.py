@@ -596,6 +596,33 @@ def cuentas_alegra(request):
         return JsonResponse({'detail': f'No se pudieron consultar las cuentas en Alegra: {exc}'}, status=502)
 
 
+@login_required
+@require_http_methods(['GET', 'POST'])
+def contacto_alegra(request):
+    """Enlaza un tercero con su contacto de Alegra por id. GET valida (devuelve nombre e identificación en Alegra);
+    POST guarda el enlace. Es el mismo enlace de «Enlazar tercero» en la integración de Alegra."""
+    from conciliacion_terceros import contactos
+    _guard(request)
+    datos = request.GET if request.method == 'GET' else (json.loads(request.body or '{}') if request.body else {})
+    empresa_id = str(datos.get('empresa') or '').strip()
+    ident = norm_ident(datos.get('identificacion'))
+    alegra_id = str(datos.get('alegra_id') or '').strip()
+    if not empresa_id or not ident or not alegra_id:
+        return JsonResponse({'detail': 'Faltan la empresa, el tercero o el ID de Alegra.'}, status=400)
+    try:
+        contacto = contactos.validar(empresa_id, ident, alegra_id)
+        if request.method == 'GET':
+            return JsonResponse({'ok': True, 'contacto': contacto})
+        if not contacto['coincide'] and not datos.get('confirmar'):
+            return JsonResponse({'detail': f'En Alegra el contacto {alegra_id} tiene la identificación «{contacto["identificacion"]}», '
+                                           f'que no coincide con {ident}.', 'contacto': contacto, 'confirmar': True}, status=409)
+        contactos.enlazar(empresa_id, ident, contacto['id'], contacto['nombre'])
+    except contactos.EnlaceError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    logger.info('Conciliación: %s enlazó %s con el contacto %s de Alegra (empresa %s)', request.user, ident, alegra_id, empresa_id)
+    return JsonResponse({'ok': True, 'contacto': contacto})
+
+
 def _factura_respuesta(conc, facturas, mensaje=''):
     engine.ejecutar(conc, usar_cache=True)
     return JsonResponse(dict(ok=True, mensaje=mensaje, facturas=[_factura_json(f) for f in facturas],
@@ -878,7 +905,8 @@ def ajuste_crear(request, pk):
                 cuentas_cache[emp.pk] = facturacion.cuentas_alegra(emp)
             ajustes_srv.resolver(a, cuentas_cache[emp.pk])
         except Exception as exc:
-            return JsonResponse({'detail': f'Fila {i}: {exc} No se registró ningún traslado.'}, status=400)
+            return JsonResponse({'detail': f'Fila {i}: {exc} No se registró ningún traslado.',
+                                 'falta_contacto': getattr(exc, 'falta_contacto', None)}, status=400)
 
     grupo = str(uuid.uuid4())
     for a in nuevos:

@@ -8,6 +8,7 @@ urlpatterns = [
     path('facturacion/', views.facturacion_config, name='conciliacion-terceros-facturacion'),
     path('facturacion/referencias', views.facturacion_referencias, name='conciliacion-terceros-facturacion-referencias'),
     path('cuentas-alegra', views.cuentas_alegra, name='conciliacion-terceros-cuentas-alegra'),
+    path('contacto-alegra', views.contacto_alegra, name='conciliacion-terceros-contacto-alegra'),
     path('<int:pk>/facturas', views.factura_crear, name='conciliacion-terceros-factura-crear'),
     path('<int:pk>/facturas/costo-sugerido', views.factura_costo_sugerido, name='conciliacion-terceros-factura-costo'),
     path('<int:pk>/facturas/<int:factura_id>/<str:accion>', views.factura_accion, name='conciliacion-terceros-factura-accion'),

@@ -72,7 +72,9 @@ def resolver(a, cuentas=None):
         try:
             contactos[ident] = facturacion._contacto(empresa, ident)
         except facturacion.FacturacionError as exc:
-            raise AjusteError(str(exc))
+            err = AjusteError(str(exc))
+            err.falta_contacto = getattr(exc, 'falta_contacto', None)  # la pantalla ofrece enlazarlo
+            raise err
         except Exception as exc:
             raise AjusteError(f'No se pudo consultar el contacto {ident} en Alegra ({exc}).')
     cfg = ConfigEmpresa.objects.filter(empresa_id=empresa.pk).first()

@@ -34,6 +34,7 @@
   .ct-esc-paso { color: #66727d; white-space: nowrap; padding-left: 4px; }
   .ct-esc-paso.hecho { color: #2e7d32; }
   .ct-info { color: #2d4a42; cursor: help; margin-left: 2px; }
+  .ct-enlace { border: 1px solid #f0c36d; background: #fffaf0; border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
   /* Selector de la cuenta del cruce: el panel va dentro de la celda (la tabla tiene scroll y lo cortaría si flotara). */
   .aj-cruce { min-width: 240px; }
   .aj-cruce .ct-combo-btn { cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; position: relative; padding-right: 22px; }
@@ -555,6 +556,7 @@
                 </div>
               </div>
               <p class="small text-muted mb-0">El saldo solo se mueve cuando Alegra confirma el comprobante. En empresas sin Alegra queda pendiente hasta marcarlo como registrado a mano.</p>
+              <div id="m-aj-enlace"></div>
               <div class="ct-panel-pie">
                 <small class="text-muted" id="m-aj-total"></small>
                 <span>
@@ -1569,7 +1571,15 @@
         // Quedaron registrados como pendientes: cada uno se envía a Alegra en su propia petición.
         enviarAjustes(r.por_enviar || [], r.resultados || [], function (rs) { listo(); avisarResultados(rs); });
       })
-      .fail(function (x) { listo(); alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo registrar el traslado.'); });
+      .fail(function (x) {
+        listo();
+        var j = x.responseJSON || {};
+        if (j.falta_contacto) {
+          enlaceContacto($('#m-aj-enlace'), j.falta_contacto, j.detail, function () { $('#m-aj-save').click(); }, 'Enlazar y registrar');
+          return;
+        }
+        alert(j.detail || 'No se pudo registrar el traslado.');
+      });
   });
   // Envía a Alegra los traslados uno por uno y espera la respuesta de cada uno.
   function enviarAjustes(ids, resultados, alTerminar) {
@@ -1968,7 +1978,7 @@
     if (f.paso_en_curso === 'factura') h += li('wait', 'fa-clock', enviando);
     else if (emitida) h += li('ok', 'fa-check-circle', 'Factura ' + esc(f.numero) + ' emitida');
     else if (f.estado === 'borrador') h += li('wait', 'fa-pause-circle', 'Factura en borrador en Alegra', 'Al emitirla se registran el costo y el cruce.', btn('emitir', 'Emitir'));
-    else h += li('bad', 'fa-times-circle', 'Factura no creada', f.error || 'Pendiente de enviar.', f.error ? btn('reintentar', 'Reintentar factura') : btn('enviar', 'Enviar factura'));
+    else h += li('bad', 'fa-times-circle', 'Factura no creada', f.error || 'Pendiente de enviar.', (f.error ? btn('reintentar', 'Reintentar factura') : btn('enviar', 'Enviar factura')) + btnEnlace(f.error, f.empresa));
     // 2. Costo (solo en la primera factura del negocio)
     if (Number(f.costo) > 0) {
       var tc = 'Costo ' + fmt.format(Number(f.costo));
@@ -1984,7 +1994,7 @@
     else if (f.paso_en_curso === 'cruce') h += li('wait', 'fa-clock', enviando);
     else if (f.cruce_estado === 'registrado') h += li('ok', 'fa-check-circle', tr + ' registrado');
     else if (!emitida) h += li('off', 'fa-circle', tr + ' · espera la factura');
-    else if (f.error_cruce) h += li('bad', 'fa-times-circle', tr + ' no registrado', f.error_cruce, btn('cruzar', 'Reintentar cruce'));
+    else if (f.error_cruce) h += li('bad', 'fa-times-circle', tr + ' no registrado', f.error_cruce, btn('cruzar', 'Reintentar cruce') + btnEnlace(f.error_cruce, f.empresa));
     else h += li('wait', 'fa-circle', tr + ' pendiente', '', btn('cruzar', 'Registrar cruce'));
     return '<ul class="ct-pasos">' + h + '</ul>';
   }
@@ -2250,11 +2260,72 @@
       return '<span class="text-warning"><i class="fas fa-hand-paper mr-1"></i>Por registrar a mano</span><br><small class="text-muted">' + ref + ' · no cuenta todavía</small>';
     if (a.enviando) return '<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Enviando…</span>';
     return '<span class="text-danger"><i class="fas fa-exclamation-triangle mr-1"></i>Pendiente · no cuenta</span>' +
-      (a.journal_error ? '<br><small class="text-danger">' + esc(a.journal_error) + '</small>' : '') + '<br><small class="text-muted">' + ref + '</small>';
+      (a.journal_error ? '<br><small class="text-danger">' + esc(a.journal_error) + '</small>' + btnEnlace(a.journal_error, a.origen_empresa) : '') +
+      '<br><small class="text-muted">' + ref + '</small>';
   }
   var URL_AJ_ACC = "{% url 'conciliacion-terceros-ajuste-enviar' conciliacion.pk 0 %}".replace('/0/enviar', '/__ID__/__ACC__');
   // Formulario en línea (en lugar de prompt): fecha con selector, comprobante opcional, Guardar / Cancelar.
   // Se pinta debajo del botón que lo abre; el aviso de corte aparece bajo la fecha.
+  // ---- Tercero sin contacto en Alegra: se enlaza aquí mismo por el ID del contacto (mismo enlace de la integración) ----
+  var URL_CONTACTO = "{% url 'conciliacion-terceros-contacto-alegra' %}";
+  function btnEnlace(texto, empresa) {
+    var m = /(\S+) no tiene contacto en Alegra/.exec(texto || '');
+    if (!m || CERRADA || !empresa) return '';
+    return ' <button type="button" class="btn btn-link p-0 ct-enlazar" data-empresa="' + esc(empresa) + '" data-ident="' + esc(m[1]) + '">' +
+      '<i class="fas fa-link mr-1" aria-hidden="true"></i>Enlazar con Alegra</button>';
+  }
+  function enlaceContacto($donde, falta, motivo, alTerminar, textoBoton) {
+    var x = BY_IDENT[falta.identificacion], nombre = x ? x.nombre : '';
+    var emp = falta.empresa_nombre || EMP_CORTA[falta.empresa] || falta.empresa, id = 'enl-' + Date.now();
+    $donde.find('.ct-enlace').remove();
+    var $b = $('<div class="ct-enlace" role="group" aria-label="Enlazar tercero con Alegra">' +
+      '<div class="small mb-1"><i class="fas fa-link mr-1" aria-hidden="true"></i><strong>' + esc(falta.identificacion) + '</strong> ' + esc(nombre) +
+      ' no está enlazado con su contacto de Alegra en ' + esc(emp) + '. Pega el ID del contacto (lo ves en la URL del contacto en Alegra).</div>' +
+      '<div class="d-flex flex-wrap align-items-center" style="gap:6px">' +
+      '<label class="sr-only" for="' + id + '">ID del contacto en Alegra</label>' +
+      '<input type="text" inputmode="numeric" id="' + id + '" class="form-control form-control-sm ct-enl-id" style="max-width:160px" placeholder="Ej. 1517" autocomplete="off">' +
+      '<button type="button" class="btn btn-sm btn-outline-secondary ct-enl-buscar">Buscar en Alegra</button>' +
+      '<button type="button" class="btn btn-sm btn-link ct-enl-no">Cancelar</button></div>' +
+      '<div class="ct-enl-res small mt-1" aria-live="polite"></div></div>');
+    $donde.append($b);
+    $b.find('.ct-enl-id').trigger('focus');
+    var contacto = null;
+    function buscar() {
+      var aid = $b.find('.ct-enl-id').val().trim();
+      if (!/^\d+$/.test(aid)) { $b.find('.ct-enl-res').html('<span class="text-danger">El ID de Alegra es un número.</span>'); return; }
+      contacto = null;
+      $b.find('.ct-enl-res').html('<span class="text-muted"><i class="fas fa-spinner fa-spin mr-1"></i>Consultando Alegra…</span>');
+      $.getJSON(URL_CONTACTO, { empresa: falta.empresa, identificacion: falta.identificacion, alegra_id: aid })
+        .done(function (r) {
+          contacto = r.contacto;
+          $b.find('.ct-enl-res').html('En Alegra: <strong>' + esc(contacto.nombre) + '</strong> · identificación ' + esc(contacto.identificacion || '(vacía)') +
+            (contacto.coincide ? ' <span class="ct-ok"><i class="fas fa-check-circle"></i> coincide</span>'
+                               : ' <span class="text-warning font-weight-bold">no coincide con ' + esc(falta.identificacion) + ': revisa que sea el contacto correcto</span>') +
+            '<div class="mt-1"><button type="button" class="btn btn-sm btn-primary ct-enl-ok">' + esc(textoBoton || 'Enlazar') + '</button></div>');
+        })
+        .fail(function (x) { $b.find('.ct-enl-res').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo consultar Alegra.') + '</span>'); });
+    }
+    $b.on('click', '.ct-enl-buscar', buscar);
+    $b.on('keydown', '.ct-enl-id', function (e) { if (e.key === 'Enter') { e.preventDefault(); buscar(); } });
+    $b.on('input', '.ct-enl-id', function () { contacto = null; $b.find('.ct-enl-res').empty(); });
+    $b.on('click', '.ct-enl-no', function () { $b.remove(); });
+    $b.on('click', '.ct-enl-ok', function () {
+      if (!contacto) return;
+      var $ok = $(this).prop('disabled', true).text('Enlazando…');
+      $.ajax({ url: URL_CONTACTO, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': CSRF },
+        data: JSON.stringify({ empresa: falta.empresa, identificacion: falta.identificacion, alegra_id: contacto.id, confirmar: !contacto.coincide }) })
+        .done(function () { $b.remove(); alTerminar && alTerminar(); })
+        .fail(function (x) { $ok.prop('disabled', false).text(textoBoton || 'Enlazar'); $b.find('.ct-enl-res').append('<div class="text-danger mt-1">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo enlazar.') + '</div>'); });
+    });
+  }
+  // Desde el historial (traslado) o los pasos de una factura: al enlazar se abre el reintento de ese mismo paso.
+  $('#m-linea').on('click', '.ct-enlazar', function () {
+    var $btn = $(this), $cont = $btn.closest('td, li');
+    enlaceContacto($cont, { empresa: String($btn.data('empresa')), identificacion: String($btn.data('ident')) }, '', function () {
+      var $re = $btn.closest('tr, li').find('.aj-enviar, .fac-acc').filter(function () { return $(this).data('acc') !== 'anular' && $(this).data('acc') !== 'verificar'; }).first();
+      if ($re.length) $re.trigger('click'); else alert('Contacto enlazado. Ya puedes reintentar.');
+    });
+  });
   function formInline($boton, opciones, alGuardar) {
     var $cont = $boton.closest('td');
     $cont.find('.ct-inline').remove();
