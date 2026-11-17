@@ -273,6 +273,7 @@ def _ajuste_json(a, inc=None):
         'origen_cuenta_nombre': a.origen_cuenta_nombre,
         'destino': a.destino_identificacion, 'destino_empresa': a.destino_empresa_id, 'destino_cuenta': a.destino_cuenta,
         'destino_cuenta_nombre': a.destino_cuenta_nombre, 'nota': a.nota, 'anulado': a.anulado,
+        'referencia': a.referencia, 'grupo_ref': a.grupo_ref,
         'journal_estado': a.journal_estado, 'journal_label': a.get_journal_estado_display(), 'journal_ref': a.journal_ref,
         'journal_error': a.journal_error, 'aplicado': a.aplicado, 'via': 'alegra' if a.via_alegra else 'manual',
         'fecha': a.fecha.isoformat() if a.fecha else '',
@@ -964,11 +965,22 @@ def ajuste_crear(request, pk):
     for a in nuevos:
         a.grupo = grupo
         a.save()  # uno a uno: cada ajuste necesita su id para la referencia AJ-CT-<id>
+    # Los de una misma empresa que van a Alegra se envían en un solo comprobante, con la referencia del grupo.
+    por_empresa = defaultdict(list)
+    for a in nuevos:
+        if a.via_alegra:
+            por_empresa[a.origen_empresa_id].append(a)
+    for ajs in por_empresa.values():
+        ref = f'AJ-CT-G{min(x.pk for x in ajs)}'
+        for a in ajs:
+            a.grupo_ref = ref
+        AjusteConciliacion.objects.filter(pk__in=[x.pk for x in ajs]).update(grupo_ref=ref)
     # Quedan pendientes (no mueven saldos). La pantalla envía cada uno a Alegra en su propia petición y espera
     # la respuesta: así ninguna petición junta varias llamadas largas a Alegra (el servidor corta a los 120 s).
     idents = [a.origen_identificacion for a in nuevos] + [a.destino_identificacion for a in nuevos]
+    # Un envío por comprobante: el primero de cada grupo manda todos los traslados de ese grupo.
     return JsonResponse(dict(ok=True, resultados=[_resultado_ajuste(a) for a in nuevos],
-                             por_enviar=[a.pk for a in nuevos if a.via_alegra],
+                             por_enviar=[min(x.pk for x in ajs) for ajs in por_empresa.values()],
                              **_lineas_afectadas(conc, idents)))
 
 
@@ -1052,19 +1064,23 @@ def ajuste_enviar(request, pk, ajuste_id):
         data = json.loads(request.body or '{}')
     except ValueError:
         data = {}
+    # Un comprobante tiene una sola fecha: si se cambia, se cambia para todos sus traslados pendientes.
+    grupo = ajustes_srv.pendientes_del_grupo(a)
     if data.get('fecha') or not a.fecha:
         fecha, error = _fecha_journal(data.get('fecha'))
         if error:
             return JsonResponse({'detail': error}, status=400)
-        a.fecha = fecha
-        a.save(update_fields=['fecha'])
+        AjusteConciliacion.objects.filter(pk__in=[x.pk for x in grupo]).update(fecha=fecha)
+        a.refresh_from_db()
     try:
         ajustes_srv.enviar(a, request.user)
     except ajustes_srv.AjusteError as exc:
         return JsonResponse({'detail': str(exc)}, status=400)
     engine.ejecutar(conc, usar_cache=True)
-    return JsonResponse(dict(ok=True, resultados=[_resultado_ajuste(a)],
-                             **_lineas_afectadas(conc, [a.origen_identificacion, a.destino_identificacion])))
+    afectados = list(AjusteConciliacion.objects.filter(pk__in=[x.pk for x in grupo]).select_related('origen_empresa')) or [a]
+    idents = [i for x in afectados for i in (x.origen_identificacion, x.destino_identificacion)]
+    return JsonResponse(dict(ok=True, resultados=[_resultado_ajuste(x) for x in afectados],
+                             **_lineas_afectadas(conc, idents)))
 
 
 @login_required

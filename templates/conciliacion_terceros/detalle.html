@@ -1312,10 +1312,17 @@
   function labelC(c, saldo) {
     return (EMP_CORTA[c.empresa] || c.empresa_nombre) + ' · ' + c.cuenta + ' ' + c.cuenta_nombre + (saldo != null ? ' ($' + fmt.format(Number(saldo)) + ')' : '');
   }
+  // Todas las cuentas donde el tercero tiene saldo. Las que no tienen saldo a favor se muestran deshabilitadas,
+  // para que se vea que existen y por qué no se puede sacar de ellas.
   function opcionesOrigen(cuentas, sel) {
-    var cs = cuentas.filter(function (c) { return Number(c.saldo) > 0; });
-    if (!cs.length) return '<option value="">Sin saldo disponible</option>';
-    return cs.map(function (c) { return '<option value="' + esc(keyC(c)) + '" data-saldo="' + c.saldo + '"' + (keyC(c) === sel ? ' selected' : '') + '>' + esc(labelC(c, c.saldo)) + '</option>'; }).join('');
+    if (!cuentas.length) return '<option value="">Sin saldo en las cuentas de la conciliación</option>';
+    var hay = cuentas.some(function (c) { return Number(c.saldo) > 0; });
+    return (hay ? '' : '<option value="">Sin saldo a favor para trasladar</option>') +
+      cuentas.map(function (c) {
+        var ok = Number(c.saldo) > 0;
+        return '<option value="' + esc(keyC(c)) + '" data-saldo="' + c.saldo + '"' + (ok ? '' : ' disabled') +
+          (ok && keyC(c) === sel ? ' selected' : '') + '>' + esc(labelC(c, c.saldo)) + (ok ? '' : ' · sin saldo a favor') + '</option>';
+      }).join('');
   }
   // Naturaleza de la cuenta: crédito (clases 2, 3 y 4) o débito. Origen y destino deben coincidir para que el asiento cuadre.
   function natC(cuenta) { return '234'.indexOf(String(cuenta || '').charAt(0)) >= 0 ? 'C' : 'D'; }
@@ -1612,12 +1619,16 @@
     function siguiente() {
       var id = cola.shift();
       if (id === undefined) { progreso(''); alTerminar(resultados.map(function (x) { return porId[x.id]; })); return; }
-      progreso('Enviando a Alegra · traslado ' + (ids.length - cola.length) + ' de ' + ids.length + '…');
+      progreso('Enviando a Alegra · comprobante ' + (ids.length - cola.length) + ' de ' + ids.length + '…');
       $.ajax({ url: URL_AJ_ACC.replace('__ID__', id).replace('__ACC__', 'enviar'), method: 'POST', contentType: 'application/json',
         headers: { 'X-CSRFToken': CSRF }, data: '{}' })
-        .done(function (r) { aplicarRespuesta(r); var x = (r.resultados || [])[0]; if (x) porId[x.id] = x; siguiente(); })
+        // Un comprobante lleva varios traslados: la respuesta trae todos los del grupo.
+        .done(function (r) { aplicarRespuesta(r); (r.resultados || []).forEach(function (x) { porId[x.id] = x; }); siguiente(); })
         .fail(function (x) {
-          porId[id] = Object.assign({}, porId[id], { aplicado: false, error: (x.responseJSON && x.responseJSON.detail) || 'No se pudo enviar.' });
+          var err = (x.responseJSON && x.responseJSON.detail) || 'No se pudo enviar.';
+          Object.keys(porId).forEach(function (k) {  // el comprobante falla completo
+            if (!porId[k].aplicado) porId[k] = Object.assign({}, porId[k], { aplicado: false, error: err });
+          });
           siguiente();
         });
     }
@@ -2274,6 +2285,11 @@
     function lado(ident, emp, cuenta) {
       return (ident === l.identificacion ? '' : '<strong>' + esc(ident) + '</strong> · ') + '<span class="ct-tag ct-tag-e">' + esc(EMP_CORTA[emp] || emp) + '</span>' + esc(cuenta);
     }
+    // Traslados que van en el mismo comprobante: enviar uno los envía todos.
+    var pendGrupo = {};
+    hs.forEach(function (a) {
+      if (a.grupo_ref && !a.anulado && a.journal_estado === 'pendiente') pendGrupo[a.grupo_ref] = (pendGrupo[a.grupo_ref] || 0) + 1;
+    });
     $('#m-hist').html('<table class="table table-sm table-bordered ct-hist mb-0"><thead class="thead-light"><tr><th>Registro</th><th>Desde</th><th>Hacia</th><th class="num">Valor</th><th>Tipo</th><th>Nota</th><th>Contabilidad</th><th></th></tr></thead><tbody>' +
       hs.map(function (a) {
         var sale = a.origen === l.identificacion && (a.destino !== l.identificacion || a.tipo === 'cruce');
@@ -2286,7 +2302,8 @@
           acciones = '<button type="button" class="btn btn-sm btn-link p-0 aj-verificar" data-id="' + a.id + '" title="Si anulaste el journal en Alegra, aquí deja de contar">¿Anulado en Alegra?</button>';
         else if (pendiente && !CERRADA) {
           acciones = (a.via === 'alegra'
-              ? '<button type="button" class="btn btn-sm btn-link p-0 aj-enviar" data-id="' + a.id + '" data-fecha="' + esc(a.fecha) + '">' + (a.journal_error ? 'Reintentar' : 'Enviar a Alegra') + '</button>'
+              ? '<button type="button" class="btn btn-sm btn-link p-0 aj-enviar" data-id="' + a.id + '" data-fecha="' + esc(a.fecha) + '">' +
+                (a.journal_error ? 'Reintentar' : 'Enviar a Alegra') + (pendGrupo[a.grupo_ref] > 1 ? ' (' + pendGrupo[a.grupo_ref] + ' traslados)' : '') + '</button>'
               : '<button type="button" class="btn btn-sm btn-link p-0 aj-manual" data-id="' + a.id + '" data-fecha="' + esc(a.fecha) + '">Marcar registrado</button>') +
             '<br><button type="button" class="btn btn-sm btn-link text-danger p-0 aj-anular" data-id="' + a.id + '">Anular</button>';
         }
@@ -2300,7 +2317,7 @@
   }
   function fechaCorta(iso) { return iso ? iso.split('-').reverse().join('/') : ''; }
   function estadoAjuste(a) {
-    var ref = 'AJ-CT-' + a.id;
+    var ref = a.referencia || ('AJ-CT-' + a.id);
     if (a.anulado) return '<span class="text-muted">' + ref + '</span>';
     var enArchivo = a.incluido_archivo ? '<br><small class="text-muted"><i class="fas fa-file-import mr-1"></i>Ya viene en el archivo cargado: no se suma de nuevo</small>' : '';
     if (a.journal_estado === 'enviado')

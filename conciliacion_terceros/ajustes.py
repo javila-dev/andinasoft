@@ -50,17 +50,19 @@ def lineas_asiento(a):
     ]
 
 
-def resolver(a, cuentas=None):
-    """Cuentas, contactos y numeración en Alegra. Lanza AjusteError antes de enviar nada si falta algo."""
+def resolver(a, cuentas=None, grupo=None):
+    """Cuentas, contactos y numeración en Alegra de todo el comprobante. Lanza AjusteError antes de enviar nada
+    si falta algo: así un traslado con un dato incompleto no deja el comprobante a medias."""
     from conciliacion_terceros import facturacion
 
     empresa = a.origen_empresa
+    grupo = list(grupo or [a])
     try:
         cuentas = cuentas if cuentas is not None else facturacion.cuentas_alegra(empresa)
     except Exception as exc:
         raise AjusteError(f'No se pudieron consultar las cuentas de {empresa.nombre} en Alegra ({exc}).')
     ids = {}
-    for codigo in {a.origen_cuenta, a.destino_cuenta}:
+    for codigo in {c for x in grupo for c in (x.origen_cuenta, x.destino_cuenta)}:
         halladas = [c for c in cuentas if c['codigo'] == codigo]
         if len(halladas) != 1:
             raise AjusteError(f'La cuenta {codigo} ' + ('no existe en Alegra como cuenta de movimiento'
@@ -68,7 +70,7 @@ def resolver(a, cuentas=None):
                               + f' ({empresa.nombre}).')
         ids[codigo] = halladas[0]['id']
     contactos = {}
-    for ident in {a.origen_identificacion, a.destino_identificacion}:
+    for ident in {i for x in grupo for i in (x.origen_identificacion, x.destino_identificacion)}:
         try:
             contactos[ident] = facturacion._contacto(empresa, ident)
         except facturacion.FacturacionError as exc:
@@ -81,25 +83,30 @@ def resolver(a, cuentas=None):
     return {'cuentas': ids, 'contactos': contactos, 'numeracion': (cfg.numeracion_journal_id if cfg else '').strip()}
 
 
-def payload(a, r):
+def payload(a, r, grupo=None):
+    """Un solo comprobante con dos líneas por traslado: los guardados juntos van en el mismo journal."""
     from alegra_integration.builders import _journal_entry, _journal_payload
 
     corte = a.conciliacion.fecha_corte.strftime('%d/%m/%Y')
-    entries = []
-    for l in lineas_asiento(a):
-        otro = a.destino_identificacion if l['lado'] == 'origen' else a.origen_identificacion
-        if a.es_cruce:
-            desc = f'Cruce {a.origen_cuenta} contra {a.destino_cuenta} · conciliación {corte} · {a.referencia}'
-        elif otro == l['identificacion']:
-            desc = f'Traslado entre cuentas · conciliación {corte} · {a.referencia}'
-        elif l['lado'] == 'origen':
-            desc = f'Traslado de saldo a {otro} · conciliación {corte} · {a.referencia}'
-        else:
-            desc = f'Traslado de saldo desde {otro} · conciliación {corte} · {a.referencia}'
-        entries.append(_journal_entry(account_id=r['cuentas'][l['cuenta']], description=desc,
-                                      debit=float(l['debito']), credit=float(l['credito']),
-                                      client_id=r['contactos'][l['identificacion']]))
-    observaciones = f'{a.referencia} · Conciliación de terceros {corte}' + (f' · {a.nota}' if a.nota else '')
+    grupo = list(grupo or [a])
+    entries, notas = [], []
+    for x in grupo:
+        if x.nota and x.nota not in notas:
+            notas.append(x.nota)
+        for l in lineas_asiento(x):
+            otro = x.destino_identificacion if l['lado'] == 'origen' else x.origen_identificacion
+            if x.es_cruce:
+                desc = f'Cruce {x.origen_cuenta} contra {x.destino_cuenta} · conciliación {corte}'
+            elif otro == l['identificacion']:
+                desc = f'Traslado entre cuentas · conciliación {corte}'
+            elif l['lado'] == 'origen':
+                desc = f'Traslado de saldo a {otro} · conciliación {corte}'
+            else:
+                desc = f'Traslado de saldo desde {otro} · conciliación {corte}'
+            entries.append(_journal_entry(account_id=r['cuentas'][l['cuenta']], description=f'{desc} · {a.referencia}',
+                                          debit=float(l['debito']), credit=float(l['credito']),
+                                          client_id=r['contactos'][l['identificacion']]))
+    observaciones = f'{a.referencia} · Conciliación de terceros {corte}' + (' · ' + ' | '.join(notas) if notas else '')
     p = _journal_payload(numeration_id=r['numeracion'], date=a.fecha.isoformat(), reference=a.referencia,
                          observations=observaciones, entries=entries)
     if not r['numeracion']:
@@ -107,9 +114,23 @@ def payload(a, r):
     return p
 
 
+def pendientes_del_grupo(a):
+    """Los traslados que van en el mismo comprobante que `a` y siguen pendientes, en el orden en que se registraron."""
+    if not a.grupo_ref:
+        return [a]
+    return list(AjusteConciliacion.objects.filter(
+        grupo_ref=a.grupo_ref, anulado=False, journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE,
+    ).select_related('origen_empresa', 'conciliacion').order_by('created_at', 'id'))
+
+
+CAMPOS_ENVIO = ['journal_estado', 'journal_ref', 'journal_respuesta', 'journal_error', 'enviado_en',
+                'enviado_por', 'envio_en_curso_desde']
+
+
 def enviar(a, usuario=None):
-    """Envía el journal y espera la respuesta de Alegra. Solo con el journal confirmado queda `enviado`.
-    Si falla, el ajuste sigue pendiente con `journal_error` (no mueve saldos)."""
+    """Envía a Alegra el comprobante de `a` con todos los traslados pendientes de su grupo (un journal con dos líneas
+    por traslado) y espera la respuesta. Solo con el journal confirmado quedan `enviado`; si falla siguen pendientes
+    con el error y no mueven saldos."""
     from conciliacion_terceros import facturacion
 
     if a.anulado or a.journal_estado != AjusteConciliacion.JOURNAL_PENDIENTE:
@@ -120,43 +141,54 @@ def enviar(a, usuario=None):
         raise AjusteError('Falta la fecha del comprobante.')
     ahora = timezone.now()
     libre = Q(envio_en_curso_desde__isnull=True) | Q(envio_en_curso_desde__lt=ahora - datetime.timedelta(minutes=BLOQUEO_MINUTOS))
-    tomado = AjusteConciliacion.objects.filter(libre, pk=a.pk, anulado=False, journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE) \
-        .update(envio_en_curso_desde=ahora)
-    if not tomado:
-        raise AjusteError('Este traslado ya se está enviando a Alegra (otra pestaña u otra persona) o ya no está pendiente. '
-                          'Recarga la página.')
+    pks = [x.pk for x in pendientes_del_grupo(a)] or [a.pk]
+    # Se toman todos los del comprobante a la vez: si otro envío ya tiene alguno, no se manda nada.
+    tomados = AjusteConciliacion.objects.filter(libre, pk__in=pks, anulado=False,
+                                                journal_estado=AjusteConciliacion.JOURNAL_PENDIENTE).update(envio_en_curso_desde=ahora)
+    if tomados != len(pks):
+        AjusteConciliacion.objects.filter(pk__in=pks, envio_en_curso_desde=ahora).update(envio_en_curso_desde=None)
+        raise AjusteError('Este comprobante ya se está enviando a Alegra (otra pestaña u otra persona) o alguno de sus '
+                          'traslados ya no está pendiente. Recarga la página.')
     try:
-        a.refresh_from_db()
+        grupo = list(AjusteConciliacion.objects.filter(pk__in=pks).select_related('origen_empresa', 'conciliacion')
+                     .order_by('created_at', 'id'))
+        a = next(x for x in grupo if x.pk == a.pk)
+        error = ''
         try:
-            r = resolver(a)
-            journal, ya_existia = facturacion.journal_idempotente(a.origen_empresa, a.referencia, lambda: payload(a, r))
+            r = resolver(a, grupo=grupo)
+            journal, ya_existia = facturacion.journal_idempotente(a.origen_empresa, a.referencia,
+                                                                  lambda: payload(a, r, grupo))
         except AjusteError as exc:
-            a.journal_error = f'No se envió nada a Alegra: {exc}'[:4000]
+            error = f'No se envió nada a Alegra: {exc}'[:4000]
         except Exception as exc:
             logger.warning('Ajuste %s: envío a Alegra falló', a.pk, exc_info=True)
-            a.journal_error = (f'{exc} No quedó aplicado. Al reintentar se busca primero en Alegra el journal '
-                               f'«{a.referencia}» para no duplicarlo.')[:4000]
+            error = (f'{exc} No quedó aplicado. Al reintentar se busca primero en Alegra el journal '
+                     f'«{a.referencia}» para no duplicarlo.')[:4000]
         else:
             jid = str(journal.get('id') or '') if isinstance(journal, dict) else ''
             estado = str(journal.get('status') or '').lower() if isinstance(journal, dict) else ''
             if not jid:
-                a.journal_error = f'Alegra no devolvió el journal creado; no quedó aplicado. Respuesta: {journal}'[:4000]
+                error = f'Alegra no devolvió el journal creado; no quedó aplicado. Respuesta: {journal}'[:4000]
             elif estado in ('void', 'voided', 'annulled', 'cancelled'):
-                a.journal_error = (f'En Alegra existe el journal {jid} con la referencia «{a.referencia}», pero está anulado. '
-                                   'Elimínalo en Alegra para volver a enviar, o anula este traslado.')
+                error = (f'En Alegra existe el journal {jid} con la referencia «{a.referencia}», pero está anulado. '
+                         'Elimínalo en Alegra para volver a enviar, o anula estos traslados.')
+        ahora_fin = timezone.now()
+        for x in grupo:
+            if error:
+                x.journal_error = error
             else:
-                a.journal_estado = AjusteConciliacion.JOURNAL_ENVIADO
-                a.journal_ref = jid
-                a.journal_respuesta = dict(journal, **({'_reconciliado': True} if ya_existia else {}))
-                a.journal_error = ''
-                a.enviado_en = timezone.now()
-                a.enviado_por = usuario
-        a.envio_en_curso_desde = None
-        # Solo los campos del envío: no se pisa una anulación u otro cambio hecho en paralelo.
-        a.save(update_fields=['journal_estado', 'journal_ref', 'journal_respuesta', 'journal_error', 'enviado_en',
-                              'enviado_por', 'envio_en_curso_desde'])
+                x.journal_estado = AjusteConciliacion.JOURNAL_ENVIADO
+                x.journal_ref = jid
+                x.journal_respuesta = dict(journal, **({'_reconciliado': True} if ya_existia else {}))
+                x.journal_error = ''
+                x.enviado_en = ahora_fin
+                x.enviado_por = usuario
+            x.envio_en_curso_desde = None
+            # Solo los campos del envío: no se pisa una anulación u otro cambio hecho en paralelo.
+            x.save(update_fields=CAMPOS_ENVIO)
+        a = next(x for x in grupo if x.pk == a.pk)
     finally:
-        AjusteConciliacion.objects.filter(pk=a.pk, envio_en_curso_desde=ahora).update(envio_en_curso_desde=None)
+        AjusteConciliacion.objects.filter(pk__in=pks, envio_en_curso_desde=ahora).update(envio_en_curso_desde=None)
     return a
 
 
@@ -177,12 +209,16 @@ def verificar_anulacion(a, usuario):
     if j is not None and status not in facturacion.ESTADOS_JOURNAL_ANULADO:
         return False, f'En Alegra el journal {a.journal_ref} sigue vigente. No se cambió nada.'
     motivo = 'anulado en Alegra' if j is not None else 'ya no existe en Alegra'
-    if not AjusteConciliacion.objects.filter(pk=a.pk, anulado=False, journal_estado=AjusteConciliacion.JOURNAL_ENVIADO).update(
-            anulado=True, anulado_por=usuario, anulado_en=timezone.now(),
-            journal_error=f'Journal {a.journal_ref} {motivo}.'):
+    # El journal puede llevar varios traslados: si se anula allá, todos dejan de contar.
+    n = AjusteConciliacion.objects.filter(journal_ref=a.journal_ref, origen_empresa=a.origen_empresa_id, anulado=False,
+                                          journal_estado=AjusteConciliacion.JOURNAL_ENVIADO).update(
+        anulado=True, anulado_por=usuario, anulado_en=timezone.now(),
+        journal_error=f'Journal {a.journal_ref} {motivo}.')
+    if not n:
         raise AjusteError('El traslado cambió mientras se verificaba; recarga la página.')
     a.refresh_from_db()
-    return True, f'El journal {a.journal_ref} está {motivo}: el traslado quedó anulado aquí y deja de contar.'
+    cuantos = f'{n} traslados quedaron anulados' if n > 1 else 'el traslado quedó anulado'
+    return True, f'El journal {a.journal_ref} está {motivo}: {cuantos} aquí y deja(n) de contar.'
 
 
 def marcar_manual(a, usuario, comprobante='', fecha=None):

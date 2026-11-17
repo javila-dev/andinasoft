@@ -119,6 +119,8 @@ class AjusteConciliacion(models.Model):
 
     conciliacion = models.ForeignKey(Conciliacion, on_delete=models.CASCADE, related_name='ajustes')
     grupo = models.CharField(max_length=36, db_index=True)  # movimientos guardados juntos
+    # Los traslados guardados juntos de una misma empresa van en un solo comprobante en Alegra: esta es su referencia.
+    grupo_ref = models.CharField(max_length=40, blank=True, default='', db_index=True)
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
     origen_identificacion = models.CharField(max_length=40, db_index=True)
     origen_empresa = models.ForeignKey(empresas, on_delete=models.PROTECT, related_name='+', db_constraint=False)
@@ -168,7 +170,8 @@ class AjusteConciliacion(models.Model):
 
     @property
     def referencia(self):
-        return f'AJ-CT-{self.pk}'
+        """Referencia del comprobante en Alegra: la del grupo cuando varios traslados van en uno solo."""
+        return self.grupo_ref or f'AJ-CT-{self.pk}'
 
 
 class ConciliacionLinea(models.Model):
