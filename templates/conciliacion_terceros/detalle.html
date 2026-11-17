@@ -1256,12 +1256,18 @@
       sh += '<button type="button" class="btn btn-sm btn-primary mt-2" id="m-precargar"><i class="fas fa-magic mr-1"></i>Preparar este traslado</button>' +
             ' <small class="text-muted ml-1">Se llena el formulario; nada se guarda hasta que lo confirmes.</small>';
     }
-    if (s.correcto && !CERRADA) {
-      sh += '<div class="mt-2"><button type="button" class="btn btn-sm btn-primary ct-equiv-add" data-contable="' + esc(s.correcto) + '">' +
-        '<i class="fas fa-link mr-1"></i>Es el mismo tercero: en contabilidad va como <strong>' + esc(s.correcto) + '</strong></button>' +
-        ' <small class="text-muted ml-1">No cambia nada en Andinasoft ni en Alegra: solo une los dos saldos aquí.</small>' +
-        '<div class="mt-1"><button type="button" class="btn btn-sm btn-link p-0" id="m-corr-ir" data-correcto="' + esc(s.correcto) + '">' +
-        'o corregir la identificación en Andinasoft a ' + esc(s.correcto) + '</button></div></div>';
+    if ((s.equivalente || s.correcto) && !CERRADA) {
+      sh += '<div class="mt-2">';
+      if (s.equivalente) {
+        sh += '<button type="button" class="btn btn-sm btn-primary ct-equiv-add" data-contable="' + esc(s.equivalente) + '">' +
+          '<i class="fas fa-link mr-1"></i>Es el mismo tercero: en contabilidad va como <strong>' + esc(s.equivalente) + '</strong></button>' +
+          ' <small class="text-muted ml-1">El Id de Andinasoft se deja como está; solo se unen los dos saldos.</small>';
+      }
+      if (s.correcto) {
+        sh += '<div class="mt-1"><button type="button" class="btn btn-sm ' + (s.equivalente ? 'btn-link p-0' : 'btn-primary') + '" id="m-corr-ir" data-correcto="' + esc(s.correcto) + '">' +
+          (s.equivalente ? 'o corregir' : '<i class="fas fa-id-card mr-1"></i>Corregir') + ' la identificación en Andinasoft a <strong>' + esc(s.correcto) + '</strong></button></div>';
+      }
+      sh += '</div>';
     }
     if (s.contrapartes && s.contrapartes.length) {
       sh += '<div class="small mt-1">Ver contraparte: ' + s.contrapartes.map(function (c) { return '<a href="#" class="ct-ir" data-ident="' + esc(c) + '">' + esc(c) + '</a>'; }).join(', ') + '</div>';

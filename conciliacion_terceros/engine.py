@@ -619,26 +619,44 @@ def _regla_adjudicacion(lineas, negocios, partes, tol):
             x.sugerencia = {'regla': 'adjudicacion_conjunta', 'adj': n['ref'], 'traslados': traslados}
 
 
+def clave_numero(ident):
+    """Clave para reconocer el mismo tercero escrito distinto: solo los dígitos y, si es un NIT con el dígito de
+    verificación pegado, sin él. Así «CE504122» y «504122» caen juntos, y «901472227-8» con «901472227»."""
+    from conciliacion_terceros.correccion import digito_verificacion
+    d = re.sub(r'\D', '', ident or '')
+    if len(d) == 10 and d[0] in '89' and digito_verificacion(d[:-1]) == int(d[-1]):
+        return d[:-1]
+    return d
+
+
 def _regla_mismo_numero(lineas):
-    """El mismo número con un prefijo de tipo de documento en un lado (CE504122 en Andinasoft, 504122 en contabilidad):
-    no es un traslado, es la misma persona con el Id escrito distinto. Se corrige la identificación."""
+    """El mismo tercero escrito distinto en cada lado: con el tipo de documento pegado (CE504122 contra 504122) o con
+    el dígito de verificación del NIT (901472227-8 contra 901472227). No es un traslado de saldo: o se enlazan los dos
+    Id (el de Andinasoft se deja como está) o se corrige la identificación en Andinasoft."""
     por_numero = defaultdict(list)
     for x in lineas.values():
-        digitos = re.sub(r'\D', '', x.identificacion)
-        if len(digitos) >= 4:
-            por_numero[digitos].append(x)
-    for digitos, grupo in por_numero.items():
+        clave = clave_numero(x.identificacion)
+        if len(clave) >= 4:
+            por_numero[clave].append(x)
+    for clave, grupo in por_numero.items():
         if len(grupo) < 2 or not any(_abierta(x) for x in grupo):
             continue
         for x in grupo:
             otros = [o for o in grupo if o is not x]
-            x.alertas = list(x.alertas) + [_alerta('mismo_numero', 'Mismo número con el Id escrito distinto: ' + ', '.join(
+            x.alertas = list(x.alertas) + [_alerta('mismo_numero', 'Mismo tercero con el Id escrito distinto: ' + ', '.join(
                 f'{o.identificacion} {o.nombre} (Andinasoft {_fmt(o.saldo_andina)}, contabilidad {_fmt(o.saldo_contable)})'.strip()
-                for o in otros) + '. Si es la misma persona, corrige la identificación en vez de trasladar el saldo.')]
-            # El Id correcto es el que no lleva letras; con él la conciliación los une en una sola línea.
-            correcto = next((o.identificacion for o in grupo if o.identificacion == digitos), '')
-            x.sugerencia = dict(x.sugerencia or {}, regla='mismo_numero', contrapartes=[o.identificacion for o in otros],
-                                **({'correcto': correcto} if correcto and x.identificacion != correcto else {}))
+                for o in otros) + '. No es un traslado de saldo: enlázalos o corrige la identificación.')]
+            sug = dict(x.sugerencia or {}, regla='mismo_numero', contrapartes=[o.identificacion for o in otros])
+            # Con el Id limpio (sin letras ni dígito de verificación) la conciliación los une en una sola línea.
+            correcto = next((o.identificacion for o in grupo if o.identificacion == clave), '')
+            if correcto and x.identificacion != correcto:
+                sug['correcto'] = correcto
+            # Enlazar: este tercero es de Andinasoft y el otro solo existe en contabilidad.
+            if x.saldo_andina or x.negocios:
+                contable = next((o.identificacion for o in otros if not o.negocios and o.saldo_contable), '')
+                if contable:
+                    sug['equivalente'] = contable
+            x.sugerencia = sug
 
 
 def _regla_mismo_valor(lineas, tol):
