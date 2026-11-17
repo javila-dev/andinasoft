@@ -330,6 +330,11 @@ def _factura_json(f, inc=None):
     }
 
 
+def _crudos():
+    """Solo los Id que en Andinasoft están guardados con puntos, guiones o espacios: {normalizado: como está}."""
+    return {k: v[0] for k, v in engine.identificaciones_andina().items() if v[0] != k}
+
+
 def _facturas_por_tercero(conc, idents=None):
     qs = conc.facturas.select_related('created_by')
     if idents is not None:
@@ -340,7 +345,7 @@ def _facturas_por_tercero(conc, idents=None):
     return out
 
 
-def _linea_json(l, ajustes=None, correcciones=None, facturas=None, equivs=None):
+def _linea_json(l, ajustes=None, correcciones=None, facturas=None, equivs=None, crudos=None):
     return {
         'facturas': (facturas or {}).get(l.identificacion, []),
         'correcciones': (correcciones or {}).get(l.identificacion, []),
@@ -351,6 +356,8 @@ def _linea_json(l, ajustes=None, correcciones=None, facturas=None, equivs=None):
         'negocios': l.negocios, 'cuentas': l.cuentas, 'alertas': l.alertas,
         'observacion': l.observacion, 'sugerencia': l.sugerencia,
         'equivalencia': (equivs or {}).get(l.identificacion, ''),
+        # Id tal como está guardado en Andinasoft cuando trae puntos, guiones o espacios.
+        'identificacion_andina': (crudos or {}).get(l.identificacion, ''),
         'revision': l.revision, 'nota': l.nota,
         'justificado_valor': str(l.justificado_valor) if l.justificado_valor is not None else '',
         'revisado_por': l.revisado_por.get_username() if l.revisado_por else '',
@@ -391,7 +398,7 @@ def detalle(request, pk):
         'total_andina': andina,
         'total_contable': contable,
         'diferencia_total': contable - andina,
-        'lineas_json': [_linea_json(l, ajustes, correcciones, facturas, engine.equivalencias()[1]) for l in lineas],
+        'lineas_json': [_linea_json(l, ajustes, correcciones, facturas, engine.equivalencias()[1], _crudos()) for l in lineas],
         'config_facturacion': {
             c.proyecto: {'empresa': c.empresa_id, 'empresa_nombre': c.empresa.nombre, 'modo': c.modo, 'emision': c.emision,
                          'faltantes': c.faltantes_alegra() if c.modo == ConfigFacturacion.MODO_ALEGRA else []}
@@ -446,7 +453,7 @@ def linea_revision(request, pk, linea_id):
     engine.aplicar_justificacion(linea, Decimal(conc.tolerancia))
     linea.save(update_fields=['revision', 'nota', 'justificado_valor', 'estado', 'alertas', 'revisado_por', 'revisado_en'])
     return JsonResponse({'ok': True, 'linea': _linea_json(linea, _ajustes_por_tercero(conc, [linea.identificacion]),
-                                                          equivs=engine.equivalencias()[1])})
+                                                          equivs=engine.equivalencias()[1], crudos=_crudos())})
 
 
 def _lineas_afectadas(conc, idents):
@@ -457,8 +464,8 @@ def _lineas_afectadas(conc, idents):
     estados = defaultdict(int)
     for e in conc.lineas.values_list('estado', flat=True):
         estados[e] += 1
-    equivs = engine.equivalencias()[1]
-    return {'lineas': [_linea_json(l, ajustes, None, facturas, equivs) for l in lineas], 'estados': dict(estados)}
+    equivs, crudos = engine.equivalencias()[1], _crudos()
+    return {'lineas': [_linea_json(l, ajustes, None, facturas, equivs, crudos) for l in lineas], 'estados': dict(estados)}
 
 
 # ---------------------------------------------------------------------------

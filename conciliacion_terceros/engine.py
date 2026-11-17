@@ -410,7 +410,7 @@ def calcular(conciliacion, usar_cache=False):
             por_tercero[t].append(n)
         for t in n['pagadores']:
             pagador_de[t].append(n)
-    nombres_locales = dict(clientes.objects.filter(pk__in=list(por_tercero) + list(contable)).values_list('pk', 'nombrecompleto'))
+    nombres_locales = {k: v[1] for k, v in identificaciones_andina().items()}
     escrituras = _escrituraciones(negocios)
 
     lineas = {}
@@ -730,6 +730,24 @@ def _resolver_alias(d):
     return out
 
 
+def identificaciones_andina():
+    """Clientes de Andinasoft por su Id normalizado: {normalizado: (Id tal como está guardado, nombre)}.
+
+    Muchos Id traen puntos, guiones o espacios («901472227-8»). La conciliación compara normalizado, pero el nombre
+    del tercero y las correcciones necesitan el Id tal como está guardado, o no lo encuentran."""
+    out = {}
+    for pk, nombre in clientes.objects.values_list('pk', 'nombrecompleto'):
+        pk = str(pk or '')
+        k = norm_ident(pk)
+        if not k:
+            continue
+        previo = out.get(k)
+        # Si el mismo número está con varias grafías, manda el que ya está limpio, y entre sucios el que tenga nombre.
+        if previo is None or (pk == k and previo[0] != k) or (not previo[1] and nombre):
+            out[k] = (pk, nombre or '')
+    return out
+
+
 def equivalencias():
     """Terceros cuyo Id en contabilidad es otro (Alegra no admite letras). ({contable: andinasoft}, {andinasoft: contable})."""
     from conciliacion_terceros.models import EquivalenciaIdentificacion
@@ -745,11 +763,13 @@ def alias_identificaciones():
     from conciliacion_terceros.models import CorreccionIdentificacion
     contable, andina = {}, {}
     for c in CorreccionIdentificacion.objects.exclude(estado=CorreccionIdentificacion.ESTADO_REVERTIDA).order_by('created_at'):
+        # El Id errado puede estar guardado con puntos o guiones; aquí se compara contra líneas y archivos ya normalizados.
+        errado, correcto = norm_ident(c.id_errado), norm_ident(c.id_correcto)
         if c.estado == CorreccionIdentificacion.ESTADO_EJECUTADA:
-            andina[c.id_errado] = c.id_correcto
+            andina[errado] = correcto
         for a in c.alegra or []:
             if a.get('estado') == 'ok' and a.get('accion') == 'corregir_contacto':
-                contable[(a['empresa'], c.id_errado)] = c.id_correcto
+                contable[(a['empresa'], errado)] = correcto
     andina = _resolver_alias(andina)
     por_empresa = defaultdict(dict)
     for (emp, x), y in contable.items():

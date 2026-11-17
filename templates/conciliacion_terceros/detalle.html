@@ -638,6 +638,7 @@
               <p class="ct-sec-ayuda mb-2">Cambia la cédula o NIT en Andinasoft y, si lo eliges, en el contacto de Alegra. Primero verás qué se va a cambiar.</p>
               <div class="form-row align-items-end">
                 <div class="col-md-3 mb-2"><label class="small mb-1" for="m-corr-errado">Identificación actual</label><input type="text" class="form-control form-control-sm" id="m-corr-errado" readonly></div>
+                <div class="col-12 small text-muted mb-2" id="m-corr-crudo" style="display:none"></div>
                 <div class="col-md-3 mb-2"><label class="small mb-1" for="m-corr-correcto">Identificación correcta</label><input type="text" class="form-control form-control-sm" id="m-corr-correcto" placeholder="Cédula o NIT sin dígito de verificación"></div>
                 <div class="col-md-3 mb-2"><button type="button" class="btn btn-sm btn-outline-primary" id="m-corr-previa">Ver qué se va a cambiar</button></div>
               </div>
@@ -1235,6 +1236,10 @@
     renderFacturas(l);
     cerrarPaneles();
     pintarEstado(l);
+    $('#m-sub').append(!l.identificacion_andina ? '' :
+      ' <span class="ct-info" tabindex="0" role="img" title="En Andinasoft está guardado como ' + esc(l.identificacion_andina) +
+      '. La conciliación compara sin puntos ni guiones." aria-label="En Andinasoft está guardado como ' + esc(l.identificacion_andina) + '">' +
+      '<i class="fas fa-info-circle"></i></span>');
     $('#m-equiv').html(!l.equivalencia ? '' :
       '<i class="fas fa-link mr-1" aria-hidden="true"></i>En contabilidad este tercero va como <strong>' + esc(l.equivalencia) + '</strong>: su saldo se suma aquí ' +
       'y los documentos a Alegra usan ese Id.' + (CERRADA ? '' :
@@ -2079,7 +2084,10 @@
   function cerrarCorr() { $('#m-corr').hide(); $('#m-corr-res').empty(); corrPrev = null; }
   function prepararCorr(l) {
     cerrarCorr();
-    $('#m-corr-errado').val(l.identificacion); $('#m-corr-correcto').val('');
+    $('#m-corr-errado').val(l.identificacion_andina || l.identificacion); $('#m-corr-correcto').val('');
+    $('#m-corr-crudo').toggle(!!l.identificacion_andina).html(!l.identificacion_andina ? '' :
+      '<i class="fas fa-info-circle mr-1" aria-hidden="true"></i>En Andinasoft está guardado como <strong>' + esc(l.identificacion_andina) +
+      '</strong> (con puntos, guiones o espacios). La conciliación lo compara como ' + esc(l.identificacion) + '; la corrección usa el guardado.');
     var s = sinDv(l.identificacion);
     $('#m-sug-dv').toggle(!!s).html(s ? '<i class="fas fa-lightbulb mr-1"></i>Este Id parece un NIT con el dígito de verificación incluido (' + esc(l.identificacion.slice(-1)) +
       '). En Andinasoft los NIT van sin DV: <a href="#" id="m-sug-dv-btn">corregir a <strong>' + esc(s) + '</strong></a>.' : '');

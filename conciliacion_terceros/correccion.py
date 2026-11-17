@@ -76,11 +76,25 @@ def _cliente_info(ident):
 # Vista previa
 # ---------------------------------------------------------------------------
 
+def _id_guardado(ident):
+    """El Id tal como está guardado en Andinasoft: puede traer puntos, guiones o espacios («901472227-8»). Si se
+    buscara normalizado no se encontraría el cliente ni sus filas, y la corrección no cambiaría nada."""
+    from conciliacion_terceros.engine import identificaciones_andina
+    norm = norm_ident(ident)
+    if not norm or clientes.objects.filter(pk=norm).exists():
+        return norm
+    return identificaciones_andina().get(norm, (norm, ''))[0]
+
+
 def vista_previa(errado, correcto):
-    errado, correcto = norm_ident(errado), norm_ident(correcto)
-    if not errado or not correcto or errado == correcto:
+    errado, correcto = _id_guardado(errado), norm_ident(correcto)
+    if not errado or not correcto or norm_ident(errado) == correcto:
         raise CorreccionError('Indica un Id errado y un Id correcto distintos.')
     origen, destino = _cliente_info(errado), _cliente_info(correcto)
+    otro = _id_guardado(correcto)
+    if not destino['existe'] and otro != correcto:
+        raise CorreccionError(f'El Id correcto {correcto} ya existe en Andinasoft escrito como «{otro}». '
+                              f'Corrige primero ese cliente a {correcto} y vuelve a intentar.')
     prev = {
         'errado': errado, 'correcto': correcto,
         'cliente_errado': origen, 'cliente_correcto': destino,
@@ -157,7 +171,8 @@ def _vista_previa_alegra(errado, correcto):
         fila = {'empresa': emp.pk, 'empresa_nombre': emp.nombre, 'errado': [], 'correcto': [], 'accion': 'nada', 'error': ''}
         try:
             client = AlegraMCPClient(emp, timeout=30)
-            fila['errado'] = _buscar_contactos(client, errado)
+            # En Alegra la identificación va normalizada, aunque en Andinasoft esté con guiones.
+            fila['errado'] = _buscar_contactos(client, norm_ident(errado))
             fila['correcto'] = _buscar_contactos(client, correcto)
         except Exception as exc:
             fila['error'] = str(exc)
