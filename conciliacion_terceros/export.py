@@ -92,6 +92,16 @@ def construir_libro(conciliacion):
         for c in l.cuentas:
             _row(dt, [l.identificacion, l.nombre, 'Contabilidad', c['empresa_nombre'], c['cuenta'], c['cuenta_nombre'], 'Sí',
                       None, Decimal(c['saldo']), estados.get(l.estado, l.estado)], money_cols=(8, 9))
+    # Negocios en $0 por los dos lados: no generan línea, así que no están en las hojas anteriores.
+    sueltos = resumen.get('sin_movimiento') or []
+    if sueltos:
+        sm = wb.create_sheet('Sin movimiento')
+        _header(sm, ['Proyecto', 'Negocio', 'Identificación', 'Nombre', 'Situación', 'Estado del negocio'],
+                [30, 16, 16, 34, 22, 20])
+        for n in sueltos:
+            for t in n['titulares']:  # una fila por titular, para poder buscar por cédula
+                _row(sm, [n['proyecto'], n['ref'], t['identificacion'], t['nombre'], n['situacion_label'], n['estado']])
+
     # Ajustes registrados (todos): solo los «Enviado a Alegra» y «Registrado a mano» mueven el saldo.
     aj = wb.create_sheet('Traslados')
     _header(aj, ['Registrado', 'Referencia', 'Tipo', 'Origen tercero', 'Origen empresa', 'Origen cuenta', 'Destino tercero', 'Destino empresa',
