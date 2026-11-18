@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 import traceback
 import datetime
 import base64
@@ -14,6 +15,8 @@ from django.core.mail import EmailMultiAlternatives
 from django.db.models import Avg, Max, Min, Sum
 from django.db import IntegrityError
 from andina.storage import media_service
+
+logger = logging.getLogger(__name__)
 
 
 #cambiar ruta a public_html
@@ -257,12 +260,21 @@ def aplicar_pago(request,adj,fecha,forma_pago,valor_pagado,concepto,valor_recibo
         obj_adj.save()
 
 def envio_notificacion(mensaje,subject,destinatarios):
-    
-    template=get_template('emails/notificacion_aplicacion.html')
-    content=template.render({'mensaje':mensaje})
-    message=EmailMultiAlternatives(subject,'',settings.EMAIL_HOST_USER,destinatarios)
-    message.attach_alternative(content,'text/html')
-    message.send()
+    """
+    Envia el correo de aviso. Nunca lanza: si el SMTP falla (timeout, DNS, auth)
+    solo se registra en el log, porque la operacion que ya quedo guardada no debe
+    devolverle un error 500 al usuario. Retorna True si el correo salio.
+    """
+    try:
+        template=get_template('emails/notificacion_aplicacion.html')
+        content=template.render({'mensaje':mensaje})
+        message=EmailMultiAlternatives(subject,'',settings.EMAIL_HOST_USER,destinatarios)
+        message.attach_alternative(content,'text/html')
+        message.send()
+        return True
+    except Exception:
+        logger.exception('No se pudo enviar la notificacion "%s" a %s',subject,destinatarios)
+        return False
 
 def envio_email_template(subject:str,sender:str,destinatarios:list,template:str,campos:dict):
     """
