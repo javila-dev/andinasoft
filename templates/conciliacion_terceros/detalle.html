@@ -391,6 +391,24 @@
   </div>
   </details>
 
+  {% if resumen.sin_movimiento %}
+  <details class="mb-3 ct-details" id="sin-mov">
+    <summary>Negocios sin movimiento <span class="badge badge-secondary" id="sin-mov-n">{{ resumen.sin_movimiento|length }}</span>
+      <span class="text-muted">· no tienen línea en la conciliación</span></summary>
+    <p class="small text-muted mt-2 mb-2">Esperan saldo pero no tienen ni un recaudo al corte, y sus titulares tampoco
+      tienen saldo en contabilidad: cuadran en $0 contra $0, así que no generan línea y no salen en las tablas.
+      Si alguno debería tener plata, el recaudo se registra primero en Andinasoft y luego se recalcula.</p>
+    <div class="table-responsive"><table class="table table-sm mb-0">
+      <thead class="thead-light"><tr><th>Proyecto</th><th>Negocio</th><th>Titulares</th><th>Situación</th></tr></thead>
+      <tbody>
+      {% for n in resumen.sin_movimiento %}<tr data-txt="{{ n.busqueda }}"><td>{{ n.proyecto }}</td><td><code>{{ n.ref }}</code></td><td>{% for t in n.titulares %}<span class="text-nowrap"><strong>{{ t.identificacion }}</strong> {{ t.nombre }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</td><td>{{ n.situacion_label }}{% if n.estado %} <span class="text-muted">· {{ n.estado }}</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <p class="small text-muted mt-2 mb-0 sin-mov-vacio" style="display:none">Ninguno coincide con la búsqueda.</p>
+  </details>
+  {% endif %}
+
   <div class="mb-2 v-terceros" id="chips"><small class="text-muted mr-2">Alertas:</small></div>
 
   <div class="form-row align-items-end mb-2">
@@ -854,7 +872,21 @@
     $('#prog-bar').css('width', pct + '%');
     $('#prog-txt').text(hechas + ' de ' + porRevisar.length + ' terceros con diferencia revisados (' + pct + '%)');
   }
-  function redibujar() { tabla.draw(); refrescarConteos(); if (vista === 'adj') dibujarAdj(); }
+  function redibujar() { tabla.draw(); refrescarConteos(); filtrarSinMov(); if (vista === 'adj') dibujarAdj(); }
+
+  // Los negocios sin movimiento no tienen línea, así que no pasan por la tabla: se filtran con el mismo buscador.
+  function filtrarSinMov() {
+    var $d = $('#sin-mov');
+    if (!$d.length) return;
+    var q = filtros.q || '', $tr = $d.find('tbody tr'), n = 0;
+    $tr.each(function () {
+      var ok = !q || String($(this).data('txt') || '').indexOf(q) >= 0;
+      $(this).toggle(ok); if (ok) n++;
+    });
+    $('#sin-mov-n').text(q ? n + ' de ' + $tr.length : $tr.length);
+    $d.find('.sin-mov-vacio').toggle(q !== '' && n === 0);
+    if (q && n) $d.prop('open', true);
+  }
 
   // ---- Vista por negocio (ADJ) ----
   // Se arma con los mismos datos de los terceros: lo que espera Andinasoft por negocio y el saldo contable de sus titulares.

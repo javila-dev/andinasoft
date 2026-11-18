@@ -226,6 +226,30 @@ def _suma(n):
     return n['situacion'] not in NO_SUMAN
 
 
+def sin_movimiento(negocios, lineas, nombres=None):
+    """Negocios que esperan saldo pero no tienen ni un recaudo al corte y cuyos titulares tampoco quedaron con línea.
+    Cuadran en $0 contra $0, así que no aparecen en ninguna de las dos vistas: se listan aparte para poder
+    confirmar que se revisaron. Si un titular sí tiene línea, el negocio ya se ve en su ficha y no entra aquí."""
+    nombres = nombres or {}
+    fuera, vistos = [], set()
+    for n in negocios:
+        if not _suma(n) or n['total'] or any(t in lineas for t in n['titulares']):
+            continue
+        k = (n['proyecto'], str(n['ref']))
+        if k in vistos:  # el mismo negocio aparece una vez por titular
+            continue
+        vistos.add(k)
+        tits = [{'identificacion': t, 'nombre': nombres.get(t, '')} for t in n['titulares']]
+        fuera.append({
+            'proyecto': n['proyecto'], 'ref': str(n['ref']), 'situacion': n['situacion'],
+            'situacion_label': SIT_LABEL.get(n['situacion'], n['situacion']), 'estado': n['estado'],
+            'titulares': tits,
+            'busqueda': ' '.join([n['proyecto'], str(n['ref'])] + [t['identificacion'] + ' ' + t['nombre'] for t in tits]).lower(),
+        })
+    fuera.sort(key=lambda r: (r['proyecto'], r['ref']))
+    return fuera
+
+
 def proyectos_conciliables():
     """Proyectos con base de datos y tabla de adjudicaciones (Alttum, p. ej., no la tiene)."""
     from django.conf import settings
@@ -473,7 +497,7 @@ def calcular(conciliacion, usar_cache=False):
     _regla_mismo_numero(lineas)
     _regla_mismo_valor(lineas, tol)
     _regla_nombre(lineas)
-    return balances, list(lineas.values()), catalogo
+    return balances, list(lineas.values()), catalogo, sin_movimiento(negocios, lineas, nombres_locales)
 
 
 PASOS_ESCRITURA = (  # (paso, campo con la fecha) en el orden del módulo de escrituración
@@ -806,7 +830,7 @@ def ejecutar(conciliacion, usar_cache=False):
     se esté guardando en paralelo no se pierde ni da 404), crea las nuevas y borra las que ya no aparecen."""
     from conciliacion_terceros.models import Conciliacion
 
-    balances, lineas, catalogo = calcular(conciliacion, usar_cache=usar_cache)
+    balances, lineas, catalogo, sueltos = calcular(conciliacion, usar_cache=usar_cache)
     tol = Decimal(conciliacion.tolerancia)
     _, alias_a = alias_identificaciones()
     fuentes = list(conciliacion.fuentes.all())
@@ -846,6 +870,7 @@ def ejecutar(conciliacion, usar_cache=False):
         conciliacion.resumen = dict(
             _resumen(lineas, balances, fuentes), calculado_en=timezone.now().isoformat(),
             catalogo=sorted(catalogo.values(), key=lambda c: (c['empresa_nombre'], c['cuenta'])),
+            sin_movimiento=sueltos,
         )
         conciliacion.save(update_fields=['resumen', 'updated_at'])
     return conciliacion
