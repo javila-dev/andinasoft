@@ -617,7 +617,7 @@
               <div id="m-fac-previas" class="ct-previas small mb-2" style="display:none"></div>
               <div id="m-fac-costo" class="form-row align-items-end mb-2" style="display:none">
                 <div class="col-md-8 mb-1">
-                  <div class="small font-weight-bold">Costo del inmueble <span class="font-weight-normal text-muted">· un solo asiento a nombre de la empresa (costo de venta contra inventario del proyecto)</span></div>
+                  <div class="small font-weight-bold">Costo del inmueble <span class="font-weight-normal text-muted">· a nombre de la empresa (costo de venta contra inventario del proyecto); con varios titulares se reparte en partes iguales, un asiento por factura</span></div>
                   <div class="small text-muted" id="m-fac-costo-calc"></div>
                 </div>
                 <div class="col-md-4 mb-1"><label class="small mb-1" for="m-fac-costo-valor">Costo a registrar</label>
@@ -1961,6 +1961,8 @@
     var total = titulares.reduce(function (a, t) { return a + Number(t.valor_venta || 0) + Number(t.valor_intereses || 0); }, 0);
     var notas = [];
     if (tipo === 'alegra' && !(costoValor() > 0)) notas.push('• Sin costo del inmueble: no se registrará el asiento de costo.');
+    else if (tipo === 'alegra' && titulares.length > 1) notas.push('• El costo de $' + fmt.format(costoValor()) + ' se reparte en partes iguales entre los '
+      + titulares.length + ' titulares: $' + fmt.format(Math.floor(costoValor() / titulares.length)) + ' cada uno, un asiento por factura.');
     var corte = titulares.some(function (t) { return t.cruce_cuenta && !t.ya_cruzado; }) ? textoCorte($('#m-fac-fecha').val()) : '';
     if (corte) notas.push('• ' + corte);
     var msg = (tipo === 'alegra'

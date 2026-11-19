@@ -242,9 +242,13 @@ def _crear_registros(conciliacion, datos, user, tipo, fecha, titulares, idents, 
                 f'Los intereses a facturar más los ya facturados antes (${intereses_grupo:,.0f}) superan los intereses '
                 f'recaudados del negocio (${recaudados:,.0f}).')
     if creadas and costo > 0:
-        # El costo es uno por negocio y va a nombre de la empresa: se guarda en la primera factura del grupo.
-        creadas[0].costo = costo
-        creadas[0].costo_estado = FacturaConciliacion.CRUCE_PENDIENTE
+        # El costo del inmueble es del negocio, no de un titular: se reparte en partes iguales entre las facturas
+        # del grupo, igual que el valor de la venta. Cada una registra su asiento a nombre de la empresa, así el
+        # costo no queda cargado a un solo propietario. La suma de las partes es el costo completo.
+        for creada, parte in zip(creadas, partes_iguales(costo, len(creadas))):
+            creada.costo = parte
+            creada.costo_estado = (FacturaConciliacion.CRUCE_PENDIENTE if parte > 0
+                                   else FacturaConciliacion.CRUCE_NO_APLICA)
     FacturaConciliacion.objects.bulk_create(creadas)
     return list(FacturaConciliacion.objects.filter(grupo=grupo).order_by('id'))
 
@@ -552,8 +556,21 @@ def emitir(f):
     return f
 
 
+def _parte_costo(f):
+    """«parte N de M» cuando el costo del negocio se repartió entre varios titulares (vacío si es uno solo).
+    Va en la descripción para que dos asientos del mismo inmueble no parezcan un cobro doble."""
+    if not f.grupo:
+        return ''
+    con_costo = [pk for pk, c in FacturaConciliacion.objects.filter(grupo=f.grupo).order_by('id')
+                 .values_list('pk', 'costo') if c and c > 0]
+    if len(con_costo) < 2 or f.pk not in con_costo:
+        return ''
+    return f' · parte {con_costo.index(f.pk) + 1} de {len(con_costo)}'
+
+
 def registrar_costo(f, config):
-    """Paso 2: journal de costo de venta (débito costo 6, crédito inventario 15), a nombre de la empresa."""
+    """Paso 2: journal de costo de venta (débito costo 6, crédito inventario 15), a nombre de la empresa.
+    Con varios titulares el costo del negocio va repartido en partes iguales: una por factura."""
     if f.costo_estado != FacturaConciliacion.CRUCE_PENDIENTE or f.costo <= 0:
         return f
     if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
@@ -570,7 +587,7 @@ def registrar_costo(f, config):
             except Exception:
                 empresa_contacto = {}
             cc = {'costCenter': {'id': int(config.centro_costo_id)}} if config.centro_costo_id else {}
-            desc = f'Costo de venta {f.proyecto} {f.negocio_ref} · factura {f.numero}'
+            desc = f'Costo de venta {f.proyecto} {f.negocio_ref} · factura {f.numero}{_parte_costo(f)}'
             payload = {
                 'date': f.fecha.isoformat(),
                 'observations': f'{desc} · FC-{f.pk}'[:500],
