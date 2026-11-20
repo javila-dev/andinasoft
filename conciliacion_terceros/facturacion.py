@@ -16,7 +16,7 @@ import re
 import uuid
 from collections import Counter
 from contextlib import contextmanager
-from decimal import ROUND_DOWN, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 
 from django.core.cache import cache
 from django.db import transaction
@@ -24,10 +24,11 @@ from django.db.models import Q
 from django.utils import timezone
 
 from andinasoft.models import empresas
-from conciliacion_terceros.models import Conciliacion, ConfigFacturacion, FacturaConciliacion
+from conciliacion_terceros.models import Conciliacion, ConfigEmpresa, ConfigFacturacion, FacturaConciliacion
 
 logger = logging.getLogger(__name__)
 CENT = Decimal('0.01')
+PESO = Decimal('1')
 
 
 class FacturacionError(Exception):
@@ -101,6 +102,33 @@ def referencias_alegra(empresa):
 
 def config_de(proyecto):
     return ConfigFacturacion.objects.select_related('empresa').filter(proyecto=proyecto).first()
+
+
+def config_empresa(empresa_id):
+    """Config de autorretención de la empresa (tarifa y cuentas); None si la empresa no tiene ninguna."""
+    return ConfigEmpresa.objects.filter(empresa_id=str(empresa_id or '')).first()
+
+
+def autorrenta_valor(total, tarifa):
+    """Autorretención sobre el total facturado (estas facturas no llevan impuesto), redondeada al peso."""
+    return (Decimal(total or 0) * Decimal(tarifa or 0) / 100).quantize(PESO, rounding=ROUND_HALF_UP)
+
+
+ESTADOS_FACTURADA = (FacturaConciliacion.ESTADO_EMITIDA, FacturaConciliacion.ESTADO_REGISTRADA)
+
+
+def autorrenta_pendiente(f, cfg_emp=None):
+    """Lo que falta autorretener de esta factura, o 0 si no aplica. Aplica a toda factura ya emitida —la creada en
+    Alegra y la informativa, que también es un ingreso— de una empresa con autorretención configurada. El cálculo es
+    en vivo: basta configurar la tarifa para que las facturas de antes queden pendientes y se puedan registrar."""
+    if f.estado not in ESTADOS_FACTURADA or f.autorrenta_estado != FacturaConciliacion.CRUCE_PENDIENTE:
+        return Decimal(0)
+    if not getattr(f.empresa, 'alegra_enabled', False):
+        return Decimal(0)  # sin Alegra el asiento se hace a mano
+    cfg_emp = cfg_emp if cfg_emp is not None else config_empresa(f.empresa_id)
+    if not (cfg_emp and cfg_emp.autorrenta_activa):
+        return Decimal(0)
+    return autorrenta_valor(f.total, cfg_emp.autorrenta_tarifa)
 
 
 def costo_sugerido(proyecto, negocio_ref):
@@ -468,11 +496,18 @@ def _encadenar(f, config, usuario):
     return f
 
 
-def siguiente_paso(f):
-    """Lo que le falta a una factura de Alegra, en orden: 'enviar', 'costo', 'cruzar' o '' si no falta nada
-    (o si lo que sigue depende de una acción del usuario, como emitir un borrador)."""
-    if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado == FacturaConciliacion.ESTADO_ANULADA:
+def siguiente_paso(f, cfg_emp=None):
+    """Lo que le falta a una factura, en orden: 'enviar', 'costo', 'cruzar', 'autorrenta' o '' si no falta nada
+    (o si lo que sigue depende de una acción del usuario, como emitir un borrador). La autorretención es el único
+    paso que también tienen las informativas: su asiento no depende de que la factura se haya creado en Alegra."""
+    if f.estado == FacturaConciliacion.ESTADO_ANULADA:
         return ''
+
+    def autorrenta():
+        return 'autorrenta' if not f.error_autorrenta and autorrenta_pendiente(f, cfg_emp) > 0 else ''
+
+    if f.tipo != FacturaConciliacion.TIPO_ALEGRA:
+        return autorrenta()
     if f.estado in (FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR) and not f.error:
         return 'enviar'
     if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
@@ -481,7 +516,7 @@ def siguiente_paso(f):
         return 'costo'
     if f.cruce_estado == FacturaConciliacion.CRUCE_PENDIENTE and f.cruce_cuenta and not f.error_cruce:
         return 'cruzar'
-    return ''
+    return autorrenta()
 
 
 def crear_en_alegra(f, config, user=None):
@@ -670,6 +705,73 @@ def cruzar(f, config):
     return f
 
 
+def registrar_autorrenta(f, cfg_emp=None, fecha=None):
+    """Paso 4: asiento de autorretención de renta (débito al anticipo de renta, crédito a autorretenciones por
+    pagar), los dos a nombre de la empresa, igual que el costo. La base es el total facturado y la tarifa la de la
+    empresa. Lleva la fecha en que se registra, no la de la factura, para no mover meses ya declarados: por eso una
+    factura de hace meses se puede registrar hoy sin tocar su periodo."""
+    cfg_emp = cfg_emp if cfg_emp is not None else config_empresa(f.empresa_id)
+    if not (cfg_emp and cfg_emp.autorrenta_activa):
+        faltan = cfg_emp.autorrenta_faltantes() if cfg_emp else ['tarifa', 'cuentas']
+        raise FacturacionError(f'{f.empresa.nombre} no tiene lista la autorretención: falta {", ".join(faltan)}. '
+                               'Se configura una vez por empresa en la pantalla de facturación.')
+    if f.estado not in ESTADOS_FACTURADA:
+        raise FacturacionError('La autorretención se registra cuando la factura ya está emitida.')
+    if f.autorrenta_estado != FacturaConciliacion.CRUCE_PENDIENTE:
+        return f
+    valor = autorrenta_valor(f.total, cfg_emp.autorrenta_tarifa)
+    if valor <= 0:
+        raise FacturacionError(f'La autorretención de esta factura da ${valor:,.0f}: revisa la tarifa '
+                               f'({cfg_emp.autorrenta_tarifa}%) y el valor facturado.')
+    fecha = fecha or timezone.localdate()
+    tarifa = cfg_emp.autorrenta_tarifa
+    with _bloqueo(f, 'autorrenta'):
+        f.refresh_from_db()
+        if f.autorrenta_estado != FacturaConciliacion.CRUCE_PENDIENTE:
+            return f
+        referencia = f'AUTORRENTA-FC-{f.pk}'
+        config = config_de(f.proyecto)
+
+        def construir():
+            from alegra_integration.mapping import MappingResolver
+            try:
+                empresa_contacto = {'client': {'id': int(MappingResolver(f.empresa).contact_for_empresa(f.empresa.pk))}}
+            except Exception:
+                empresa_contacto = {}
+            cc = {'costCenter': {'id': int(config.centro_costo_id)}} if config and config.centro_costo_id else {}
+            desc = (f'Autorretención de renta {tarifa}% · {f.proyecto} {f.negocio_ref} · factura '
+                    f'{f.numero or "#" + str(f.pk)}')
+            payload = {
+                'date': fecha.isoformat(),
+                'observations': f'{desc} · base ${f.total:,.0f} · FC-{f.pk}'[:500],
+                'reference': referencia,
+                'entries': [
+                    dict({'id': int(cfg_emp.autorrenta_cuenta_anticipo_id), 'debit': float(valor), 'credit': 0,
+                          'description': desc[:255]}, **empresa_contacto, **cc),
+                    dict({'id': int(cfg_emp.autorrenta_cuenta_pasivo_id), 'debit': 0, 'credit': float(valor),
+                          'description': desc[:255]}, **empresa_contacto, **cc),
+                ],
+            }
+            numeracion = (config.numeracion_journal_id if config else '') or cfg_emp.numeracion_journal_id
+            if numeracion:
+                payload['numberTemplate'] = str(numeracion)  # mismo contrato que caja (_journal_payload)
+            return payload
+
+        try:
+            resp, ya = _journal_idempotente(f, referencia, construir)
+            f.alegra_autorrenta_journal_id = str(resp.get('id') or '')
+            f.autorrenta = valor
+            f.autorrenta_tarifa = tarifa
+            f.autorrenta_fecha = fecha
+            f.autorrenta_estado = FacturaConciliacion.CRUCE_REGISTRADO
+            f.respuesta = dict(f.respuesta or {}, autorrenta=resp, **({'autorrenta_reconciliado': True} if ya else {}))
+            f.error_autorrenta = ''
+        except Exception as exc:
+            f.error_autorrenta = (f'{exc} Al reintentar, el sistema busca primero en Alegra el journal «{referencia}».')[:4000]
+        f.save()
+    return f
+
+
 # ---------------------------------------------------------------------------
 # Escrituración: la factura deja la ADJ como escriturada y con el paso "Facturado"
 # ---------------------------------------------------------------------------
@@ -809,6 +911,12 @@ def anular_registro(f, user):
         raise FacturacionError('La factura ya está emitida en Alegra: se anula con nota crédito en Alegra.')
     if f.tipo == FacturaConciliacion.TIPO_ALEGRA and f.estado == FacturaConciliacion.ESTADO_BORRADOR:
         raise FacturacionError('La factura está como borrador en Alegra: elimínala allá antes de anular el registro.')
+    if f.autorrenta_estado == FacturaConciliacion.CRUCE_REGISTRADO:
+        # Las informativas sí se pueden anular, y su asiento de autorretención quedaría suelto en la contabilidad.
+        raise FacturacionError(
+            f'Esta factura ya tiene el asiento de autorretención en Alegra (journal {f.alegra_autorrenta_journal_id or "sin id"}, '
+            f'${f.autorrenta:,.0f}). Anúlalo o elimínalo allá y vuelve a intentar: si no, quedaría un anticipo de renta '
+            'sin factura que lo respalde.')
     estado_antes = f.estado
     if f.tipo == FacturaConciliacion.TIPO_ALEGRA:
         if f.paso_en_curso and f.paso_en_curso_desde and f.paso_en_curso_desde > timezone.now() - datetime.timedelta(minutes=BLOQUEO_MINUTOS):

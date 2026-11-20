@@ -67,6 +67,77 @@
     </div>
   </div>
 
+  <div class="card mb-3">
+    <div class="card-header py-2">
+      <strong>Autorretención de renta por empresa</strong>
+      <div class="small text-muted">
+        La obligación es de la empresa (responsabilidad 59 del RUT), no del proyecto: la tarifa y las dos cuentas se
+        configuran una vez y valen para todos sus proyectos. Al facturar se registra un asiento por factura —débito al
+        anticipo de renta, crédito a autorretenciones por pagar, los dos a nombre de la empresa— por la tarifa sobre el
+        total facturado. El asiento lleva la fecha en que se registra, no la de la factura. Tarifa en 0 = la empresa no
+        autorretiene.
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 ct-tabla ar-tabla">
+        <thead class="thead-light"><tr><th>Empresa</th><th class="text-right">Tarifa</th><th>Anticipo de renta (débito)</th><th>Autorretenciones por pagar (crédito)</th><th>Facturas sin asiento</th></tr></thead>
+        <tbody>
+          {% for f in filas_autorrenta %}
+          <tr data-empresa="{{ f.empresa.pk }}" tabindex="0" aria-label="Configurar la autorretención de {{ f.empresa.nombre }}">
+            <td><strong>{{ f.empresa.nombre }}</strong></td>
+            <td class="text-right">{% if f.cfg.autorrenta_tarifa %}{{ f.cfg.autorrenta_tarifa|floatformat:"-3" }}%{% else %}<span class="text-muted">No autorretiene</span>{% endif %}</td>
+            <td>{% if f.cfg.autorrenta_cuenta_anticipo_codigo %}<code>{{ f.cfg.autorrenta_cuenta_anticipo_codigo }}</code> {{ f.cfg.autorrenta_cuenta_anticipo_nombre }}{% else %}—{% endif %}</td>
+            <td>{% if f.cfg.autorrenta_cuenta_pasivo_codigo %}<code>{{ f.cfg.autorrenta_cuenta_pasivo_codigo }}</code> {{ f.cfg.autorrenta_cuenta_pasivo_nombre }}{% else %}—{% endif %}</td>
+            <td>{% if f.pendientes %}<a href="{% url 'conciliacion-terceros-facturas' %}?empresa={{ f.empresa.pk }}&amp;paso=autorrenta">{{ f.pendientes }} por registrar</a>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">Ninguna empresa tiene integración con Alegra.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form method="post" id="ar-form" class="ct-form mb-3" style="display:none">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="autorrenta">
+    <input type="hidden" name="empresa" id="ar-empresa">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h6 class="mb-0" id="ar-titulo"></h6>
+      <button type="button" class="close" id="ar-cerrar" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="small text-muted mb-2" id="ar-cargando"></div>
+    <div class="form-row">
+      <div class="col-md-2 mb-2"><label for="ar-tarifa">Tarifa (%)</label>
+        <input type="number" step="0.001" min="0" max="100" name="autorrenta_tarifa" id="ar-tarifa" class="form-control form-control-sm" value="0">
+        <small class="text-muted">0 = no autorretiene.</small>
+      </div>
+      <div class="col-md-5 mb-2 ar-cuenta" data-campo="autorrenta_cuenta_anticipo">
+        <label id="lbl-ar-anticipo">Anticipo de renta (débito, 1355)</label>
+        <div class="ct-combo">
+          <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-ar-anticipo"></button>
+          <div class="ct-combo-panel" style="display:none">
+            <input type="search" class="form-control form-control-sm ct-cta-q" aria-label="Buscar cuenta por código o nombre" placeholder="Escribe código o nombre…" autocomplete="off">
+            <div class="ct-res-busq mt-1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-5 mb-2 ar-cuenta" data-campo="autorrenta_cuenta_pasivo">
+        <label id="lbl-ar-pasivo">Autorretenciones por pagar (crédito, 2365)</label>
+        <div class="ct-combo">
+          <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-ar-pasivo"></button>
+          <div class="ct-combo-panel" style="display:none">
+            <input type="search" class="form-control form-control-sm ct-cta-q" aria-label="Buscar cuenta por código o nombre" placeholder="Escribe código o nombre…" autocomplete="off">
+            <div class="ct-res-busq mt-1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" name="autorrenta_cuenta_anticipo_id" id="h-autorrenta_cuenta_anticipo_id"><input type="hidden" name="autorrenta_cuenta_anticipo_codigo" id="h-autorrenta_cuenta_anticipo_codigo"><input type="hidden" name="autorrenta_cuenta_anticipo_nombre" id="h-autorrenta_cuenta_anticipo_nombre">
+    <input type="hidden" name="autorrenta_cuenta_pasivo_id" id="h-autorrenta_cuenta_pasivo_id"><input type="hidden" name="autorrenta_cuenta_pasivo_codigo" id="h-autorrenta_cuenta_pasivo_codigo"><input type="hidden" name="autorrenta_cuenta_pasivo_nombre" id="h-autorrenta_cuenta_pasivo_nombre">
+    <div class="text-right"><button type="submit" class="btn btn-primary btn-sm">Guardar</button></div>
+  </form>
+
   <form method="post" id="form" class="ct-form" style="display:none">
     {% csrf_token %}
     <input type="hidden" name="proyecto" id="f-proyecto">
@@ -166,7 +237,7 @@
     <div class="text-right"><button type="submit" class="btn btn-primary btn-sm">Guardar</button></div>
   </form>
 </div>
-{{ configs_json|json_script:"configs-data" }}
+{{ configs_json|json_script:"configs-data" }}{{ autorrenta_json|json_script:"autorrenta-data" }}
 {% endblock %}
 
 {% block jsbottom %}
@@ -285,6 +356,91 @@
     document.getElementById('form').scrollIntoView({ behavior: 'smooth' });
   });
   $('#f-cerrar').on('click', function () { $('#form').hide(); $('.ct-tabla tbody tr').removeClass('sel'); });
+})();
+
+// Autorretención: sus cuentas son de la empresa elegida en su propia tabla, no de la del formulario por proyecto.
+(function () {
+  var CFGS = JSON.parse(document.getElementById('autorrenta-data').textContent);
+  var URL_REFS = "{% url 'conciliacion-terceros-facturacion-referencias' %}";
+  var CAMPOS = ['autorrenta_cuenta_anticipo', 'autorrenta_cuenta_pasivo'];
+  var cuentas = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function cerrar() { $('#ar-form .ct-combo-panel').hide(); }
+  function mostrar(campo) {
+    var id = $('#h-' + campo + '_id').val(), $b = $('.ar-cuenta[data-campo="' + campo + '"] .ct-combo-btn');
+    $b.prop('disabled', !cuentas);
+    $b.html(id ? '<code>' + esc($('#h-' + campo + '_codigo').val()) + '</code> ' + esc($('#h-' + campo + '_nombre').val())
+                : '<span class="text-muted">' + (cuentas ? '— Selecciona una cuenta —' : 'Cargando cuentas…') + '</span>');
+  }
+  function mostrarTodas() { CAMPOS.forEach(mostrar); }
+  function filtrar($c) {
+    var q = norm($c.find('.ct-cta-q').val()).trim(), sel = $('#h-' + $c.data('campo') + '_id').val();
+    var palabras = q ? q.split(/\s+/) : [];
+    var cs = (cuentas || []).filter(function (c) {
+      var h = norm(c.codigo + ' ' + c.nombre); return palabras.every(function (w) { return h.indexOf(w) >= 0; });
+    }).slice(0, 80);
+    $c.find('.ct-res-busq').html((sel ? '<div class="item text-danger" data-quitar="1"><i class="fas fa-times mr-1"></i>Quitar la cuenta seleccionada</div>' : '') +
+      (cs.length ? cs.map(function (c, i) {
+        return '<div class="item' + (String(c.id) === String(sel) ? ' font-weight-bold' : '') + '" data-i="' + i + '"><code>' + esc(c.codigo) + '</code> ' + esc(c.nombre) + '</div>';
+      }).join('') : '<div class="item text-muted">Sin resultados</div>')).data('cs', cs);
+  }
+  function cargar(emp) {
+    cuentas = null; mostrarTodas();
+    $('#ar-cargando').text('Cargando las cuentas de Alegra…');
+    $.getJSON(URL_REFS, { empresa: emp }).done(function (r) {
+      if (emp !== $('#ar-empresa').val()) return;  // cambiaron de empresa mientras cargaba
+      cuentas = (r.referencias || {}).cuentas || []; $('#ar-cargando').text(''); mostrarTodas();
+    }).fail(function (x) {
+      $('#ar-cargando').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo consultar Alegra.') + '</span>');
+    });
+  }
+  $('.ar-tabla tbody').on('keydown', 'tr', function (e) {
+    if (e.target === this && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $(this).trigger('click'); }
+  });
+  $('.ar-tabla tbody').on('click', 'tr', function () {
+    var emp = String($(this).data('empresa') || '');
+    if (!emp) return;
+    var cfg = CFGS[emp] || {};
+    $('.ar-tabla tbody tr').removeClass('sel'); $(this).addClass('sel');
+    $('#ar-empresa').val(emp);
+    $('#ar-titulo').text('Autorretención · ' + $(this).find('td').first().text());
+    $('#ar-tarifa').val(cfg.autorrenta_tarifa || 0);
+    CAMPOS.forEach(function (c) {
+      ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(cfg[c + '_' + k] || ''); });
+    });
+    cerrar(); $('#ar-form').show(); cargar(emp);
+    document.getElementById('ar-form').scrollIntoView({ behavior: 'smooth' });
+  });
+  $('#ar-form .ct-combo-btn').on('click', function () {
+    var $c = $(this).closest('.ar-cuenta'), $p = $c.find('.ct-combo-panel'), abierto = $p.is(':visible');
+    cerrar(); if (abierto || !cuentas) return;
+    $p.show(); $c.find('.ct-cta-q').val(''); filtrar($c); $c.find('.ct-cta-q').trigger('focus');
+  });
+  $('#ar-form .ct-cta-q').on('input', function () { filtrar($(this).closest('.ar-cuenta')); })
+    .on('keydown', function (e) {
+      var $c = $(this).closest('.ar-cuenta'), $its = $c.find('.item[data-i]'), $a = $its.filter('.activo'), i = $its.index($a);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(i + 1, $its.length - 1) : Math.max(i - 1, 0);
+        $its.removeClass('activo'); var el = $its.eq(i).addClass('activo')[0]; if (el) el.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') { e.preventDefault(); ($a.length ? $a : $its.first()).trigger('click'); }
+      else if (e.key === 'Escape') { cerrar(); $c.find('.ct-combo-btn').trigger('focus'); }
+    });
+  $('#ar-form .ct-res-busq').on('click', '.item[data-i], .item[data-quitar]', function () {
+    var $c = $(this).closest('.ar-cuenta'), campo = $c.data('campo');
+    var c = $(this).data('quitar') ? { id: '', codigo: '', nombre: '' } : $c.find('.ct-res-busq').data('cs')[$(this).data('i')];
+    $('#h-' + campo + '_id').val(c.id); $('#h-' + campo + '_codigo').val(c.codigo); $('#h-' + campo + '_nombre').val(c.nombre);
+    cerrar(); mostrar(campo);
+  });
+  $(document).on('mousedown', function (e) { if (!$(e.target).closest('#ar-form .ct-combo').length) cerrar(); });
+  $('#ar-cerrar').on('click', function () { $('#ar-form').hide(); $('.ar-tabla tbody tr').removeClass('sel'); });
+  $('#ar-form').on('submit', function () {
+    var t = parseFloat($('#ar-tarifa').val() || 0);
+    if (t > 0 && !(($('#h-autorrenta_cuenta_anticipo_id').val() || '') && ($('#h-autorrenta_cuenta_pasivo_id').val() || ''))) {
+      alert('Con tarifa mayor que cero hay que elegir las dos cuentas del asiento.'); return false;
+    }
+    return true;
+  });
 })();
 </script>
 {% endblock %}

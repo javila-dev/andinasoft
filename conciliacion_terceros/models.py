@@ -11,6 +11,15 @@ class ConfigEmpresa(models.Model):
     cuentas = models.JSONField(default=list, blank=True)
     # Numeración (ID de Alegra) de los journals de ajuste; vacío = la predeterminada de Alegra.
     numeracion_journal_id = models.CharField(max_length=40, blank=True, default='')
+    # Autorretención de renta: la obligación es de la empresa (responsabilidad 59 del RUT), no del proyecto, así que
+    # la tarifa y las dos cuentas se guardan una sola vez por empresa. Tarifa en 0 = esta empresa no autorretiene.
+    autorrenta_tarifa = models.DecimalField(max_digits=6, decimal_places=3, default=0)
+    autorrenta_cuenta_anticipo_id = models.CharField(max_length=40, blank=True, default='')
+    autorrenta_cuenta_anticipo_codigo = models.CharField(max_length=30, blank=True, default='')
+    autorrenta_cuenta_anticipo_nombre = models.CharField(max_length=255, blank=True, default='')
+    autorrenta_cuenta_pasivo_id = models.CharField(max_length=40, blank=True, default='')
+    autorrenta_cuenta_pasivo_codigo = models.CharField(max_length=30, blank=True, default='')
+    autorrenta_cuenta_pasivo_nombre = models.CharField(max_length=255, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -19,6 +28,17 @@ class ConfigEmpresa(models.Model):
 
     def __str__(self):
         return f'{self.empresa_id}: {", ".join(self.cuentas or [])}'
+
+    @property
+    def autorrenta_activa(self):
+        """La empresa autorretiene y están las dos cuentas del asiento: sin esto no se registra nada."""
+        return bool(self.autorrenta_tarifa > 0 and self.autorrenta_cuenta_anticipo_id and self.autorrenta_cuenta_pasivo_id)
+
+    def autorrenta_faltantes(self):
+        req = {'tarifa': self.autorrenta_tarifa > 0,
+               'cuenta del anticipo de renta (débito)': self.autorrenta_cuenta_anticipo_id,
+               'cuenta de autorretenciones por pagar (crédito)': self.autorrenta_cuenta_pasivo_id}
+        return [k for k, v in req.items() if not v]
 
 
 class Conciliacion(models.Model):
@@ -408,6 +428,7 @@ class FacturaConciliacion(models.Model):
     CRUCE_PENDIENTE = 'pendiente'
     CRUCE_REGISTRADO = 'registrado'
     CRUCE_CHOICES = ((CRUCE_NO_APLICA, 'Ya cruzado en contabilidad'), (CRUCE_PENDIENTE, 'Pendiente'), (CRUCE_REGISTRADO, 'Journal registrado'))
+    AUTORRENTA_CHOICES = ((CRUCE_NO_APLICA, 'No aplica'), (CRUCE_PENDIENTE, 'Pendiente'), (CRUCE_REGISTRADO, 'Asiento registrado'))
 
     conciliacion = models.ForeignKey(Conciliacion, on_delete=models.CASCADE, related_name='facturas')
     grupo = models.CharField(max_length=36, db_index=True)  # facturas de los titulares de un mismo negocio
@@ -436,11 +457,20 @@ class FacturaConciliacion(models.Model):
     costo = models.DecimalField(max_digits=18, decimal_places=2, default=0)
     costo_estado = models.CharField(max_length=20, choices=CRUCE_CHOICES, default=CRUCE_NO_APLICA)
     alegra_costo_journal_id = models.CharField(max_length=40, blank=True, default='')
+    # Autorretención de renta: un asiento por factura (anticipo de renta contra autorretenciones por pagar) con la
+    # tarifa de la empresa sobre el total facturado. Queda pendiente mientras la empresa autorretenga y no se haya
+    # registrado: así las facturas de antes de este cambio también se pueden registrar hacia atrás.
+    autorrenta = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    autorrenta_tarifa = models.DecimalField(max_digits=6, decimal_places=3, default=0)
+    autorrenta_fecha = models.DateField(null=True, blank=True)
+    autorrenta_estado = models.CharField(max_length=20, choices=AUTORRENTA_CHOICES, default=CRUCE_PENDIENTE)
+    alegra_autorrenta_journal_id = models.CharField(max_length=40, blank=True, default='')
     respuesta = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder)
-    # Un error por paso (factura, costo, cruce) para reintentar solo el que falló.
+    # Un error por paso (factura, costo, cruce, autorretención) para reintentar solo el que falló.
     error = models.TextField(blank=True, default='')
     error_costo = models.TextField(blank=True, default='')
     error_cruce = models.TextField(blank=True, default='')
+    error_autorrenta = models.TextField(blank=True, default='')
     # Bloqueo del paso que se está enviando a Alegra (evita dobles envíos simultáneos).
     paso_en_curso = models.CharField(max_length=20, blank=True, default='')
     paso_en_curso_desde = models.DateTimeField(null=True, blank=True)

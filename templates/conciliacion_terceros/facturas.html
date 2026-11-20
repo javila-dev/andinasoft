@@ -1,0 +1,328 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Facturas de la conciliación{% endblock %}
+
+{% block style %}
+<style>
+  #content { min-width: 0; }
+  .fc-tabla td, .fc-tabla th { vertical-align: middle; font-size: 12.5px; }
+  .fc-tabla td.num, .fc-tabla th.num { text-align: right; white-space: nowrap; }
+  .fc-paso { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #eef2f1; color: #495057; white-space: nowrap; }
+  .fc-paso.ok { background: #e4f1e8; color: #1e6b3a; }
+  .fc-paso.pend { background: #fdf3e2; color: #8a5a00; }
+  .fc-paso.err { background: #fbe6e6; color: #9c2a2a; }
+  .fc-chip { display: inline-block; border: 1px solid #d5dbd9; border-radius: 14px; padding: 2px 10px; margin: 0 6px 6px 0;
+    font-size: 12px; background: #fff; color: #495057; text-decoration: none; }
+  .fc-chip.active { background: #eef5f2; border-color: #9bbfae; font-weight: 600; }
+  .fc-filtros { border: 1px solid #d5dbd9; border-radius: 8px; padding: 10px; background: #fbfcfc; }
+  .fc-nueva { border: 1px dashed #b8c4c0; border-radius: 8px; padding: 10px; background: #fafcfb; }
+  .fc-res { max-height: 230px; overflow-y: auto; border: 1px solid #e3e7e6; border-radius: 6px; background: #fff; }
+  .fc-res a { display: block; padding: 5px 8px; border-bottom: 1px solid #f0f2f1; font-size: 12.5px; color: #212529; text-decoration: none; }
+  .fc-res a:hover, .fc-res a:focus { background: #eef5f2; }
+  .fc-err { color: #9c2a2a; font-size: 11.5px; }
+  .fc-lote { position: sticky; bottom: 0; background: #fff; border-top: 1px solid #d5dbd9; padding: 8px 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-start flex-wrap">
+    <div>
+      <a href="{% url 'conciliacion-terceros' %}" class="small"><i class="fas fa-arrow-left mr-1"></i>Conciliaciones</a>
+      <h4 class="mt-2 mb-0">Facturas</h4>
+      <small class="text-muted">
+        Todas las facturas registradas desde la conciliación, en qué va cada una y qué le falta. Desde aquí se registran
+        los asientos de una factura ya emitida (costo, cruce y autorretención), incluso si su conciliación ya está cerrada:
+        ninguno de esos asientos cambia las cifras de la conciliación.
+      </small>
+    </div>
+    <a href="{% url 'conciliacion-terceros-facturacion' %}" class="btn btn-sm btn-outline-secondary mt-2"><i class="fas fa-cog mr-1"></i>Configuración de facturación</a>
+  </div>
+
+  {% if sin_autorrenta %}
+  <div class="alert alert-warning py-2 mt-3 mb-0 small">
+    Ninguna empresa tiene configurada la autorretención de renta, así que ninguna factura la espera.
+    Se configura una vez por empresa en <a href="{% url 'conciliacion-terceros-facturacion' %}">Configuración de facturación</a>.
+  </div>
+  {% endif %}
+
+  <div class="my-3">
+    <span class="small text-muted mr-2">Por registrar:</span>
+    <a class="fc-chip {% if filtros.paso == 'autorrenta' %}active{% endif %}" href="?paso=autorrenta">Autorretención <strong>{{ conteos.autorrenta }}</strong></a>
+    <a class="fc-chip {% if filtros.paso == 'costo' %}active{% endif %}" href="?paso=costo">Costo <strong>{{ conteos.costo }}</strong></a>
+    <a class="fc-chip {% if filtros.paso == 'cruzar' %}active{% endif %}" href="?paso=cruzar">Cruce <strong>{{ conteos.cruzar }}</strong></a>
+    <a class="fc-chip {% if filtros.paso == 'emitir' %}active{% endif %}" href="?paso=emitir">Borradores por emitir <strong>{{ conteos.emitir }}</strong></a>
+    <a class="fc-chip {% if filtros.paso == 'enviar' %}active{% endif %}" href="?paso=enviar">Sin crear en Alegra <strong>{{ conteos.enviar }}</strong></a>
+    <a class="fc-chip {% if not filtros.paso and not filtros.estado %}active{% endif %}" href="?">Todas</a>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8 mb-3">
+      <form method="get" class="fc-filtros">
+        <input type="hidden" name="paso" value="{{ filtros.paso }}">
+        <div class="form-row">
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="f-q">Buscar</label>
+            <input type="search" class="form-control form-control-sm" id="f-q" name="q" value="{{ filtros.q }}" placeholder="Cédula, nombre, ADJ o número">
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="f-empresa">Empresa</label>
+            <select class="form-control form-control-sm" id="f-empresa" name="empresa">
+              <option value="">Todas</option>
+              {% for e in empresas %}<option value="{{ e.pk }}" {% if filtros.empresa == e.pk|stringformat:"s" %}selected{% endif %}>{{ e.nombre }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="f-proyecto">Proyecto</label>
+            <select class="form-control form-control-sm" id="f-proyecto" name="proyecto">
+              <option value="">Todos</option>
+              {% for p in proyectos %}<option value="{{ p }}" {% if filtros.proyecto == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="f-estado">Estado de la factura</label>
+            <select class="form-control form-control-sm" id="f-estado" name="estado">
+              <option value="">Todos (menos lo filtrado por paso)</option>
+              {% for v, l in estados %}<option value="{{ v }}" {% if filtros.estado == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="f-tipo">Tipo</label>
+            <select class="form-control form-control-sm" id="f-tipo" name="tipo">
+              <option value="">Todos</option>
+              {% for v, l in tipos %}<option value="{{ v }}" {% if filtros.tipo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 mb-2 d-flex align-items-end">
+            <button type="submit" class="btn btn-sm btn-primary mr-2">Filtrar</button>
+            <a href="?" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="col-lg-4 mb-3">
+      <div class="fc-nueva">
+        <div class="d-flex justify-content-between align-items-center">
+          <strong class="small">Nueva factura</strong>
+          {% if conciliacion_abierta %}<small class="text-muted">corte {{ conciliacion_abierta.fecha_corte|date:"d/m/Y" }}</small>{% endif %}
+        </div>
+        {% if conciliacion_abierta %}
+        <p class="small text-muted mb-2">Escribe el negocio (ADJ) o la cédula de un titular y elígelo: se abre el formulario de facturación de la conciliación en revisión, con sus titulares y valores.</p>
+        <input type="search" class="form-control form-control-sm" id="n-q" placeholder="ADJ617, 1144… (mínimo 2 caracteres)" autocomplete="off" aria-label="Buscar el negocio que se va a facturar">
+        <div class="fc-res mt-2" id="n-res" style="display:none"></div>
+        <div class="small text-muted mt-1" id="n-aviso"></div>
+        {% else %}
+        <p class="small text-muted mb-0">No hay una conciliación en revisión. Para facturar hay que tener una abierta.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 fc-tabla">
+        <thead class="thead-light">
+          <tr>
+            <th style="width:26px"><input type="checkbox" id="sel-todas" aria-label="Seleccionar todas las de esta página que esperan autorretención"></th>
+            <th>Fecha</th><th>Factura</th><th>Proyecto · negocio</th><th>Titular</th><th class="num">Total</th>
+            <th>Estado</th><th>Costo</th><th>Cruce</th><th>Autorretención</th><th>Qué falta</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in filas %}
+          <tr data-id="{{ r.f.pk }}">
+            <td>
+              {% if r.autorrenta_pendiente %}
+              <input type="checkbox" class="sel-fila" value="{{ r.f.pk }}" aria-label="Seleccionar la factura {{ r.f.numero|default:r.f.pk }}">
+              {% endif %}
+            </td>
+            <td class="text-nowrap">{{ r.f.fecha|date:"d/m/Y" }}</td>
+            <td>
+              <strong>{% if r.f.numero %}{{ r.f.numero }}{% else %}#{{ r.f.pk }}{% endif %}</strong>
+              <br><small class="text-muted">{{ r.f.get_tipo_display }}</small>
+            </td>
+            <td>{{ r.f.proyecto }}<br><small class="text-muted">{{ r.f.negocio_ref }}</small></td>
+            <td>{{ r.f.identificacion }}<br><small class="text-muted">{{ r.f.nombre|truncatechars:28 }}</small></td>
+            <td class="num">${{ r.f.total|floatformat:0|intcomma }}</td>
+            <td>
+              {{ r.f.get_estado_display }}
+              {% if r.f.error %}<div class="fc-err" title="{{ r.f.error }}">{{ r.f.error|truncatechars:70 }}</div>{% endif %}
+            </td>
+            <td>
+              {% if r.f.costo_estado == 'registrado' %}<span class="fc-paso ok">Registrado</span>
+              {% elif r.f.costo_estado == 'pendiente' and r.f.costo > 0 %}<span class="fc-paso pend">Pendiente</span>
+                {% if r.puede_pasos %}<button type="button" class="btn btn-link btn-sm p-0 fc-accion" data-accion="costo">registrar</button>{% endif %}
+              {% else %}<span class="text-muted">—</span>{% endif %}
+              {% if r.f.error_costo %}<div class="fc-err" title="{{ r.f.error_costo }}">{{ r.f.error_costo|truncatechars:60 }}</div>{% endif %}
+            </td>
+            <td>
+              {% if r.f.cruce_estado == 'registrado' %}<span class="fc-paso ok">Registrado</span>
+              {% elif r.f.cruce_estado == 'pendiente' and r.f.cruce_cuenta %}<span class="fc-paso pend">Pendiente</span>
+                {% if r.puede_pasos %}<button type="button" class="btn btn-link btn-sm p-0 fc-accion" data-accion="cruzar">registrar</button>{% endif %}
+              {% else %}<span class="text-muted">—</span>{% endif %}
+              {% if r.f.error_cruce %}<div class="fc-err" title="{{ r.f.error_cruce }}">{{ r.f.error_cruce|truncatechars:60 }}</div>{% endif %}
+            </td>
+            <td class="fc-td-autorrenta">
+              {% if r.f.autorrenta_estado == 'registrado' %}
+                <span class="fc-paso ok">${{ r.f.autorrenta|floatformat:0|intcomma }}</span>
+                <br><small class="text-muted">{{ r.f.autorrenta_tarifa|floatformat:"-3" }}% · {{ r.f.autorrenta_fecha|date:"d/m/Y" }}</small>
+              {% elif r.autorrenta_pendiente %}
+                <span class="fc-paso pend">${{ r.autorrenta_pendiente|floatformat:0|intcomma }}</span>
+                <button type="button" class="btn btn-link btn-sm p-0 fc-accion" data-accion="autorrenta">registrar</button>
+                <br><small class="text-muted">{{ r.tarifa|floatformat:"-3" }}% del total</small>
+              {% elif r.f.autorrenta_estado == 'no_aplica' %}<span class="text-muted">No aplica</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+              {% if r.f.error_autorrenta %}<div class="fc-err" title="{{ r.f.error_autorrenta }}">{{ r.f.error_autorrenta|truncatechars:60 }}</div>{% endif %}
+            </td>
+            <td>
+              {% if r.siguiente_label %}<span class="fc-paso {% if r.siguiente == 'enviar' %}err{% else %}pend{% endif %}">{{ r.siguiente_label }}</span>{% else %}<span class="text-muted">Nada</span>{% endif %}
+              {% if r.siguiente == 'emitir' and r.f.alegra_invoice_id %}
+                <button type="button" class="btn btn-link btn-sm p-0 fc-accion" data-accion="emitir">emitir</button>
+              {% endif %}
+              <br><a class="small" href="{% url 'conciliacion-terceros-detalle' r.f.conciliacion_id %}?q={{ r.f.identificacion|urlencode }}">ver en la conciliación</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="11" class="text-muted">Ninguna factura coincide con el filtro.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="fc-lote" id="lote" style="display:none">
+    <button type="button" class="btn btn-sm btn-primary" id="lote-ir">Registrar la autorretención de las seleccionadas</button>
+    <span class="small text-muted ml-2" id="lote-estado"></span>
+  </div>
+
+  {% if pagina.paginator.num_pages > 1 %}
+  <nav class="mt-3 d-flex justify-content-between align-items-center small">
+    <span class="text-muted">{{ pagina.paginator.count }} factura(s) · página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    <span>
+      {% if pagina.has_previous %}<a href="?{{ request.GET.urlencode }}&amp;p={{ pagina.previous_page_number }}" class="btn btn-sm btn-outline-secondary">Anterior</a>{% endif %}
+      {% if pagina.has_next %}<a href="?{{ request.GET.urlencode }}&amp;p={{ pagina.next_page_number }}" class="btn btn-sm btn-outline-secondary ml-1">Siguiente</a>{% endif %}
+    </span>
+  </nav>
+  {% else %}
+  <p class="small text-muted mt-2">{{ pagina.paginator.count }} factura(s).</p>
+  {% endif %}
+
+  <form id="csrf-form">{% csrf_token %}</form>
+</div>
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+(function () {
+  var URL_ACC = "{% url 'conciliacion-terceros-facturas-accion' 0 'X' %}".replace('/0/X', '/__ID__/__ACC__');
+  var URL_LOTE = "{% url 'conciliacion-terceros-facturas-autorrenta-lote' %}";
+  var URL_NEG = "{% url 'conciliacion-terceros-facturas-negocios' %}";
+  var TOKEN = $('#csrf-form [name=csrfmiddlewaretoken]').val();
+  var fmt = new Intl.NumberFormat('es-CO');
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  // --- un paso de una factura ---
+  $('.fc-tabla').on('click', '.fc-accion', function () {
+    var $b = $(this), $tr = $b.closest('tr'), id = $tr.data('id'), acc = $b.data('accion');
+    if (acc === 'emitir' && !confirm('Se emite la factura ante la DIAN. ¿Seguir?')) return;
+    $b.prop('disabled', true).text('enviando…');
+    $.ajax({ url: URL_ACC.replace('__ID__', id).replace('__ACC__', acc), method: 'POST', headers: { 'X-CSRFToken': TOKEN } })
+      .done(function (r) {
+        var f = r.factura || {};
+        if (acc === 'autorrenta' && f.autorrenta_estado === 'registrado' && !f.error_autorrenta) {
+          $tr.find('.fc-td-autorrenta').html('<span class="fc-paso ok">$' + fmt.format(Math.round(Number(f.autorrenta))) + '</span>');
+          $tr.find('.sel-fila').remove();
+          actualizarLote();
+        } else if (f.error_autorrenta || f.error_costo || f.error_cruce) {
+          alert('No quedó registrado: ' + (f.error_autorrenta || f.error_costo || f.error_cruce));
+          location.reload();
+        } else {
+          location.reload();
+        }
+      })
+      .fail(function (x) {
+        alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo registrar.');
+        $b.prop('disabled', false).text(acc === 'emitir' ? 'emitir' : 'registrar');
+      });
+  });
+
+  // --- lote de autorretención: tandas cortas, cada factura son dos llamadas a Alegra ---
+  function seleccionadas() { return $('.sel-fila:checked').map(function () { return Number(this.value); }).get(); }
+  function actualizarLote() {
+    var n = seleccionadas().length;
+    $('#lote').toggle(n > 0);
+    $('#lote-ir').text('Registrar la autorretención de ' + n + ' factura(s)');
+  }
+  $('#sel-todas').on('change', function () { $('.sel-fila').prop('checked', this.checked); actualizarLote(); });
+  $('.fc-tabla').on('change', '.sel-fila', actualizarLote);
+
+  $('#lote-ir').on('click', function () {
+    var ids = seleccionadas(), total = ids.length;
+    if (!total) return;
+    if (!confirm('Se registra un asiento de autorretención por cada una de las ' + total + ' factura(s), con la fecha de hoy. ¿Seguir?')) return;
+    var $b = $(this).prop('disabled', true), hechas = 0, fallas = [];
+    $('#sel-todas').prop('disabled', true);
+    (function tanda() {
+      var lote = ids.splice(0, 5);
+      if (!lote.length) {
+        $('#lote-estado').html(hechas + ' registrada(s)' + (fallas.length ? ', ' + fallas.length + ' con error' : '') + '. Se recarga la página…');
+        setTimeout(function () { location.reload(); }, 1200);
+        return;
+      }
+      $('#lote-estado').text('Registrando… ' + hechas + ' de ' + total);
+      $.ajax({ url: URL_LOTE, method: 'POST', headers: { 'X-CSRFToken': TOKEN }, contentType: 'application/json',
+               data: JSON.stringify({ ids: lote }) })
+        .done(function (r) {
+          (r.resultados || []).forEach(function (x) {
+            var $tr = $('tr[data-id="' + x.id + '"]');
+            if (x.ok) {
+              hechas++;
+              $tr.find('.fc-td-autorrenta').html('<span class="fc-paso ok">$' + fmt.format(Math.round(Number(x.valor))) + '</span>');
+              $tr.find('.sel-fila').remove();
+            } else {
+              fallas.push(x.id);
+              $tr.find('.fc-td-autorrenta').append('<div class="fc-err">' + esc(x.detail || 'No quedó registrada') + '</div>');
+              $tr.find('.sel-fila').prop('checked', false);
+            }
+          });
+          tanda();
+        })
+        .fail(function (x) {
+          $('#lote-estado').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'Se interrumpió el envío.') +
+            ' ' + hechas + ' de ' + total + ' quedaron registradas; las demás siguen pendientes.</span>');
+          $b.prop('disabled', false); $('#sel-todas').prop('disabled', false);
+        });
+    })();
+  });
+
+  // --- buscador de negocios para facturar ---
+  var tmr = null;
+  $('#n-q').on('input', function () {
+    var q = $(this).val().trim();
+    clearTimeout(tmr);
+    if (q.length < 2) { $('#n-res').hide().empty(); $('#n-aviso').text(''); return; }
+    tmr = setTimeout(function () {
+      $('#n-aviso').text('Buscando…');
+      $.getJSON(URL_NEG, { q: q, proyecto: $('#f-proyecto').val() || '' })
+        .done(function (r) {
+          var ns = r.negocios || [];
+          $('#n-aviso').text(ns.length ? (r.total > ns.length ? 'Se muestran ' + ns.length + ' de ' + r.total + ': afina la búsqueda.' : '')
+                                       : 'Ningún negocio con saldo coincide.');
+          $('#n-res').toggle(ns.length > 0).html(ns.map(function (n) {
+            return '<a href="' + esc(n.url) + '"><strong>' + esc(n.proyecto) + ' · ' + esc(n.ref) + '</strong> — recaudado $' +
+              fmt.format(Math.round(Number(n.total))) + '<br><small class="text-muted">' + esc(n.titulares.join(', ')) + '</small></a>';
+          }).join(''));
+        })
+        .fail(function (x) {
+          $('#n-res').hide().empty();
+          $('#n-aviso').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo buscar.') + '</span>');
+        });
+    }, 300);
+  });
+})();
+</script>
+{% endblock %}

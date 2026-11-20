@@ -188,6 +188,7 @@
         <button class="btn btn-sm btn-outline-secondary" type="submit" title="Vuelve a leer Andinasoft; conserva revisiones y notas"><i class="fas fa-sync-alt mr-1"></i>Recalcular</button>
       </form>
       {% endif %}
+      <a href="{% url 'conciliacion-terceros-facturas' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-invoice mr-1"></i>Facturas</a>
       <a href="{% url 'conciliacion-terceros-facturacion' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-file-invoice-dollar mr-1"></i>Facturación</a>
       <a href="{% url 'conciliacion-terceros-exportar' conciliacion.pk %}" class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel mr-1"></i>Exportar</a>
       <form method="post" action="{% url 'conciliacion-terceros-estado' conciliacion.pk %}" class="d-inline">{% csrf_token %}
@@ -1739,7 +1740,7 @@
     $('#m-sec-acciones').toggle(!CERRADA);
     var na = (l.ajustes || []).length, nf = (l.facturas || []).length, nc = (l.correcciones || []).length;
     var pend = (l.ajustes || []).filter(function (a) { return !a.anulado && a.journal_estado === 'pendiente'; }).length +
-      (l.facturas || []).filter(function (f) { return f.estado !== 'anulada' && (f.siguiente || f.error || f.error_costo || f.error_cruce || f.estado === 'pendiente' || f.estado === 'error'); }).length +
+      (l.facturas || []).filter(function (f) { return f.estado !== 'anulada' && (f.siguiente || f.error || f.error_costo || f.error_cruce || f.error_autorrenta || f.estado === 'pendiente' || f.estado === 'error'); }).length +
       (l.correcciones || []).filter(function (c) { return c.estado === 'parcial'; }).length;
     $('#m-historial').toggle(na + nf + nc > 0).prop('open', pend > 0);
     $('#m-historial-n').attr('class', 'badge ' + (pend ? 'badge-warning' : 'badge-light')).text(pend ? pend + ' pendiente(s)' : (na + nf + nc));
@@ -2008,7 +2009,7 @@
   });
   // Envía a Alegra los pasos pendientes de cada factura, uno por petición y en orden (factura → costo → cruce),
   // esperando la respuesta de cada uno. Se detiene en el primer paso que falle de cada factura.
-  var PASO_TXT = { enviar: 'factura', costo: 'costo', cruzar: 'cruce' };
+  var PASO_TXT = { enviar: 'factura', costo: 'costo', cruzar: 'cruce', autorrenta: 'autorretención' };
   function progreso(txt) { $('#m-progreso').toggle(!!txt).html(txt ? '<i class="fas fa-spinner fa-spin mr-1"></i>' + esc(txt) : ''); }
   function completarFacturas(lista, alTerminar) {
     var cola = lista.slice(), finales = [], hechos = {};
@@ -2036,11 +2037,24 @@
     }
     function btn(acc, txt) { return CERRADA ? '' : ' <button type="button" class="btn btn-link fac-acc" data-acc="' + acc + '" data-id="' + f.id + '">' + txt + '</button>'; }
     var enviando = '<i class="fas fa-spinner fa-spin mr-1"></i>Enviando…';
+    // Autorretención de renta: va por la tarifa de la empresa sobre el total facturado y su asiento lleva la fecha
+    // en que se registra. También la tienen las informativas: el asiento no depende de Alegra para la factura.
+    function autorrenta() {
+      var pend = Number(f.autorrenta_por_registrar || 0);
+      if (f.autorrenta_estado === 'registrado') return li('ok', 'fa-check-circle', 'Autorretención ' + fmt.format(Number(f.autorrenta)) + ' registrada');
+      if (f.paso_en_curso === 'autorrenta') return li('wait', 'fa-clock', enviando);
+      if (f.error_autorrenta) return li('bad', 'fa-times-circle', 'Autorretención no registrada', f.error_autorrenta, btn('autorrenta', 'Reintentar autorretención'));
+      if (pend > 0) return li('wait', 'fa-circle', 'Autorretención ' + fmt.format(pend) + ' pendiente',
+        'Débito al anticipo de renta contra autorretenciones por pagar, a nombre de la empresa y con la fecha de hoy.',
+        btn('autorrenta', 'Registrar autorretención'));
+      return '';
+    }
     if (f.estado === 'anulada') return '<span class="text-muted">Anulada</span>';
     if (f.tipo !== 'alegra') {
       return '<ul class="ct-pasos">' + li('ok', 'fa-check-circle', 'Factura registrada') +
         li(f.cruce_estado === 'no_aplica' ? 'off' : 'ok', f.cruce_estado === 'no_aplica' ? 'fa-minus-circle' : 'fa-check-circle',
-           f.cruce_estado === 'no_aplica' ? 'Sin cruce (ya está en contabilidad)' : 'Cruce descontado de la cuenta ' + esc(f.cruce_cuenta)) + '</ul>';
+           f.cruce_estado === 'no_aplica' ? 'Sin cruce (ya está en contabilidad)' : 'Cruce descontado de la cuenta ' + esc(f.cruce_cuenta)) +
+        autorrenta() + '</ul>';
     }
     var emitida = f.estado === 'emitida', h = '';
     // 1. Factura
@@ -2065,6 +2079,8 @@
     else if (!emitida) h += li('off', 'fa-circle', tr + ' · espera la factura');
     else if (f.error_cruce) h += li('bad', 'fa-times-circle', tr + ' no registrado', f.error_cruce, btn('cruzar', 'Reintentar cruce') + btnEnlace(f.error_cruce, f.empresa));
     else h += li('wait', 'fa-circle', tr + ' pendiente', '', btn('cruzar', 'Registrar cruce'));
+    // 4. Autorretención de renta
+    h += autorrenta();
     return '<ul class="ct-pasos">' + h + '</ul>';
   }
   function renderFacturas(l) {
@@ -2569,7 +2585,21 @@
   if (qInicial) {
     $('#f-ocultar').prop('checked', false); filtros.ocultar = false;
     $('#f-q').val(qInicial); filtros.q = qInicial.toLowerCase(); redibujar();
-    if (BY_IDENT[qInicial]) { cambiarVista('terceros'); abrir(BY_IDENT[qInicial]); }
+    if (BY_IDENT[qInicial]) {
+      cambiarVista('terceros'); abrir(BY_IDENT[qInicial]);
+      // ?factura=<proyecto>|<negocio>: lo manda el módulo de facturas para abrir el panel ya en ese negocio.
+      var pedida = new URLSearchParams(location.search).get('factura') || '';
+      var corte = pedida.lastIndexOf('|');
+      if (corte > 0) {
+        var pr = pedida.slice(0, corte), rf = pedida.slice(corte + 1);
+        abrirAccion('factura');
+        var ns = $('#m-fac-negocio').data('negocios') || [];
+        for (var i = 0; i < ns.length; i++) {
+          if (ns[i].proyecto === pr && String(ns[i].ref) === rf) { $('#m-fac-negocio').val(i); break; }
+        }
+        abrirFactura(pr, rf);
+      }
+    }
     // El ?q= ya se aplicó: se quita de la URL para que una recarga posterior no vuelva a filtrar ni abrir la ficha.
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
   }

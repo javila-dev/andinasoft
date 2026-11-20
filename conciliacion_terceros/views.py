@@ -6,13 +6,17 @@ import re
 import uuid
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.core.cache import cache
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import get_valid_filename
 from django.views.decorators.http import require_http_methods
@@ -326,6 +330,10 @@ def _factura_json(f, inc=None):
         'costo': str(f.costo), 'costo_estado': f.costo_estado, 'error_costo': f.error_costo, 'error_cruce': f.error_cruce,
         'alegra_costo_journal_id': f.alegra_costo_journal_id, 'paso_en_curso': f.paso_en_curso,
         'costo_label': {'no_aplica': '', 'pendiente': 'Pendiente', 'registrado': 'Registrado'}.get(f.costo_estado, ''),
+        'autorrenta': str(f.autorrenta), 'autorrenta_estado': f.autorrenta_estado,
+        'autorrenta_tarifa': str(f.autorrenta_tarifa), 'error_autorrenta': f.error_autorrenta,
+        'alegra_autorrenta_journal_id': f.alegra_autorrenta_journal_id,
+        'autorrenta_por_registrar': str(facturacion.autorrenta_pendiente(f)),
         'creado_por': f.created_by.get_username() if f.created_by else '',
         'creado_en': timezone.localtime(f.created_at).strftime('%d/%m/%Y %H:%M') if f.created_at else '',
     }
@@ -494,11 +502,59 @@ def _referencias_ajenas(emp, datos):
     return out
 
 
+def _guardar_autorrenta(request):
+    """Tarifa y cuentas de la autorretención de una empresa: se configuran una sola vez y valen para todos sus
+    proyectos, porque la obligación es de la empresa. Con tarifa en 0 la empresa no autorretiene."""
+    emp = get_object_or_404(empresas, pk=request.POST.get('empresa'))
+    try:
+        tarifa = Decimal(str(request.POST.get('autorrenta_tarifa') or 0).replace(',', '.'))
+    except InvalidOperation:
+        tarifa = None
+    if tarifa is None or tarifa < 0 or tarifa > 100:
+        messages.error(request, 'La tarifa de autorretención es un porcentaje entre 0 y 100 (p. ej. 1,1).')
+        return redirect('conciliacion-terceros-facturacion')
+    campos = ['autorrenta_cuenta_anticipo_id', 'autorrenta_cuenta_anticipo_codigo', 'autorrenta_cuenta_anticipo_nombre',
+              'autorrenta_cuenta_pasivo_id', 'autorrenta_cuenta_pasivo_codigo', 'autorrenta_cuenta_pasivo_nombre']
+    datos = {c: (request.POST.get(c) or '').strip() for c in campos}
+    datos['autorrenta_tarifa'] = tarifa
+    if tarifa > 0:
+        if not (datos['autorrenta_cuenta_anticipo_id'] and datos['autorrenta_cuenta_pasivo_id']):
+            messages.error(request, 'Con tarifa mayor que cero hay que elegir las dos cuentas del asiento '
+                                    '(anticipo de renta y autorretenciones por pagar); no se guardó.')
+            return redirect('conciliacion-terceros-facturacion')
+        try:
+            ids = {str(c['id']) for c in facturacion.cuentas_alegra(emp)}
+        except Exception:
+            logger.warning('No se pudieron leer las cuentas de Alegra de %s', emp.pk, exc_info=True)
+            messages.error(request, f'No se pudieron consultar las cuentas de {emp.nombre} en Alegra para '
+                                    'verificarlas; no se guardó. Intenta de nuevo en un momento.')
+            return redirect('conciliacion-terceros-facturacion')
+        ajenas = [datos[f'autorrenta_cuenta_{k}_codigo'] or k for k in ('anticipo', 'pasivo')
+                  if datos[f'autorrenta_cuenta_{k}_id'] not in ids]
+        if ajenas:
+            messages.error(request, f'Estas cuentas no existen en el Alegra de {emp.nombre} (¿quedaron de otra '
+                                    f'empresa?): {", ".join(ajenas)}. Vuelve a elegirlas; no se guardó.')
+            return redirect('conciliacion-terceros-facturacion')
+    ConfigEmpresa.objects.update_or_create(empresa=emp, defaults=datos)
+    if tarifa > 0:
+        pendientes = FacturaConciliacion.objects.filter(
+            empresa_id=emp.pk, autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE,
+            estado__in=facturacion.ESTADOS_FACTURADA).count()
+        messages.success(request, f'{emp.nombre}: autorretención al {tarifa}% guardada.' + (
+            f' Quedan {pendientes} factura(s) ya emitida(s) sin el asiento: se registran desde el módulo de facturas.'
+            if pendientes else ''))
+    else:
+        messages.success(request, f'{emp.nombre}: queda sin autorretención (tarifa en 0).')
+    return redirect('conciliacion-terceros-facturacion')
+
+
 @login_required
 @require_http_methods(['GET', 'POST'])
 def facturacion_config(request):
     _guard(request)
     proyectos_lista = engine.proyectos_conciliables()
+    if request.method == 'POST' and request.POST.get('form') == 'autorrenta':
+        return _guardar_autorrenta(request)
     if request.method == 'POST':
         proyecto = request.POST.get('proyecto')
         if proyecto not in proyectos_lista:
@@ -559,13 +615,243 @@ def facturacion_config(request):
             if c else None)
         for p, c in configs.items()
     }
+    cfgs_emp = {str(c.empresa_id): c for c in ConfigEmpresa.objects.all()}
+    pendientes = {r['empresa_id']: r['n'] for r in FacturaConciliacion.objects.filter(
+        autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE, estado__in=facturacion.ESTADOS_FACTURADA,
+    ).values('empresa_id').annotate(n=Count('pk'))}
+    campos_autorrenta = ['autorrenta_tarifa', 'autorrenta_cuenta_anticipo_id', 'autorrenta_cuenta_anticipo_codigo',
+                         'autorrenta_cuenta_anticipo_nombre', 'autorrenta_cuenta_pasivo_id',
+                         'autorrenta_cuenta_pasivo_codigo', 'autorrenta_cuenta_pasivo_nombre']
+    empresas_alegra = [e for e in empresas.objects.order_by('nombre') if e.alegra_enabled]
+    filas_autorrenta = [{'empresa': e, 'cfg': cfgs_emp.get(str(e.pk)), 'pendientes': pendientes.get(str(e.pk), 0)}
+                        for e in empresas_alegra]
+    autorrenta_js = {str(e.pk): ({c: str(getattr(cfgs_emp[str(e.pk)], c)) for c in campos_autorrenta}
+                                 if cfgs_emp.get(str(e.pk)) else None) for e in empresas_alegra}
     return render(request, 'conciliacion_terceros/facturacion.html', {
         'filas': filas,
         'empresas': empresas.objects.order_by('nombre'),
         'modos': ConfigFacturacion.MODO_CHOICES,
         'emisiones': ConfigFacturacion.EMISION_CHOICES,
         'configs_json': datos_js,
+        'filas_autorrenta': filas_autorrenta,
+        'autorrenta_json': autorrenta_js,
     })
+
+
+# ---------------------------------------------------------------------------
+# Módulo de facturas: todas las facturas registradas, en qué va cada una y qué le falta.
+# Es la pantalla para los pasos contables de una factura ya emitida (costo, cruce y autorretención),
+# incluidas las de conciliaciones cerradas: esos asientos no cambian ninguna cifra de la conciliación.
+# ---------------------------------------------------------------------------
+
+PASOS_FACTURA = {
+    'autorrenta': 'Autorretención por registrar',
+    'costo': 'Costo por registrar',
+    'cruzar': 'Cruce por registrar',
+    'enviar': 'Sin crear en Alegra',
+    'emitir': 'En borrador por emitir',
+}
+
+
+def _fila_factura(f, cfgs_emp):
+    """Una factura para el listado: sus cuatro pasos y lo que le falta."""
+    cfg_emp = cfgs_emp.get(str(f.empresa_id))
+    pendiente = facturacion.autorrenta_pendiente(f, cfg_emp)
+    siguiente = facturacion.siguiente_paso(f, cfg_emp)
+    if not siguiente and f.tipo == FacturaConciliacion.TIPO_ALEGRA and f.estado == FacturaConciliacion.ESTADO_BORRADOR:
+        siguiente = 'emitir'
+    return {
+        'f': f,
+        'siguiente': siguiente,
+        'siguiente_label': PASOS_FACTURA.get(siguiente, ''),
+        'autorrenta_pendiente': pendiente,
+        'tarifa': cfg_emp.autorrenta_tarifa if cfg_emp else 0,
+        # El cruce y el costo solo se pueden mandar desde aquí si la factura está emitida en Alegra.
+        'puede_pasos': f.tipo == FacturaConciliacion.TIPO_ALEGRA and f.estado == FacturaConciliacion.ESTADO_EMITIDA,
+    }
+
+
+def _facturas_filtradas(request):
+    """El queryset del listado según los filtros de la URL, y los filtros ya normalizados."""
+    filtros = {k: (request.GET.get(k) or '').strip() for k in ('empresa', 'proyecto', 'estado', 'tipo', 'paso', 'q')}
+    qs = FacturaConciliacion.objects.select_related('empresa', 'conciliacion', 'created_by')
+    if filtros['empresa']:
+        qs = qs.filter(empresa_id=filtros['empresa'])
+    if filtros['proyecto']:
+        qs = qs.filter(proyecto=filtros['proyecto'])
+    if filtros['tipo']:
+        qs = qs.filter(tipo=filtros['tipo'])
+    if filtros['estado']:
+        qs = qs.filter(estado=filtros['estado'])
+    elif filtros['paso']:
+        qs = qs.exclude(estado=FacturaConciliacion.ESTADO_ANULADA)
+    if filtros['paso'] == 'autorrenta':
+        # Solo las de empresas que autorretienen: en las demás el paso no existe.
+        configuradas = [str(c.empresa_id) for c in ConfigEmpresa.objects.all() if c.autorrenta_activa]
+        qs = qs.filter(autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE, estado__in=facturacion.ESTADOS_FACTURADA,
+                       empresa_id__in=configuradas)
+    elif filtros['paso'] == 'costo':
+        qs = qs.filter(costo_estado=FacturaConciliacion.CRUCE_PENDIENTE, costo__gt=0)
+    elif filtros['paso'] == 'cruzar':
+        qs = qs.filter(cruce_estado=FacturaConciliacion.CRUCE_PENDIENTE).exclude(cruce_cuenta='')
+    elif filtros['paso'] == 'enviar':
+        qs = qs.filter(tipo=FacturaConciliacion.TIPO_ALEGRA,
+                       estado__in=(FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR))
+    elif filtros['paso'] == 'emitir':
+        qs = qs.filter(tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_BORRADOR)
+    if filtros['q']:
+        t = filtros['q']
+        qs = qs.filter(Q(identificacion__icontains=t) | Q(nombre__icontains=t) | Q(negocio_ref__icontains=t)
+                       | Q(numero__icontains=t) | Q(proyecto__icontains=t))
+    return qs.order_by('-fecha', '-id'), filtros
+
+
+@login_required
+@require_http_methods(['GET'])
+def facturas(request):
+    _guard(request)
+    qs, filtros = _facturas_filtradas(request)
+    cfgs_emp = {str(c.empresa_id): c for c in ConfigEmpresa.objects.all()}
+    pagina = Paginator(qs, 100).get_page(request.GET.get('p') or 1)
+    filas = [_fila_factura(f, cfgs_emp) for f in pagina.object_list]
+    # Cuántas facturas esperan cada paso (sobre todas, no solo esta página): son los atajos de arriba.
+    vigentes = FacturaConciliacion.objects.exclude(estado=FacturaConciliacion.ESTADO_ANULADA)
+    empresas_autorrenta = [k for k, c in cfgs_emp.items() if c.autorrenta_activa]
+    conteos = {
+        'autorrenta': vigentes.filter(autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE,
+                                      estado__in=facturacion.ESTADOS_FACTURADA,
+                                      empresa_id__in=empresas_autorrenta).count(),
+        'costo': vigentes.filter(costo_estado=FacturaConciliacion.CRUCE_PENDIENTE, costo__gt=0).count(),
+        'cruzar': vigentes.filter(cruce_estado=FacturaConciliacion.CRUCE_PENDIENTE).exclude(cruce_cuenta='').count(),
+        'enviar': vigentes.filter(tipo=FacturaConciliacion.TIPO_ALEGRA,
+                                  estado__in=(FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR)).count(),
+        'emitir': vigentes.filter(tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_BORRADOR).count(),
+    }
+    abierta = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
+    return render(request, 'conciliacion_terceros/facturas.html', {
+        'filas': filas,
+        'pagina': pagina,
+        'filtros': filtros,
+        'conteos': conteos,
+        'pasos': PASOS_FACTURA,
+        'empresas': empresas.objects.order_by('nombre'),
+        'proyectos': sorted(set(FacturaConciliacion.objects.values_list('proyecto', flat=True).distinct())),
+        'estados': FacturaConciliacion.ESTADO_CHOICES,
+        'tipos': FacturaConciliacion.TIPO_CHOICES,
+        'conciliacion_abierta': abierta,
+        'sin_autorrenta': not empresas_autorrenta,
+    })
+
+
+@login_required
+@require_http_methods(['POST'])
+def facturas_accion(request, factura_id, accion):
+    """Pasos contables de una factura ya creada, desde el módulo: no dependen del estado de la conciliación,
+    porque ninguno cambia sus cifras. Crear la factura en Alegra sigue siendo cosa de la conciliación."""
+    _guard(request)
+    f = get_object_or_404(FacturaConciliacion.objects.select_related('empresa'), pk=factura_id)
+    try:
+        if accion == 'autorrenta':
+            facturacion.registrar_autorrenta(f)
+        elif accion in ('costo', 'cruzar'):
+            cfg = facturacion.config_de(f.proyecto)
+            if not cfg:
+                raise facturacion.FacturacionError('El proyecto no tiene configuración de facturación.')
+            (facturacion.registrar_costo if accion == 'costo' else facturacion.cruzar)(f, cfg)
+        elif accion == 'emitir':
+            facturacion.emitir(f)
+        else:
+            return JsonResponse({'detail': 'Acción desconocida.'}, status=400)
+    except facturacion.FacturacionError as exc:
+        return JsonResponse({'detail': str(exc)}, status=400)
+    f.refresh_from_db()
+    cfg_emp = facturacion.config_empresa(f.empresa_id)
+    return JsonResponse({'ok': True, 'factura': {
+        'id': f.pk, 'estado': f.estado, 'estado_label': f.get_estado_display(),
+        'autorrenta': str(f.autorrenta), 'autorrenta_estado': f.autorrenta_estado,
+        'autorrenta_label': f.get_autorrenta_estado_display(), 'error_autorrenta': f.error_autorrenta,
+        'autorrenta_pendiente': str(facturacion.autorrenta_pendiente(f, cfg_emp)),
+        'costo_estado': f.costo_estado, 'error_costo': f.error_costo,
+        'cruce_estado': f.cruce_estado, 'error_cruce': f.error_cruce,
+        'siguiente': facturacion.siguiente_paso(f, cfg_emp),
+    }})
+
+
+@login_required
+@require_http_methods(['POST'])
+def facturas_autorrenta_lote(request):
+    """Registra la autorretención de varias facturas de una pasada. La pantalla manda tandas cortas porque cada
+    factura son dos llamadas a Alegra (buscar el journal y crearlo): así ninguna petición se queda sin respuesta."""
+    _guard(request)
+    try:
+        ids = [int(x) for x in (json.loads(request.body or '{}').get('ids') or [])][:20]
+    except (ValueError, TypeError):
+        return JsonResponse({'detail': 'Lista de facturas inválida.'}, status=400)
+    if not ids:
+        return JsonResponse({'detail': 'No hay facturas seleccionadas.'}, status=400)
+    resultados = []
+    for f in FacturaConciliacion.objects.select_related('empresa').filter(pk__in=ids).order_by('fecha', 'id'):
+        try:
+            facturacion.registrar_autorrenta(f)
+            f.refresh_from_db()
+            resultados.append({'id': f.pk, 'ok': not f.error_autorrenta, 'valor': str(f.autorrenta),
+                               'estado': f.autorrenta_estado, 'detail': f.error_autorrenta})
+        except facturacion.FacturacionError as exc:
+            resultados.append({'id': f.pk, 'ok': False, 'valor': '0', 'estado': f.autorrenta_estado, 'detail': str(exc)})
+        except Exception as exc:
+            logger.exception('Autorretención de la factura %s', f.pk)
+            resultados.append({'id': f.pk, 'ok': False, 'valor': '0', 'estado': f.autorrenta_estado, 'detail': str(exc)})
+    return JsonResponse({'ok': True, 'resultados': resultados})
+
+
+def _negocios_facturables(conc):
+    """Negocios con saldo de la conciliación abierta: [{proyecto, ref, total, titulares, busqueda}].
+    Se arma una vez y se guarda en caché: recorrer las líneas en cada tecleo del buscador sería caro."""
+    clave = f'ct:negocios_facturables:{conc.pk}:{conc.updated_at.timestamp() if conc.updated_at else 0}'
+    hit = cache.get(clave)
+    if hit is not None:
+        return hit
+    out = {}
+    for negocios in conc.lineas.values_list('negocios', flat=True).iterator():
+        for n in (negocios or []):
+            if not n.get('suma') or n.get('situacion') == 'factura' or Decimal(str(n.get('total_negocio') or 0)) <= 0:
+                continue
+            k = (n.get('proyecto') or '', str(n.get('ref') or ''))
+            if k in out:
+                continue
+            titulares = [str(t) for t in (n.get('titulares') or [])]
+            out[k] = {'proyecto': k[0], 'ref': k[1], 'total': str(n.get('total_negocio') or 0), 'titulares': titulares,
+                      'busqueda': ' '.join([k[0], k[1]] + titulares).lower()}
+    filas = sorted(out.values(), key=lambda r: (r['proyecto'], r['ref']))
+    cache.set(clave, filas, timeout=60 * 10)
+    return filas
+
+
+@login_required
+@require_http_methods(['GET'])
+def facturas_negocios(request):
+    """Buscador de negocios para facturar desde el módulo: devuelve el enlace que abre la ficha del primer titular
+    con el panel de factura de ese negocio ya abierto, para no repetir acá el formulario de la conciliación."""
+    _guard(request)
+    conc = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
+    if not conc:
+        return JsonResponse({'detail': 'No hay una conciliación en revisión: para facturar hay que tener una abierta.'},
+                            status=400)
+    q = (request.GET.get('q') or '').strip().lower()
+    proyecto = (request.GET.get('proyecto') or '').strip()
+    base = reverse('conciliacion-terceros-detalle', args=[conc.pk])
+    filas = _negocios_facturables(conc)
+    if proyecto:
+        filas = [n for n in filas if n['proyecto'] == proyecto]
+    if q:
+        palabras = q.split()
+        filas = [n for n in filas if all(w in n['busqueda'] for w in palabras)]
+    salida = []
+    for n in filas[:60]:
+        titular = n['titulares'][0] if n['titulares'] else ''
+        salida.append(dict(n, url=f'{base}?q={quote(titular)}&factura={quote(n["proyecto"] + "|" + n["ref"])}'))
+    return JsonResponse({'ok': True, 'total': len(filas), 'negocios': salida,
+                         'conciliacion': {'id': conc.pk, 'corte': conc.fecha_corte.isoformat(), 'url': base}})
 
 
 @login_required
@@ -727,6 +1013,8 @@ def factura_accion(request, pk, factura_id, accion):
             if not cfg:
                 raise facturacion.FacturacionError('El proyecto no tiene configuración de facturación.')
             facturacion.cruzar(f, cfg)
+        elif accion == 'autorrenta':
+            facturacion.registrar_autorrenta(f)
         elif accion in ('enviar', 'reintentar'):
             if f.tipo != FacturaConciliacion.TIPO_ALEGRA or f.estado not in (FacturaConciliacion.ESTADO_ERROR, FacturaConciliacion.ESTADO_PENDIENTE):
                 raise facturacion.FacturacionError('Solo se envía una factura de Alegra que no alcanzó a crearse.')
