@@ -112,7 +112,7 @@
         <input type="number" step="0.001" min="0" max="100" name="autorrenta_tarifa" id="ar-tarifa" class="form-control form-control-sm" value="0">
         <small class="text-muted">0 = no autorretiene.</small>
       </div>
-      <div class="col-md-5 mb-2 ar-cuenta" data-campo="autorrenta_cuenta_anticipo">
+      <div class="col-md-5 mb-2 ct-cuenta" data-campo="autorrenta_cuenta_anticipo" data-empresa="#ar-empresa" data-aviso="#ar-cargando">
         <label id="lbl-ar-anticipo">Anticipo de renta (débito, 1355)</label>
         <div class="ct-combo">
           <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-ar-anticipo"></button>
@@ -122,7 +122,7 @@
           </div>
         </div>
       </div>
-      <div class="col-md-5 mb-2 ar-cuenta" data-campo="autorrenta_cuenta_pasivo">
+      <div class="col-md-5 mb-2 ct-cuenta" data-campo="autorrenta_cuenta_pasivo" data-empresa="#ar-empresa" data-aviso="#ar-cargando">
         <label id="lbl-ar-pasivo">Autorretenciones por pagar (crédito, 2365)</label>
         <div class="ct-combo">
           <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-ar-pasivo"></button>
@@ -189,7 +189,7 @@
           <input type="number" min="0" step="0.01" name="costo_m2" id="f-costo_m2" class="form-control form-control-sm" value="0">
           <small class="text-muted">Se multiplica por el área del lote; al facturar se puede cambiar.</small>
         </div>
-        <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_costo">
+        <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_costo" data-empresa="#f-empresa" data-aviso="#f-cargando">
           <label id="lbl-cuenta_costo">Cuenta de costo de venta (débito, 6)</label>
           <div class="ct-combo">
             <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-cuenta_costo"></button>
@@ -199,7 +199,7 @@
             </div>
           </div>
         </div>
-        <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_inventario">
+        <div class="col-md-4 mb-2 ct-cuenta" data-campo="cuenta_inventario" data-empresa="#f-empresa" data-aviso="#f-cargando">
           <label id="lbl-cuenta_inventario">Cuenta de inventario del proyecto (crédito, 15)</label>
           <div class="ct-combo">
             <button type="button" class="form-control form-control-sm ct-combo-btn text-left" aria-labelledby="lbl-cuenta_inventario"></button>
@@ -211,7 +211,7 @@
         </div>
       </div>
       <div class="form-row">
-        <div class="col-md-6 mb-2 ct-cuenta" data-campo="cuenta_cxc">
+        <div class="col-md-6 mb-2 ct-cuenta" data-campo="cuenta_cxc" data-empresa="#f-empresa" data-aviso="#f-cargando">
           <label id="lbl-cuenta_cxc">Cuenta por cobrar de la factura (crédito del cruce)</label>
           <small class="d-block text-muted mb-1">El débito del cruce va a la cuenta de anticipos donde cada tercero tiene el saldo; se elige al facturar.</small>
           <div class="ct-combo">
@@ -242,11 +242,113 @@
 
 {% block jsbottom %}
 <script>
+// Plan de cuentas de Alegra: se pide una sola vez por empresa y lo comparten todos los combos de cuenta de la
+// pantalla (la cuenta por cobrar, el costo, el inventario y las dos de la autorretención). Las cuentas son de cada
+// Alegra, así que la caché va por empresa: volver a una empresa ya cargada no vuelve a pedir el plan, y dos combos
+// que lo pidan a la vez comparten la misma petición.
+var PLAN = (function () {
+  var URL_CUENTAS = "{% url 'conciliacion-terceros-cuentas-alegra' %}";
+  var cargadas = {}, enCurso = {};
+  return {
+    de: function (emp) { return cargadas[emp] || null; },
+    poner: function (emp, cuentas) { if (emp) cargadas[emp] = cuentas || []; },  // ya venían con las referencias
+    cargar: function (emp, listo, falla) {
+      if (!emp) return;
+      if (cargadas[emp]) { listo(cargadas[emp]); return; }
+      enCurso[emp] = enCurso[emp] || [];
+      enCurso[emp].push({ listo: listo, falla: falla });
+      if (enCurso[emp].length > 1) return;  // otro combo ya la pidió: se les avisa a todos cuando llegue
+      $.getJSON(URL_CUENTAS, { empresa: emp })
+        .done(function (r) {
+          cargadas[emp] = r.cuentas || [];
+          var esperando = enCurso[emp] || []; delete enCurso[emp];
+          esperando.forEach(function (c) { c.listo(cargadas[emp]); });
+        })
+        .fail(function (x) {
+          var esperando = enCurso[emp] || []; delete enCurso[emp];
+          var msg = (x.responseJSON && x.responseJSON.detail) || 'No se pudieron consultar las cuentas de Alegra.';
+          esperando.forEach(function (c) { if (c.falla) c.falla(msg); });
+        });
+    }
+  };
+})();
+
+// El combo de cuenta con buscador: el mismo para todos los selectores de cuenta de la pantalla. Cada uno dice en
+// data-empresa de qué campo sale su empresa y en data-aviso dónde mostrar un error al cargar el plan.
+var CUENTAS = (function () {
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+  function empresaDe($c) { return String($($c.data('empresa')).val() || ''); }
+  function cerrar() { $('.ct-combo-panel').hide(); }
+  function pintar($c) {
+    var campo = $c.data('campo'), id = $('#h-' + campo + '_id').val();
+    var hay = !!PLAN.de(empresaDe($c)), $b = $c.find('.ct-combo-btn');
+    $b.prop('disabled', !hay);
+    $b.html(id ? '<code>' + esc($('#h-' + campo + '_codigo').val()) + '</code> ' + esc($('#h-' + campo + '_nombre').val())
+                : '<span class="text-muted">' + (hay ? '— Selecciona una cuenta —' : (empresaDe($c) ? 'Cargando cuentas…' : 'Elige primero la empresa')) + '</span>');
+  }
+  function filtrar($c) {
+    var q = norm($c.find('.ct-cta-q').val()).trim(), sel = $('#h-' + $c.data('campo') + '_id').val();
+    var palabras = q ? q.split(/\s+/) : [], todas = PLAN.de(empresaDe($c)) || [];
+    var cs = todas.filter(function (c) {
+      var h = norm(c.codigo + ' ' + c.nombre); return palabras.every(function (w) { return h.indexOf(w) >= 0; });
+    }).slice(0, 80);
+    $c.find('.ct-res-busq').html((sel ? '<div class="item text-danger" data-quitar="1"><i class="fas fa-times mr-1"></i>Quitar la cuenta seleccionada</div>' : '') +
+      (cs.length ? cs.map(function (c, i) {
+        return '<div class="item' + (String(c.id) === String(sel) ? ' font-weight-bold' : '') + '" data-i="' + i + '"><code>' +
+          esc(c.codigo) + '</code> ' + esc(c.nombre) + '</div>';
+      }).join('') : '<div class="item text-muted">Sin resultados</div>')).data('cs', cs);
+  }
+  // Pinta los combos del formulario y pide el plan si todavía no está.
+  function preparar(selForm) {
+    $(selForm).find('.ct-cuenta').each(function () {
+      var $c = $(this), emp = empresaDe($c);
+      pintar($c);
+      if (!emp || PLAN.de(emp)) return;
+      PLAN.cargar(emp, function () { $(selForm).find('.ct-cuenta').each(function () { pintar($(this)); }); },
+        function (msg) {
+          var $av = $($c.data('aviso'));
+          if ($av.length) $av.html('<span class="text-danger">' + esc(msg) + '</span>'); else alert(msg);
+        });
+    });
+  }
+  function limpiar(campos) {
+    campos.forEach(function (c) { ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(''); }); });
+  }
+
+  $(document).on('click', '.ct-cuenta .ct-combo-btn', function () {
+    var $c = $(this).closest('.ct-cuenta'), $p = $c.find('.ct-combo-panel'), abierto = $p.is(':visible');
+    cerrar(); if (abierto || !PLAN.de(empresaDe($c))) return;
+    $p.show(); $c.find('.ct-cta-q').val(''); filtrar($c); $c.find('.ct-cta-q').trigger('focus');
+  });
+  $(document).on('input', '.ct-cuenta .ct-cta-q', function () { filtrar($(this).closest('.ct-cuenta')); });
+  $(document).on('keydown', '.ct-cuenta .ct-cta-q', function (e) {
+    var $c = $(this).closest('.ct-cuenta'), $its = $c.find('.item[data-i]'), $a = $its.filter('.activo'), i = $its.index($a);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(i + 1, $its.length - 1) : Math.max(i - 1, 0);
+      $its.removeClass('activo'); var el = $its.eq(i).addClass('activo')[0]; if (el) el.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') { e.preventDefault(); ($a.length ? $a : $its.first()).trigger('click'); }
+    else if (e.key === 'Escape') { cerrar(); $c.find('.ct-combo-btn').trigger('focus'); }
+  });
+  $(document).on('click', '.ct-cuenta .item[data-i], .ct-cuenta .item[data-quitar]', function () {
+    var $c = $(this).closest('.ct-cuenta'), campo = $c.data('campo');
+    var c = $(this).data('quitar') ? { id: '', codigo: '', nombre: '' } : $c.find('.ct-res-busq').data('cs')[$(this).data('i')];
+    $('#h-' + campo + '_id').val(c.id); $('#h-' + campo + '_codigo').val(c.codigo); $('#h-' + campo + '_nombre').val(c.nombre);
+    cerrar(); pintar($c);
+  });
+  $(document).on('mousedown', function (e) { if (!$(e.target).closest('.ct-combo').length) cerrar(); });
+
+  return { preparar: preparar, pintar: pintar, cerrar: cerrar, limpiar: limpiar, esc: esc };
+})();
+
+// Facturación de cada proyecto: empresa, numeración, ítems, impuesto y las cuentas de la factura y del costo.
 (function () {
   var CONFIGS = JSON.parse(document.getElementById('configs-data').textContent);
   var URL_REFS = "{% url 'conciliacion-terceros-facturacion-referencias' %}";
+  var CUENTAS_FORM = ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'];
+  var REFS_FORM = ['numeracion', 'item_venta', 'item_intereses', 'impuesto', 'centro_costo'];
   var refs = null, actual = null;
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  var esc = CUENTAS.esc;
   function val(k) { return actual ? (actual[k] || '') : ''; }
 
   function llenarSelects() {
@@ -267,25 +369,6 @@
     $('#h-' + campo + '_id').val(this.value);
     $('#h-' + campo + '_nombre').val(this.value ? $(this).find('option:selected').text() : '');
   });
-  function mostrarCuenta(campo) {
-    var cod = $('#h-' + campo + '_codigo').val(), nom = $('#h-' + campo + '_nombre').val(), id = $('#h-' + campo + '_id').val();
-    var hay = !!(refs && refs.cuentas), $b = $('.ct-cuenta[data-campo="' + campo + '"] .ct-combo-btn');
-    $b.prop('disabled', !hay);
-    $b.html(id ? '<code>' + esc(cod) + '</code> ' + esc(nom) : '<span class="text-muted">' + (hay ? '— Selecciona una cuenta —' : 'Cargando cuentas…') + '</span>');
-  }
-  function mostrarCuentas() { ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(mostrarCuenta); }
-  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-  function filtrarCuentas($c) {
-    var q = norm($c.find('.ct-cta-q').val()).trim(), todas = (refs && refs.cuentas) || [], sel = $('#h-' + $c.data('campo') + '_id').val();
-    var palabras = q ? q.split(/\s+/) : [];
-    var cs = todas.filter(function (c) { var h = norm(c.codigo + ' ' + c.nombre); return palabras.every(function (w) { return h.indexOf(w) >= 0; }); }).slice(0, 80);
-    var html = (sel ? '<div class="item text-danger" data-quitar="1"><i class="fas fa-times mr-1"></i>Quitar la cuenta seleccionada</div>' : '') +
-      (cs.length ? cs.map(function (c, i) {
-        return '<div class="item' + (String(c.id) === String(sel) ? ' font-weight-bold' : '') + '" data-i="' + i + '"><code>' + esc(c.codigo) + '</code> ' + esc(c.nombre) + '</div>';
-      }).join('') : '<div class="item text-muted">Sin resultados</div>');
-    $c.find('.ct-res-busq').html(html).data('cs', cs);
-  }
-  function cerrarCombos() { $('.ct-combo-panel').hide(); }
   function cargarRefs() {
     var emp = $('#f-empresa').val();
     var alegra = $('#f-empresa option:selected').data('alegra') == 1;
@@ -293,108 +376,54 @@
     $('#f-alegra').toggle(modo === 'alegra'); $('#f-info').toggle(modo !== 'alegra');
     if (modo !== 'alegra') return;
     if (!alegra) { $('#f-cargando').html('<span class="text-danger">Esta empresa no tiene integración con Alegra: elige modo informativo.</span>'); return; }
+    CUENTAS.preparar('#form');  // el plan puede estar ya cargado de otra vez o del otro formulario
     $('#f-cargando').text('Cargando numeraciones, ítems, impuestos y cuentas de Alegra…');
     $.getJSON(URL_REFS, { empresa: emp }).done(function (r) {
       if (emp !== $('#f-empresa').val()) return;  // cambiaron de empresa mientras cargaba
-      refs = r.referencias; $('#f-cargando').text(''); llenarSelects(); mostrarCuentas();
+      refs = r.referencias; $('#f-cargando').text('');
+      PLAN.poner(emp, refs.cuentas);  // las referencias ya traen el plan: no se pide otra vez
+      llenarSelects(); CUENTAS.preparar('#form');
     }).fail(function (x) { $('#f-cargando').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo consultar Alegra.') + '</span>'); });
   }
   $('#f-empresa').on('change', function () {
-    // Todas las referencias de Alegra (numeración, ítems, impuesto, centro de costo y cuentas) son de la empresa:
+    // Las referencias de Alegra (numeración, ítems, impuesto, centro de costo y cuentas) son de la empresa:
     // al cambiarla se limpian, para no guardar IDs de otra empresa.
     refs = null;
-    ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(function (c) {
-      ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(''); });
-    });
-    ['numeracion', 'item_venta', 'item_intereses', 'impuesto', 'centro_costo'].forEach(function (c) {
-      $('#h-' + c + '_id, #h-' + c + '_nombre').val('');
-    });
-    cerrarCombos(); llenarSelects(); mostrarCuentas(); cargarRefs();
+    CUENTAS.limpiar(CUENTAS_FORM);
+    REFS_FORM.forEach(function (c) { $('#h-' + c + '_id, #h-' + c + '_nombre').val(''); });
+    CUENTAS.cerrar(); llenarSelects(); CUENTAS.preparar('#form'); cargarRefs();
   });
   $('#f-modo').on('change', cargarRefs);
-  $('.ct-combo-btn').on('click', function () {
-    var $c = $(this).closest('.ct-cuenta'), $p = $c.find('.ct-combo-panel'), abierto = $p.is(':visible');
-    cerrarCombos(); if (abierto || !(refs && refs.cuentas)) return;
-    $p.show(); $c.find('.ct-cta-q').val(''); filtrarCuentas($c); $c.find('.ct-cta-q').trigger('focus');
-  });
-  $('.ct-cta-q').on('input', function () { filtrarCuentas($(this).closest('.ct-cuenta')); })
-    .on('keydown', function (e) {
-      var $c = $(this).closest('.ct-cuenta'), $its = $c.find('.item[data-i]'), $a = $its.filter('.activo'), i = $its.index($a);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(i + 1, $its.length - 1) : Math.max(i - 1, 0);
-        $its.removeClass('activo'); var el = $its.eq(i).addClass('activo')[0]; if (el) el.scrollIntoView({ block: 'nearest' });
-      } else if (e.key === 'Enter') { e.preventDefault(); ($a.length ? $a : $its.first()).trigger('click'); }
-      else if (e.key === 'Escape') { cerrarCombos(); $c.find('.ct-combo-btn').trigger('focus'); }
-    });
-  $('.ct-res-busq').on('click', '.item[data-i], .item[data-quitar]', function () {
-    var $c = $(this).closest('.ct-cuenta'), campo = $c.data('campo');
-    var c = $(this).data('quitar') ? { id: '', codigo: '', nombre: '' } : $c.find('.ct-res-busq').data('cs')[$(this).data('i')];
-    $('#h-' + campo + '_id').val(c.id); $('#h-' + campo + '_codigo').val(c.codigo); $('#h-' + campo + '_nombre').val(c.nombre);
-    cerrarCombos(); mostrarCuenta(campo);
-  });
-  $(document).on('mousedown', function (e) { if (!$(e.target).closest('.ct-combo').length) cerrarCombos(); });
 
-  $('.ct-tabla tbody').on('keydown', 'tr', function (e) {  // teclado: Enter o espacio abre la configuración
+  $('.ct-tabla:not(.ar-tabla) tbody').on('keydown', 'tr', function (e) {  // teclado: Enter o espacio abre la configuración
     if (e.target === this && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $(this).trigger('click'); }
   });
-  $('.ct-tabla tbody').on('click', 'tr', function () {
+  $('.ct-tabla:not(.ar-tabla) tbody').on('click', 'tr', function () {
     var p = $(this).data('proyecto'); actual = CONFIGS[p] || null;
-    $('.ct-tabla tbody tr').removeClass('sel'); $(this).addClass('sel');
+    $('.ct-tabla:not(.ar-tabla) tbody tr').removeClass('sel'); $(this).addClass('sel');
     $('#f-proyecto').val(p); $('#f-titulo').text('Facturación · ' + p);
     $('#f-empresa').val(val('empresa') || $('#f-empresa option').first().val());
     $('#f-modo').val(val('modo') || 'informativa'); $('#f-emision').val(val('emision') || 'borrador');
     $('#f-forma_pago').val(val('forma_pago') || 'CREDIT'); $('#f-dias_vencimiento').val(val('dias_vencimiento') || 0);
     $('#h-numeracion_journal_id').val(val('numeracion_journal_id'));
-    ['numeracion', 'item_venta', 'item_intereses', 'impuesto', 'centro_costo'].forEach(function (c) {
+    REFS_FORM.forEach(function (c) {
       $('#h-' + c + '_id').val(val(c + '_id')); $('#h-' + c + '_nombre').val(val(c + '_nombre'));
     });
     $('#f-costo_m2').val(val('costo_m2') || 0);
-    ['cuenta_cxc', 'cuenta_costo', 'cuenta_inventario'].forEach(function (c) {
+    CUENTAS_FORM.forEach(function (c) {
       ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(val(c + '_' + k)); });
     });
-    refs = null; cerrarCombos(); llenarSelects(); mostrarCuentas(); $('#form').show(); cargarRefs();
+    refs = null; CUENTAS.cerrar(); llenarSelects(); CUENTAS.preparar('#form'); $('#form').show(); cargarRefs();
     document.getElementById('form').scrollIntoView({ behavior: 'smooth' });
   });
-  $('#f-cerrar').on('click', function () { $('#form').hide(); $('.ct-tabla tbody tr').removeClass('sel'); });
+  $('#f-cerrar').on('click', function () { $('#form').hide(); $('.ct-tabla:not(.ar-tabla) tbody tr').removeClass('sel'); });
 })();
 
-// Autorretención: sus cuentas son de la empresa elegida en su propia tabla, no de la del formulario por proyecto.
+// Autorretención: tarifa y cuentas de una empresa. Sus cuentas salen del mismo plan que los demás combos.
 (function () {
   var CFGS = JSON.parse(document.getElementById('autorrenta-data').textContent);
-  var URL_REFS = "{% url 'conciliacion-terceros-facturacion-referencias' %}";
   var CAMPOS = ['autorrenta_cuenta_anticipo', 'autorrenta_cuenta_pasivo'];
-  var cuentas = null;
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
-  function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-  function cerrar() { $('#ar-form .ct-combo-panel').hide(); }
-  function mostrar(campo) {
-    var id = $('#h-' + campo + '_id').val(), $b = $('.ar-cuenta[data-campo="' + campo + '"] .ct-combo-btn');
-    $b.prop('disabled', !cuentas);
-    $b.html(id ? '<code>' + esc($('#h-' + campo + '_codigo').val()) + '</code> ' + esc($('#h-' + campo + '_nombre').val())
-                : '<span class="text-muted">' + (cuentas ? '— Selecciona una cuenta —' : 'Cargando cuentas…') + '</span>');
-  }
-  function mostrarTodas() { CAMPOS.forEach(mostrar); }
-  function filtrar($c) {
-    var q = norm($c.find('.ct-cta-q').val()).trim(), sel = $('#h-' + $c.data('campo') + '_id').val();
-    var palabras = q ? q.split(/\s+/) : [];
-    var cs = (cuentas || []).filter(function (c) {
-      var h = norm(c.codigo + ' ' + c.nombre); return palabras.every(function (w) { return h.indexOf(w) >= 0; });
-    }).slice(0, 80);
-    $c.find('.ct-res-busq').html((sel ? '<div class="item text-danger" data-quitar="1"><i class="fas fa-times mr-1"></i>Quitar la cuenta seleccionada</div>' : '') +
-      (cs.length ? cs.map(function (c, i) {
-        return '<div class="item' + (String(c.id) === String(sel) ? ' font-weight-bold' : '') + '" data-i="' + i + '"><code>' + esc(c.codigo) + '</code> ' + esc(c.nombre) + '</div>';
-      }).join('') : '<div class="item text-muted">Sin resultados</div>')).data('cs', cs);
-  }
-  function cargar(emp) {
-    cuentas = null; mostrarTodas();
-    $('#ar-cargando').text('Cargando las cuentas de Alegra…');
-    $.getJSON(URL_REFS, { empresa: emp }).done(function (r) {
-      if (emp !== $('#ar-empresa').val()) return;  // cambiaron de empresa mientras cargaba
-      cuentas = (r.referencias || {}).cuentas || []; $('#ar-cargando').text(''); mostrarTodas();
-    }).fail(function (x) {
-      $('#ar-cargando').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo consultar Alegra.') + '</span>');
-    });
-  }
+
   $('.ar-tabla tbody').on('keydown', 'tr', function (e) {
     if (e.target === this && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); $(this).trigger('click'); }
   });
@@ -409,30 +438,12 @@
     CAMPOS.forEach(function (c) {
       ['id', 'codigo', 'nombre'].forEach(function (k) { $('#h-' + c + '_' + k).val(cfg[c + '_' + k] || ''); });
     });
-    cerrar(); $('#ar-form').show(); cargar(emp);
+    $('#ar-cargando').text(PLAN.de(emp) ? '' : 'Cargando las cuentas de Alegra…');
+    CUENTAS.cerrar(); $('#ar-form').show(); CUENTAS.preparar('#ar-form');
+    if (PLAN.de(emp)) $('#ar-cargando').text('');
+    else PLAN.cargar(emp, function () { if ($('#ar-empresa').val() === emp) $('#ar-cargando').text(''); });
     document.getElementById('ar-form').scrollIntoView({ behavior: 'smooth' });
   });
-  $('#ar-form .ct-combo-btn').on('click', function () {
-    var $c = $(this).closest('.ar-cuenta'), $p = $c.find('.ct-combo-panel'), abierto = $p.is(':visible');
-    cerrar(); if (abierto || !cuentas) return;
-    $p.show(); $c.find('.ct-cta-q').val(''); filtrar($c); $c.find('.ct-cta-q').trigger('focus');
-  });
-  $('#ar-form .ct-cta-q').on('input', function () { filtrar($(this).closest('.ar-cuenta')); })
-    .on('keydown', function (e) {
-      var $c = $(this).closest('.ar-cuenta'), $its = $c.find('.item[data-i]'), $a = $its.filter('.activo'), i = $its.index($a);
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(i + 1, $its.length - 1) : Math.max(i - 1, 0);
-        $its.removeClass('activo'); var el = $its.eq(i).addClass('activo')[0]; if (el) el.scrollIntoView({ block: 'nearest' });
-      } else if (e.key === 'Enter') { e.preventDefault(); ($a.length ? $a : $its.first()).trigger('click'); }
-      else if (e.key === 'Escape') { cerrar(); $c.find('.ct-combo-btn').trigger('focus'); }
-    });
-  $('#ar-form .ct-res-busq').on('click', '.item[data-i], .item[data-quitar]', function () {
-    var $c = $(this).closest('.ar-cuenta'), campo = $c.data('campo');
-    var c = $(this).data('quitar') ? { id: '', codigo: '', nombre: '' } : $c.find('.ct-res-busq').data('cs')[$(this).data('i')];
-    $('#h-' + campo + '_id').val(c.id); $('#h-' + campo + '_codigo').val(c.codigo); $('#h-' + campo + '_nombre').val(c.nombre);
-    cerrar(); mostrar(campo);
-  });
-  $(document).on('mousedown', function (e) { if (!$(e.target).closest('#ar-form .ct-combo').length) cerrar(); });
   $('#ar-cerrar').on('click', function () { $('#ar-form').hide(); $('.ar-tabla tbody tr').removeClass('sel'); });
   $('#ar-form').on('submit', function () {
     var t = parseFloat($('#ar-tarifa').val() || 0);
