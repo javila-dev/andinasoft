@@ -750,6 +750,114 @@ def facturas(request):
     })
 
 
+
+def _cuentas_del_titular(linea, empresa_id):
+    """Las cuentas de esa empresa donde el titular tiene saldo, de mayor a menor."""
+    out = []
+    for c in (linea.cuentas if linea else []):
+        if str(c.get('empresa')) != str(empresa_id):
+            continue
+        out.append({'cuenta': c.get('cuenta'), 'cuenta_nombre': c.get('cuenta_nombre') or '',
+                    'saldo': str(c.get('saldo') or 0), 'manual': bool(c.get('manual'))})
+    return sorted(out, key=lambda c: Decimal(c['saldo']), reverse=True)
+
+
+def _negocio_para_facturar(conc, proyecto, ref):
+    """Todo lo que el asistente necesita de un negocio: sus titulares con lo recaudado, la cuenta de anticipos donde
+    cada uno tiene el saldo, cómo está cada uno frente a la contabilidad y qué facturas ya tiene el negocio."""
+    n = next((x for x in _negocios_facturables(conc) if x['proyecto'] == proyecto and x['ref'] == ref), None)
+    if not n:
+        return None
+    cfg = facturacion.config_de(proyecto)
+    empresa_id = str(cfg.empresa_id) if cfg else ''
+    lineas = {l.identificacion: l for l in conc.lineas.filter(identificacion__in=n['titulares'])}
+    estados = dict(ConciliacionLinea.ESTADO_CHOICES)
+
+    def del_negocio(l):
+        for x in (l.negocios if l else []):
+            if x.get('proyecto') == proyecto and str(x.get('ref')) == ref and x.get('situacion') != 'factura':
+                return x
+        return None
+
+    titulares, cuenta_veces = [], defaultdict(int)
+    for ident in n['titulares']:
+        l = lineas.get(ident)
+        neg = del_negocio(l)
+        cuentas = _cuentas_del_titular(l, empresa_id) if empresa_id else []
+        con_saldo = [c for c in cuentas if Decimal(c['saldo']) > 0]
+        if con_saldo:
+            cuenta_veces[con_saldo[0]['cuenta']] += 1
+        titulares.append({
+            'identificacion': ident, 'nombre': (l.nombre if l else '') or '',
+            'capital': str(Decimal(neg['capital'])) if neg else '0',
+            'intereses': str(Decimal(neg['intereses'])) if neg else '0',
+            'total': str(Decimal(neg['valor'])) if neg else '0',
+            'cuentas': cuentas, 'cuenta': con_saldo[0]['cuenta'] if con_saldo else '',
+            'estado': l.estado if l else '', 'estado_label': estados.get(l.estado, 'Sin línea') if l else 'Sin línea',
+            'diferencia': str(l.diferencia) if l else '0', 'andina': str(l.saldo_andina) if l else '0',
+            'contable': str(l.saldo_contable) if l else '0',
+            'sin_cuenta': not con_saldo,
+        })
+    # Un titular sin saldo propio usa la cuenta donde están los demás: suele ser el mismo anticipo del negocio.
+    defecto = max(cuenta_veces, key=lambda c: cuenta_veces[c]) if cuenta_veces else ''
+    for t in titulares:
+        if not t['cuenta'] and defecto:
+            t['cuenta'] = defecto
+        nombre = next((c['cuenta_nombre'] for c in t['cuentas'] if c['cuenta'] == t['cuenta']), '')
+        if not nombre and defecto == t['cuenta']:
+            nombre = next((c['cuenta_nombre'] for x in titulares for c in x['cuentas'] if c['cuenta'] == t['cuenta']), '')
+        t['cuenta_nombre'] = nombre
+    previas = [{'id': f.pk, 'identificacion': f.identificacion, 'numero': f.numero or f'#{f.pk}', 'total': str(f.total),
+                'fecha': f.fecha.isoformat(), 'estado': f.get_estado_display(), 'tipo': f.get_tipo_display()}
+               for f in FacturaConciliacion.objects.filter(proyecto=proyecto, negocio_ref=ref,
+                                                           identificacion__in=n['titulares'])
+               .exclude(estado=FacturaConciliacion.ESTADO_ANULADA).order_by('id')]
+    return {'negocio': n, 'titulares': titulares, 'cfg': cfg, 'previas': previas, 'empresa_id': empresa_id}
+
+
+@login_required
+@require_http_methods(['GET'])
+def factura_nueva(request):
+    """
+    Asistente para facturar un negocio: el paso 1 (elegir el negocio) viene del módulo de facturas; aquí se revisa
+    todo en una sola pantalla y se confirma. Lo que no es una decisión —empresa, numeración, cuentas, costo— sale
+    de la configuración del proyecto y se muestra en texto; se puede cambiar, pero no hay que contestarlo.
+    """
+    _guard(request)
+    conc = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
+    if not conc:
+        messages.error(request, 'No hay una conciliación en revisión: para facturar hay que tener una abierta.')
+        return redirect('conciliacion-terceros-facturas')
+    proyecto = (request.GET.get('proyecto') or '').strip()
+    ref = (request.GET.get('ref') or '').strip()
+    datos = _negocio_para_facturar(conc, proyecto, ref) if proyecto and ref else None
+    if not datos:
+        messages.error(request, f'{proyecto} {ref}: ese negocio no está entre los que esperan saldo en la '
+                                f'conciliación al {conc.fecha_corte:%d/%m/%Y}.')
+        return redirect('conciliacion-terceros-facturas')
+    cfg = datos['cfg']
+    faltantes = cfg.faltantes_alegra() if cfg and cfg.modo == ConfigFacturacion.MODO_ALEGRA else []
+    cfg_emp = facturacion.config_empresa(cfg.empresa_id) if cfg else None
+    total = sum(Decimal(t['total']) for t in datos['titulares'])
+    tarifa = cfg_emp.autorrenta_tarifa if (cfg_emp and cfg_emp.autorrenta_activa) else Decimal(0)
+    return render(request, 'conciliacion_terceros/factura_nueva.html', {
+        'conciliacion': conc,
+        'negocio': datos['negocio'],
+        'titulares': datos['titulares'],
+        'previas': datos['previas'],
+        'cfg': cfg,
+        'faltantes': faltantes,
+        'puede_alegra': bool(cfg and cfg.modo == ConfigFacturacion.MODO_ALEGRA and not faltantes),
+        'empresa': cfg.empresa if cfg else None,
+        'catalogo': [c for c in (conc.resumen or {}).get('catalogo', []) if str(c['empresa']) == datos['empresa_id']],
+        'total': total,
+        'tarifa_autorrenta': tarifa,
+        'autorrenta': facturacion.autorrenta_valor(total, tarifa),
+        'hoy': timezone.localdate().isoformat(),
+        'titulares_json': datos['titulares'],
+    })
+
+
 @login_required
 @require_http_methods(['POST'])
 def facturas_accion(request, factura_id, accion):
@@ -837,8 +945,8 @@ def _negocios_facturables(conc):
 @login_required
 @require_http_methods(['GET'])
 def facturas_negocios(request):
-    """Buscador de negocios para facturar desde el módulo: devuelve el enlace que abre la ficha del primer titular
-    con el panel de factura de ese negocio ya abierto, para no repetir acá el formulario de la conciliación."""
+    """Paso 1 del asistente: elegir el negocio. Devuelve los que esperan saldo en la conciliación abierta, cada uno
+    con el enlace al asistente de facturación."""
     _guard(request)
     conc = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
     if not conc:
@@ -846,7 +954,7 @@ def facturas_negocios(request):
                             status=400)
     q = (request.GET.get('q') or '').strip().lower()
     proyecto = (request.GET.get('proyecto') or '').strip()
-    base = reverse('conciliacion-terceros-detalle', args=[conc.pk])
+    base = reverse('conciliacion-terceros-factura-nueva')
     filas = _negocios_facturables(conc)
     if proyecto:
         filas = [n for n in filas if n['proyecto'] == proyecto]
@@ -855,8 +963,7 @@ def facturas_negocios(request):
         filas = [n for n in filas if all(w in n['busqueda'] for w in palabras)]
     salida = []
     for n in filas[:60]:
-        titular = n['titulares'][0] if n['titulares'] else ''
-        salida.append(dict(n, url=f'{base}?q={quote(titular)}&factura={quote(n["proyecto"] + "|" + n["ref"])}'))
+        salida.append(dict(n, url=f'{base}?proyecto={quote(n["proyecto"])}&ref={quote(n["ref"])}'))
     return JsonResponse({'ok': True, 'total': len(filas), 'negocios': salida,
                          'conciliacion': {'id': conc.pk, 'corte': conc.fecha_corte.isoformat(), 'url': base}})
 

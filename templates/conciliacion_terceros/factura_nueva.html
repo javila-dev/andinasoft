@@ -1,0 +1,448 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load l10n %}
+
+{% block title %}Facturar {{ negocio.ref }}{% endblock %}
+
+{% block style %}
+<style>
+  #content { min-width: 0; }
+  .fn-wrap { max-width: 1050px; }
+  .fn-pasos { display: flex; gap: 8px; align-items: center; margin: 14px 0 18px; flex-wrap: wrap; }
+  .fn-paso { font-size: 12.5px; padding: 4px 12px; border-radius: 14px; background: #eef2f1; color: #6c757d; white-space: nowrap; }
+  .fn-paso.hecho { background: #e4f1e8; color: #1e6b3a; }
+  .fn-paso.activo { background: #1F3A34; color: #fff; font-weight: 600; }
+  .fn-raya { flex: 0 0 18px; height: 1px; background: #ced4da; }
+  .fn-bloque { border: 1px solid #d5dbd9; border-radius: 8px; padding: 14px; margin-bottom: 14px; background: #fff; }
+  .fn-bloque h6 { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+  .fn-linea { font-size: 13px; margin-bottom: 4px; }
+  .fn-linea .fa-check { color: #2e7d32; }
+  .fn-avanzado { border-top: 1px dashed #d5dbd9; margin-top: 10px; padding-top: 10px; }
+  .fn-tabla td, .fn-tabla th { vertical-align: middle; font-size: 13px; }
+  .fn-tabla input { max-width: 150px; }
+  .fn-sem { border-left: 3px solid #ced4da; padding: 6px 10px; margin-bottom: 8px; background: #fbfcfc; font-size: 13px; }
+  .fn-sem.ok { border-color: #2e7d32; }
+  .fn-sem.ojo { border-color: #e0a800; background: #fffdf7; }
+  .fn-sem.mal { border-color: #c62828; background: #fdf7f7; }
+  .fn-resumen { font-size: 14px; line-height: 1.7; }
+  .fn-resumen strong { font-weight: 700; }
+  .fn-saldo { border: 1px solid #e0c89a; border-radius: 6px; background: #fffdf7; padding: 10px; margin-top: 8px; }
+  .fn-saldo label { font-size: 12px; margin-bottom: 2px; }
+  .num { text-align: right; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 fn-wrap">
+  <a href="{% url 'conciliacion-terceros-facturas' %}" class="small"><i class="fas fa-arrow-left mr-1"></i>Facturas</a>
+  <div class="d-flex justify-content-between align-items-center">
+    <h4 class="mt-2 mb-0">Facturar {{ negocio.proyecto }} · {{ negocio.ref }}</h4>
+    <a href="{% url 'conciliacion-terceros-facturas' %}" class="btn btn-sm btn-outline-secondary">Cambiar de negocio</a>
+  </div>
+  <small class="text-muted">
+    Recaudado ${{ negocio.total|floatformat:0|intcomma }} entre {{ titulares|length }} titular(es) ·
+    conciliación al {{ conciliacion.fecha_corte|date:"d/m/Y" }}
+  </small>
+
+  <div class="fn-pasos">
+    <span class="fn-paso hecho"><i class="fas fa-check mr-1" aria-hidden="true"></i>1 · Negocio</span>
+    <span class="fn-raya"></span>
+    <span class="fn-paso activo" id="p-2">2 · Revisar</span>
+    <span class="fn-raya"></span>
+    <span class="fn-paso" id="p-3">3 · Confirmar</span>
+  </div>
+
+  {% if previas %}
+  <div class="alert alert-warning py-2 small">
+    <strong>Este negocio ya tiene {{ previas|length }} factura(s):</strong>
+    {% for p in previas %}{{ p.identificacion }} · {{ p.numero }} por ${{ p.total|floatformat:0|intcomma }} ({{ p.estado|lower }}){% if not forloop.last %}; {% endif %}{% endfor %}.
+    Si registras otra, el sistema te pedirá confirmarlo.
+  </div>
+  {% endif %}
+  {% if not cfg %}
+  <div class="alert alert-warning py-2 small">El proyecto no tiene configuración de facturación: solo se puede registrar una factura informativa (ya emitida por fuera).</div>
+  {% elif faltantes %}
+  <div class="alert alert-warning py-2 small">Para crear la factura en Alegra falta configurar: {{ faltantes|join:", " }}. Mientras tanto solo se puede registrar como informativa.</div>
+  {% endif %}
+
+  <!-- ================= PASO 2 ================= -->
+  <div id="paso2">
+    <div class="fn-bloque">
+      <h6>¿Qué se factura?</h6>
+      <div class="table-responsive">
+        <table class="table table-sm fn-tabla mb-1">
+          <thead class="thead-light"><tr><th>Titular</th><th class="num">Capital</th><th class="num">Intereses</th><th class="num">Total</th><th class="fn-informativa">N.º de factura</th></tr></thead>
+          <tbody>
+            {% for t in titulares %}
+            <tr data-ident="{{ t.identificacion }}">
+              <td><strong>{{ t.identificacion }}</strong><br><small class="text-muted">{{ t.nombre }}</small></td>
+              <td class="num"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fn-cap" value="{{ t.capital }}" aria-label="Capital de {{ t.identificacion }}"></td>
+              <td class="num"><input type="number" step="0.01" min="0" class="form-control form-control-sm text-right fn-int" value="{{ t.intereses }}" aria-label="Intereses de {{ t.identificacion }}"></td>
+              <td class="num fn-tot"></td>
+              <td class="fn-informativa"><input type="text" class="form-control form-control-sm fn-num" placeholder="Prefijo y número" aria-label="Número de factura de {{ t.identificacion }}"></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot><tr><th colspan="3">Total a facturar</th><th class="num" id="fn-total"></th><th class="fn-informativa"></th></tr></tfoot>
+        </table>
+      </div>
+      <div class="small text-muted">Viene de lo recaudado en Andinasoft, repartido entre los titulares. Un titular en 0 no se factura.</div>
+    </div>
+
+    <div class="fn-bloque">
+      <h6>Cómo queda contabilizado <button type="button" class="btn btn-link btn-sm p-0 ml-2" id="fn-cambiar">cambiar</button></h6>
+      <div id="fn-texto"></div>
+
+      <div class="fn-avanzado" id="fn-avanzado" style="display:none">
+        <div class="form-row">
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="fn-tipo">Tipo</label>
+            <select id="fn-tipo" class="form-control form-control-sm">
+              {% if puede_alegra %}<option value="alegra">Crear en Alegra ({% if cfg.emision == 'emitir' %}crear y emitir{% else %}borrador{% endif %})</option>{% endif %}
+              <option value="informativa">Informativa (ya emitida por fuera)</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="small mb-1" for="fn-fecha">Fecha de la factura</label>
+            <input type="date" id="fn-fecha" class="form-control form-control-sm" value="{{ hoy }}" max="{{ hoy }}">
+          </div>
+          <div class="col-md-5 mb-2 fn-solo-alegra">
+            <label class="small mb-1" for="fn-costo">Costo del inmueble</label>
+            <input type="number" step="1" min="0" id="fn-costo" class="form-control form-control-sm">
+            <small class="text-muted" id="fn-costo-calc">Calculando el sugerido…</small>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm fn-tabla mb-0">
+            <thead class="thead-light"><tr><th>Titular</th><th>Cuenta de anticipos que se cruza</th><th class="fn-informativa">¿El cruce ya está en contabilidad?</th></tr></thead>
+            <tbody>
+              {% for t in titulares %}
+              <tr data-ident="{{ t.identificacion }}">
+                <td>{{ t.identificacion }}</td>
+                <td><select class="form-control form-control-sm fn-cta" aria-label="Cuenta de anticipos de {{ t.identificacion }}"></select></td>
+                <td class="fn-informativa text-center"><input type="checkbox" class="fn-ya" aria-label="El cruce ya está en el archivo contable"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="fn-bloque">
+      <h6>Cómo está cada titular frente a la contabilidad</h6>
+      <div id="fn-semaforo"></div>
+    </div>
+
+    <div class="text-right">
+      <button type="button" class="btn btn-primary" id="fn-continuar">Continuar <i class="fas fa-arrow-right ml-1" aria-hidden="true"></i></button>
+    </div>
+  </div>
+
+  <!-- ================= PASO 3 ================= -->
+  <div id="paso3" style="display:none">
+    <div class="fn-bloque">
+      <h6>Esto es lo que va a pasar</h6>
+      <div class="fn-resumen" id="fn-resumen"></div>
+    </div>
+    <div id="fn-progreso" class="small mb-2" style="display:none"></div>
+    <div id="fn-resultado" style="display:none"></div>
+    <div class="d-flex justify-content-between" id="fn-botones">
+      <button type="button" class="btn btn-outline-secondary" id="fn-atras"><i class="fas fa-arrow-left mr-1" aria-hidden="true"></i>Atrás</button>
+      <button type="button" class="btn btn-primary" id="fn-facturar">Facturar y registrar todo</button>
+    </div>
+  </div>
+
+  <form id="csrf-form">{% csrf_token %}</form>
+</div>
+{{ titulares_json|json_script:"titulares-data" }}
+{{ catalogo|json_script:"catalogo-data" }}
+{% endblock %}
+
+{% block jsbottom %}
+<script>
+(function () {
+  var TITULARES = JSON.parse(document.getElementById('titulares-data').textContent);
+  var CATALOGO = JSON.parse(document.getElementById('catalogo-data').textContent);
+  var CSRF = $('#csrf-form [name=csrfmiddlewaretoken]').val();
+  var URL_CREAR = "{% url 'conciliacion-terceros-factura-crear' conciliacion.pk %}";
+  var URL_ACC = "{% url 'conciliacion-terceros-factura-accion' conciliacion.pk 0 'X' %}".replace('/0/X', '/__ID__/__ACC__');
+  var URL_COSTO = "{% url 'conciliacion-terceros-factura-costo' conciliacion.pk %}";
+  var URL_SALDO = "{% url 'conciliacion-terceros-saldo-manual' conciliacion.pk %}";
+  var URL_FACTURAS = "{% url 'conciliacion-terceros-facturas' %}";
+  var PROYECTO = "{{ negocio.proyecto|escapejs }}", REF = "{{ negocio.ref|escapejs }}";
+  var EMPRESA = "{{ empresa.pk|default:'' }}", EMPRESA_NOMBRE = "{{ empresa.nombre|default:''|escapejs }}";
+  var PUEDE_ALEGRA = {% if puede_alegra %}true{% else %}false{% endif %};
+  // unlocalize: el idioma escribe los decimales con coma y Number() no la entiende.
+  var TARIFA = Number("{{ tarifa_autorrenta|unlocalize }}") || 0;
+  var CFG = {
+    numeracion: "{{ cfg.numeracion_nombre|default:''|escapejs }}",
+    emision: "{{ cfg.emision|default:''|escapejs }}",
+    impuesto: "{{ cfg.impuesto_nombre|default:''|escapejs }}",
+    cxc: "{{ cfg.cuenta_cxc_codigo|default:''|escapejs }} {{ cfg.cuenta_cxc_nombre|default:''|escapejs }}",
+    costo_cuenta: "{{ cfg.cuenta_costo_codigo|default:''|escapejs }}",
+    inventario: "{{ cfg.cuenta_inventario_codigo|default:''|escapejs }}"
+  };
+  var fmt = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function money(v) { return '$' + fmt.format(Math.round(Number(v || 0))); }
+  function tipo() { return $('#fn-tipo').val() || 'informativa'; }
+  // jQuery convierte a número un data-ident que son puros dígitos: se compara siempre como texto.
+  function porIdent(ident) { return TITULARES.filter(function (t) { return t.identificacion === String(ident); })[0] || {}; }
+
+  // ---- paso 2: valores ----
+  function pintarTotales() {
+    var total = 0;
+    $('#paso2 tbody tr[data-ident]').each(function () {
+      var $tr = $(this), t = (Number($tr.find('.fn-cap').val()) || 0) + (Number($tr.find('.fn-int').val()) || 0);
+      $tr.find('.fn-tot').text(money(t));
+      total += t;
+    });
+    $('#fn-total').text(money(total));
+    pintarTexto(total);
+    return total;
+  }
+  // Lo que no es una decisión se cuenta en una frase, no en campos.
+  function pintarTexto(total) {
+    var h = [];
+    if (tipo() === 'alegra') {
+      h.push('<div class="fn-linea"><i class="fas fa-check mr-2" aria-hidden="true"></i><strong>' + esc(EMPRESA_NOMBRE) +
+        '</strong> · numeración ' + esc(CFG.numeracion || 'predeterminada') + ': ' +
+        (CFG.emision === 'emitir' ? 'se crea y se emite ante la DIAN' : 'queda en borrador en Alegra') +
+        (CFG.impuesto ? ', con ' + esc(CFG.impuesto) : ', sin impuesto') + '.</div>');
+      var costo = Number($('#fn-costo').val()) || 0;
+      h.push('<div class="fn-linea"><i class="fas fa-check mr-2" aria-hidden="true"></i>Costo del inmueble ' +
+        (costo ? '<strong>' + money(costo) + '</strong> contra el inventario del proyecto' : '<span class="text-muted">sin costo (no se registra el asiento)</span>') + '.</div>');
+      var ctas = {};
+      $('#fn-avanzado .fn-cta').each(function () { if (this.value) ctas[this.value] = 1; });
+      var lista = Object.keys(ctas);
+      h.push('<div class="fn-linea"><i class="fas fa-check mr-2" aria-hidden="true"></i>' + (lista.length
+        ? 'Cruce del anticipo contra <strong>' + esc(lista.join(', ')) + '</strong>'
+        : '<span class="text-danger">Sin cuenta de anticipos: el anticipo no se cancela en contabilidad</span>') + '.</div>');
+      if (TARIFA > 0) {
+        h.push('<div class="fn-linea"><i class="fas fa-check mr-2" aria-hidden="true"></i>Autorretención de renta ' +
+          String(TARIFA).replace('.', ',') + '%: <strong>' + money(total * TARIFA / 100) + '</strong>.</div>');
+      }
+    } else {
+      h.push('<div class="fn-linea"><i class="fas fa-check mr-2" aria-hidden="true"></i>Solo se registra la factura que ya se emitió por fuera: no se envía nada a Alegra.</div>');
+    }
+    $('#fn-texto').html(h.join(''));
+  }
+
+  // ---- paso 2: semáforo por titular ----
+  function pintarSemaforo() {
+    $('#fn-semaforo').html(TITULARES.map(function (t) {
+      var dif = Number(t.diferencia) || 0, clase = 'ok', txt;
+      if (t.sin_cuenta && tipo() === 'alegra') {
+        clase = 'mal';
+        txt = '<strong>No tiene saldo de anticipos en ' + esc(EMPRESA_NOMBRE) + '</strong> según el archivo contable. ' +
+          'Si sigue así, la factura queda sin cruce y el anticipo no se cancela.';
+      } else if (t.estado === 'cuadrado' || t.estado === 'justificado') {
+        txt = 'Cuadra: la contabilidad muestra ' + money(t.contable) + '.';
+      } else {
+        clase = 'ojo';
+        txt = 'La contabilidad muestra <strong>' + money(t.contable) + '</strong> y Andinasoft espera <strong>' + money(t.andina) +
+          '</strong> (diferencia ' + money(dif) + ').';
+      }
+      return '<div class="fn-sem ' + clase + '" data-ident="' + esc(t.identificacion) + '">' +
+        '<div><strong>' + esc(t.identificacion) + '</strong> ' + esc(t.nombre) + '</div>' +
+        '<div>' + txt + (clase === 'ok' ? '' :
+          ' <button type="button" class="btn btn-link btn-sm p-0 fn-saldo-abrir">el archivo está desactualizado: poner el saldo a mano</button>') + '</div>' +
+        '<div class="fn-saldo" style="display:none">' +
+          '<div class="form-row">' +
+            '<div class="col-md-5 mb-2"><label>Cuenta</label><select class="form-control form-control-sm fn-s-cuenta">' +
+              CATALOGO.map(function (c) { return '<option value="' + esc(c.cuenta) + '">' + esc(c.cuenta + ' ' + c.cuenta_nombre) + '</option>'; }).join('') +
+            '</select></div>' +
+            '<div class="col-md-3 mb-2"><label>Saldo que muestra la contabilidad</label><input type="number" step="0.01" class="form-control form-control-sm fn-s-valor"></div>' +
+            '<div class="col-md-4 mb-2"><label>¿De dónde salió?</label><input type="text" class="form-control form-control-sm fn-s-nota" maxlength="200" placeholder="Consultado en Alegra hoy"></div>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sm btn-primary fn-s-guardar">Guardar el saldo</button> ' +
+          '<button type="button" class="btn btn-sm btn-link fn-s-cancelar">Cancelar</button>' +
+        '</div></div>';
+    }).join(''));
+  }
+  $('#fn-semaforo').on('click', '.fn-saldo-abrir', function () {
+    var $s = $(this).closest('.fn-sem'), t = porIdent($s.data('ident'));
+    $s.find('.fn-saldo').toggle();
+    if (t.cuenta) $s.find('.fn-s-cuenta').val(t.cuenta);
+  });
+  $('#fn-semaforo').on('click', '.fn-s-cancelar', function () { $(this).closest('.fn-saldo').hide(); });
+  $('#fn-semaforo').on('click', '.fn-s-guardar', function () {
+    var $s = $(this).closest('.fn-sem'), ident = String($s.data('ident')), $b = $(this);
+    var cuenta = $s.find('.fn-s-cuenta').val(), valor = $s.find('.fn-s-valor').val(), nota = $s.find('.fn-s-nota').val();
+    if (valor === '') { alert('Escribe el saldo que muestra la contabilidad.'); return; }
+    if ((nota || '').trim().length < 5) { alert('Escribe de dónde salió el saldo.'); return; }
+    var c = CATALOGO.filter(function (x) { return x.cuenta === cuenta; })[0] || {};
+    $b.prop('disabled', true);
+    $.ajax({ url: URL_SALDO, method: 'POST', headers: { 'X-CSRFToken': CSRF }, contentType: 'application/json',
+             data: JSON.stringify({ identificacion: ident, empresa: EMPRESA, cuenta: cuenta,
+                                    cuenta_nombre: c.cuenta_nombre || '', saldo: valor, nota: nota }) })
+      .done(function (r) {
+        var l = (r.lineas || []).filter(function (x) { return x.identificacion === ident; })[0];
+        var t = porIdent(ident);
+        if (l) {
+          t.contable = l.contable; t.andina = l.andina; t.diferencia = l.diferencia; t.estado = l.estado;
+          t.cuentas = (l.cuentas || []).filter(function (c2) { return String(c2.empresa) === String(EMPRESA); })
+            .map(function (c2) { return { cuenta: c2.cuenta, cuenta_nombre: c2.cuenta_nombre, saldo: c2.saldo, manual: !!c2.manual }; });
+          t.sin_cuenta = !t.cuentas.filter(function (c2) { return Number(c2.saldo) > 0; }).length;
+          if (!t.cuenta || t.sin_cuenta === false) t.cuenta = cuenta;
+        }
+        pintarSemaforo(); llenarCuentas(); pintarTotales();
+      })
+      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo guardar el saldo.'); })
+      .always(function () { $b.prop('disabled', false); });
+  });
+
+  // ---- avanzado ----
+  function llenarCuentas() {
+    $('#fn-avanzado tbody tr[data-ident]').each(function () {
+      var $tr = $(this), t = porIdent($tr.data('ident')), sel = $tr.find('.fn-cta').val() || t.cuenta || '';
+      $tr.find('.fn-cta').html('<option value="">— Sin cruce —</option>' + CATALOGO.map(function (c) {
+        var saldo = (t.cuentas || []).filter(function (x) { return x.cuenta === c.cuenta; })[0];
+        return '<option value="' + esc(c.cuenta) + '"' + (c.cuenta === sel ? ' selected' : '') + '>' +
+          esc(c.cuenta + ' ' + c.cuenta_nombre) + (saldo ? ' (saldo ' + fmt.format(Number(saldo.saldo)) + (saldo.manual ? ', a mano' : '') + ')' : '') + '</option>';
+      }).join(''));
+    });
+  }
+  $('#fn-cambiar').on('click', function () { $('#fn-avanzado').toggle(); });
+  $('#fn-tipo').on('change', function () {
+    $('.fn-informativa').toggle(tipo() === 'informativa');
+    $('.fn-solo-alegra').toggle(tipo() === 'alegra');
+    pintarSemaforo(); pintarTotales();
+  });
+  $('#paso2').on('input', '.fn-cap, .fn-int, #fn-costo', pintarTotales);
+  $('#fn-avanzado').on('change', '.fn-cta', pintarTotales);
+
+  // ---- paso 3 ----
+  function datos() {
+    var titulares = [];
+    $('#paso2 tbody tr[data-ident]').each(function () {
+      var ident = String($(this).data('ident')), t = porIdent(ident);
+      var cap = Number($(this).find('.fn-cap').val()) || 0, inte = Number($(this).find('.fn-int').val()) || 0;
+      if (cap + inte <= 0) return;
+      var $av = $('#fn-avanzado tbody tr[data-ident="' + ident + '"]');
+      var cta = $av.find('.fn-cta').val() || '';
+      var c = CATALOGO.filter(function (x) { return x.cuenta === cta; })[0] || {};
+      titulares.push({ identificacion: ident, nombre: t.nombre || '', valor_venta: cap, valor_intereses: inte,
+                       numero: $(this).find('.fn-num').val() || '', cruce_cuenta: cta,
+                       cruce_cuenta_nombre: c.cuenta_nombre || '', ya_cruzado: $av.find('.fn-ya').is(':checked') });
+    });
+    return { tipo: tipo(), empresa: EMPRESA, proyecto: PROYECTO, negocio_ref: REF, concepto: 'venta_intereses',
+             fecha: $('#fn-fecha').val(), costo: tipo() === 'alegra' ? (Number($('#fn-costo').val()) || 0) : 0,
+             titulares: titulares };
+  }
+  function pintarResumen(d) {
+    var total = d.titulares.reduce(function (a, t) { return a + t.valor_venta + t.valor_intereses; }, 0);
+    var h = d.titulares.map(function (t) {
+      return '<div>· Factura ' + (d.tipo === 'alegra' ? 'en Alegra' : esc(t.numero)) + ' a <strong>' + esc(t.identificacion) + '</strong> ' +
+        esc(t.nombre) + ' por <strong>' + money(t.valor_venta + t.valor_intereses) + '</strong>' +
+        (t.valor_intereses ? ' (capital ' + money(t.valor_venta) + ' + intereses ' + money(t.valor_intereses) + ')' : '') +
+        (t.cruce_cuenta ? ', cruzando el anticipo contra ' + esc(t.cruce_cuenta) : ', <span class="text-danger">sin cruce del anticipo</span>') + '.</div>';
+    }).join('');
+    if (d.tipo === 'alegra') {
+      if (d.costo) h += '<div>· Costo de venta <strong>' + money(d.costo) + '</strong> contra el inventario del proyecto, a nombre de la empresa' +
+        (d.titulares.length > 1 ? ' (repartido en partes iguales entre las ' + d.titulares.length + ' facturas)' : '') + '.</div>';
+      if (TARIFA > 0) h += '<div>· Autorretención de renta <strong>' + money(total * TARIFA / 100) + '</strong> (' +
+        String(TARIFA).replace('.', ',') + '% del total), con la fecha de hoy.</div>';
+      h += '<div class="text-muted mt-2">Todo queda registrado en ' + esc(EMPRESA_NOMBRE) + '. Si algún paso falla, los demás no se pierden: se reintenta desde el listado de facturas.</div>';
+    } else {
+      h += '<div class="text-muted mt-2">No se envía nada a Alegra: solo queda registrado aquí para cerrar el anticipo.</div>';
+    }
+    $('#fn-resumen').html(h);
+  }
+  $('#fn-continuar').on('click', function () {
+    var d = datos();
+    if (!d.titulares.length) { alert('No hay nada que facturar: todos los titulares están en 0.'); return; }
+    if (!d.fecha) { alert('Indica la fecha de la factura.'); return; }
+    if (d.tipo === 'informativa' && d.titulares.some(function (t) { return !t.numero.trim(); })) {
+      alert('Indica el número de la factura de cada titular.'); return;
+    }
+    // Sin cuenta de anticipos la factura se crea igual, pero el anticipo se queda abierto en la contabilidad.
+    var sinCruce = d.titulares.filter(function (t) { return !t.cruce_cuenta; });
+    if (d.tipo === 'alegra' && sinCruce.length && !confirm(
+        sinCruce.map(function (t) { return t.identificacion; }).join(', ') +
+        ': la factura quedaría sin cruce y el anticipo no se cancela en contabilidad. ' +
+        'Puedes poner el saldo a mano más arriba y elegir la cuenta. ¿Seguir sin cruce?')) return;
+    pintarResumen(d);
+    $('#paso2').hide(); $('#paso3').show();
+    $('#p-2').removeClass('activo').addClass('hecho'); $('#p-3').addClass('activo');
+    window.scrollTo(0, 0);
+  });
+  $('#fn-atras').on('click', function () {
+    $('#paso3').hide(); $('#paso2').show();
+    $('#p-3').removeClass('activo'); $('#p-2').removeClass('hecho').addClass('activo');
+  });
+
+  // ---- registrar: la factura y, una por una, las piezas que le siguen ----
+  var PASO_TXT = { enviar: 'creando la factura', costo: 'registrando el costo', cruzar: 'registrando el cruce',
+                   autorrenta: 'registrando la autorretención', emitir: 'emitiendo' };
+  function progreso(txt) {
+    $('#fn-progreso').toggle(!!txt).html(txt ? '<i class="fas fa-spinner fa-spin mr-1"></i>' + esc(txt) : '');
+  }
+  function pasosDe(f, hechos, listo) {
+    if (!f.siguiente || hechos[f.id + '|' + f.siguiente]) { listo(f); return; }
+    hechos[f.id + '|' + f.siguiente] = true;
+    progreso((PASO_TXT[f.siguiente] || f.siguiente) + ' de ' + (f.identificacion || '') + '…');
+    $.ajax({ url: URL_ACC.replace('__ID__', f.id).replace('__ACC__', f.siguiente), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+      .done(function (r) { pasosDe((r.facturas || [])[0] || f, hechos, listo); })
+      .fail(function (x) {
+        f.error_paso = (PASO_TXT[f.siguiente] || f.siguiente) + ': ' + ((x.responseJSON && x.responseJSON.detail) || 'no se pudo completar');
+        listo(f);
+      });
+  }
+  function terminar(fs) {
+    progreso('');
+    $('#fn-botones').hide();
+    var malas = fs.filter(function (f) { return f.error_paso || f.error || f.error_costo || f.error_cruce || f.error_autorrenta; });
+    $('#fn-resultado').show().html(
+      '<div class="alert alert-' + (malas.length ? 'warning' : 'success') + ' py-2">' +
+      '<strong>' + (malas.length ? 'Quedó registrado, con pasos pendientes' : 'Listo: todo quedó registrado') + '.</strong><br>' +
+      fs.map(function (f) {
+        return '· ' + esc(f.identificacion) + ' · ' + esc(f.numero || ('#' + f.id)) + ' · ' + esc(f.estado_label || f.estado) +
+          (f.error_paso ? ' <span class="text-danger">' + esc(f.error_paso) + '</span>' : '');
+      }).join('<br>') +
+      (malas.length ? '<br><small>Lo que falte se reintenta desde el listado de facturas, sin crear otra factura.</small>' : '') +
+      '</div><a class="btn btn-sm btn-primary" href="' + URL_FACTURAS + '?q=' + encodeURIComponent(REF) + '">Ver en el listado de facturas</a> ' +
+      '<a class="btn btn-sm btn-outline-secondary" href="' + URL_FACTURAS + '">Facturar otro negocio</a>');
+    window.scrollTo(0, 0);
+  }
+  $('#fn-facturar').on('click', function () {
+    var $b = $(this).prop('disabled', true), d = datos();
+    function enviar() {
+      progreso('registrando la factura…');
+      $.ajax({ url: URL_CREAR, method: 'POST', headers: { 'X-CSRFToken': CSRF }, contentType: 'application/json',
+               data: JSON.stringify(d) })
+        .done(function (r) {
+          var cola = (r.facturas || []).slice(), listas = [], hechos = {};
+          (function siguiente() {
+            if (!cola.length) { terminar(listas); return; }
+            pasosDe(cola.shift(), hechos, function (f) { listas.push(f); siguiente(); });
+          })();
+        })
+        .fail(function (x) {
+          var j = x.responseJSON || {};
+          if (x.status === 409 && j.confirmar) {
+            if (confirm(j.detail)) { d.confirmar_duplicado = true; enviar(); return; }
+          } else alert(j.detail || 'No se pudo registrar la factura.');
+          progreso(''); $b.prop('disabled', false);
+        });
+    }
+    enviar();
+  });
+
+  // ---- arranque ----
+  $('#fn-tipo').val(PUEDE_ALEGRA ? 'alegra' : 'informativa');
+  $('.fn-informativa').toggle(tipo() === 'informativa');
+  $('.fn-solo-alegra').toggle(tipo() === 'alegra');
+  llenarCuentas(); pintarSemaforo(); pintarTotales();
+  if (PUEDE_ALEGRA) {
+    $.getJSON(URL_COSTO, { proyecto: PROYECTO, ref: REF }).done(function (r) {
+      var area = Number(r.area), m2 = Number(r.costo_m2), sug = Number(r.sugerido);
+      $('#fn-costo-calc').text(m2 ? 'Sugerido: lote ' + (r.inmueble || '') + ' de ' + fmt.format(area) + ' m² × $' + fmt.format(m2) + '/m² = $' + fmt.format(sug) + '. Puedes cambiarlo.'
+                                  : 'El proyecto no tiene costo por m² configurado: escribe el costo.');
+      if (!$('#fn-costo').val()) { $('#fn-costo').val(Math.round(sug) || ''); pintarTotales(); }
+    }).fail(function () { $('#fn-costo-calc').text('No se pudo calcular el costo sugerido: escríbelo.'); });
+  }
+})();
+</script>
+{% endblock %}
