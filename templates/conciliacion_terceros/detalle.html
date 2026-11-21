@@ -20,6 +20,9 @@
   .ct-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin: 0 3px 2px 0; white-space: nowrap; }
   .ct-tag-p { background: #e3f2fd; color: #0d47a1; }
   .ct-tag-e { background: #e8eeec; color: #2d4a42; }
+  .ct-tag-m { background: #fdf3e2; color: #8a5a00; cursor: help; }
+  .ct-saldo-box { border: 1px solid #e0c89a; border-radius: 6px; background: #fffdf7; padding: 10px; margin-top: 6px; }
+  .ct-saldo-box label { font-size: 12px; margin-bottom: 2px; }
   .ct-tabla-wrap { overflow-x: auto; }
   #tabla { font-size: 11.5px; }
   #tabla th { font-size: 11px; white-space: nowrap; }
@@ -410,6 +413,21 @@
   </details>
   {% endif %}
 
+  <details class="mb-3 ct-details" id="saldos-mano" style="display:none">
+    <summary><strong>Saldos puestos a mano</strong> <span class="badge badge-warning" id="saldos-mano-n">0</span></summary>
+    <p class="small text-muted mb-2">
+      Saldos que alguien escribió porque el archivo de esa empresa quedó desactualizado. Mandan sobre el archivo para
+      ese tercero en esa cuenta y quedan con su nota. Al cargar un archivo nuevo de la empresa, revísalos: si ya los
+      trae, quítalos para no contarlos dos veces.
+    </p>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered mb-0">
+        <thead class="thead-light"><tr><th>Empresa</th><th>Cuenta</th><th>Tercero</th><th class="num">A mano</th><th class="num">Archivo</th><th>Nota</th><th>Quién</th><th></th></tr></thead>
+        <tbody id="saldos-mano-filas"></tbody>
+      </table>
+    </div>
+  </details>
+
   <div class="mb-2 v-terceros" id="chips"><small class="text-muted mr-2">Alertas:</small></div>
 
   <div class="form-row align-items-end mb-2">
@@ -513,6 +531,32 @@
               </div>
             </div>
           </div>
+          <div class="pb-2">
+          <button type="button" class="btn btn-link btn-sm p-0 ct-saldo-nuevo">
+            <i class="fas fa-pen mr-1" aria-hidden="true"></i>El archivo está desactualizado: poner un saldo a mano
+          </button>
+          <div id="m-saldo" class="ct-saldo-box" style="display:none">
+            <div class="small font-weight-bold mb-1">Saldo a mano
+              <span class="font-weight-normal text-muted">· manda sobre lo que dice el archivo para este tercero en esa cuenta. No mueve nada en la contabilidad: solo cambia contra qué se compara.</span>
+            </div>
+            <div class="form-row">
+              <div class="col-md-4 mb-2"><label for="m-saldo-cuenta">Cuenta</label>
+                <select id="m-saldo-cuenta" class="form-control form-control-sm"></select></div>
+              <div class="col-md-3 mb-2"><label for="m-saldo-valor">Saldo que muestra la contabilidad</label>
+                <input type="number" step="0.01" id="m-saldo-valor" class="form-control form-control-sm"></div>
+              <div class="col-md-5 mb-2"><label for="m-saldo-nota">¿De dónde salió?</label>
+                <input type="text" id="m-saldo-nota" class="form-control form-control-sm" maxlength="200" placeholder="Consultado en Alegra el 21/11"></div>
+            </div>
+            <div class="form-check small mb-2">
+              <input type="checkbox" class="form-check-input" id="m-saldo-mov" checked>
+              <label class="form-check-label" for="m-saldo-mov">Ese saldo ya incluye los traslados y cruces registrados aquí (lo normal si lo consultaste después de enviarlos a la contabilidad)</label>
+            </div>
+            <div id="m-saldo-info" class="small text-muted mb-2"></div>
+            <button type="button" class="btn btn-sm btn-primary" id="m-saldo-ok">Guardar</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="m-saldo-quitar" style="display:none">Volver al saldo del archivo</button>
+            <button type="button" class="btn btn-sm btn-link" id="m-saldo-cancelar">Cancelar</button>
+          </div>
+        </div>
           <details id="m-adj-wrap" class="ct-details">
             <summary>Ver cómo se reparte cada negocio entre sus titulares</summary>
             <div id="m-adj" class="pt-2"></div>
@@ -751,7 +795,7 @@
   </div>
 </div>
 
-{% if lineas_json %}{{ lineas_json|json_script:"lineas-data" }}{{ catalogo|json_script:"catalogo-data" }}{{ config_facturacion|json_script:"config-fac-data" }}{{ empresas_factura|json_script:"empresas-fac-data" }}{% endif %}
+{% if lineas_json %}{{ saldos_manuales|json_script:"saldos-mano-data" }}{{ lineas_json|json_script:"lineas-data" }}{{ catalogo|json_script:"catalogo-data" }}{{ config_facturacion|json_script:"config-fac-data" }}{{ empresas_factura|json_script:"empresas-fac-data" }}{% endif %}
 {% endblock %}
 
 {% block jsbottom %}
@@ -1259,11 +1303,18 @@
     var conAj = l.cuentas.some(function (c) { return Number(c.ajustes || 0) !== 0; });
     $('#m-head-c').html('<tr><th>Empresa</th><th>Cuenta</th>' + (conAj ? '<th class="num">Archivo</th><th class="num">Traslados</th>' : '') + '<th class="num">Saldo</th></tr>');
     $('#m-lado-c').html(l.cuentas.length ? l.cuentas.map(function (c) {
-      return '<tr><td><span class="ct-tag ct-tag-e">' + esc(EMP_CORTA[c.empresa] || c.empresa_nombre) + '</span></td><td><code>' + esc(c.cuenta) + '</code> ' + esc(c.cuenta_nombre) +
+      var m = c.manual;
+      var marca = m ? ' <span class="ct-tag ct-tag-m" tabindex="0" title="' + esc('Puesto a mano por ' + (m.por || '?') + ' el ' + (m.en || '') +
+        '. El archivo dice ' + fmt.format(Number(m.archivo)) + '. ' + (m.con_movimientos ? 'Ya incluye lo registrado aquí. ' : '') + (m.nota || '')) + '">a mano</span>' : '';
+      var lapiz = CERRADA ? '' : ' <button type="button" class="btn btn-link p-0 ct-saldo-editar" data-cuenta="' + esc(c.cuenta) +
+        '" data-empresa="' + esc(c.empresa) + '" title="' + (m ? 'Cambiar este saldo puesto a mano' : 'Poner este saldo a mano') +
+        '" aria-label="Poner a mano el saldo de la cuenta ' + esc(c.cuenta) + '"><i class="fas fa-pen" aria-hidden="true"></i></button>';
+      return '<tr><td><span class="ct-tag ct-tag-e">' + esc(EMP_CORTA[c.empresa] || c.empresa_nombre) + '</span></td><td><code>' + esc(c.cuenta) + '</code> ' + esc(c.cuenta_nombre) + marca +
         '</td>' + (conAj ? '<td class="num">' + money(c.saldo_archivo) + '</td><td class="num">' + (Number(c.ajustes) ? money(c.ajustes) : '') + '</td>' : '') +
-        '<td class="num">' + money(c.saldo) + '</td></tr>';
+        '<td class="num">' + money(c.saldo) + lapiz + '</td></tr>';
     }).join('') : '<tr><td colspan="' + (conAj ? 5 : 3) + '" class="text-muted">Sin saldo en las cuentas seleccionadas.</td></tr>');
     $('#m-foot-c').html('<tr><td colspan="' + (conAj ? 4 : 2) + '">Total contabilidad</td><td class="num">' + money(l.contable) + '</td></tr>');
+    cerrarSaldo();
     renderHistorial(l);
     prepararCorr(l);
     renderFacturas(l);
@@ -2029,6 +2080,123 @@
     }
     siguiente();
   }
+  // ----- Saldos puestos a mano -----
+  // El archivo de la empresa quedo desactualizado y nadie lo va a volver a exportar: se escribe el saldo que la
+  // contabilidad muestra hoy para ese tercero en esa cuenta. Manda sobre el archivo, queda con su nota y se puede
+  // quitar. No toca la contabilidad.
+  var URL_SALDO = "{% url 'conciliacion-terceros-saldo-manual' conciliacion.pk %}";
+  var SALDOS_MANO = JSON.parse(document.getElementById('saldos-mano-data').textContent);
+
+  function manualDe(l, empresa, cuenta) {
+    var c = (l.cuentas || []).filter(function (x) { return String(x.empresa) === String(empresa) && x.cuenta === cuenta; })[0];
+    return c ? (c.manual || null) : null;
+  }
+  function cerrarSaldo() { $('#m-saldo').hide(); }
+  function abrirSaldo(empresa, cuenta) {
+    if (CERRADA || !actual) return;
+    var cs = CATALOGO.slice().sort(function (a, b) { return (a.empresa_nombre + a.cuenta).localeCompare(b.empresa_nombre + b.cuenta); });
+    if (!cs.length) { alert('Ninguna empresa tiene archivo confirmado: no hay cuentas que corregir.'); return; }
+    $('#m-saldo-cuenta').html(cs.map(function (c) {
+      return '<option value="' + esc(c.empresa + '|' + c.cuenta) + '">' + esc((EMP_CORTA[c.empresa] || c.empresa_nombre) + ' · ' + c.cuenta + ' ' + c.cuenta_nombre) + '</option>';
+    }).join(''));
+    if (empresa && cuenta) $('#m-saldo-cuenta').val(empresa + '|' + cuenta);
+    $('#m-saldo').show();
+    pintarSaldoElegido();
+    $('#m-saldo-valor').trigger('focus');
+    document.getElementById('m-saldo').scrollIntoView({ block: 'nearest' });
+  }
+  // Al elegir la cuenta se muestra lo que dice el archivo y, si ya tiene saldo a mano, se carga para cambiarlo.
+  function pintarSaldoElegido() {
+    var pedazos = String($('#m-saldo-cuenta').val() || '').split('|'), emp = pedazos[0], cta = pedazos[1];
+    var c = (actual.cuentas || []).filter(function (x) { return String(x.empresa) === emp && x.cuenta === cta; })[0];
+    var m = c ? c.manual : null;
+    var archivo = m ? Number(m.archivo) : (c ? Number(c.saldo_archivo) : 0);
+    $('#m-saldo-info').html('El archivo dice <strong>' + fmt.format(archivo) + '</strong> para este tercero en esa cuenta.' +
+      (c && Number(c.ajustes) ? ' Los traslados y cruces registrados aquí suman ' + fmt.format(Number(c.ajustes)) + '.' : '') +
+      (m ? ' <span class="text-warning">Ya tiene un saldo a mano de ' + fmt.format(Number(m.saldo)) + '.</span>' : ''));
+    // La casilla solo tiene sentido si hay traslados o cruces de esa cuenta que el saldo pueda traer.
+    $('#m-saldo-mov').closest('.form-check').toggle(Number(c && c.ajustes) !== 0 || !!(m && m.con_movimientos));
+    $('#m-saldo-quitar').toggle(!!m);
+    $('#m-saldo-valor').val(m ? Number(m.saldo) : '');
+    $('#m-saldo-nota').val(m ? m.nota : '');
+    $('#m-saldo-mov').prop('checked', m ? !!m.con_movimientos : true);
+  }
+  function enviarSaldo(quitar) {
+    var pedazos = String($('#m-saldo-cuenta').val() || '').split('|');
+    var c = CATALOGO.filter(function (x) { return String(x.empresa) === pedazos[0] && x.cuenta === pedazos[1]; })[0] || {};
+    var datos = { identificacion: actual.identificacion, empresa: pedazos[0], cuenta: pedazos[1],
+                  cuenta_nombre: c.cuenta_nombre || '', nombre: actual.nombre || '' };
+    if (quitar) datos.quitar = true;
+    else {
+      datos.saldo = $('#m-saldo-valor').val();
+      datos.nota = $('#m-saldo-nota').val();
+      datos.con_movimientos = $('#m-saldo-mov').is(':checked');
+      if (datos.saldo === '') { alert('Escribe el saldo que muestra la contabilidad.'); return; }
+      if ((datos.nota || '').trim().length < 5) { alert('Escribe de dónde salió el saldo, p. ej. «consultado en Alegra el 21/11».'); return; }
+    }
+    var $bs = $('#m-saldo-ok, #m-saldo-quitar').prop('disabled', true);
+    $.ajax({ url: URL_SALDO, method: 'POST', headers: { 'X-CSRFToken': CSRF }, contentType: 'application/json',
+             data: JSON.stringify(datos) })
+      .done(function (r) {
+        SALDOS_MANO = r.saldos_manuales || [];
+        cerrarSaldo(); aplicarRespuesta(r); pintarSaldosMano();
+      })
+      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo guardar el saldo.'); })
+      .always(function () { $bs.prop('disabled', false); });
+  }
+  $('#m-lado-c').on('click', '.ct-saldo-editar', function () { abrirSaldo($(this).data('empresa'), $(this).data('cuenta')); });
+  $('.ct-saldo-nuevo').on('click', function () { abrirSaldo('', ''); });
+  $('#m-saldo-cuenta').on('change', pintarSaldoElegido);
+  $('#m-saldo-ok').on('click', function () { enviarSaldo(false); });
+  $('#m-saldo-quitar').on('click', function () {
+    if (confirm('El tercero vuelve a comparar contra el saldo del archivo. ¿Quitar el saldo puesto a mano?')) enviarSaldo(true);
+  });
+  $('#m-saldo-cancelar').on('click', cerrarSaldo);
+
+  // La lista de arriba: todos los saldos a mano de la conciliación, para revisarlos al cargar un archivo nuevo.
+  function pintarSaldosMano() {
+    var $d = $('#saldos-mano');
+    $d.toggle(SALDOS_MANO.length > 0);
+    $('#saldos-mano-n').text(SALDOS_MANO.length);
+    var nuevos = SALDOS_MANO.filter(function (s) { return s.archivo_nuevo; }).length;
+    $('#saldos-mano-filas').html(SALDOS_MANO.map(function (s) {
+      return '<tr' + (s.archivo_nuevo ? ' class="table-warning"' : '') + '><td><span class="ct-tag ct-tag-e">' + esc(EMP_CORTA[s.empresa] || s.empresa_nombre) + '</span></td>' +
+        '<td><code>' + esc(s.cuenta) + '</code> ' + esc(s.cuenta_nombre || '') + '</td>' +
+        '<td><a href="#" class="ct-ir-saldo" data-ident="' + esc(s.identificacion) + '">' + esc(s.identificacion) + '</a> ' + esc(s.nombre || '') + '</td>' +
+        '<td class="num">' + money(s.saldo) + '</td><td class="num text-muted">' + money(s.archivo) + '</td>' +
+        '<td>' + esc(s.nota) + (s.archivo_nuevo ? '<br><small class="text-warning">El archivo de esta empresa se cargó después: revisa si ya lo trae.</small>' : '') + '</td>' +
+        '<td class="text-nowrap"><small>' + esc(s.por) + '<br>' + esc(s.en) + '</small></td>' +
+        '<td>' + (CERRADA ? '' : '<button type="button" class="btn btn-link btn-sm p-0 ct-saldo-quitar" data-ident="' + esc(s.identificacion) +
+          '" data-empresa="' + esc(s.empresa) + '" data-cuenta="' + esc(s.cuenta) + '">quitar</button>') + '</td></tr>';
+    }).join(''));
+    if (nuevos) $d.prop('open', true);
+  }
+  $('#saldos-mano-filas').on('click', '.ct-ir-saldo', function (e) {
+    e.preventDefault();
+    var l = BY_IDENT[$(this).data('ident')];
+    if (l) { cambiarVista('terceros'); abrir(l); }
+  });
+  $('#saldos-mano-filas').on('click', '.ct-saldo-quitar', function () {
+    var $b = $(this);
+    if (!confirm('Ese tercero vuelve a comparar contra el saldo del archivo. ¿Quitarlo?')) return;
+    $b.prop('disabled', true);
+    $.ajax({ url: URL_SALDO, method: 'POST', headers: { 'X-CSRFToken': CSRF }, contentType: 'application/json',
+             data: JSON.stringify({ identificacion: $b.data('ident'), empresa: $b.data('empresa'), cuenta: $b.data('cuenta'), quitar: true }) })
+      .done(function (r) {
+        SALDOS_MANO = r.saldos_manuales || [];
+        pintarSaldosMano();
+        var l = BY_IDENT[$b.data('ident')];
+        (r.lineas || []).forEach(function (x) {
+          var y = BY_IDENT[x.identificacion];
+          if (y) { Object.assign(y, x); preparar(y); tabla.row('#l' + y.id).invalidate('data'); }
+        });
+        tabla.draw(false); refrescarConteos(); avisarResumenViejo();
+        if (l && $('#m-linea').is(':visible') && actual && actual.identificacion === l.identificacion) abrir(BY_IDENT[l.identificacion]);
+      })
+      .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo quitar.'); $b.prop('disabled', false); });
+  });
+  pintarSaldosMano();
+
   // Cada paso con su estado y, si falló o quedó pendiente, su propio botón: se reintenta solo ese paso.
   function pasosFactura(f) {
     function li(clase, icono, texto, det, boton) {

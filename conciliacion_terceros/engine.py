@@ -374,9 +374,13 @@ def calcular(conciliacion, usar_cache=False):
     catalogo = catalogo_cuentas(conciliacion, balances)
     nombres_empresa = {f.empresa_id: f.empresa.nombre for f in fuentes}
 
-    def entrada(ident, emp, cuenta, nombre_cuenta):
+    def clave_ident(ident, emp):
+        """El Id con el que ese tercero queda en el lado contable: el corregido en Alegra y su equivalente."""
         ident = alias_c.get((emp, ident), ident)
-        ident = eq_contable.get(ident, ident)
+        return eq_contable.get(ident, ident)
+
+    def entrada(ident, emp, cuenta, nombre_cuenta):
+        ident = clave_ident(ident, emp)
         e = contable[ident].get((emp, cuenta))
         if e is None:
             info = catalogo.get((emp, cuenta)) or {'empresa': emp, 'empresa_nombre': nombres_empresa.get(emp, emp),
@@ -388,13 +392,43 @@ def calcular(conciliacion, usar_cache=False):
     from conciliacion_terceros import incluidos as incl
     inc = incl.por_empresa(fuentes)
 
+    # Saldos puestos a mano: para ese tercero en esa cuenta mandan sobre el archivo, que quedó desactualizado y
+    # nadie va a volver a exportar. Cada uno dice además qué movimientos de la conciliación ya refleja —quien lo
+    # consultó en la contabilidad los vio ahí— para no sumarlos dos veces. Sin archivo confirmado de la empresa
+    # no hay lado contable al que aplicarlos.
+    inc_manual = {}
+    for sm in conciliacion.saldos_manuales.select_related('created_by'):
+        if sm.empresa_id not in confirmadas:
+            continue
+        e = entrada(sm.identificacion, sm.empresa_id, sm.cuenta, sm.cuenta_nombre)
+        ids_manual = (incl.ids_de(sm.incluidos, 'ajustes'), incl.ids_de(sm.incluidos, 'facturas'))
+        e['manual'] = {
+            'saldo': str(sm.saldo), 'archivo': str(e['saldo_archivo']), 'nota': sm.nota,
+            'por': sm.created_by.get_username() if sm.created_by else '',
+            'en': timezone.localtime(sm.updated_at).strftime('%d/%m/%Y %H:%M') if sm.updated_at else '',
+            'con_movimientos': bool(ids_manual[0] or ids_manual[1]),
+        }
+        e['saldo_archivo'] = sm.saldo
+        inc_manual[(clave_ident(sm.identificacion, sm.empresa_id), sm.empresa_id, sm.cuenta)] = ids_manual
+        nombres_contables.setdefault(clave_ident(sm.identificacion, sm.empresa_id), sm.nombre)
+
+    def no_contado(tipo, pk, ident, emp, cuenta):
+        """Si ese movimiento todavía no está en el saldo del tercero: ni en el archivo de la empresa ni en el
+        saldo que alguien puso a mano para esa cuenta."""
+        if emp not in confirmadas:
+            return False
+        if pk in inc.get(emp, incl.VACIO)[0 if tipo == 'ajuste' else 1]:
+            return False
+        ids = inc_manual.get((clave_ident(ident, emp), emp, cuenta))
+        return not (ids and pk in (ids[0] if tipo == 'ajuste' else ids[1]))
+
     # Solo los ajustes aplicados: confirmados por Alegra o registrados a mano. Los pendientes no mueven saldos.
     # Y solo en empresas con archivo confirmado: sin archivo no hay saldo al que sumarlos.
     for a in conciliacion.ajustes.filter(anulado=False, journal_estado__in=AjusteConciliacion.ESTADOS_APLICADOS):
-        if a.origen_empresa_id in confirmadas and a.pk not in inc.get(a.origen_empresa_id, incl.VACIO)[0]:
+        if no_contado('ajuste', a.pk, a.origen_identificacion, a.origen_empresa_id, a.origen_cuenta):
             entrada(a.origen_identificacion, a.origen_empresa_id, a.origen_cuenta, a.origen_cuenta_nombre)['ajustes'] -= a.valor
         # Un cruce con otra cuenta solo baja el origen: la otra cuenta no hace parte de la conciliación.
-        if not a.es_cruce and a.destino_empresa_id in confirmadas and a.pk not in inc.get(a.destino_empresa_id, incl.VACIO)[0]:
+        if not a.es_cruce and no_contado('ajuste', a.pk, a.destino_identificacion, a.destino_empresa_id, a.destino_cuenta):
             entrada(a.destino_identificacion, a.destino_empresa_id, a.destino_cuenta, a.destino_cuenta_nombre)['ajustes'] += a.valor
 
     # Facturas: cierran el anticipo. Si el cruce no está en el archivo contable, se resta de la cuenta de anticipos.
@@ -412,7 +446,7 @@ def calcular(conciliacion, usar_cache=False):
         alegra = fac.tipo == FacturaConciliacion.TIPO_ALEGRA
         cruce_hecho = (fac.cruce_estado == FacturaConciliacion.CRUCE_REGISTRADO if alegra
                        else fac.cruce_estado != FacturaConciliacion.CRUCE_NO_APLICA)
-        if cruce_hecho and fac.cruce_cuenta and fac.empresa_id in confirmadas and not incl.factura_incluida(fac, inc):
+        if cruce_hecho and fac.cruce_cuenta and no_contado('factura', fac.pk, fac.identificacion, fac.empresa_id, fac.cruce_cuenta):
             entrada(fac.identificacion, fac.empresa_id, fac.cruce_cuenta, fac.cruce_cuenta_nombre)['ajustes'] -= fac.total
     # Facturas registradas en conciliaciones anteriores (con fecha hasta este corte): el negocio ya se facturó, así que
     # Andinasoft ya no lo espera. Su cruce, si se hizo, ya viene en el archivo de esta conciliación: no se resta otra vez.

@@ -29,6 +29,7 @@ urlpatterns = [
     path('<int:pk>/correccion/<int:correccion_id>/revertir', views.correccion_revertir, name='conciliacion-terceros-correccion-revertir'),
     path('<int:pk>/terceros/buscar', views.buscar_tercero, name='conciliacion-terceros-buscar'),
     path('<int:pk>/terceros/equivalencia', views.equivalencia, name='conciliacion-terceros-equivalencia'),
+    path('<int:pk>/saldos', views.saldo_manual, name='conciliacion-terceros-saldo-manual'),
     path('<int:pk>/ajustes', views.ajuste_crear, name='conciliacion-terceros-ajuste-crear'),
     path('<int:pk>/ajustes/<int:ajuste_id>/anular', views.ajuste_anular, name='conciliacion-terceros-ajuste-anular'),
     path('<int:pk>/ajustes/<int:ajuste_id>/enviar', views.ajuste_enviar, name='conciliacion-terceros-ajuste-enviar'),

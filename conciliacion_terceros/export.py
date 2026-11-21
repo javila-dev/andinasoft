@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -101,6 +102,20 @@ def construir_libro(conciliacion):
         for n in sueltos:
             for t in n['titulares']:  # una fila por titular, para poder buscar por cédula
                 _row(sm, [n['proyecto'], n['ref'], t['identificacion'], t['nombre'], n['situacion_label'], n['estado']])
+
+    # Saldos escritos a mano porque el archivo de la empresa quedó desactualizado: mandan sobre el archivo.
+    manuales = list(conciliacion.saldos_manuales.select_related('empresa', 'created_by'))
+    if manuales:
+        sa = wb.create_sheet('Saldos a mano')
+        _header(sa, ['Empresa', 'Cuenta', 'Nombre de la cuenta', 'Identificación', 'Nombre', 'Saldo a mano',
+                     'Saldo del archivo', 'Diferencia', '¿Incluye lo registrado aquí?', 'Nota', 'Quién', 'Cuándo'],
+                [26, 14, 30, 16, 34, 16, 16, 16, 24, 40, 16, 18])
+        for m in manuales:
+            incluye = bool((m.incluidos or {}).get('ajustes') or (m.incluidos or {}).get('facturas'))
+            _row(sa, [m.empresa.nombre, m.cuenta, m.cuenta_nombre, m.identificacion, m.nombre, m.saldo,
+                      m.saldo_archivo, m.saldo - m.saldo_archivo, 'Sí' if incluye else 'No', m.nota,
+                      m.created_by.get_username() if m.created_by else '',
+                      timezone.localtime(m.updated_at).strftime('%d/%m/%Y %H:%M') if m.updated_at else ''])
 
     # Ajustes registrados (todos): solo los «Enviado a Alegra» y «Registrado a mano» mueven el saldo.
     aj = wb.create_sheet('Traslados')

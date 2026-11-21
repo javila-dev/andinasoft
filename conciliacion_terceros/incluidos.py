@@ -32,6 +32,11 @@ def _ids(d, clave):
     return out
 
 
+def ids_de(incluidos, clave):
+    """Ids de los movimientos que una fuente —o un saldo puesto a mano— declara que ya reflejó."""
+    return _ids(incluidos, clave)
+
+
 def por_empresa(fuentes):
     """{empresa_id: (ids de ajustes, ids de facturas)} que trae el archivo confirmado de cada empresa."""
     return {f.empresa_id: (_ids(f.incluidos, 'ajustes'), _ids(f.incluidos, 'facturas')) for f in fuentes if f.confirmada}

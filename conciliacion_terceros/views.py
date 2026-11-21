@@ -199,6 +199,12 @@ def fuente_cuentas(request, pk, fuente_id):
         ConfigEmpresa.objects.update_or_create(empresa=fuente.empresa, defaults=defaults)
         if usadas:
             messages.success(request, f'{fuente.empresa.nombre}: {len(usadas)} cuenta(s) seleccionada(s).')
+            # El archivo nuevo puede traer ya los saldos que alguien escribió a mano: si no se quitan, se cuentan dos veces.
+            a_mano = conc.saldos_manuales.filter(empresa_id=fuente.empresa_id).count()
+            if a_mano:
+                messages.warning(request, f'{fuente.empresa.nombre} tiene {a_mano} saldo(s) puesto(s) a mano, que siguen '
+                                          'mandando sobre este archivo. Revísalos en «Saldos puestos a mano» y quita los '
+                                          'que el archivo nuevo ya traiga.')
         else:
             messages.warning(request, f'{fuente.empresa.nombre}: no seleccionaste cuentas, el archivo no suma nada.')
         n_inc = len(fuente.incluidos['ajustes']) + len(fuente.incluidos['facturas'])
@@ -397,6 +403,7 @@ def detalle(request, pk):
     return render(request, 'conciliacion_terceros/detalle.html', {
         'conciliacion': conc,
         'falta_confirmar': _falta_confirmar(conc),
+        'saldos_manuales': _saldos_manuales_json(conc),
         'ajustes_manuales': manuales,
         'manuales_pendientes': sum(1 for a in manuales if a['journal_estado'] == AjusteConciliacion.JOURNAL_PENDIENTE),
         'hoy': timezone.localdate().isoformat(),
@@ -1131,6 +1138,124 @@ def buscar_tercero(request, pk):
         resultados.append({'identificacion': k, 'nombre': c.nombrecompleto, 'estado': '', 'andina': '0', 'contable': '0',
                            'diferencia': '0', 'cuentas': [], 'en_conciliacion': False})
     return JsonResponse({'resultados': resultados[:20]})
+
+
+
+# ---------------------------------------------------------------------------
+# Saldos puestos a mano: cuando el archivo de una empresa queda desactualizado y nadie va a volver a exportarlo,
+# se escribe el saldo que la contabilidad muestra hoy para ese tercero en esa cuenta. No mueve nada: solo cambia
+# contra qué se compara lo que espera Andinasoft.
+# ---------------------------------------------------------------------------
+
+def _saldo_archivo_actual(conc, ident, empresa_id, cuenta):
+    """Lo que dice el archivo para ese tercero en esa cuenta, aunque ya haya un saldo puesto a mano encima."""
+    linea = conc.lineas.filter(identificacion=ident).first()
+    for c in (linea.cuentas if linea else []):
+        if str(c.get('empresa')) == empresa_id and c.get('cuenta') == cuenta:
+            return Decimal(str((c.get('manual') or {}).get('archivo', c.get('saldo_archivo') or 0)))
+    return Decimal(0)
+
+
+def _movimientos_de_la_cuenta(conc, ident, empresa_id, cuenta):
+    """Traslados y cruces ya aplicados sobre esa cuenta de ese tercero: lo que un saldo leído hoy en la
+    contabilidad ya trae. Se guardan por id, igual que los del archivo."""
+    ajustes, facturas = [], []
+    for a in conc.ajustes.filter(anulado=False, journal_estado__in=AjusteConciliacion.ESTADOS_APLICADOS):
+        origen = (a.origen_empresa_id == empresa_id and a.origen_cuenta == cuenta and a.origen_identificacion == ident)
+        destino = (not a.es_cruce and a.destino_empresa_id == empresa_id and a.destino_cuenta == cuenta
+                   and a.destino_identificacion == ident)
+        if origen or destino:
+            ajustes.append(a.pk)
+    for f in conc.facturas.filter(empresa_id=empresa_id, cruce_cuenta=cuenta, identificacion=ident):
+        alegra = f.tipo == FacturaConciliacion.TIPO_ALEGRA
+        hecho = (f.cruce_estado == FacturaConciliacion.CRUCE_REGISTRADO if alegra
+                 else f.cruce_estado != FacturaConciliacion.CRUCE_NO_APLICA)
+        if f.vigente and hecho:
+            facturas.append(f.pk)
+    return {'ajustes': ajustes, 'facturas': facturas}
+
+
+def _saldos_manuales_json(conc):
+    """Los saldos puestos a mano de la conciliación, con el aviso de si el archivo se recargó después."""
+    cargados = {f.empresa_id: f.cargado_en for f in conc.fuentes.filter(confirmada=True)}
+    out = []
+    for s in conc.saldos_manuales.select_related('empresa', 'created_by'):
+        cargado = cargados.get(s.empresa_id)
+        out.append({
+            'id': s.pk, 'empresa': s.empresa_id, 'empresa_nombre': s.empresa.nombre,
+            'cuenta': s.cuenta, 'cuenta_nombre': s.cuenta_nombre,
+            'identificacion': s.identificacion, 'nombre': s.nombre,
+            'saldo': str(s.saldo), 'archivo': str(s.saldo_archivo), 'nota': s.nota,
+            'con_movimientos': bool((s.incluidos or {}).get('ajustes') or (s.incluidos or {}).get('facturas')),
+            'por': s.created_by.get_username() if s.created_by else '',
+            'en': timezone.localtime(s.updated_at).strftime('%d/%m/%Y %H:%M') if s.updated_at else '',
+            # El archivo de la empresa se cargó después de poner este saldo: puede que ya lo traiga.
+            'archivo_nuevo': bool(cargado and s.archivo_cargado_en and cargado > s.archivo_cargado_en),
+        })
+    return out
+
+
+@login_required
+@require_http_methods(['POST'])
+def saldo_manual(request, pk):
+    """
+    Pone a mano el saldo de un tercero en una cuenta: {"identificacion", "empresa", "cuenta", "cuenta_nombre",
+    "saldo", "nota", "con_movimientos"}. Con {"quitar": true} vuelve a mandar el archivo.
+    `con_movimientos` dice si ese saldo ya refleja los traslados y cruces registrados aquí (es lo normal cuando se
+    consulta la contabilidad después de enviarlos): esos no se vuelven a sumar.
+    """
+    _guard(request)
+    conc = get_object_or_404(Conciliacion, pk=pk)
+    if conc.estado == Conciliacion.ESTADO_CERRADA:
+        return JsonResponse({'detail': 'La conciliación está cerrada.'}, status=400)
+    try:
+        d = json.loads(request.body or '{}')
+    except ValueError:
+        return JsonResponse({'detail': 'JSON inválido.'}, status=400)
+    ident = norm_ident(d.get('identificacion'))
+    empresa_id = str(d.get('empresa') or '').strip()
+    cuenta = str(d.get('cuenta') or '').strip()
+    if not (ident and empresa_id and cuenta):
+        return JsonResponse({'detail': 'Faltan el tercero, la empresa o la cuenta.'}, status=400)
+    if d.get('quitar'):
+        borrados, _ = conc.saldos_manuales.filter(empresa_id=empresa_id, cuenta=cuenta, identificacion=ident).delete()
+        if not borrados:
+            return JsonResponse({'detail': 'Esa cuenta no tiene un saldo puesto a mano.'}, status=400)
+        engine.ejecutar(conc, usar_cache=True)
+        return JsonResponse(dict(ok=True, mensaje=f'{cuenta}: vuelve a mandar el saldo del archivo.',
+                                 saldos_manuales=_saldos_manuales_json(conc), **_lineas_afectadas(conc, [ident])))
+    fuente = conc.fuentes.filter(empresa_id=empresa_id, confirmada=True).select_related('empresa').first()
+    if not fuente:
+        return JsonResponse({'detail': 'Esa empresa no tiene archivo confirmado en esta conciliación: sin archivo no hay '
+                                       'saldo contable que corregir.'}, status=400)
+    if cuenta not in set(fuente.cuentas_usadas or []):
+        return JsonResponse({'detail': f'La cuenta {cuenta} no está entre las que suma el archivo de '
+                                       f'{fuente.empresa.nombre}; elige una de esas.'}, status=400)
+    try:
+        saldo = Decimal(str(d.get('saldo', '')).replace(',', '').strip() or 'x')
+    except InvalidOperation:
+        return JsonResponse({'detail': 'El saldo no es un número.'}, status=400)
+    nota = (d.get('nota') or '').strip()
+    if len(nota) < 5:
+        return JsonResponse({'detail': 'Escribe de dónde salió el saldo (p. ej. «consultado en Alegra el 21/11»).'},
+                            status=400)
+    linea = conc.lineas.filter(identificacion=ident).first()
+    con_movimientos = d.get('con_movimientos', True)
+    conc.saldos_manuales.update_or_create(
+        empresa_id=empresa_id, cuenta=cuenta, identificacion=ident,
+        defaults={
+            'cuenta_nombre': (d.get('cuenta_nombre') or '').strip(),
+            'nombre': (linea.nombre if linea else '') or (d.get('nombre') or ''),
+            'saldo': saldo.quantize(Decimal('0.01')),
+            'saldo_archivo': _saldo_archivo_actual(conc, ident, empresa_id, cuenta),
+            'nota': nota[:2000],
+            'incluidos': _movimientos_de_la_cuenta(conc, ident, empresa_id, cuenta) if con_movimientos else {},
+            'archivo_cargado_en': fuente.cargado_en,
+            'created_by': request.user,
+        })
+    engine.ejecutar(conc, usar_cache=True)
+    return JsonResponse(dict(ok=True, mensaje=f'{cuenta}: saldo puesto a mano en ${saldo:,.0f}.',
+                             saldos_manuales=_saldos_manuales_json(conc), **_lineas_afectadas(conc, [ident])))
 
 
 @login_required

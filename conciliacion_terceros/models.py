@@ -194,6 +194,46 @@ class AjusteConciliacion(models.Model):
         return self.grupo_ref or f'AJ-CT-{self.pk}'
 
 
+class SaldoManual(models.Model):
+    """
+    Saldo de un tercero en una cuenta puesto a mano, porque el archivo de esa empresa quedó desactualizado y nadie
+    va a volver a exportarlo. Reemplaza lo que dice el archivo para ese tercero en esa cuenta; lo que decía el
+    archivo se guarda al lado para poder compararlo. No mueve nada en la contabilidad: solo cambia contra qué se
+    compara lo que espera Andinasoft.
+
+    `incluidos` son los movimientos de la conciliación que ese saldo ya refleja —quien lo consulta en la
+    contabilidad lo ve despues de que los traslados y los cruces llegaron allá—, con el mismo contrato que
+    `FuenteConciliacion.incluidos`: el engine no los vuelve a sumar.
+    """
+    conciliacion = models.ForeignKey(Conciliacion, on_delete=models.CASCADE, related_name='saldos_manuales')
+    empresa = models.ForeignKey(empresas, on_delete=models.PROTECT, related_name='+', db_constraint=False)
+    cuenta = models.CharField(max_length=30)
+    cuenta_nombre = models.CharField(max_length=255, blank=True, default='')
+    identificacion = models.CharField(max_length=40, db_index=True)
+    nombre = models.CharField(max_length=255, blank=True, default='')
+    saldo = models.DecimalField(max_digits=18, decimal_places=2)
+    saldo_archivo = models.DecimalField(max_digits=18, decimal_places=2, default=0)
+    nota = models.TextField()
+    incluidos = models.JSONField(default=dict, blank=True)  # {'ajustes': [ids], 'facturas': [ids]}
+    # Cuándo se había cargado el archivo de la empresa al ponerlo: si después cargan otro, hay que revisar este saldo.
+    archivo_cargado_en = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', db_constraint=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Saldo puesto a mano'
+        verbose_name_plural = 'Saldos puestos a mano'
+        ordering = ['empresa__nombre', 'cuenta', 'identificacion']
+        constraints = [
+            models.UniqueConstraint(fields=['conciliacion', 'empresa', 'cuenta', 'identificacion'],
+                                    name='unique_saldo_manual_tercero_cuenta'),
+        ]
+
+    def __str__(self):
+        return f'{self.identificacion} {self.cuenta} = {self.saldo} (a mano)'
+
+
 class ConciliacionLinea(models.Model):
     """
     Un tercero: lo que le corresponde según Andinasoft (sus negocios) contra la suma de sus
