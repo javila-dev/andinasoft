@@ -678,10 +678,34 @@ def _fila_factura(f, cfgs_emp):
     }
 
 
+def _rango_fechas(filtros):
+    """Las fechas del filtro de periodo: «este mes», «este año» o el rango escrito. Devuelve (desde, hasta)."""
+    hoy = timezone.localdate()
+    if filtros['periodo'] == 'mes':
+        return hoy.replace(day=1), hoy
+    if filtros['periodo'] == 'anio':
+        return hoy.replace(month=1, day=1), hoy
+    def leer(v):
+        try:
+            return datetime.date.fromisoformat(v) if v else None
+        except ValueError:
+            return None
+    return leer(filtros['desde']), leer(filtros['hasta'])
+
+
 def _facturas_filtradas(request):
     """El queryset del listado según los filtros de la URL, y los filtros ya normalizados."""
-    filtros = {k: (request.GET.get(k) or '').strip() for k in ('empresa', 'proyecto', 'estado', 'tipo', 'paso', 'q')}
+    filtros = {k: (request.GET.get(k) or '').strip()
+               for k in ('empresa', 'proyecto', 'estado', 'tipo', 'paso', 'q', 'periodo', 'desde', 'hasta')}
+    if filtros['periodo'] not in ('mes', 'anio', 'rango'):
+        filtros['periodo'] = 'rango' if (filtros['desde'] or filtros['hasta']) else ''
     qs = FacturaConciliacion.objects.select_related('empresa', 'conciliacion', 'created_by')
+    desde, hasta = _rango_fechas(filtros)
+    filtros['desde_real'], filtros['hasta_real'] = desde, hasta
+    if desde:
+        qs = qs.filter(fecha__gte=desde)
+    if hasta:
+        qs = qs.filter(fecha__lte=hasta)
     if filtros['empresa']:
         qs = qs.filter(empresa_id=filtros['empresa'])
     if filtros['proyecto']:
@@ -735,7 +759,18 @@ def facturas(request):
         'emitir': vigentes.filter(tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_BORRADOR).count(),
     }
     abierta = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
+    # Lo que falta facturar, para el botón de nueva factura: negocios con recaudo sin factura vigente.
+    por_facturar = 0
+    if abierta:
+        ya = {(f[0], f[1]) for f in FacturaConciliacion.objects
+              .exclude(estado__in=(FacturaConciliacion.ESTADO_ANULADA, FacturaConciliacion.ESTADO_ERROR))
+              .values_list('proyecto', 'negocio_ref')}
+        por_facturar = sum(1 for n in _negocios_facturables(abierta) if (n['proyecto'], n['ref']) not in ya)
+    # Los demás filtros, para no perderlos al cambiar de periodo.
+    otros = {k: v for k, v in filtros.items() if k in ('empresa', 'proyecto', 'estado', 'tipo', 'paso', 'q') and v}
     return render(request, 'conciliacion_terceros/facturas.html', {
+        'por_facturar': por_facturar,
+        'otros_filtros': '&'.join(f'{k}={quote(v)}' for k, v in otros.items()),
         'filas': filas,
         'pagina': pagina,
         'filtros': filtros,
@@ -813,6 +848,50 @@ def _negocio_para_facturar(conc, proyecto, ref):
                                                            identificacion__in=n['titulares'])
                .exclude(estado=FacturaConciliacion.ESTADO_ANULADA).order_by('id')]
     return {'negocio': n, 'titulares': titulares, 'cfg': cfg, 'previas': previas, 'empresa_id': empresa_id}
+
+
+
+@login_required
+@require_http_methods(['GET'])
+def facturas_por_facturar(request):
+    """
+    Lo que falta facturar: los negocios con recaudo de la conciliación en revisión, sin factura vigente. De aquí
+    arranca el asistente. Por defecto muestra solo los escriturados —que son los que toca facturar— y permite ver
+    todos los que tienen recaudo.
+    """
+    _guard(request)
+    conc = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
+    if not conc:
+        messages.error(request, 'No hay una conciliación en revisión: para facturar hay que tener una abierta.')
+        return redirect('conciliacion-terceros-facturas')
+    filtros = {k: (request.GET.get(k) or '').strip() for k in ('proyecto', 'q', 'ver')}
+    # Negocios que ya tienen factura vigente: no vuelven a la lista.
+    facturados = {(f[0], f[1]) for f in FacturaConciliacion.objects
+                  .exclude(estado__in=(FacturaConciliacion.ESTADO_ANULADA, FacturaConciliacion.ESTADO_ERROR))
+                  .values_list('proyecto', 'negocio_ref')}
+    filas = [n for n in _negocios_facturables(conc) if (n['proyecto'], n['ref']) not in facturados]
+    total_pendientes = len(filas)
+    escriturados = [n for n in filas if n['escriturada']]
+    if filtros['ver'] != 'todos':
+        filas = escriturados
+    if filtros['proyecto']:
+        filas = [n for n in filas if n['proyecto'] == filtros['proyecto']]
+    if filtros['q']:
+        palabras = filtros['q'].lower().split()
+        filas = [n for n in filas if all(w in n['busqueda'] for w in palabras)]
+    nombres = {l.identificacion: l.nombre for l in conc.lineas.filter(
+        identificacion__in={t for n in filas[:400] for t in n['titulares']})}
+    pagina = Paginator(filas, 50).get_page(request.GET.get('p') or 1)
+    for n in pagina.object_list:
+        n['nombres'] = [{'identificacion': t, 'nombre': nombres.get(t, '')} for t in n['titulares']]
+    return render(request, 'conciliacion_terceros/por_facturar.html', {
+        'conciliacion': conc,
+        'pagina': pagina,
+        'filtros': filtros,
+        'total_pendientes': total_pendientes,
+        'total_escriturados': len(escriturados),
+        'proyectos': sorted({n['proyecto'] for n in _negocios_facturables(conc)}),
+    })
 
 
 @login_required
@@ -935,37 +1014,15 @@ def _negocios_facturables(conc):
             if k in out:
                 continue
             titulares = [str(t) for t in (n.get('titulares') or [])]
+            esc = n.get('escritura') or {}
             out[k] = {'proyecto': k[0], 'ref': k[1], 'total': str(n.get('total_negocio') or 0), 'titulares': titulares,
+                      'situacion': n.get('situacion') or '', 'situacion_label': n.get('situacion_label') or '',
+                      'escriturada': bool(n.get('situacion') == 'escriturada' or esc.get('completa')),
+                      'paso_escritura': esc.get('actual') or '', 'fecha_escritura': esc.get('fecha_escritura') or '',
                       'busqueda': ' '.join([k[0], k[1]] + titulares).lower()}
     filas = sorted(out.values(), key=lambda r: (r['proyecto'], r['ref']))
     cache.set(clave, filas, timeout=60 * 10)
     return filas
-
-
-@login_required
-@require_http_methods(['GET'])
-def facturas_negocios(request):
-    """Paso 1 del asistente: elegir el negocio. Devuelve los que esperan saldo en la conciliación abierta, cada uno
-    con el enlace al asistente de facturación."""
-    _guard(request)
-    conc = Conciliacion.objects.filter(estado=Conciliacion.ESTADO_BORRADOR).order_by('-fecha_corte', '-id').first()
-    if not conc:
-        return JsonResponse({'detail': 'No hay una conciliación en revisión: para facturar hay que tener una abierta.'},
-                            status=400)
-    q = (request.GET.get('q') or '').strip().lower()
-    proyecto = (request.GET.get('proyecto') or '').strip()
-    base = reverse('conciliacion-terceros-factura-nueva')
-    filas = _negocios_facturables(conc)
-    if proyecto:
-        filas = [n for n in filas if n['proyecto'] == proyecto]
-    if q:
-        palabras = q.split()
-        filas = [n for n in filas if all(w in n['busqueda'] for w in palabras)]
-    salida = []
-    for n in filas[:60]:
-        salida.append(dict(n, url=f'{base}?proyecto={quote(n["proyecto"])}&ref={quote(n["ref"])}'))
-    return JsonResponse({'ok': True, 'total': len(filas), 'negocios': salida,
-                         'conciliacion': {'id': conc.pk, 'corte': conc.fecha_corte.isoformat(), 'url': base}})
 
 
 @login_required

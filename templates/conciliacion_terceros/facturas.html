@@ -55,6 +55,19 @@
     <a class="fc-chip {% if not filtros.paso and not filtros.estado %}active{% endif %}" href="?">Todas</a>
   </div>
 
+  <div class="mb-3">
+    <span class="small text-muted mr-2">Fecha de la factura:</span>
+    <a class="fc-chip {% if filtros.periodo == 'mes' %}active{% endif %}" href="?periodo=mes{% if otros_filtros %}&amp;{{ otros_filtros }}{% endif %}">Este mes</a>
+    <a class="fc-chip {% if filtros.periodo == 'anio' %}active{% endif %}" href="?periodo=anio{% if otros_filtros %}&amp;{{ otros_filtros }}{% endif %}">Este año</a>
+    <a class="fc-chip {% if not filtros.periodo %}active{% endif %}" href="?{{ otros_filtros }}">Todas las fechas</a>
+    {% if filtros.desde_real or filtros.hasta_real %}
+    <span class="small text-muted ml-2">
+      {% if filtros.desde_real %}desde {{ filtros.desde_real|date:"d/m/Y" }}{% endif %}
+      {% if filtros.hasta_real %}hasta {{ filtros.hasta_real|date:"d/m/Y" }}{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
   <div class="row">
     <div class="col-lg-8 mb-3">
       <form method="get" class="fc-filtros">
@@ -94,9 +107,19 @@
               {% for v, l in tipos %}<option value="{{ v }}" {% if filtros.tipo == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
             </select>
           </div>
-          <div class="col-md-4 mb-2 d-flex align-items-end">
+          <div class="col-md-4 mb-2">
+            <label class="small mb-1" for="f-desde">Entre fechas</label>
+            <div class="d-flex">
+              <input type="date" class="form-control form-control-sm mr-1" id="f-desde" name="desde" value="{{ filtros.desde }}" aria-label="Desde">
+              <input type="date" class="form-control form-control-sm" id="f-hasta" name="hasta" value="{{ filtros.hasta }}" aria-label="Hasta">
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="col-md-12 mb-1 d-flex align-items-end">
             <button type="submit" class="btn btn-sm btn-primary mr-2">Filtrar</button>
             <a href="?" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+            <small class="text-muted ml-3">Escribir fechas manda sobre «este mes» o «este año».</small>
           </div>
         </div>
       </form>
@@ -109,10 +132,13 @@
           {% if conciliacion_abierta %}<small class="text-muted">corte {{ conciliacion_abierta.fecha_corte|date:"d/m/Y" }}</small>{% endif %}
         </div>
         {% if conciliacion_abierta %}
-        <p class="small text-muted mb-2">Escribe el negocio (ADJ) o la cédula de un titular y elígelo: se abre el asistente con sus titulares, lo recaudado y lo que falta por revisar.</p>
-        <input type="search" class="form-control form-control-sm" id="n-q" placeholder="ADJ617, 1144… (mínimo 2 caracteres)" autocomplete="off" aria-label="Buscar el negocio que se va a facturar">
-        <div class="fc-res mt-2" id="n-res" style="display:none"></div>
-        <div class="small text-muted mt-1" id="n-aviso"></div>
+        <p class="small text-muted mb-2">
+          Se empieza por el negocio, no por el tercero: la lista trae los que tienen recaudo y todavía no se han
+          facturado, con los escriturados primero. Al elegir uno se abre el asistente.
+        </p>
+        <a class="btn btn-sm btn-primary" href="{% url 'conciliacion-terceros-por-facturar' %}">
+          <i class="fas fa-list-ul mr-1" aria-hidden="true"></i>Ver qué falta por facturar{% if por_facturar %} ({{ por_facturar }}){% endif %}
+        </a>
         {% else %}
         <p class="small text-muted mb-0">No hay una conciliación en revisión. Para facturar hay que tener una abierta.</p>
         {% endif %}
@@ -218,7 +244,6 @@
 (function () {
   var URL_ACC = "{% url 'conciliacion-terceros-facturas-accion' 0 'X' %}".replace('/0/X', '/__ID__/__ACC__');
   var URL_LOTE = "{% url 'conciliacion-terceros-facturas-autorrenta-lote' %}";
-  var URL_NEG = "{% url 'conciliacion-terceros-facturas-negocios' %}";
   var TOKEN = $('#csrf-form [name=csrfmiddlewaretoken]').val();
   var fmt = new Intl.NumberFormat('es-CO');
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
@@ -297,30 +322,6 @@
     })();
   });
 
-  // --- buscador de negocios para facturar ---
-  var tmr = null;
-  $('#n-q').on('input', function () {
-    var q = $(this).val().trim();
-    clearTimeout(tmr);
-    if (q.length < 2) { $('#n-res').hide().empty(); $('#n-aviso').text(''); return; }
-    tmr = setTimeout(function () {
-      $('#n-aviso').text('Buscando…');
-      $.getJSON(URL_NEG, { q: q, proyecto: $('#f-proyecto').val() || '' })
-        .done(function (r) {
-          var ns = r.negocios || [];
-          $('#n-aviso').text(ns.length ? (r.total > ns.length ? 'Se muestran ' + ns.length + ' de ' + r.total + ': afina la búsqueda.' : '')
-                                       : 'Ningún negocio con saldo coincide.');
-          $('#n-res').toggle(ns.length > 0).html(ns.map(function (n) {
-            return '<a href="' + esc(n.url) + '"><strong>' + esc(n.proyecto) + ' · ' + esc(n.ref) + '</strong> — recaudado $' +
-              fmt.format(Math.round(Number(n.total))) + '<br><small class="text-muted">' + esc(n.titulares.join(', ')) + '</small></a>';
-          }).join(''));
-        })
-        .fail(function (x) {
-          $('#n-res').hide().empty();
-          $('#n-aviso').html('<span class="text-danger">' + esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo buscar.') + '</span>');
-        });
-    }, 300);
-  });
 })();
 </script>
 {% endblock %}

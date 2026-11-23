@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Por facturar{% endblock %}
+
+{% block style %}
+<style>
+  #content { min-width: 0; }
+  .pf-wrap { max-width: 1150px; }
+  .pf-tabla td, .pf-tabla th { vertical-align: middle; font-size: 13px; }
+  .pf-tabla td.num, .pf-tabla th.num { text-align: right; white-space: nowrap; }
+  .pf-chip { display: inline-block; border: 1px solid #d5dbd9; border-radius: 14px; padding: 2px 12px; margin: 0 6px 6px 0;
+    font-size: 12.5px; background: #fff; color: #495057; text-decoration: none; }
+  .pf-chip.active { background: #eef5f2; border-color: #9bbfae; font-weight: 600; }
+  .pf-filtros { border: 1px solid #d5dbd9; border-radius: 8px; padding: 10px; background: #fbfcfc; }
+  .pf-tag { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #e4f1e8; color: #1e6b3a; white-space: nowrap; }
+  .pf-tag.gris { background: #eef2f1; color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 pf-wrap">
+  <a href="{% url 'conciliacion-terceros-facturas' %}" class="small"><i class="fas fa-arrow-left mr-1"></i>Facturas</a>
+  <div class="d-flex justify-content-between align-items-center">
+    <h4 class="mt-2 mb-0">Por facturar</h4>
+    <span class="small text-muted">conciliación al {{ conciliacion.fecha_corte|date:"d/m/Y" }}</span>
+  </div>
+  <small class="text-muted d-block" style="max-width: 940px">
+    Negocios con recaudo que todavía no tienen factura. Los escriturados son los que toca facturar; los demás se
+    muestran solo si los pides. Al elegir uno se abre el asistente con sus titulares y valores.
+  </small>
+
+  <div class="my-3">
+    <a class="pf-chip {% if filtros.ver != 'todos' %}active{% endif %}"
+       href="?{% if filtros.proyecto %}proyecto={{ filtros.proyecto|urlencode }}&amp;{% endif %}{% if filtros.q %}q={{ filtros.q|urlencode }}{% endif %}">
+      Escriturados <strong>{{ total_escriturados }}</strong>
+    </a>
+    <a class="pf-chip {% if filtros.ver == 'todos' %}active{% endif %}"
+       href="?ver=todos{% if filtros.proyecto %}&amp;proyecto={{ filtros.proyecto|urlencode }}{% endif %}{% if filtros.q %}&amp;q={{ filtros.q|urlencode }}{% endif %}">
+      Todos los que tienen recaudo <strong>{{ total_pendientes }}</strong>
+    </a>
+  </div>
+
+  <form method="get" class="pf-filtros mb-3">
+    <input type="hidden" name="ver" value="{{ filtros.ver }}">
+    <div class="form-row">
+      <div class="col-md-4 mb-2">
+        <label class="small mb-1" for="f-q">Buscar</label>
+        <input type="search" class="form-control form-control-sm" id="f-q" name="q" value="{{ filtros.q }}" placeholder="ADJ, cédula o nombre del titular">
+      </div>
+      <div class="col-md-4 mb-2">
+        <label class="small mb-1" for="f-proyecto">Proyecto</label>
+        <select class="form-control form-control-sm" id="f-proyecto" name="proyecto">
+          <option value="">Todos</option>
+          {% for p in proyectos %}<option value="{{ p }}" {% if filtros.proyecto == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 mb-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-sm btn-primary mr-2">Filtrar</button>
+        <a href="?{% if filtros.ver == 'todos' %}ver=todos{% endif %}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 pf-tabla">
+        <thead class="thead-light">
+          <tr><th>Proyecto · negocio</th><th>Titulares</th><th class="num">Recaudado</th><th>Situación</th><th>Escrituración</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for n in pagina.object_list %}
+          <tr>
+            <td><strong>{{ n.ref }}</strong><br><small class="text-muted">{{ n.proyecto }}</small></td>
+            <td>
+              {% for t in n.nombres %}<div>{{ t.identificacion }} <span class="text-muted">{{ t.nombre|truncatechars:26 }}</span></div>{% endfor %}
+            </td>
+            <td class="num">${{ n.total|floatformat:0|intcomma }}</td>
+            <td>{{ n.situacion_label|default:"—" }}</td>
+            <td>
+              {% if n.escriturada %}<span class="pf-tag">Escriturada</span>{% elif n.paso_escritura %}<span class="pf-tag gris">{{ n.paso_escritura }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+              {% if n.fecha_escritura %}<br><small class="text-muted">{{ n.fecha_escritura }}</small>{% endif %}
+            </td>
+            <td class="text-right">
+              <a class="btn btn-sm btn-primary text-nowrap" href="{% url 'conciliacion-terceros-factura-nueva' %}?proyecto={{ n.proyecto|urlencode }}&amp;ref={{ n.ref|urlencode }}">Facturar</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-muted">
+            {% if filtros.q or filtros.proyecto %}Ningún negocio coincide con el filtro.
+            {% elif filtros.ver == 'todos' %}No queda ningún negocio con recaudo sin facturar.
+            {% else %}No hay negocios escriturados sin facturar. Mira «Todos los que tienen recaudo» si esperabas alguno.{% endif %}
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if pagina.paginator.num_pages > 1 %}
+  <nav class="mt-3 d-flex justify-content-between align-items-center small">
+    <span class="text-muted">{{ pagina.paginator.count }} negocio(s) · página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    <span>
+      {% if pagina.has_previous %}<a href="?{{ request.GET.urlencode }}&amp;p={{ pagina.previous_page_number }}" class="btn btn-sm btn-outline-secondary">Anterior</a>{% endif %}
+      {% if pagina.has_next %}<a href="?{{ request.GET.urlencode }}&amp;p={{ pagina.next_page_number }}" class="btn btn-sm btn-outline-secondary ml-1">Siguiente</a>{% endif %}
+    </span>
+  </nav>
+  {% else %}
+  <p class="small text-muted mt-2">{{ pagina.paginator.count }} negocio(s).</p>
+  {% endif %}
+</div>
+{% endblock %}
