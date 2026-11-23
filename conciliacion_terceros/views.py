@@ -546,7 +546,7 @@ def _guardar_autorrenta(request):
     if tarifa > 0:
         pendientes = FacturaConciliacion.objects.filter(
             empresa_id=emp.pk, autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE,
-            estado__in=facturacion.ESTADOS_FACTURADA).count()
+            tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_EMITIDA).count()
         messages.success(request, f'{emp.nombre}: autorretención al {tarifa}% guardada.' + (
             f' Quedan {pendientes} factura(s) ya emitida(s) sin el asiento: se registran desde el módulo de facturas.'
             if pendientes else ''))
@@ -624,7 +624,7 @@ def facturacion_config(request):
     }
     cfgs_emp = {str(c.empresa_id): c for c in ConfigEmpresa.objects.all()}
     pendientes = {r['empresa_id']: r['n'] for r in FacturaConciliacion.objects.filter(
-        autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE, estado__in=facturacion.ESTADOS_FACTURADA,
+        autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE, tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_EMITIDA,
     ).values('empresa_id').annotate(n=Count('pk'))}
     campos_autorrenta = ['autorrenta_tarifa', 'autorrenta_cuenta_anticipo_id', 'autorrenta_cuenta_anticipo_codigo',
                          'autorrenta_cuenta_anticipo_nombre', 'autorrenta_cuenta_pasivo_id',
@@ -719,7 +719,7 @@ def _facturas_filtradas(request):
     if filtros['paso'] == 'autorrenta':
         # Solo las de empresas que autorretienen: en las demás el paso no existe.
         configuradas = [str(c.empresa_id) for c in ConfigEmpresa.objects.all() if c.autorrenta_activa]
-        qs = qs.filter(autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE, estado__in=facturacion.ESTADOS_FACTURADA,
+        qs = qs.filter(autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE, tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_EMITIDA,
                        empresa_id__in=configuradas)
     elif filtros['paso'] == 'costo':
         qs = qs.filter(costo_estado=FacturaConciliacion.CRUCE_PENDIENTE, costo__gt=0)
@@ -750,7 +750,7 @@ def facturas(request):
     empresas_autorrenta = [k for k, c in cfgs_emp.items() if c.autorrenta_activa]
     conteos = {
         'autorrenta': vigentes.filter(autorrenta_estado=FacturaConciliacion.CRUCE_PENDIENTE,
-                                      estado__in=facturacion.ESTADOS_FACTURADA,
+                                      tipo=FacturaConciliacion.TIPO_ALEGRA, estado=FacturaConciliacion.ESTADO_EMITIDA,
                                       empresa_id__in=empresas_autorrenta).count(),
         'costo': vigentes.filter(costo_estado=FacturaConciliacion.CRUCE_PENDIENTE, costo__gt=0).count(),
         'cruzar': vigentes.filter(cruce_estado=FacturaConciliacion.CRUCE_PENDIENTE).exclude(cruce_cuenta='').count(),
@@ -969,6 +969,29 @@ def facturas_accion(request, factura_id, accion):
         'cruce_estado': f.cruce_estado, 'error_cruce': f.error_cruce,
         'siguiente': facturacion.siguiente_paso(f, cfg_emp),
     }})
+
+
+@login_required
+@require_http_methods(['POST'])
+def facturas_autorrenta_previa(request):
+    """Cómo quedarían los asientos de autorretención de las facturas elegidas: las dos partidas de cada uno con su
+    cuenta y su valor. No envía nada a Alegra; es lo que se muestra antes de registrar."""
+    _guard(request)
+    try:
+        ids = [int(x) for x in (json.loads(request.body or '{}').get('ids') or [])][:50]
+    except (ValueError, TypeError):
+        return JsonResponse({'detail': 'Lista de facturas inválida.'}, status=400)
+    if not ids:
+        return JsonResponse({'detail': 'No hay facturas seleccionadas.'}, status=400)
+    cfgs = {str(c.empresa_id): c for c in ConfigEmpresa.objects.all()}
+    filas = [facturacion.autorrenta_previa(f, cfgs.get(str(f.empresa_id)))
+             for f in FacturaConciliacion.objects.select_related('empresa').filter(pk__in=ids).order_by('fecha', 'id')]
+    return JsonResponse({
+        'ok': True, 'facturas': filas,
+        'base': str(sum(Decimal(r['base']) for r in filas)),
+        'total': str(sum(Decimal(r['valor']) for r in filas)),
+        'listas': sum(1 for r in filas if r['puede']),
+    })
 
 
 @login_required

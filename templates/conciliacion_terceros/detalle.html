@@ -795,6 +795,21 @@
   </div>
 </div>
 
+<div class="modal fade" id="m-aut" tabindex="-1" role="dialog" aria-labelledby="m-aut-t">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="m-aut-t">Así quedaría el asiento</h6>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="m-aut-cuerpo"></div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary" id="m-aut-ok">Registrar</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% if lineas_json %}{{ saldos_manuales|json_script:"saldos-mano-data" }}{{ lineas_json|json_script:"lineas-data" }}{{ catalogo|json_script:"catalogo-data" }}{{ config_facturacion|json_script:"config-fac-data" }}{{ empresas_factura|json_script:"empresas-fac-data" }}{% endif %}
 {% endblock %}
 
@@ -2271,8 +2286,49 @@
           '<td class="acc">' + acc.join('<br>') + '</td></tr>';
       }).join('') + '</tbody></table>');
   }
+  // El asiento de autorretención se ve antes de crearlo: es la única forma de revisarlo sin tenerlo ya en Alegra.
+  var URL_AUT_PREVIA = "{% url 'conciliacion-terceros-facturas-autorrenta-previa' %}";
+  // La tarifa se guarda con tres decimales (1.100) y las fechas en ISO: se muestran como las escribe la gente.
+  function pct(v) { return String(v).replace(/\.?0+$/, '').replace('.', ',') + '%'; }
+  function fechaCorta(v) { var p = String(v).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : String(v); }
+  function verAsiento(id, alConfirmar) {
+    $('#m-aut-cuerpo').html('<div class="text-muted small">Calculando…</div>');
+    $('#m-aut-ok').prop('disabled', true).off('click.aut');
+    $('#m-aut').modal('show');
+    $.ajax({ url: URL_AUT_PREVIA, method: 'POST', headers: { 'X-CSRFToken': CSRF }, contentType: 'application/json',
+             data: JSON.stringify({ ids: [id] }) })
+      .done(function (r) {
+        var f = (r.facturas || [])[0];
+        if (!f) { $('#m-aut-cuerpo').html('<div class="text-danger small">No se pudo calcular el asiento.</div>'); return; }
+        $('#m-aut-cuerpo').html(
+          '<p class="small mb-2">Factura <strong>' + esc(f.numero) + '</strong> de ' + esc(f.identificacion) + ' · ' +
+          esc(f.proyecto) + ' ' + esc(f.negocio_ref) + '.<br>Base <strong>' + fmt.format(Number(f.base)) + '</strong> × ' +
+          pct(f.tarifa) + ' = <strong>' + fmt.format(Number(f.valor)) + '</strong>.</p>' +
+          '<table class="table table-sm table-bordered mb-2"><thead class="thead-light"><tr><th>Cuenta</th>' +
+          '<th class="num">Débito</th><th class="num">Crédito</th></tr></thead><tbody>' +
+          f.partidas.map(function (p) {
+            return '<tr><td><code>' + esc(p.cuenta) + '</code> ' + esc(p.nombre) + '</td><td class="num">' +
+              (Number(p.debito) ? fmt.format(Number(p.debito)) : '') + '</td><td class="num">' +
+              (Number(p.credito) ? fmt.format(Number(p.credito)) : '') + '</td></tr>';
+          }).join('') + '</tbody></table>' +
+          '<p class="small text-muted mb-0">Las dos partidas van a nombre de ' + esc(f.empresa) + '. Fecha del asiento: ' +
+          fechaCorta(f.fecha) + ' (hoy), no la de la factura (' + fechaCorta(f.fecha_factura) + '). Referencia <code>' +
+          esc(f.referencia) + '</code>, que evita registrarlo dos veces.</p>' +
+          ((f.avisos || []).length ? '<div class="alert alert-warning py-2 small mt-2 mb-0">' +
+            esc(f.avisos.join(' ')) + '</div>' : ''));
+        $('#m-aut-ok').prop('disabled', !f.puede)
+          .on('click.aut', function () { $('#m-aut').modal('hide'); alConfirmar(); });
+      })
+      .fail(function (x) {
+        $('#m-aut-cuerpo').html('<div class="text-danger small">' +
+          esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo calcular el asiento.') + '</div>');
+      });
+  }
+
   $('#m-linea').on('click', '.fac-acc', function () {
     var acc = $(this).data('acc');
+    var $boton = $(this);
+    if (acc === 'autorrenta') { verAsiento($boton.data('id'), function () { pasoFactura($boton, acc); }); return; }
     var txt = { emitir: '¿Emitir la factura ante la DIAN? Es un cambio inmediato en producción.',
                 costo: '¿Registrar en Alegra el asiento de costo (costo de venta contra inventario)?\nAntes de crearlo se verifica que no exista ya.',
                 cruzar: '¿Registrar en Alegra el comprobante de cruce del anticipo?\nAntes de crearlo se verifica que no exista ya.',
@@ -2281,7 +2337,11 @@
                 verificar: '¿Consultar la factura en Alegra?\nSi allá está anulada (o el borrador se eliminó), el registro se anula aquí y deja de contar.',
                 anular: '¿Anular el registro de esta factura?' }[acc];
     if (!confirm(txt)) return;
-    var $b = $(this), txtOrig = $(this).text();
+    pasoFactura($(this), acc);
+  });
+
+  function pasoFactura($b, acc) {
+    var txtOrig = $b.text();
     if ($b.prop('disabled')) return;
     $b.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-1"></i>Enviando…');
     $.ajax({ url: URL_FAC_ACC.replace('__ID__', $b.data('id')).replace('__ACC__', acc), method: 'POST', headers: { 'X-CSRFToken': CSRF } })
@@ -2298,7 +2358,7 @@
         });
       })
       .fail(function (x) { alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo completar la acción.'); $b.prop('disabled', false).text(txtOrig); });
-  });
+  }
 
   // ---- Corrección de identificación ----
   var URL_CORR_PREVIA = "{% url 'conciliacion-terceros-correccion-previa' conciliacion.pk %}";

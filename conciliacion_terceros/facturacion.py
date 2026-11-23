@@ -114,14 +114,16 @@ def autorrenta_valor(total, tarifa):
     return (Decimal(total or 0) * Decimal(tarifa or 0) / 100).quantize(PESO, rounding=ROUND_HALF_UP)
 
 
-ESTADOS_FACTURADA = (FacturaConciliacion.ESTADO_EMITIDA, FacturaConciliacion.ESTADO_REGISTRADA)
+def autorrenta_aplica(f):
+    """Solo las facturas que este módulo emitió en Alegra llevan el asiento de autorretención. Las informativas se
+    emitieron por fuera, así que su autorretención se liquida donde se emitieron: registrarla aquí la duplicaría."""
+    return f.tipo == FacturaConciliacion.TIPO_ALEGRA and f.estado == FacturaConciliacion.ESTADO_EMITIDA
 
 
 def autorrenta_pendiente(f, cfg_emp=None):
-    """Lo que falta autorretener de esta factura, o 0 si no aplica. Aplica a toda factura ya emitida —la creada en
-    Alegra y la informativa, que también es un ingreso— de una empresa con autorretención configurada. El cálculo es
-    en vivo: basta configurar la tarifa para que las facturas de antes queden pendientes y se puedan registrar."""
-    if f.estado not in ESTADOS_FACTURADA or f.autorrenta_estado != FacturaConciliacion.CRUCE_PENDIENTE:
+    """Lo que falta autorretener de esta factura, o 0 si no aplica. El cálculo es en vivo: basta configurar la
+    tarifa de la empresa para que las facturas emitidas antes queden pendientes y se puedan registrar."""
+    if not autorrenta_aplica(f) or f.autorrenta_estado != FacturaConciliacion.CRUCE_PENDIENTE:
         return Decimal(0)
     if not getattr(f.empresa, 'alegra_enabled', False):
         return Decimal(0)  # sin Alegra el asiento se hace a mano
@@ -498,8 +500,8 @@ def _encadenar(f, config, usuario):
 
 def siguiente_paso(f, cfg_emp=None):
     """Lo que le falta a una factura, en orden: 'enviar', 'costo', 'cruzar', 'autorrenta' o '' si no falta nada
-    (o si lo que sigue depende de una acción del usuario, como emitir un borrador). La autorretención es el único
-    paso que también tienen las informativas: su asiento no depende de que la factura se haya creado en Alegra."""
+    (o si lo que sigue depende de una acción del usuario, como emitir un borrador). Una informativa no tiene pasos:
+    se emitió por fuera y aquí solo queda registrada."""
     if f.estado == FacturaConciliacion.ESTADO_ANULADA:
         return ''
 
@@ -507,7 +509,7 @@ def siguiente_paso(f, cfg_emp=None):
         return 'autorrenta' if not f.error_autorrenta and autorrenta_pendiente(f, cfg_emp) > 0 else ''
 
     if f.tipo != FacturaConciliacion.TIPO_ALEGRA:
-        return autorrenta()
+        return ''
     if f.estado in (FacturaConciliacion.ESTADO_PENDIENTE, FacturaConciliacion.ESTADO_ERROR) and not f.error:
         return 'enviar'
     if f.estado != FacturaConciliacion.ESTADO_EMITIDA:
@@ -705,6 +707,41 @@ def cruzar(f, config):
     return f
 
 
+def autorrenta_previa(f, cfg_emp=None, fecha=None):
+    """Cómo quedaría el asiento de autorretención de esta factura, sin enviar nada: las dos partidas con su cuenta
+    y su valor, la base, la tarifa y la fecha. Es lo que se le muestra a quien va a registrarlo."""
+    cfg_emp = cfg_emp if cfg_emp is not None else config_empresa(f.empresa_id)
+    valor = autorrenta_pendiente(f, cfg_emp)
+    tarifa = cfg_emp.autorrenta_tarifa if cfg_emp else Decimal(0)
+    fecha = fecha or timezone.localdate()
+    desc = (f'Autorretención de renta {tarifa}% · {f.proyecto} {f.negocio_ref} · factura '
+            f'{f.numero or "#" + str(f.pk)}')
+    avisos = []
+    if not (cfg_emp and cfg_emp.autorrenta_activa):
+        avisos.append(f'{f.empresa.nombre} no tiene lista la autorretención: '
+                      + ', '.join(cfg_emp.autorrenta_faltantes() if cfg_emp else ['tarifa', 'cuentas']) + '.')
+    if not autorrenta_aplica(f):
+        avisos.append('Solo llevan asiento las facturas emitidas en Alegra desde aquí.')
+    if f.autorrenta_estado == FacturaConciliacion.CRUCE_REGISTRADO:
+        avisos.append(f'Ya tiene su asiento registrado (${f.autorrenta:,.0f}).')
+    return {
+        'id': f.pk, 'numero': f.numero or f'#{f.pk}', 'identificacion': f.identificacion, 'nombre': f.nombre,
+        'proyecto': f.proyecto, 'negocio_ref': f.negocio_ref, 'empresa': f.empresa.nombre,
+        'base': str(f.total), 'tarifa': str(tarifa), 'valor': str(valor), 'fecha': fecha.isoformat(),
+        'fecha_factura': f.fecha.isoformat(), 'referencia': f'AUTORRENTA-FC-{f.pk}', 'descripcion': desc,
+        'partidas': [
+            {'cuenta': cfg_emp.autorrenta_cuenta_anticipo_codigo if cfg_emp else '',
+             'nombre': cfg_emp.autorrenta_cuenta_anticipo_nombre if cfg_emp else '',
+             'debito': str(valor), 'credito': '0'},
+            {'cuenta': cfg_emp.autorrenta_cuenta_pasivo_codigo if cfg_emp else '',
+             'nombre': cfg_emp.autorrenta_cuenta_pasivo_nombre if cfg_emp else '',
+             'debito': '0', 'credito': str(valor)},
+        ],
+        'avisos': avisos,
+        'puede': not avisos and valor > 0,
+    }
+
+
 def registrar_autorrenta(f, cfg_emp=None, fecha=None):
     """Paso 4: asiento de autorretención de renta (débito al anticipo de renta, crédito a autorretenciones por
     pagar), los dos a nombre de la empresa, igual que el costo. La base es el total facturado y la tarifa la de la
@@ -715,8 +752,9 @@ def registrar_autorrenta(f, cfg_emp=None, fecha=None):
         faltan = cfg_emp.autorrenta_faltantes() if cfg_emp else ['tarifa', 'cuentas']
         raise FacturacionError(f'{f.empresa.nombre} no tiene lista la autorretención: falta {", ".join(faltan)}. '
                                'Se configura una vez por empresa en la pantalla de facturación.')
-    if f.estado not in ESTADOS_FACTURADA:
-        raise FacturacionError('La autorretención se registra cuando la factura ya está emitida.')
+    if not autorrenta_aplica(f):
+        raise FacturacionError('La autorretención se registra sobre una factura emitida en Alegra desde aquí. '
+                               'La de una factura informativa se liquida donde se emitió.')
     if f.autorrenta_estado != FacturaConciliacion.CRUCE_PENDIENTE:
         return f
     valor = autorrenta_valor(f.total, cfg_emp.autorrenta_tarifa)

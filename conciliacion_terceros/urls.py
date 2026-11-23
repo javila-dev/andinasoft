@@ -10,6 +10,7 @@ urlpatterns = [
     path('facturas/', views.facturas, name='conciliacion-terceros-facturas'),
     path('facturas/por-facturar', views.facturas_por_facturar, name='conciliacion-terceros-por-facturar'),
     path('facturas/nueva', views.factura_nueva, name='conciliacion-terceros-factura-nueva'),
+    path('facturas/autorrenta-previa', views.facturas_autorrenta_previa, name='conciliacion-terceros-facturas-autorrenta-previa'),
     path('facturas/autorrenta-lote', views.facturas_autorrenta_lote, name='conciliacion-terceros-facturas-autorrenta-lote'),
     path('facturas/<int:factura_id>/<str:accion>', views.facturas_accion, name='conciliacion-terceros-facturas-accion'),
     path('cuentas-alegra', views.cuentas_alegra, name='conciliacion-terceros-cuentas-alegra'),

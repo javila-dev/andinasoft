@@ -237,6 +237,23 @@
 
   <form id="csrf-form">{% csrf_token %}</form>
 </div>
+
+<div class="modal fade" id="m-aut" tabindex="-1" role="dialog" aria-labelledby="m-aut-t">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="m-aut-t">Así quedaría el asiento</h6>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+      </div>
+      <div class="modal-body" id="m-aut-cuerpo"></div>
+      <div class="modal-footer py-2">
+        <span class="small text-muted mr-auto" id="m-aut-pie"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary" id="m-aut-ok">Registrar</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block jsbottom %}
@@ -244,6 +261,7 @@
 (function () {
   var URL_ACC = "{% url 'conciliacion-terceros-facturas-accion' 0 'X' %}".replace('/0/X', '/__ID__/__ACC__');
   var URL_LOTE = "{% url 'conciliacion-terceros-facturas-autorrenta-lote' %}";
+  var URL_PREVIA = "{% url 'conciliacion-terceros-facturas-autorrenta-previa' %}";
   var TOKEN = $('#csrf-form [name=csrfmiddlewaretoken]').val();
   var fmt = new Intl.NumberFormat('es-CO');
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
@@ -252,6 +270,12 @@
   $('.fc-tabla').on('click', '.fc-accion', function () {
     var $b = $(this), $tr = $b.closest('tr'), id = $tr.data('id'), acc = $b.data('accion');
     if (acc === 'emitir' && !confirm('Se emite la factura ante la DIAN. ¿Seguir?')) return;
+    // La autorretención se muestra antes de mandarla: el asiento no se ve en ninguna otra parte hasta que existe.
+    if (acc === 'autorrenta') { verAsiento([id], function () { enviarPaso($b, $tr, id, acc); }); return; }
+    enviarPaso($b, $tr, id, acc);
+  });
+
+  function enviarPaso($b, $tr, id, acc) {
     $b.prop('disabled', true).text('enviando…');
     $.ajax({ url: URL_ACC.replace('__ID__', id).replace('__ACC__', acc), method: 'POST', headers: { 'X-CSRFToken': TOKEN } })
       .done(function (r) {
@@ -271,7 +295,68 @@
         alert((x.responseJSON && x.responseJSON.detail) || 'No se pudo registrar.');
         $b.prop('disabled', false).text(acc === 'emitir' ? 'emitir' : 'registrar');
       });
-  });
+  }
+
+  // --- previsualización del asiento de autorretención ---
+  // La tarifa se guarda con tres decimales (1.100) y las fechas en ISO: se muestran como las escribe la gente.
+  function pct(v) { return String(v).replace(/\.?0+$/, '').replace('.', ',') + '%'; }
+  function fechaCorta(v) { var p = String(v).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : String(v); }
+  function filaPartidas(f) {
+    return '<table class="table table-sm table-bordered mb-2"><thead class="thead-light"><tr><th>Cuenta</th>' +
+      '<th class="num">Débito</th><th class="num">Crédito</th></tr></thead><tbody>' +
+      f.partidas.map(function (p) {
+        return '<tr><td><code>' + esc(p.cuenta) + '</code> ' + esc(p.nombre) + '</td>' +
+          '<td class="num">' + (Number(p.debito) ? '$' + fmt.format(Number(p.debito)) : '') + '</td>' +
+          '<td class="num">' + (Number(p.credito) ? '$' + fmt.format(Number(p.credito)) : '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  function verAsiento(ids, alConfirmar) {
+    $('#m-aut-cuerpo').html('<div class="text-muted small">Calculando…</div>');
+    $('#m-aut-pie').text(''); $('#m-aut-ok').prop('disabled', true).off('click.aut');
+    $('#m-aut').modal('show');
+    $.ajax({ url: URL_PREVIA, method: 'POST', headers: { 'X-CSRFToken': TOKEN }, contentType: 'application/json',
+             data: JSON.stringify({ ids: ids }) })
+      .done(function (r) {
+        var fs = r.facturas || [], listas = r.listas || 0, h = '';
+        if (fs.length === 1) {
+          var f = fs[0];
+          h += '<p class="small mb-2">Factura <strong>' + esc(f.numero) + '</strong> de ' + esc(f.identificacion) + ' ' +
+            esc(f.nombre) + ' · ' + esc(f.proyecto) + ' ' + esc(f.negocio_ref) + '.<br>' +
+            'Base <strong>$' + fmt.format(Number(f.base)) + '</strong> × ' + pct(f.tarifa) +
+            ' = <strong>$' + fmt.format(Number(f.valor)) + '</strong>.</p>' + filaPartidas(f) +
+            '<p class="small text-muted mb-0">Las dos partidas van a nombre de ' + esc(f.empresa) +
+            '. Fecha del asiento: ' + fechaCorta(f.fecha) + ' (hoy), no la de la factura (' + fechaCorta(f.fecha_factura) + '). ' +
+            'Referencia <code>' + esc(f.referencia) + '</code>, que evita registrarlo dos veces.</p>';
+        } else {
+          h += '<p class="small mb-2">Un asiento por factura, cada uno con la misma estructura: débito al anticipo de ' +
+            'renta y crédito a autorretenciones por pagar, a nombre de la empresa y con la fecha de hoy.</p>' +
+            '<table class="table table-sm table-bordered"><thead class="thead-light"><tr><th>Factura</th><th>Tercero</th>' +
+            '<th class="num">Base</th><th class="num">Tarifa</th><th class="num">Autorretención</th></tr></thead><tbody>' +
+            fs.map(function (f) {
+              return '<tr' + (f.puede ? '' : ' class="text-muted"') + '><td>' + esc(f.numero) + '</td><td>' +
+                esc(f.identificacion) + '</td><td class="num">$' + fmt.format(Number(f.base)) + '</td>' +
+                '<td class="num">' + pct(f.tarifa) + '</td>' +
+                '<td class="num">$' + fmt.format(Number(f.valor)) + '</td></tr>';
+            }).join('') + '</tbody><tfoot><tr><th colspan="2">Total</th><th class="num">$' + fmt.format(Number(r.base)) +
+            '</th><th></th><th class="num">$' + fmt.format(Number(r.total)) + '</th></tr></tfoot></table>' +
+            (fs.length ? filaPartidas(fs[0]).replace('<table', '<table title="Estructura de cada asiento"') : '');
+        }
+        var avisos = fs.filter(function (f) { return (f.avisos || []).length; });
+        if (avisos.length) {
+          h += '<div class="alert alert-warning py-2 small mb-0">' + avisos.map(function (f) {
+            return '<div><strong>' + esc(f.numero) + ':</strong> ' + esc((f.avisos || []).join(' ')) + '</div>';
+          }).join('') + '</div>';
+        }
+        $('#m-aut-cuerpo').html(h);
+        $('#m-aut-pie').text(listas === fs.length ? '' : listas + ' de ' + fs.length + ' se pueden registrar.');
+        $('#m-aut-ok').prop('disabled', !listas).text(listas > 1 ? 'Registrar ' + listas + ' asientos' : 'Registrar')
+          .on('click.aut', function () { $('#m-aut').modal('hide'); alConfirmar(); });
+      })
+      .fail(function (x) {
+        $('#m-aut-cuerpo').html('<div class="text-danger small">' +
+          esc((x.responseJSON && x.responseJSON.detail) || 'No se pudo calcular el asiento.') + '</div>');
+      });
+  }
 
   // --- lote de autorretención: tandas cortas, cada factura son dos llamadas a Alegra ---
   function seleccionadas() { return $('.sel-fila:checked').map(function () { return Number(this.value); }).get(); }
@@ -284,10 +369,14 @@
   $('.fc-tabla').on('change', '.sel-fila', actualizarLote);
 
   $('#lote-ir').on('click', function () {
-    var ids = seleccionadas(), total = ids.length;
-    if (!total) return;
-    if (!confirm('Se registra un asiento de autorretención por cada una de las ' + total + ' factura(s), con la fecha de hoy. ¿Seguir?')) return;
-    var $b = $(this).prop('disabled', true), hechas = 0, fallas = [];
+    var ids = seleccionadas();
+    if (!ids.length) return;
+    verAsiento(ids, function () { registrarLote(ids); });
+  });
+
+  function registrarLote(ids) {
+    var total = ids.length;
+    var $b = $('#lote-ir').prop('disabled', true), hechas = 0, fallas = [];
     $('#sel-todas').prop('disabled', true);
     (function tanda() {
       var lote = ids.splice(0, 5);
@@ -320,7 +409,7 @@
           $b.prop('disabled', false); $('#sel-todas').prop('disabled', false);
         });
     })();
-  });
+  }
 
 })();
 </script>
