@@ -1300,7 +1300,11 @@ def correccion_revertir(request, pk, correccion_id):
 @login_required
 @require_http_methods(['GET'])
 def buscar_tercero(request, pk):
-    """Busca terceros por Id o nombre: primero en la conciliación (con su estado) y luego en clientes de Andinasoft."""
+    """
+    Busca terceros por Id o nombre, en este orden: la conciliación (con su estado), las empresas del grupo y los
+    clientes de Andinasoft. Las empresas van aquí porque su propio NIT es un tercero como cualquier otro en la
+    contabilidad: es a donde se llevan los sobrantes que después se ajustan, y no está en la tabla de clientes.
+    """
     _guard(request)
     conc = get_object_or_404(Conciliacion, pk=pk)
     q = (request.GET.get('q') or '').strip()
@@ -1316,6 +1320,16 @@ def buscar_tercero(request, pk):
         resultados.append({'identificacion': l.identificacion, 'nombre': l.nombre, 'estado': l.estado,
                            'andina': str(l.saldo_andina), 'contable': str(l.saldo_contable), 'diferencia': str(l.diferencia),
                            'cuentas': l.cuentas, 'en_conciliacion': True})
+    filtro_e = Q(nombre__icontains=q)
+    if ident:
+        filtro_e |= Q(Nit__startswith=ident)
+    for e in empresas.objects.filter(filtro_e).order_by('nombre')[:10]:
+        k = norm_ident(e.pk)
+        if k in vistos:
+            continue
+        vistos.add(k)
+        resultados.append({'identificacion': k, 'nombre': e.nombre, 'estado': '', 'andina': '0', 'contable': '0',
+                           'diferencia': '0', 'cuentas': [], 'en_conciliacion': False, 'empresa': True})
     filtro_c = Q(nombrecompleto__icontains=q)
     if ident:
         filtro_c |= Q(idTercero__startswith=ident)
@@ -1325,7 +1339,7 @@ def buscar_tercero(request, pk):
             continue
         vistos.add(k)
         resultados.append({'identificacion': k, 'nombre': c.nombrecompleto, 'estado': '', 'andina': '0', 'contable': '0',
-                           'diferencia': '0', 'cuentas': [], 'en_conciliacion': False})
+                           'diferencia': '0', 'cuentas': [], 'en_conciliacion': False, 'empresa': False})
     return JsonResponse({'resultados': resultados[:20]})
 
 

@@ -1443,7 +1443,9 @@
     var selO = primera ? keyC(primera) : '';
     var selD = aj.modo === 'tercero' ? selO : '';
     var celT = aj.modo === 'tercero'
-      ? '<td><strong>' + esc(t.ident) + '</strong> ' + esc(t.nombre) + (t.estado ? '<br><small><span class="ct-dot st-' + t.estado + '"></span>' + esc(ESTADOS[t.estado]) + '</small>' : '<br><small class="text-muted">Sin línea en la conciliación</small>') + '</td>'
+      ? '<td><strong>' + esc(t.ident) + '</strong> ' + esc(t.nombre) +
+        (t.estado ? '<br><small><span class="ct-dot st-' + t.estado + '"></span>' + esc(ESTADOS[t.estado]) + '</small>'
+                  : '<br><small class="text-muted">' + (t.empresa ? 'Empresa del grupo: su propio NIT' : 'Sin línea en la conciliación') + '</small>') + '</td>'
       : '<td class="text-muted small">Mismo tercero</td>';
     var celS = '<td class="aj-saldo"' + (aj.modo === 'tercero' ? '' : ' style="display:none"') + '></td>';
     // Cruce: la otra cuenta no hace parte de la conciliación. Con Alegra se elige de sus cuentas; sin Alegra se escribe.
@@ -1660,7 +1662,7 @@
         $('#m-aj-res').show().html(res.length ? res.map(function (x, i) {
           return '<div class="item" data-i="' + i + '" tabindex="0" role="button" aria-label="Elegir ' + esc(x.identificacion + ' ' + x.nombre) + '"><span><strong>' + esc(x.identificacion) + '</strong> ' + esc(x.nombre) + '</span><span class="text-nowrap">' +
             (x.en_conciliacion ? '<span class="ct-dot st-' + x.estado + '"></span>' + esc(ESTADOS[x.estado]) + ' · contable ' + fmt.format(Number(x.contable)) + ' · Andinasoft ' + fmt.format(Number(x.andina))
-                               : '<span class="text-muted">Sin línea en la conciliación</span>') + '</span></div>';
+                               : '<span class="text-muted">' + (x.empresa ? 'Empresa del grupo · su propio NIT' : 'Sin línea en la conciliación') + '</span>') + '</span></div>';
         }).join('') : '<div class="item text-muted">Sin resultados</div>').data('res', res);
       });
     }, 250);
@@ -1668,7 +1670,8 @@
   $('#m-aj-res').on('click', '.item[data-i]', function () {
     var x = $('#m-aj-res').data('res')[$(this).data('i')];
     var local = BY_IDENT[x.identificacion];
-    filaAjuste({ ident: x.identificacion, nombre: x.nombre, estado: x.estado, cuentas: local ? local.cuentas : x.cuentas,
+    filaAjuste({ ident: x.identificacion, nombre: x.nombre, estado: x.estado, empresa: x.empresa,
+                 cuentas: local ? local.cuentas : x.cuentas,
                  contable: local ? local.contable : x.contable, andina: local ? local.andina : x.andina });
     $('#m-aj-q').val(''); $('#m-aj-res').hide().empty();
   });
