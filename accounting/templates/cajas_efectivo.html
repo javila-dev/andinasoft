@@ -2067,6 +2067,10 @@
       $('#btn-create-partner').addClass('disabled')
       .html('<i class="fas fa-spinner fa-pulse">')
       let data = new FormData(this)
+      // El token del HTML queda viejo si la cookie rota con la página abierta
+      // (p. ej. un nuevo inicio de sesión); la cookie siempre es la vigente.
+      const csrf = getCookie('csrftoken')
+      if (csrf) data.set('csrfmiddlewaretoken', csrf)
       data.append('todo','create')
       $.ajax({
         type:'POST',

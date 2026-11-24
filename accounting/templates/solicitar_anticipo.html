@@ -733,6 +733,10 @@
         $('#btn-create-partner').addClass('disabled')
         .html('<i class="fas fa-spinner fa-pulse">')
         let data = new FormData(this)
+        // El token del HTML queda viejo si la cookie rota con la página abierta
+        // (p. ej. un nuevo inicio de sesión); la cookie siempre es la vigente.
+        const csrf = getCookie('csrftoken')
+        if (csrf) data.set('csrfmiddlewaretoken', csrf)
         data.append('todo','create')
         $.ajax({
           type:'POST',
@@ -1085,9 +1089,15 @@
         $('#modalLegalizarAnticipo').modal('hide')
         $("#modalcreatepartner").modal('show')
       })
+      // Mientras se crea un tercero desde "Registrar gasto", ese modal se
+      // oculta solo para dar paso al de tercero: no debe reabrir "Legalizar
+      // anticipo" ni borrar lo que ya se diligenció.
+      let creandoTerceroDesdeGasto = false
       $('#id_nit_tercero').on('fstadd', function(){
-        $('#modalNuevaLegalizacion').modal('hide')
-        $('#modalcreatepartner').modal('show')
+        creandoTerceroDesdeGasto = true
+        $('#modalNuevaLegalizacion')
+          .one('hidden.bs.modal', function(){ $('#modalcreatepartner').modal('show') })
+          .modal('hide')
       })
       $('#btn-change-concept').click(function(e){
         let row = table_legalizacion.row('.selected').data()
@@ -1203,6 +1213,7 @@
       })
       
       $('#modalNuevaLegalizacion').on('hidden.bs.modal',function(e){
+        if (creandoTerceroDesdeGasto) return
         $('#modalLegalizarAnticipo').modal('show')
         $('#form-legalizar-anticipo').trigger('reset')
 
@@ -1211,6 +1222,8 @@
         $('#modalLegalizarAnticipo').modal('show')
       })
       $("#modalcreatepartner").on('hidden.bs.modal',function(e){
+        if (!creandoTerceroDesdeGasto) return
+        creandoTerceroDesdeGasto = false
         $("#modalNuevaLegalizacion").modal('show')
       })
 
