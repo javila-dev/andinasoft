@@ -45,7 +45,8 @@
               <td><code>{{ f.codigo }}</code></td>
               <td>{{ f.nombre }}{% if f.nueva %} <span class="badge badge-warning" title="No estaba en la selección anterior de esta empresa">nueva</span>{% endif %}</td>
               <td class="num">{{ f.terceros }}</td>
-              <td class="num">${{ f.saldo|floatformat:0|intcomma }}</td>
+              <td class="num">${{ f.saldo|floatformat:0|intcomma }}{% if f.sin_tercero > 1 or f.sin_tercero < -1 %}
+                <span class="badge badge-light border text-muted" title="En Alegra hay ${{ f.sin_tercero|floatformat:0|intcomma }} en esta cuenta sin tercero: esa plata no entra en la conciliación hasta que alguien la asigne.">${{ f.sin_tercero|floatformat:0|intcomma }} sin tercero</span>{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>

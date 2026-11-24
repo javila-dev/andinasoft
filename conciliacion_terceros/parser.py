@@ -5,7 +5,10 @@ Estructura observada (oct-2026):
 - Filas 1-8: título, empresa, "NIT.xxx", "Desde dd/mm/aaaa Hasta dd/mm/aaaa", cuenta filtrada, fecha de generación.
 - Encabezado: Nivel | Código | Cuenta contable | Identificación | Nombre del tercero | Saldo anterior | Débito | Crédito | Saldo final
 - Niveles: "> > > Cuenta", "> > > > Subcuenta", "> > > > > Total Auxiliar" (total por cuenta), "> > > > > Auxiliar" (tercero).
-El saldo crédito viene positivo. Se valida que la suma de terceros cuadre con el "Total Auxiliar".
+El reporte es un árbol: los ">" dicen qué tan adentro va la fila. Un "Total Auxiliar" puede tener terceros
+propios ("Auxiliar", a su misma profundidad) y subcuentas ("Total Auxiliar" un nivel más adentro), así que su
+saldo incluye el de las subcuentas. El saldo crédito viene positivo. Se valida que la suma de los terceros de
+cada cuenta cuadre con lo que tiene a su nombre (su total menos el de sus subcuentas).
 """
 import datetime
 import re
@@ -24,12 +27,17 @@ class BalanceParseError(Exception):
 class CuentaBalance:
     codigo: str
     nombre: str
-    total: Decimal = None
+    total: Decimal = None          # lo que la cuenta tiene a su nombre, sin el saldo de sus subcuentas
     terceros: 'OrderedDict[str, dict]' = field(default_factory=OrderedDict)
 
     @property
     def suma(self):
         return sum((t['saldo'] for t in self.terceros.values()), Decimal('0'))
+
+    @property
+    def sin_tercero(self):
+        """Saldo de la cuenta que en Alegra no quedó a nombre de nadie: no se puede conciliar."""
+        return (self.total or Decimal('0')) - self.suma
 
 
 @dataclass
@@ -85,31 +93,49 @@ def parse_balance(path):
     if not hasta:
         raise BalanceParseError('No se encontró el rango "Desde ... Hasta ..." en el encabezado del archivo.')
 
-    cuentas = OrderedDict()
+    filas = []
     for row in rows[header_idx + 1:]:
         if not row or not row[0]:
             continue
         nivel = str(row[0]).strip()
-        codigo = str(row[1] or '').strip()
-        if not codigo:
+        clase = 'total' if nivel.endswith('Total Auxiliar') else ('tercero' if nivel.endswith('Auxiliar') else '')
+        if not clase:
             continue
-        if nivel.endswith('Total Auxiliar'):
-            cta = cuentas.setdefault(codigo, CuentaBalance(codigo, str(row[2] or '').strip()))
-            cta.total = _dec(row[8])
-        elif nivel.endswith('Auxiliar'):
-            cta = cuentas.setdefault(codigo, CuentaBalance(codigo, str(row[2] or '').strip()))
-            ident = norm_ident(row[3]) or f'SIN-ID-{len(cta.terceros) + 1}'
+        filas.append({'prof': nivel.count('>'), 'clase': clase, 'codigo': str(row[1] or '').strip(),
+                      'nombre': str(row[2] or '').strip(), 'ident': row[3],
+                      'tercero': str(row[4] or '').strip(), 'saldo': _dec(row[8])})
+
+    cuentas = OrderedDict()
+    for i, fila in enumerate(filas):
+        if fila['clase'] != 'total' or not fila['codigo']:
+            continue
+        propios, hijos = [], Decimal('0')
+        for sig in filas[i + 1:]:
+            if sig['prof'] < fila['prof'] or (sig['prof'] == fila['prof'] and sig['clase'] == 'total'):
+                break  # terminó la rama de esta cuenta
+            if sig['prof'] == fila['prof'] and sig['clase'] == 'tercero':
+                propios.append(sig)
+            elif sig['prof'] == fila['prof'] + 1 and sig['clase'] == 'total':
+                hijos += sig['saldo']
+        saldo_propio = fila['saldo'] - hijos
+        if not propios and saldo_propio == 0:
+            continue  # la cuenta solo agrupa subcuentas: sus terceros están en ellas
+        cta = cuentas.setdefault(fila['codigo'], CuentaBalance(fila['codigo'], fila['nombre']))
+        cta.total = (cta.total or Decimal('0')) + saldo_propio
+        for t in propios:
+            ident = norm_ident(t['ident']) or f'SIN-ID-{len(cta.terceros) + 1}'
             linea = cta.terceros.get(ident)
-            saldo = _dec(row[8])
             if linea:
-                linea['saldo'] += saldo
+                linea['saldo'] += t['saldo']
             else:
-                cta.terceros[ident] = {'identificacion': ident, 'nombre': str(row[4] or '').strip(), 'saldo': saldo}
+                cta.terceros[ident] = {'identificacion': ident, 'nombre': t['tercero'], 'saldo': t['saldo']}
 
     if not cuentas:
         raise BalanceParseError('El archivo no tiene filas de terceros ("Auxiliar").')
     for cta in cuentas.values():
-        if cta.total is not None and abs(cta.suma - cta.total) > Decimal('1'):
+        # Con terceros y sin cuadrar, al archivo le faltan filas. Sin ningún tercero, el saldo existe pero en
+        # Alegra no quedó a nombre de nadie: la cuenta se puede leer, solo que no hay nada que conciliar en ella.
+        if cta.terceros and abs(cta.sin_tercero) > Decimal('1'):
             raise BalanceParseError(
                 f'La cuenta {cta.codigo} no cuadra: suma de terceros {cta.suma:,.2f} vs total {cta.total:,.2f}. '
                 f'¿El archivo está completo?'

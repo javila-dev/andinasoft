@@ -222,6 +222,8 @@ def fuente_cuentas(request, pk, fuente_id):
     recordadas = set(config.cuentas or []) if config else set()
     filas = [{
         'codigo': codigo, 'nombre': cta.nombre, 'terceros': len(cta.terceros), 'saldo': cta.suma,
+        # Saldo que en Alegra no quedó a nombre de nadie: se ve aquí porque esa plata no entra en la conciliación.
+        'sin_tercero': cta.sin_tercero,
         'usar': codigo in marcadas, 'nueva': bool(config) and codigo not in recordadas and not fuente.confirmada,
     } for codigo, cta in balance.cuentas.items()]
     movimientos = incluidos_srv.sugerir(fuente, incluidos_srv.movimientos_en_corte(fuente))
