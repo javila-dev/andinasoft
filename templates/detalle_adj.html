@@ -487,6 +487,9 @@
           <div class="alert alert-warning py-2">
             Selecciona los recibos en orden cronológico (del más antiguo al más reciente). Al reaplicarlos no se cobrará ningún interés de mora.
           </div>
+          <p class="small text-muted mb-2">
+            Marca <strong>Abono a capital</strong> en los recibos que lo sean: se paga lo vencido a la fecha del pago, el resto se abona a capital y el plan se recalcula con la misma cuota y menos plazo.
+          </p>
           <div class="table-responsive" style="max-height: 350px;">
             <table class="table table-sm table-hover mb-0" id="tablaReaplicarRecaudos">
               <thead class="thead-light">
@@ -497,23 +500,27 @@
                   <th>Valor</th>
                   <th>Forma de pago</th>
                   <th>Usuario</th>
+                  <th class="text-center">Abono a capital</th>
                 </tr>
               </thead>
               <tbody>
                 {% for recaudo in recaudos_pendientes %}
-                <tr data-recibo="{{recaudo.numrecibo}}" data-abono-capital="{{recaudo.abono_capital|yesno:'true,false'}}">
+                <tr data-recibo="{{recaudo.numrecibo}}" data-sugerir-abono="{{recaudo.sugerir_abono|yesno:'true,false'}}">
                   <td class="text-center">
-                    <input type="checkbox" class="form-check-input position-static js-reapply-checkbox">
+                    <input type="checkbox" class="form-check-input position-static js-reapply-checkbox" aria-label="Aplicar recibo {{recaudo.numrecibo}}">
                   </td>
                   <td>{{recaudo.numrecibo}}</td>
                   <td>{{recaudo.fecha|date:'d/m/Y'}}</td>
                   <td>$ {{recaudo.valor|floatformat:0|intcomma}}</td>
                   <td>{{recaudo.formapago}}</td>
                   <td>{{recaudo.usuario}}</td>
+                  <td class="text-center">
+                    <input type="checkbox" class="form-check-input position-static js-reapply-abono" aria-label="Aplicar recibo {{recaudo.numrecibo}} como abono a capital">
+                  </td>
                 </tr>
                 {% empty %}
                 <tr>
-                  <td colspan="6" class="text-center text-muted py-4">No hay recaudos pendientes por aplicar.</td>
+                  <td colspan="7" class="text-center text-muted py-4">No hay recaudos pendientes por aplicar.</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -847,6 +854,7 @@
       reapplyState.selectedCount = 0;
       getReapplyRows().each(function(){
         $(this).find('.js-reapply-checkbox').prop('checked', false);
+        $(this).find('.js-reapply-abono').prop('checked', $(this).data('sugerirAbono') === true);
       });
       $btnConfirmReapply.prop('disabled', getReapplyRows().length === 0);
     };
@@ -887,19 +895,21 @@
         return;
       }
       const rows = getReapplyRows().toArray().slice(0, reapplyState.selectedCount);
-      const recibos = rows.map(row => $(row).data('recibo'));
-      const hasAbonoCapital = rows.some(row => $(row).data('abonoCapital') === true);
-      let allowAbono = false;
+      const recibos = rows.map(row => String($(row).data('recibo')));
+      const abonos = rows
+        .filter(row => $(row).find('.js-reapply-abono').is(':checked'))
+        .map(row => String($(row).data('recibo')));
       const $btn = $(this);
-      $btn.prop('disabled', true).text('Procesando...');
-      if (hasAbonoCapital){
-        const confirmed = confirm('Estás a punto de reaplicar abonos a capital. Esta acción ajustará el plan actual. ¿Deseas continuar?');
+      if (abonos.length){
+        const confirmed = confirm(
+          'Los recibos ' + abonos.join(', ') + ' se aplicarán como abono a capital: ' +
+          'se pagará lo vencido a la fecha del pago, el resto se abonará a capital y el plan de pagos se recalculará. ¿Deseas continuar?'
+        );
         if (!confirmed){
-          $btn.text('Reaplicar seleccionados').prop('disabled', false);
           return;
         }
-        allowAbono = true;
       }
+      $btn.prop('disabled', true).text('Procesando...');
       $.ajax({
         type:'POST',
         url: window.location.pathname,
@@ -907,7 +917,7 @@
           'csrfmiddlewaretoken': getCookie('csrftoken'),
           'todo':'reaplicar_recaudos',
           'recibos[]':recibos,
-          'allow_abono_capital': allowAbono ? 'true' : 'false'
+          'abonos[]':abonos
         },
         success: function(response){
           alert(response.message || 'Los recaudos fueron reaplicados correctamente.');

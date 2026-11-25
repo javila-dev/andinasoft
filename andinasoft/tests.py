@@ -1,465 +1,205 @@
 """
-Tests para la funcionalidad de Abono a Capital
+Tests del abono a capital (andinasoft/abono_capital_service.py).
 
-IMPORTANTE: Estos tests usan SOLO MOCKS y NO acceden a ninguna base de datos.
-No se requiere crear bases de datos de prueba ni ejecutar migraciones.
-Los tests son completamente aislados y funcionan sin conexión a BD.
+Solo prueban los cálculos puros, sin BD (SimpleTestCase). El flujo completo contra la
+BD se verifica con scripts en el entorno de desarrollo.
 """
+import random
+from decimal import Decimal
 
 from django.test import SimpleTestCase
-from decimal import Decimal
-import datetime
-from unittest.mock import Mock, patch
 
-from andinasoft.views import _validar_integridad_post_abono, _guardar_recaudo
+from andinasoft.abono_capital_service import (
+    AbonoCapitalError,
+    distribuir_en_vencidas,
+    recalcular_cuotas,
+)
+
+D = Decimal
 
 
-class AbonoCapitalValidacionTestCase(SimpleTestCase):
-    """
-    Tests unitarios para la función _validar_integridad_post_abono
+def _cuota(idcta, cuota, intcte=1, rcdocapital=0, rcdointcte=0):
+    return {'idcta': idcta, 'cuota': D(cuota), 'intcte': D(intcte),
+            'rcdocapital': D(rcdocapital), 'rcdointcte': D(rcdointcte)}
 
-    Usa SOLO MOCKS - No accede a base de datos real
-    No requiere creación de bases de datos de prueba
-    """
 
-    def setUp(self):
-        """Configuración inicial para cada test"""
-        self.proyecto = 'Casas de Verano'
-        self.adj = 'TEST001'
+def _algoritmo_anterior(cuotas, saldo_por_distribuir, tasa):
+    """Copia del recálculo que vivía en views._guardar_recaudo (antes del servicio)."""
+    cambios = []
+    for cta in cuotas:
+        if saldo_por_distribuir <= 0:
+            cambios.append(('delete', cta['idcta']))
+            continue
+        intcte_nuevo = round(saldo_por_distribuir * tasa) if cta['intcte'] > 0 else 0
+        cap_calculado = cta['cuota'] - intcte_nuevo
+        if cap_calculado >= saldo_por_distribuir:
+            capital = saldo_por_distribuir
+            cambios.append(('update', cta['idcta'], capital, intcte_nuevo, capital + intcte_nuevo))
+            saldo_por_distribuir = 0
+        else:
+            cambios.append(('update', cta['idcta'], cap_calculado, intcte_nuevo, cta['cuota']))
+            saldo_por_distribuir -= cap_calculado
+    return cambios
 
-    def test_validacion_exitosa_plan_cuadrado(self):
-        """Test: Validación pasa cuando el plan está perfectamente cuadrado"""
 
-        with patch('andinasoft.views.PlanPagos') as mock_planpagos, \
-             patch('andinasoft.views.Recaudos') as mock_recaudos, \
-             patch('andinasoft.views.saldos_adj') as mock_saldos:
+class RecalcularCuotasTests(SimpleTestCase):
 
-            # Simular capital del plan: 100M
-            mock_planpagos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('100000000')
-            }
+    def test_acorta_plazo_y_cierra_en_la_ultima_cuota(self):
+        cuotas = [_cuota('FN1', 1000), _cuota('FN2', 1000), _cuota('FN3', 1000)]
+        cambios, sobrante = recalcular_cuotas(cuotas, D('1500'), D('0.01'))
+        self.assertEqual(sobrante, 0)
+        self.assertEqual(cambios, [
+            ('update', 'FN1', D('985'), D('15'), D('1000')),
+            ('update', 'FN2', D('515'), D('5'), D('520')),
+            ('delete', 'FN3'),
+        ])
 
-            # Simular capital recaudado: 30M
-            mock_recaudos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('30000000')
-            }
-
-            # Simular saldos_adj coherentes
-            mock_saldos.objects.using.return_value.filter.return_value.aggregate.side_effect = [
-                {'capital__sum': Decimal('100000000')},  # capital total
-                {'rcdocapital__sum': Decimal('30000000')},  # recaudado
-                {'saldocapital__sum': Decimal('70000000')}  # pendiente
-            ]
-
-            # Simular cuotas cuadradas
-            mock_cuota1 = Mock(capital=Decimal('500000'), intcte=Decimal('25000'), cuota=Decimal('525000'))
-            mock_cuota2 = Mock(capital=Decimal('480000'), intcte=Decimal('24000'), cuota=Decimal('504000'))
-            mock_planpagos.objects.using.return_value.filter.return_value.__iter__ = Mock(
-                return_value=iter([mock_cuota1, mock_cuota2])
+    def test_igual_al_algoritmo_anterior_sin_anticipos(self):
+        rnd = random.Random(7)
+        for _ in range(300):
+            tasa = rnd.choice([D('0'), D('0.008'), D('0.0099'), D('0.015'), D('0.02')])
+            cuota = D(rnd.randrange(300_000, 3_000_000))
+            cuotas = [_cuota(f'FN{i}', cuota, intcte=0 if tasa == 0 else 1) for i in range(rnd.randrange(1, 60))]
+            # El saldo debe poder pagarse con esas cuotas (como en un plan real).
+            pendiente = D(rnd.randrange(1, int(cuota * len(cuotas) * D('0.6')) + 2))
+            nuevo, sobrante = recalcular_cuotas(cuotas, pendiente, tasa)
+            if sobrante > 0:
+                continue
+            viejo = _algoritmo_anterior(cuotas, pendiente, tasa)
+            self.assertEqual(
+                [tuple(D(str(x)) if not isinstance(x, str) else x for x in c) for c in viejo],
+                nuevo,
             )
 
-            # Simular que no hay saldos negativos
-            mock_saldos.objects.using.return_value.filter.return_value.exists.return_value = False
-
-            # Ejecutar validación
-            es_valido, errores = _validar_integridad_post_abono(self.proyecto, self.adj)
-
-            # Verificar resultado
-            self.assertTrue(es_valido)
-            self.assertEqual(len(errores), 0)
-
-    def test_validacion_falla_capital_plan_no_coincide(self):
-        """Test: Validación falla cuando el capital del plan no coincide con saldos"""
-
-        with patch('andinasoft.views.PlanPagos') as mock_planpagos, \
-             patch('andinasoft.views.Recaudos') as mock_recaudos, \
-             patch('andinasoft.views.saldos_adj') as mock_saldos:
-
-            # Simular capital del plan: 100M
-            mock_planpagos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('100000000')
-            }
-
-            # Simular capital en saldos: 98M (no coincide!)
-            mock_saldos_filter = Mock()
-            mock_saldos_filter.aggregate.side_effect = [
-                {'capital__sum': Decimal('98000000')},  # capital total en saldos
-                {'rcdocapital__sum': Decimal('30000000')},  # recaudado
-                {'saldocapital__sum': Decimal('68000000')}  # pendiente
-            ]
-            mock_saldos.objects.using.return_value.filter.return_value = mock_saldos_filter
-
-            # Simular capital recaudado
-            mock_recaudos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('30000000')
-            }
-
-            # Simular cuotas cuadradas
-            mock_planpagos.objects.using.return_value.filter.return_value.__iter__ = Mock(
-                return_value=iter([])
-            )
-
-            # Simular que no hay saldos negativos
-            mock_saldos.objects.using.return_value.filter.return_value.exists.return_value = False
-
-            # Ejecutar validación
-            es_valido, errores = _validar_integridad_post_abono(self.proyecto, self.adj)
-
-            # Verificar resultado
-            self.assertFalse(es_valido)
-            self.assertGreater(len(errores), 0)
-            self.assertEqual(errores[0]['code'], 'CAPITAL_PLAN_MISMATCH')
-            self.assertIn('100,000,000', errores[0]['message'])
-            self.assertIn('98,000,000', errores[0]['message'])
-
-    def test_validacion_falla_cuotas_descuadradas(self):
-        """Test: Validación falla cuando hay cuotas descuadradas (capital + interés ≠ cuota)"""
-
-        with patch('andinasoft.views.PlanPagos') as mock_planpagos, \
-             patch('andinasoft.views.Recaudos') as mock_recaudos, \
-             patch('andinasoft.views.saldos_adj') as mock_saldos:
-
-            # Simular capital coherente
-            mock_planpagos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('100000000')
-            }
-
-            mock_recaudos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('30000000')
-            }
-
-            mock_saldos_filter = Mock()
-            mock_saldos_filter.aggregate.side_effect = [
-                {'capital__sum': Decimal('100000000')},
-                {'rcdocapital__sum': Decimal('30000000')},
-                {'saldocapital__sum': Decimal('70000000')}
-            ]
-            mock_saldos.objects.using.return_value.filter.return_value = mock_saldos_filter
-
-            # Simular cuotas DESCUADRADAS
-            mock_cuota1 = Mock(
-                idcta='FN1TEST001',
-                capital=Decimal('500000'),
-                intcte=Decimal('25000'),
-                cuota=Decimal('530000')  # ¡Descuadrada! 500k + 25k = 525k, no 530k
-            )
-            mock_cuota2 = Mock(
-                idcta='FN2TEST001',
-                capital=Decimal('480000'),
-                intcte=Decimal('24000'),
-                cuota=Decimal('504000')  # Cuadrada
-            )
-            mock_planpagos.objects.using.return_value.filter.return_value.__iter__ = Mock(
-                return_value=iter([mock_cuota1, mock_cuota2])
-            )
-
-            # Simular que no hay saldos negativos
-            mock_saldos.objects.using.return_value.filter.return_value.exists.return_value = False
-
-            # Ejecutar validación
-            es_valido, errores = _validar_integridad_post_abono(self.proyecto, self.adj)
-
-            # Verificar resultado
-            self.assertFalse(es_valido)
-            self.assertGreater(len(errores), 0)
-
-            # Buscar el error de cuotas descuadradas
-            error_descuadradas = None
-            for error in errores:
-                if error['code'] == 'CUOTAS_DESCUADRADAS':
-                    error_descuadradas = error
-                    break
-
-            self.assertIsNotNone(error_descuadradas)
-            self.assertEqual(error_descuadradas['code'], 'CUOTAS_DESCUADRADAS')
-            self.assertIn('cuotas', error_descuadradas['data'])
-            self.assertGreater(len(error_descuadradas['data']['cuotas']), 0)
-            self.assertEqual(error_descuadradas['data']['cuotas'][0]['idcta'], 'FN1TEST001')
-
-    def test_validacion_falla_saldo_capital_negativo(self):
-        """Test: Validación falla cuando hay cuotas con saldo de capital negativo"""
-
-        with patch('andinasoft.views.PlanPagos') as mock_planpagos, \
-             patch('andinasoft.views.Recaudos') as mock_recaudos, \
-             patch('andinasoft.views.saldos_adj') as mock_saldos:
-
-            # Simular capital coherente
-            mock_planpagos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('100000000')
-            }
-
-            mock_recaudos.objects.using.return_value.filter.return_value.aggregate.return_value = {
-                'capital__sum': Decimal('30000000')
-            }
-
-            mock_saldos_filter = Mock()
-            mock_saldos_filter.aggregate.side_effect = [
-                {'capital__sum': Decimal('100000000')},
-                {'rcdocapital__sum': Decimal('30000000')},
-                {'saldocapital__sum': Decimal('70000000')}
-            ]
-
-            # Simular cuotas con saldo negativo
-            mock_cuotas_negativas = Mock()
-            mock_cuotas_negativas.exists.return_value = True
-            mock_cuotas_negativas.count.return_value = 2
-            mock_cuotas_negativas.values.return_value = [
-                {'idcta': 'FN5TEST001', 'saldocapital': Decimal('-50000')},
-                {'idcta': 'FN6TEST001', 'saldocapital': Decimal('-25000')}
-            ]
-
-            def filter_side_effect(*args, **kwargs):
-                if 'saldocapital__lt' in kwargs:
-                    return mock_cuotas_negativas
-                return mock_saldos_filter
-
-            mock_saldos.objects.using.return_value.filter.side_effect = filter_side_effect
-
-            # Simular cuotas cuadradas
-            mock_planpagos.objects.using.return_value.filter.return_value.__iter__ = Mock(
-                return_value=iter([])
-            )
-
-            # Ejecutar validación
-            es_valido, errores = _validar_integridad_post_abono(self.proyecto, self.adj)
-
-            # Verificar resultado
-            self.assertFalse(es_valido)
-            self.assertGreater(len(errores), 0)
-
-            # Buscar el error de saldo negativo
-            error_negativo = None
-            for error in errores:
-                if error['code'] == 'SALDO_CAPITAL_NEGATIVO':
-                    error_negativo = error
-                    break
-
-            self.assertIsNotNone(error_negativo)
-            self.assertEqual(error_negativo['code'], 'SALDO_CAPITAL_NEGATIVO')
-            self.assertIn('2 cuotas', error_negativo['message'])
-
-
-class AbonoCapitalIntegracionTestCase(SimpleTestCase):
-    """
-    Tests de integración para la función _guardar_recaudo con abono a capital
-    Usa SOLO MOCKS - No accede a base de datos real
-    No requiere creación de bases de datos de prueba
-    """
-
-    def setUp(self):
-        """Configuración inicial para cada test"""
-        # Crear mock de usuario (no accede a BD)
-        self.user = Mock()
-        self.user.username = 'testuser'
-        self.proyecto = 'Casas de Verano'
-        self.adj = 'TEST001'
-        sin_novacion = patch('andinasoft.views.novacion_pendiente_origen', return_value=None)
-        sin_novacion.start()
-        self.addCleanup(sin_novacion.stop)
-
-    def test_abono_capital_exitoso_simple(self):
-        """Test: Abono a capital exitoso sin cuotas vencidas"""
-
-        # Crear mocks completos
-        with patch('andinasoft.views.proyectos') as mock_proyectos, \
-             patch('andinasoft.views.bk_bfchangeplan') as mock_bk, \
-             patch('andinasoft.views.bk_planpagos') as mock_bk_plan, \
-             patch('andinasoft.views.bk_recaudodetallado') as mock_bk_recaudo, \
-             patch('andinasoft.views.PlanPagos') as mock_planpagos, \
-             patch('andinasoft.views.Recaudos') as mock_recaudos, \
-             patch('andinasoft.views.saldos_adj') as mock_saldos, \
-             patch('andinasoft.views._validar_integridad_post_abono') as mock_validar:
-
-            # Simular validación exitosa
-            mock_validar.return_value = (True, [])
-
-            # Simular proyecto
-            mock_proyecto_obj = Mock()
-            mock_proyectos.objects.get.return_value = mock_proyecto_obj
-
-            # Simular backup
-            mock_bk_obj = Mock()
-            mock_bk.objects.create.return_value = mock_bk_obj
-
-            # Simular plan de pagos vacío (para backup)
-            mock_planpagos.objects.using.return_value.filter.return_value = []
-
-            # Simular recaudos vacíos (para backup)
-            mock_recaudos.objects.using.return_value.filter.return_value = []
-
-            # Simular saldo_cuotas sin cuotas vencidas
-            mock_saldo_cuotas = Mock()
-            mock_saldo_cuotas.filter.return_value = []
-
-            # Simular obj_adj con tasa
-            mock_obj_adj = Mock()
-            mock_obj_adj.tasafnc = Decimal('0.05')
-
-            # Simular form_recibo válido
-            mock_form_recibo = Mock()
-            mock_form_recibo.is_valid.return_value = True
-            mock_form_recibo.cleaned_data = {
-                'abonocapital': True,
-                'fecha': datetime.date.today(),
-                'fecha_pago': datetime.datetime.now(),
-                'forma_pago': 'Efectivo',
-                'condonacion_mora': 'No',
-                'valor': '10000000',
-                'concepto': 'Abono a capital',
-                'condonacion_porc': None,
-                'numsolicitud': None,
-                'movimiento_banco_id': None
-            }
-
-            # Simular consecutivo
-            mock_consecutivo = Mock()
-            mock_consecutivo.consecutivo = 12345
-
-            # Simular titulares
-            mock_titulares = Mock()
-            mock_titulares.IdTercero1 = 'ID123'
-
-            # Ejecutar función
-            context_updates, alerts, should_return = _guardar_recaudo(
-                request=Mock(user=self.user, session={}),
-                proyecto=self.proyecto,
-                adj=self.adj,
-                titulares=mock_titulares,
-                saldo_cuotas=mock_saldo_cuotas,
-                saldos_cuotas=mock_saldo_cuotas,
-                consecutivo=mock_consecutivo,
-                obj_adj=mock_obj_adj,
-                form_recibo=mock_form_recibo,
-                form_token='test_token'
-            )
-
-            # Debug: Ver qué está pasando
-            if should_return:
-                print(f"\nDEBUG - should_return: {should_return}")
-                print(f"DEBUG - alerts: {alerts}")
-                print(f"DEBUG - context_updates: {context_updates}")
-
-            # Verificaciones
-            self.assertFalse(should_return)  # No debe retornar error
-            self.assertTrue(mock_validar.called)  # Debe llamar a validación
-
-            # Verificar que se haya intentado crear el backup
-            self.assertTrue(mock_bk.objects.create.called)
-
-    def test_abono_capital_falla_validacion_rollback_completo(self):
-        """Test: Cuando falla la validación, se hace rollback de TODO"""
-
-        with patch('andinasoft.views.proyectos') as mock_proyectos, \
-             patch('andinasoft.views.bk_bfchangeplan') as mock_bk, \
-             patch('andinasoft.views.bk_planpagos'), \
-             patch('andinasoft.views.bk_recaudodetallado'), \
-             patch('andinasoft.views.PlanPagos') as mock_planpagos, \
-             patch('andinasoft.views.Recaudos') as mock_recaudos, \
-             patch('andinasoft.views._validar_integridad_post_abono') as mock_validar:
-
-            # Simular validación FALLIDA
-            mock_validar.return_value = (False, [
-                {
-                    'code': 'CAPITAL_PLAN_MISMATCH',
-                    'message': 'Capital del plan no coincide',
-                    'severity': 'critical'
-                }
-            ])
-
-            # Simular proyecto
-            mock_proyecto_obj = Mock()
-            mock_proyectos.objects.get.return_value = mock_proyecto_obj
-
-            # Simular backup
-            mock_bk_obj = Mock()
-            mock_bk.objects.create.return_value = mock_bk_obj
-
-            # Simular plan y recaudos vacíos
-            mock_planpagos.objects.using.return_value.filter.return_value = []
-            mock_recaudos.objects.using.return_value.filter.return_value = []
-
-            # Simular saldo_cuotas sin vencidas
-            mock_saldo_cuotas = Mock()
-            mock_saldo_cuotas.filter.return_value = []
-
-            # Simular obj_adj
-            mock_obj_adj = Mock()
-            mock_obj_adj.tasafnc = Decimal('0.05')
-
-            # Simular form válido
-            mock_form_recibo = Mock()
-            mock_form_recibo.is_valid.return_value = True
-            mock_form_recibo.cleaned_data = {
-                'abonocapital': True,
-                'fecha': datetime.date.today(),
-                'fecha_pago': datetime.datetime.now(),
-                'forma_pago': 'Efectivo',
-                'condonacion_mora': 'No',
-                'valor': '10000000',
-                'concepto': 'Abono a capital',
-                'condonacion_porc': None,
-                'numsolicitud': None,
-                'movimiento_banco_id': None
-            }
-
-            mock_consecutivo = Mock()
-            mock_consecutivo.consecutivo = 12345
-
-            mock_titulares = Mock()
-            mock_titulares.IdTercero1 = 'ID123'
-
-            # Ejecutar función
-            context_updates, alerts, should_return = _guardar_recaudo(
-                request=Mock(user=self.user, session={}),
-                proyecto=self.proyecto,
-                adj=self.adj,
-                titulares=mock_titulares,
-                saldo_cuotas=mock_saldo_cuotas,
-                saldos_cuotas=mock_saldo_cuotas,
-                consecutivo=mock_consecutivo,
-                obj_adj=mock_obj_adj,
-                form_recibo=mock_form_recibo,
-                form_token='test_token'
-            )
-
-            # Verificaciones
-            self.assertTrue(should_return)  # Debe retornar para abortar
-            self.assertGreater(len(alerts), 0)  # Debe tener alertas
-            self.assertEqual(alerts[0]['code'], 'ABONO_CAPITAL_VALIDATION_FAILED')
-            self.assertIn('REVERTIDOS', alerts[0]['message'])
-
-            # Verificar mensaje de contexto
-            self.assertIn('alerta', context_updates)
-            self.assertTrue(context_updates['alerta'])
-            self.assertEqual(context_updates['titulo'], 'Abono a capital rechazado')
-
-
-class AbonoCapitalRollbackTestCase(SimpleTestCase):
-    """
-    Tests específicos para verificar el comportamiento de rollback
-    Usa SOLO MOCKS - No accede a base de datos real
-    """
-
-    def test_rollback_no_deja_registros_huerfanos(self):
-        """Test: Si falla el abono, no quedan registros en Recaudos sin Recaudos_general"""
-
-        # Este test verifica que la transacción atómica funciona correctamente
-        # En un caso real, si el abono falla, NO debe haber registros de Recaudos creados
-
-        with patch('andinasoft.views._validar_integridad_post_abono') as mock_validar:
-            # Simular validación fallida
-            mock_validar.return_value = (False, [{'code': 'TEST_ERROR', 'message': 'Test error'}])
-
-            # Simular que se crearon registros en Recaudos dentro de la transacción
-            recaudos_count_antes = 0  # En una BD real, sería Recaudos.objects.count()
-
-            # Intentar guardar con validación fallida
-            # (la transacción hace rollback)
-
-            recaudos_count_despues = 0  # Debe ser igual
-
-            # Verificar que no aumentó el conteo
-            self.assertEqual(recaudos_count_antes, recaudos_count_despues)
-
-
-# Tests para ejecutar: python manage.py test andinasoft.tests
+    def test_respeta_anticipos_y_conserva_el_capital(self):
+        rnd = random.Random(11)
+        for _ in range(300):
+            tasa = rnd.choice([D('0'), D('0.0099'), D('0.015')])
+            cuota = D(rnd.randrange(400_000, 2_000_000))
+            cuotas = []
+            for i in range(rnd.randrange(2, 40)):
+                pc = D(rnd.randrange(0, int(cuota * D('0.5')))) if i == 0 and rnd.random() < 0.7 else D(0)
+                pi = D(rnd.randrange(0, 5000)) if pc else D(0)
+                cuotas.append(_cuota(f'FN{i}', cuota, rcdocapital=pc, rcdointcte=pi))
+            pendiente = D(rnd.randrange(0, int(cuota * len(cuotas) * D('0.5')) + 1))
+            try:
+                cambios, sobrante = recalcular_cuotas(cuotas, pendiente, tasa)
+            except AbonoCapitalError:
+                continue
+            if sobrante > 0:
+                continue
+            por_id = {c['idcta']: c for c in cuotas}
+            capital_total = D(0)
+            for cambio in cambios:
+                cta = por_id[cambio[1]]
+                if cambio[0] == 'delete':
+                    self.assertEqual(cta['rcdocapital'] + cta['rcdointcte'], 0,
+                                     'no se puede borrar una cuota con recaudos')
+                    continue
+                _, _, capital, intcte, valor_cuota = cambio
+                self.assertGreaterEqual(capital, cta['rcdocapital'])
+                self.assertGreaterEqual(intcte, cta['rcdointcte'])
+                self.assertEqual(capital + intcte, valor_cuota)
+                capital_total += capital
+            pagado = sum(c['rcdocapital'] for c in cuotas)
+            self.assertEqual(capital_total, pendiente + pagado)
+
+    def test_sin_saldo_deja_lo_pagado_y_borra_lo_demas(self):
+        cuotas = [_cuota('FN1', 1000, rcdocapital=200, rcdointcte=10), _cuota('FN2', 1000)]
+        cambios, sobrante = recalcular_cuotas(cuotas, D('0'), D('0.01'))
+        self.assertEqual(sobrante, 0)
+        self.assertEqual(cambios, [
+            ('update', 'FN1', D('200'), D('10'), D('210')),
+            ('delete', 'FN2'),
+        ])
+
+    def test_cuota_parcial_calcula_interes_sobre_saldo_al_inicio(self):
+        # FN1 ya tiene 400 de capital anticipado; quedan 1000 por distribuir.
+        cuotas = [_cuota('FN1', 600, rcdocapital=400), _cuota('FN2', 600), _cuota('FN3', 600)]
+        cambios, sobrante = recalcular_cuotas(cuotas, D('1000'), D('0.01'))
+        self.assertEqual(sobrante, 0)
+        # Interés FN1 sobre 1400 = 14; capital 586 (400 ya pagado + 186 nuevo).
+        self.assertEqual(cambios[0], ('update', 'FN1', D('586'), D('14'), D('600')))
+        # Quedan 814: FN2 interés 8, capital 592; quedan 222 -> FN3 cierra.
+        self.assertEqual(cambios[1], ('update', 'FN2', D('592'), D('8'), D('600')))
+        self.assertEqual(cambios[2], ('update', 'FN3', D('222'), D('2'), D('224')))
+
+    def test_cuotas_sin_interes_se_quedan_sin_interes(self):
+        cuotas = [_cuota('CI1', 500, intcte=0), _cuota('FN1', 1000)]
+        cambios, _ = recalcular_cuotas(cuotas, D('800'), D('0.015'))
+        self.assertEqual(cambios[0], ('update', 'CI1', D('500'), D('0'), D('500')))
+
+    def test_cuota_que_no_cubre_el_interes_falla(self):
+        cuotas = [_cuota('FN1', 10)]
+        with self.assertRaises(AbonoCapitalError):
+            recalcular_cuotas(cuotas, D('100000'), D('0.015'))
+
+    def test_cuotas_insuficientes_dejan_sobrante(self):
+        cuotas = [_cuota('FN1', 100, intcte=0)]
+        _, sobrante = recalcular_cuotas(cuotas, D('250'), D('0'))
+        self.assertEqual(sobrante, D('150'))
+
+
+class GuardarRecaudoAbonoTests(SimpleTestCase):
+    """El recibo nuevo marcado como abono delega en el servicio y no se crea si falla."""
+
+    def _guardar(self, **cleaned):
+        from unittest.mock import Mock
+        from andinasoft.views import _guardar_recaudo
+        datos = {
+            'abonocapital': True, 'fecha': '2026-11-25', 'fecha_pago': '2026-11-24',
+            'forma_pago': 'Efectivo', 'condonacion_mora': 'No', 'valor': '5,000,000',
+            'concepto': 'Abono', 'condonacion_porc': None, 'numsolicitud': None,
+        }
+        datos.update(cleaned)
+        form = Mock(cleaned_data=datos)
+        form.is_valid.return_value = True
+        return _guardar_recaudo(
+            request=Mock(session={}), proyecto='Casas de Verano', adj='ADJ1',
+            titulares=Mock(), saldo_cuotas=[], saldos_cuotas=[],
+            consecutivo=Mock(consecutivo=999), obj_adj=Mock(), form_recibo=form, form_token='t',
+        )
+
+    def test_abono_rechazado_no_crea_el_recibo(self):
+        from unittest.mock import patch
+        error = AbonoCapitalError('La validación del plan falló.', [{'message': 'Capital del plan cambió', 'code': 'X'}])
+        with patch('andinasoft.views.novacion_pendiente_origen', return_value=None), \
+             patch('andinasoft.views.validar_recaudo_caja_abierta'), \
+             patch('andinasoft.views.aplicar_abono_capital', side_effect=error) as abono, \
+             patch('andinasoft.views.Recaudos_general') as rg:
+            updates, alerts, should_return = self._guardar()
+        self.assertTrue(should_return)
+        self.assertEqual(alerts[0]['code'], 'ABONO_CAPITAL_VALIDATION_FAILED')
+        self.assertIn('Capital del plan cambió', alerts[0]['message'])
+        self.assertEqual(updates['titulo'], 'Abono a capital rechazado')
+        rg.objects.using.return_value.create.assert_not_called()
+        kwargs = abono.call_args.kwargs
+        self.assertEqual((kwargs['nro_recibo'], kwargs['valor'], kwargs['fecha_corte'], kwargs['cobro_mora']),
+                         ('999', 5000000, '2026-11-24', 1))
+
+
+class DistribuirEnVencidasTests(SimpleTestCase):
+
+    def test_orden_mora_interes_capital_y_sobrante(self):
+        cuotas = [
+            {'idcta': 'FN1', 'saldocapital': D('900'), 'saldointcte': D('100'), 'mora': D('50')},
+            {'idcta': 'FN2', 'saldocapital': D('900'), 'saldointcte': D('100'), 'mora': D('0')},
+        ]
+        lineas, sobrante = distribuir_en_vencidas(cuotas, D('2500'))
+        self.assertEqual(lineas, [
+            {'idcta': 'FN1', 'mora': D('50'), 'interes': D('100'), 'capital': D('900')},
+            {'idcta': 'FN2', 'mora': D('0'), 'interes': D('100'), 'capital': D('900')},
+        ])
+        self.assertEqual(sobrante, D('450'))
+
+    def test_pago_parcial_no_deja_sobrante(self):
+        cuotas = [{'idcta': 'FN1', 'saldocapital': D('900'), 'saldointcte': D('100'), 'mora': D('50')}]
+        lineas, sobrante = distribuir_en_vencidas(cuotas, D('120'))
+        self.assertEqual(lineas, [{'idcta': 'FN1', 'mora': D('50'), 'interes': D('70'), 'capital': D('0')}])
+        self.assertEqual(sobrante, 0)
+
+    def test_saldos_negativos_no_restan(self):
+        cuotas = [{'idcta': 'FN1', 'saldocapital': D('-5'), 'saldointcte': D('0'), 'mora': D('0')}]
+        lineas, sobrante = distribuir_en_vencidas(cuotas, D('100'))
+        self.assertEqual(lineas, [])
+        self.assertEqual(sobrante, D('100'))

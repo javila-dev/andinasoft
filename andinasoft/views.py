@@ -58,6 +58,7 @@ from andinasoft.edades_cartera_service import edades_cartera_snapshot
 from andinasoft.recaudos_terceros_service import informe_recaudos_terceros, excel_recaudos_terceros
 from andinasoft.cartera_gestor_service import asignar_gestor, listar_gestores_opciones
 from andinasoft.estado_cuenta_service import build_estado_cuenta_context
+from andinasoft.abono_capital_service import AbonoCapitalError, aplicar_abono_capital
 from andinasoft.ajuste_capital_service import (
     aplicar_ajuste_valor_a_capital,
     recortar_plan_a_capital_pagado,
@@ -1197,116 +1198,6 @@ def _validar_recaudo_context(request, proyecto, adj, titulares, saldos_cuotas, c
     return context, alerts
 
 
-def _validar_integridad_post_abono(proyecto, adj):
-    """
-    Valida la integridad del plan de pagos DESPUÉS de hacer el abono a capital.
-    Esta función se ejecuta dentro de la transacción, antes del commit.
-
-    Retorna (es_valido, errores[])
-
-    Validaciones:
-    1. Capital del plan debe coincidir con saldos
-    2. Capital recaudado debe coincidir con saldos
-    3. Capital pendiente debe ser coherente
-    4. Todas las cuotas deben estar cuadradas (capital = cuota - interes)
-    """
-    errores = []
-    tolerancia = 1  # 1 peso de tolerancia por redondeos
-
-    # Excluir SF (saldo a favor interno) de validaciones de capital del contrato
-    # 1. Validar coherencia: Capital total del plan
-    cap_plan = PlanPagos.objects.using(proyecto).filter(
-        adj=adj
-    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
-
-    cap_saldos = saldos_adj.objects.using(proyecto).filter(
-        adj=adj
-    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
-
-    if abs(cap_plan - cap_saldos) > tolerancia:
-        errores.append({
-            'code': 'CAPITAL_PLAN_MISMATCH',
-            'message': f'Capital del plan ({cap_plan:,.0f}) no coincide con saldos ({cap_saldos:,.0f}). Diferencia: {abs(cap_plan - cap_saldos):,.0f}',
-            'severity': 'critical',
-            'data': {'cap_plan': float(cap_plan), 'cap_saldos': float(cap_saldos)}
-        })
-
-    # 2. Validar coherencia: Capital recaudado
-    cap_recaudado = Recaudos.objects.using(proyecto).filter(
-        idadjudicacion=adj,
-        estado='Aprobado'
-    ).exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
-
-    cap_rcdo_saldos = saldos_adj.objects.using(proyecto).filter(
-        adj=adj
-    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('rcdocapital'))['rcdocapital__sum'] or 0
-
-    if abs(cap_recaudado - cap_rcdo_saldos) > tolerancia:
-        errores.append({
-            'code': 'CAPITAL_RECAUDADO_MISMATCH',
-            'message': f'Capital recaudado ({cap_recaudado:,.0f}) no coincide con saldos ({cap_rcdo_saldos:,.0f}). Diferencia: {abs(cap_recaudado - cap_rcdo_saldos):,.0f}',
-            'severity': 'critical',
-            'data': {'cap_recaudado': float(cap_recaudado), 'cap_rcdo_saldos': float(cap_rcdo_saldos)}
-        })
-
-    # 3. Validar coherencia: Capital pendiente
-    cap_pdte_calculado = cap_plan - cap_recaudado
-    cap_pdte_saldos = saldos_adj.objects.using(proyecto).filter(
-        adj=adj
-    ).exclude(tipocta='SF').exclude(idcta__startswith='SF').aggregate(Sum('saldocapital'))['saldocapital__sum'] or 0
-
-    if abs(cap_pdte_calculado - cap_pdte_saldos) > tolerancia:
-        errores.append({
-            'code': 'CAPITAL_PENDIENTE_MISMATCH',
-            'message': f'Capital pendiente calculado ({cap_pdte_calculado:,.0f}) no coincide con saldos ({cap_pdte_saldos:,.0f}). Diferencia: {abs(cap_pdte_calculado - cap_pdte_saldos):,.0f}',
-            'severity': 'critical',
-            'data': {'cap_pdte_calc': float(cap_pdte_calculado), 'cap_pdte_saldos': float(cap_pdte_saldos)}
-        })
-
-    # 4. Validar que cada cuota esté cuadrada: capital + intcte = cuota
-    cuotas_plan = PlanPagos.objects.using(proyecto).filter(adj=adj).exclude(
-        tipocta='SF'
-    ).exclude(idcta__startswith='SF')
-    cuotas_descuadradas = []
-
-    for cuota in cuotas_plan:
-        suma_componentes = cuota.capital + cuota.intcte
-        if abs(suma_componentes - cuota.cuota) > tolerancia:
-            cuotas_descuadradas.append({
-                'idcta': cuota.idcta,
-                'capital': float(cuota.capital),
-                'intcte': float(cuota.intcte),
-                'cuota': float(cuota.cuota),
-                'diferencia': float(abs(suma_componentes - cuota.cuota))
-            })
-
-    if cuotas_descuadradas:
-        errores.append({
-            'code': 'CUOTAS_DESCUADRADAS',
-            'message': f'{len(cuotas_descuadradas)} cuotas descuadradas (capital + interés ≠ cuota)',
-            'severity': 'critical',
-            'data': {'cuotas': cuotas_descuadradas[:5]}  # Primeras 5 cuotas con error
-        })
-
-    # 5. Validar que no haya capital pendiente negativo en ninguna cuota
-    cuotas_negativas = saldos_adj.objects.using(proyecto).filter(
-        adj=adj,
-        saldocapital__lt=0
-    ).exclude(tipocta='SF').exclude(idcta__startswith='SF')
-
-    if cuotas_negativas.exists():
-        lista_negativas = list(cuotas_negativas.values('idcta', 'saldocapital')[:5])
-        errores.append({
-            'code': 'SALDO_CAPITAL_NEGATIVO',
-            'message': f'{cuotas_negativas.count()} cuotas con saldo de capital negativo',
-            'severity': 'critical',
-            'data': {'cuotas': lista_negativas}
-        })
-
-    es_valido = len(errores) == 0
-    return es_valido, errores
-
-
 def _guardar_recaudo(
     request,
     proyecto,
@@ -1402,283 +1293,43 @@ def _guardar_recaudo(
     else:
         cobro_mora = 1 - (procentaje_condonado / 100)
 
-    # ABONO A CAPITAL: Transacción TODO O NADA
-    # Si falla cualquier parte, se revierte TODO (backup + pagos + recálculo)
+    # ABONO A CAPITAL: lo vencido primero, el resto a una cuota CO y el plan se recalcula.
+    # Si algo falla no queda nada aplicado (ver andinasoft/abono_capital_service.py).
     if abonocapital:
         try:
-            # Usar transacción atómica: si algo falla, se revierte TODO
-            with transaction.atomic(using=proyecto):
-                # Crear backup
-                obj_proyecto = proyectos.objects.get(pk=proyecto)
-                obj_bk = bk_bfchangeplan.objects.create(
-                    proyecto=obj_proyecto,
-                    usuario_bk=request.user, adj=adj
-                )
-                full_planpagos = PlanPagos.objects.using(proyecto).filter(adj=adj)
-                for i in full_planpagos:
-                    bk_planpagos.objects.create(
-                        id_bk=obj_bk,
-                        proyecto=obj_proyecto,
-                        idcta=i.idcta, tipocta=i.tipocta, nrocta=i.nrocta,
-                        adj=i.adj, capital=i.capital, intcte=i.intcte,
-                        cuota=i.cuota, fecha=i.fecha
-                    )
-                full_recaudodetalle = Recaudos.objects.using(proyecto).filter(idadjudicacion=adj)
-                for i in full_recaudodetalle:
-                    bk_recaudodetallado.objects.create(
-                        id_bk=obj_bk,
-                        proyecto=obj_proyecto, recibo=i.recibo,
-                        fecha=i.fecha, idcta=i.idcta, idadjudicacion=i.idadjudicacion,
-                        capital=i.capital, interescte=i.interescte, interesmora=i.interesmora,
-                        moralqd=i.moralqd, fechaoperacion=i.fechaoperacion,
-                        usuario=i.usuario, estado=i.estado
-                    )
-
-                # PASO 1: Pagar cuotas vencidas primero (solo las que tienen fecha <= fecha_pago)
-                saldo_disponible = valor_pagado
-                cuotas_vencidas = saldo_cuotas.filter(fecha__lte=fecha_pago)
-
-                for cuota in cuotas_vencidas:
-                    if saldo_disponible == 0:
-                        break
-
-                    datos_mora = PlanPagos.objects.using(proyecto).get(idcta=cuota.idcta).mora(dia_pago=fecha_pago)
-
-                    if cuota.idcta[:2] == 'CI':
-                        es_ci = True
-                    elif cuota.idcta[:2] == 'FN':
-                        es_fn = True
-                    elif cuota.idcta[:2] == 'CE':
-                        es_ce = True
-                    elif cuota.idcta[:2] == 'CO':
-                        es_co = True
-
-                    capital = cuota.saldocapital
-                    intcte = cuota.saldointcte
-                    intmora = round(datos_mora.get('valor') * cobro_mora, 0)
-
-                    # Pagar mora
-                    if saldo_disponible >= intmora:
-                        mora_pagada = intmora
-                        saldo_disponible -= intmora
-                    else:
-                        mora_pagada = saldo_disponible
-                        saldo_disponible = 0
-
-                    # Pagar interés
-                    if saldo_disponible >= intcte:
-                        intcte_pagado = intcte
-                        saldo_disponible -= intcte
-                    else:
-                        intcte_pagado = saldo_disponible
-                        saldo_disponible = 0
-
-                    # Pagar capital
-                    if saldo_disponible >= capital:
-                        capital_pagado = capital
-                        saldo_disponible -= capital
-                    else:
-                        capital_pagado = saldo_disponible
-                        saldo_disponible = 0
-
-                    # Crear recaudo solo si se pagó algo
-                    if mora_pagada > 0 or intcte_pagado > 0 or capital_pagado > 0:
-                        Recaudos.objects.using(proyecto).create(
-                            recibo=nro_recibo,
-                            fecha=fecha,
-                            idcta=cuota.idcta,
-                            idadjudicacion=adj,
-                            capital=capital_pagado,
-                            interescte=intcte_pagado,
-                            interesmora=mora_pagada,
-                            moralqd=cuota.saldomora,
-                            fechaoperacion=datetime.datetime.today(),
-                            usuario=usuario_corto(request.user),
-                            estado='Aprobado'
-                        )
-
-                # PASO 2: Si queda saldo, hacer abono a capital
-                if saldo_disponible > 0:
-                    tasa = obj_adj.tasafnc
-
-                    # Obtener consecutivo de cuotas CO
-                    obj_planpagos = PlanPagos.objects.using(proyecto).filter(adj=adj, tipocta='CO')
-                    if obj_planpagos.exists():
-                        ultimacta = obj_planpagos.aggregate(Max('nrocta'))['nrocta__max']
-                    else:
-                        ultimacta = 0
-                    ultimacta += 1
-                    
-                    
-
-                    # Crear cuota CO con el saldo disponible
-                    PlanPagos.objects.using(proyecto).create(
-                        adj=adj,
-                        fecha=fecha,
-                        tipocta='CO',
-                        idcta=f'CO{ultimacta}{adj}',
-                        capital=saldo_disponible,
-                        cuota=saldo_disponible,
-                        nrocta=ultimacta,
-                        intcte=0
-                    )
-
-                    # Crear recaudo CO
-                    Recaudos.objects.using(proyecto).create(
-                        recibo=nro_recibo,
-                        fecha=fecha,
-                        idcta=f'CO{ultimacta}{adj}',
-                        idadjudicacion=adj,
-                        capital=saldo_disponible,
-                        interescte=0,
-                        interesmora=0,
-                        moralqd=0,
-                        fechaoperacion=datetime.datetime.today(),
-                        usuario=usuario_corto(request.user),
-                        estado='Aprobado'
-                    )
-
-                    # Calcular capital pendiente de TODO el plan
-                                        
-                    cap_total = obj_adj.valor
-
-                    cap_pagado = Recaudos.objects.using(proyecto).filter(
-                        idadjudicacion=adj,
-                        estado='Aprobado'
-                    ).exclude(idcta__startswith='SF').aggregate(Sum('capital'))['capital__sum'] or 0
-
-                    # Este es el monto EXACTO que debe sumar el nuevo plan de pagos
-                    saldo_por_distribuir = cap_total - cap_pagado
-
-                    # Validación de seguridad: Si pagaron de más, el saldo es 0
-                    if saldo_por_distribuir < 0:
-                        saldo_por_distribuir = 0
-
-                    # -------------------------------------------------------------
-                    # 2. OBTENER CUOTAS DISPONIBLES (VIVAS)
-                    # -------------------------------------------------------------
-                    # Usamos la vista para filtrar solo las que no se han pagado totalmente
-                    # Excluyendo la CO que acabamos de crear
-                    ids_cuotas_vivas = saldos_adj.objects.using(proyecto).filter(
-                        adj=adj,
-                        saldocapital__gt=0
-                    ).exclude(tipocta='SF').exclude(
-                        idcta__startswith='SF'
-                    ).values_list('idcta', flat=True)
-                    
-                    # Traemos los objetos reales ordenados por fecha
-                    cuotas_para_recalcular = PlanPagos.objects.using(proyecto).filter(
-                        adj=adj,
-                        idcta__in=ids_cuotas_vivas
-                    ).order_by('fecha')
-
-                    cuotas_a_borrar = []
-
-                    # -------------------------------------------------------------
-                    # 3. DISTRIBUCIÓN EXACTA (ALGORITMO DE LLENADO)
-                    # -------------------------------------------------------------
-                    for cta in cuotas_para_recalcular:
-                        
-                        # Si ya distribuimos todo el dinero, esta cuota sobra -> Se borra
-                        if saldo_por_distribuir <= 0:
-                            cuotas_a_borrar.append(cta.idcta)
-                            continue
-
-                        # --- A. Calcular Intereses de esta cuota sobre el saldo actual ---
-                        if cta.intcte > 0:
-                            intcte_nuevo = round(saldo_por_distribuir * tasa)
-                        else:
-                            intcte_nuevo = 0
-
-                        # --- B. Calcular cuánto Capital abonaría esta cuota normalmente ---
-                        # Fórmula: La cuota fija que paga el cliente MENOS los intereses generados
-                        cap_calculado = cta.cuota - intcte_nuevo
-
-                        # --- C. EL MOMENTO DE LA VERDAD (Ajuste Final) ---
-                        # Verificamos si este capital calculado es mayor o igual a lo que falta.
-                        # O si el capital calculado es negativo/cero (amortización negativa).
-                        
-                        if cap_calculado >= saldo_por_distribuir:
-                            # ES LA ÚLTIMA CUOTA REAL
-                            # Ajustamos el capital EXACTAMENTE a lo que falta para cerrar el crédito
-                            cta.capital = saldo_por_distribuir
-                            cta.intcte = intcte_nuevo
-                            
-                            # La cuota a pagar cambia en este último pago para cuadrar
-                            cta.cuota = cta.capital + cta.intcte
-                            
-                            cta.save()
-                            
-                            # Ya no queda deuda
-                            saldo_por_distribuir = 0
-                            
-                        else:
-                            # ES UNA CUOTA NORMAL (INTERMEDIA)
-                            cta.capital = cap_calculado
-                            cta.intcte = intcte_nuevo
-                            
-                            # Mantenemos la cuota fija original
-                            # cta.cuota se queda igual
-                            
-                            cta.save()
-                            
-                            # Restamos lo que acabamos de asignar del saldo global
-                            saldo_por_distribuir -= cap_calculado
-
-                    # 4. Limpieza de cuotas excedentes
-                    if cuotas_a_borrar:
-                        PlanPagos.objects.using(proyecto).filter(
-                            adj=adj,
-                            idcta__in=cuotas_a_borrar
-                        ).delete()
-
-                # VALIDACIÓN POST-PROCESO: Verificar que todo cuadre
-                # Se ejecuta SIEMPRE al final (haya o no abono a capital)
-                es_valido, errores_validacion = _validar_integridad_post_abono(proyecto, adj)
-
-                if not es_valido:
-                    # Preparar mensaje de error detallado
-                    mensajes_error = []
-                    for error in errores_validacion:
-                        mensajes_error.append(f"• {error['message']}")
-
-                    mensaje_completo = "ABONO A CAPITAL RECHAZADO - Validación falló:\n\n" + "\n".join(mensajes_error)
-                    mensaje_completo += f"\n\nAdjudicación: {adj}"
-                    mensaje_completo += f"\nRecibo: {nro_recibo}"
-                    mensaje_completo += f"\nValor total: ${valor_recibo:,.0f}"
-                    mensaje_completo += "\n\nTODOS LOS CAMBIOS HAN SIDO REVERTIDOS (incluyendo pagos de cuotas vencidas)."
-
-                    # Lanzar excepción para forzar rollback
-                    raise ValidationError(mensaje_completo)
-
-                # Si llegamos aquí, la validación pasó → commit automático al salir del with
-
-        except ValidationError as e:
-            # El rollback ya ocurrió automáticamente - TODO fue revertido
+            resultado_abono = aplicar_abono_capital(
+                proyecto=proyecto,
+                adj=adj,
+                nro_recibo=nro_recibo,
+                fecha=fecha,
+                fecha_corte=fecha_pago,
+                valor=valor_pagado,
+                cobro_mora=cobro_mora,
+                user=request.user,
+            )
+        except AbonoCapitalError as e:
+            errores_validacion = e.errores
+            mensaje_completo = f'ABONO A CAPITAL RECHAZADO: {e}'
+            if errores_validacion:
+                mensaje_completo += '\n\n' + '\n'.join(f"• {err['message']}" for err in errores_validacion)
+            mensaje_completo += f"\n\nAdjudicación: {adj}\nRecibo: {nro_recibo}\nValor total: ${valor_recibo:,.0f}"
+            mensaje_completo += "\n\nTODOS LOS CAMBIOS HAN SIDO REVERTIDOS (el recibo NO fue creado)."
             context_updates['alerta'] = True
             context_updates['titulo'] = 'Abono a capital rechazado'
-            context_updates['mensaje'] = str(e)
+            context_updates['mensaje'] = mensaje_completo
             context_updates['link'] = False
             alerts.append({
                 'code': 'ABONO_CAPITAL_VALIDATION_FAILED',
-                'message': str(e),
+                'message': mensaje_completo,
                 'severity': 'error',
-                'errors': errores_validacion if 'errores_validacion' in locals() else []
+                'errors': errores_validacion,
             })
             return context_updates, alerts, True
-
-        except Exception as e:
-            # Cualquier otro error también hace rollback de TODO
-            context_updates['alerta'] = True
-            context_updates['titulo'] = 'Error en abono a capital'
-            context_updates['mensaje'] = f'Ocurrió un error inesperado durante el abono a capital: {str(e)}. Todos los cambios fueron revertidos (el recibo NO fue creado).'
-            context_updates['link'] = False
-            alerts.append({
-                'code': 'ABONO_CAPITAL_UNEXPECTED_ERROR',
-                'message': str(e),
-                'severity': 'error'
-            })
-            return context_updates, alerts, True
+        es_ci = resultado_abono['es_ci']
+        es_fn = resultado_abono['es_fn']
+        es_ce = resultado_abono['es_ce']
+        es_co = resultado_abono['es_co']
+        alerts.extend(resultado_abono['alertas'])
 
     # Procesamiento normal de cuotas (no abono a capital)
     else:
@@ -3070,56 +2721,97 @@ def detalle_adjudicacion(request,proyecto,adj):
                 titulares = titulares_por_adj.objects.using(proyecto).get(adj=adj)
                 timeline_msgs = []
                 pending_map = {rec.numrecibo: rec for rec in pendientes_qs}
-                allow_abono = request.POST.get('allow_abono_capital') == 'true'
+                # Recibos que el usuario marcó en el modal para aplicar como abono a capital.
+                abonos = set(request.POST.getlist('abonos[]'))
+                if not abonos.issubset(set(recibos)):
+                    return JsonResponse({'status':400,'message':'La selección de abonos a capital no es válida.'},status=400)
+
+                def _registrar_timeline():
+                    if timeline_msgs:
+                        timeline.objects.using(proyecto).create(
+                            adj=adj,
+                            fecha=datetime.date.today(),
+                            usuario=request.user,
+                            accion=f'Reaplicó los recaudos pendientes {", ".join(timeline_msgs)}'
+                        )
+
+                def _error(mensaje):
+                    _registrar_timeline()
+                    if timeline_msgs:
+                        mensaje += f' Ya quedaron aplicados: {", ".join(timeline_msgs)}.'
+                    return JsonResponse({'status':400,'message':mensaje},status=400)
+
+                avisos = []
                 for num in recibos:
                     rec_obj = pending_map.get(num)
                     if rec_obj is None:
-                        return JsonResponse({'status':400,'message':f'El recibo {num} ya fue aplicado.'},status=400)
-                    solicitud = recibos_internos.objects.using('default').filter(recibo_asociado=num).first()
-                    if solicitud and solicitud.abono_capital:
-                        if not allow_abono:
-                            return JsonResponse({
-                                'status':409,
-                                'needs_confirmation':True,
-                                'message':f'El recibo {num} es un abono a capital. Confirma que deseas reaplicarlo.'
-                            },status=409)
+                        return _error(f'El recibo {num} ya fue aplicado.')
+                    solicitud = recibos_internos.objects.using('default').filter(
+                        proyecto=proyecto, recibo_asociado=num
+                    ).first()
                     porcentaje_cond = Decimal('100') if solicitud and solicitud.condonacion else Decimal('0')
                     saldo_cuotas = list(saldos_adj.objects.using(proyecto).filter(adj=adj,saldocuota__gt=0))
                     if len(saldo_cuotas) == 0:
-                        return JsonResponse({'status':400,'message':'No hay saldos pendientes para aplicar el recaudo.'},status=400)
-                    aplicar_pago(
-                        request=request,
-                        adj=adj,
-                        fecha=rec_obj.fecha,
-                        forma_pago=rec_obj.formapago or '',
-                        valor_pagado=rec_obj.valor,
-                        concepto=rec_obj.concepto or 'PAGO RECIBIDO DE CLIENTE',
-                        valor_recibo=rec_obj.valor,
-                        porcentaje_condonado=porcentaje_cond,
-                        saldo_cuotas=saldo_cuotas,
-                        consecutivo=rec_obj.numrecibo,
-                        Recaudos=Recaudos,
-                        Recaudos_general=Recaudos_general,
-                        titulares=titulares,
-                        proyecto=proyecto,
-                        crear_recibo=False,
-                        cobrar_mora=False
-                    )
+                        return _error(f'No hay saldos pendientes para aplicar el recibo {num}.')
+                    if num in abonos:
+                        try:
+                            resultado_abono = aplicar_abono_capital(
+                                proyecto=proyecto,
+                                adj=adj,
+                                nro_recibo=rec_obj.numrecibo,
+                                fecha=rec_obj.fecha,
+                                fecha_corte=rec_obj.fecha_pago or rec_obj.fecha,
+                                valor=rec_obj.valor,
+                                cobro_mora=0,
+                                user=request.user,
+                            )
+                        except AbonoCapitalError as e:
+                            detalle = ' '.join(err['message'] for err in e.errores)
+                            return _error(f'El abono a capital del recibo {num} no se aplicó: {e} {detalle}'.strip())
+                        avisos.extend(a['message'] for a in resultado_abono['alertas'])
+                        remanente = remanente_recibo(proyecto, rec_obj.numrecibo, rec_obj.valor)
+                        if remanente > 0 and not plan_tiene_deuda_pendiente(proyecto, adj):
+                            registrar_saldo_favor(
+                                proyecto=proyecto,
+                                adj=adj,
+                                nro_recibo=rec_obj.numrecibo,
+                                fecha=rec_obj.fecha,
+                                remanente=remanente,
+                                usuario=request.user,
+                                ledger_user=request.user,
+                            )
+                        if not plan_tiene_deuda_pendiente(proyecto, adj):
+                            Adjudicacion.objects.using(proyecto).filter(idadjudicacion=adj).update(estado='Pagado')
+                    else:
+                        aplicar_pago(
+                            request=request,
+                            adj=adj,
+                            fecha=rec_obj.fecha,
+                            forma_pago=rec_obj.formapago or '',
+                            valor_pagado=rec_obj.valor,
+                            concepto=rec_obj.concepto or 'PAGO RECIBIDO DE CLIENTE',
+                            valor_recibo=rec_obj.valor,
+                            porcentaje_condonado=porcentaje_cond,
+                            saldo_cuotas=saldo_cuotas,
+                            consecutivo=rec_obj.numrecibo,
+                            Recaudos=Recaudos,
+                            Recaudos_general=Recaudos_general,
+                            titulares=titulares,
+                            proyecto=proyecto,
+                            crear_recibo=False,
+                            cobrar_mora=False
+                        )
                     if solicitud:
                         solicitud.usuario_confirma = request.user
                         solicitud.fecha_confirma = datetime.date.today()
                         solicitud.save(update_fields=['usuario_confirma','fecha_confirma'])
-                    timeline_msgs.append(num)
-                
-                if timeline_msgs:
-                    timeline.objects.using(proyecto).create(
-                        adj=adj,
-                        fecha=datetime.date.today(),
-                        usuario=request.user,
-                        accion=f'Reaplicó los recaudos pendientes {", ".join(timeline_msgs)}'
-                    )
-                
-                return JsonResponse({'status':200,'message':'Los recaudos seleccionados fueron reaplicados correctamente.'})
+                    timeline_msgs.append(f'{num} (abono a capital)' if num in abonos else num)
+
+                _registrar_timeline()
+                mensaje = 'Los recaudos seleccionados fueron reaplicados correctamente.'
+                if avisos:
+                    mensaje += ' ' + ' '.join(avisos)
+                return JsonResponse({'status':200,'message':mensaje})
     else:
         if request.method == 'POST':
             form_doc=form_docs_contratos(request.POST,request.FILES)
@@ -3496,6 +3188,9 @@ def detalle_adjudicacion(request,proyecto,adj):
         for rec in recibos_detallados:
             rec.soporte_url = soportes_map.get(rec.numrecibo)
             rec.abono_capital = abono_map.get(rec.numrecibo, False)
+            # En el modal de reaplicar se propone como abono si la solicitud lo marcó
+            # o si el recibo se registró originalmente como abono.
+            rec.sugerir_abono = bool(rec.abono_capital) or rec.operacion == 'Abono Capital'
             rec.condonacion_flag = condonacion_map.get(rec.numrecibo)
             if not rec.aplicado:
                 tiene_recaudos_pendientes = True
